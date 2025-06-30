@@ -2,13 +2,13 @@
 pragma solidity 0.8.25;
 
 import {Test, console} from "forge-std/Test.sol";
-import {Wrapper} from "../src/v3/Wrapper.sol";
+import {Wrapper} from "../src/Wrapper.sol";
 import {MockDashboard} from "./mocks/MockDashboard.sol";
 import {MockVaultHub} from "./mocks/MockVaultHub.sol";
 import {MockStakingVault} from "./mocks/MockStakingVault.sol";
-import {WithdrawalQueue} from "../src/v3/WithdrawalQueue.sol";
-import {Escrow} from "../src/v3/Escrow.sol";
-import {ExampleStrategy} from "../src/v3/ExampleStrategy.sol";
+import {WithdrawalQueue} from "../src/WithdrawalQueue.sol";
+import {Escrow} from "../src/Escrow.sol";
+import {ExampleStrategy} from "../src/ExampleStrategy.sol";
 
 contract StVaultWrapperV3Test is Test {
     Wrapper public wrapper;

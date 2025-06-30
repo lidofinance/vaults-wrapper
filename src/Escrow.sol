@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0
 pragma solidity 0.8.25;
 
-import {IStrategy} from "../interfaces/IStrategy.sol";
+import {IStrategy} from "./interfaces/IStrategy.sol";
 import {WithdrawalQueue} from "./WithdrawalQueue.sol";
 import {Wrapper} from "./Wrapper.sol";
 

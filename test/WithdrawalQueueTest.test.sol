@@ -2,8 +2,8 @@
 pragma solidity 0.8.25;
 
 import {Test, console} from "forge-std/Test.sol";
-import {WithdrawalQueue} from "../src/v3/WithdrawalQueue.sol";
-import {Wrapper} from "../src/v3/Wrapper.sol";
+import {WithdrawalQueue} from "../src/WithdrawalQueue.sol";
+import {Wrapper} from "../src/Wrapper.sol";
 import {MockDashboard} from "./mocks/MockDashboard.sol";
 import {MockVaultHub} from "./mocks/MockVaultHub.sol";
 import {MockStakingVault} from "./mocks/MockStakingVault.sol";

@@ -5,8 +5,8 @@ import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {ERC4626} from "@openzeppelin/contracts/token/ERC20/extensions/ERC4626.sol";
 import {WithdrawalQueue} from "./WithdrawalQueue.sol";
 import {Escrow} from "./Escrow.sol";
-import {IVaultHub} from "../interfaces/IVaultHub.sol";
-import {IDashboard} from "../interfaces/IDashboard.sol";
+import {IVaultHub} from "./interfaces/IVaultHub.sol";
+import {IDashboard} from "./interfaces/IDashboard.sol";
 
 
 contract Wrapper is ERC4626 {
