@@ -3,14 +3,14 @@ pragma solidity 0.8.25;
 
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {ERC4626} from "@openzeppelin/contracts/token/ERC20/extensions/ERC4626.sol";
+import {AccessControlEnumerable} from "@openzeppelin/contracts/access/extensions/AccessControlEnumerable.sol";
+
 import {WithdrawalQueue} from "./WithdrawalQueue.sol";
 import {Escrow} from "./Escrow.sol";
 import {IVaultHub} from "./interfaces/IVaultHub.sol";
 import {IDashboard} from "./interfaces/IDashboard.sol";
 
-
-contract Wrapper is ERC4626 {
-
+contract Wrapper is ERC4626, AccessControlEnumerable {
     uint256 public constant E27_PRECISION_BASE = 1e27;
 
     IDashboard public immutable dashboard;
@@ -27,12 +27,22 @@ contract Wrapper is ERC4626 {
     event AutoLeverageToggled(bool enabled);
     event ValidatorExitRequested(bytes pubkeys);
     event ValidatorWithdrawalsTriggered(bytes pubkeys, uint64[] amounts);
-    event WithdrawalRequested(uint256 indexed requestId, address indexed user, uint256 shares, uint256 assets);
-    event ImmediateWithdrawal(address indexed user, uint256 shares, uint256 assets);
+    event WithdrawalRequested(
+        uint256 indexed requestId,
+        address indexed user,
+        uint256 shares,
+        uint256 assets
+    );
+    event ImmediateWithdrawal(
+        address indexed user,
+        uint256 shares,
+        uint256 assets
+    );
 
     constructor(
         address _dashboard,
         address _withdrawalQueue,
+        address _owner,
         string memory name_,
         string memory symbol_
     )
@@ -42,6 +52,8 @@ contract Wrapper is ERC4626 {
         // (totalAssets, deposit, withdraw, redeem) to use our own ETH-based logic.
         ERC4626(ERC20(address(0)))
     {
+        _grantRole(DEFAULT_ADMIN_ROLE, _owner);
+
         dashboard = IDashboard(_dashboard);
         vaultHub = dashboard.vaultHub();
         stakingVault = dashboard.stakingVault();
@@ -60,7 +72,10 @@ contract Wrapper is ERC4626 {
      * @notice Standard ERC4626 deposit function - DISABLED for this ETH wrapper
      * @dev This function is overridden to revert, as this wrapper only accepts native ETH
      */
-    function deposit(uint256 /*assets*/, address /*receiver*/) public pure override returns (uint256 /*shares*/) {
+    function deposit(
+        uint256 /*assets*/,
+        address /*receiver*/
+    ) public pure override returns (uint256 /*shares*/) {
         revert("Use depositETH() for native ETH deposits");
     }
 
@@ -69,7 +84,9 @@ contract Wrapper is ERC4626 {
      * @param receiver Address to receive the minted shares
      * @return shares Number of shares minted
      */
-    function depositETH(address receiver) public payable returns (uint256 shares) {
+    function depositETH(
+        address receiver
+    ) public payable returns (uint256 shares) {
         require(msg.value > 0, "Zero deposit");
         require(receiver != address(0), "Invalid receiver");
 
@@ -108,20 +125,27 @@ contract Wrapper is ERC4626 {
         uint256 totalBorrowedAssets = escrow.getTotalBorrowedAssets();
 
         uint256 userTotalAssets = _vaultTotalAssets - totalBorrowedAssets;
-        
+
         if (_totalSupply == 0) return E27_PRECISION_BASE; // 1.0
-        
+
         return (userTotalAssets * E27_PRECISION_BASE) / _totalSupply;
     }
 
     function withdraw(uint256 shares) external returns (uint256 requestId) {
-        require(shares <= maxWithdraw(msg.sender), "ERC4626: withdraw more than max");
+        require(
+            shares <= maxWithdraw(msg.sender),
+            "ERC4626: withdraw more than max"
+        );
 
         uint256 assets = previewRedeem(shares);
 
         _burn(msg.sender, shares);
 
-        requestId = withdrawalQueue.requestWithdrawal(msg.sender, shares, assets);    
+        requestId = withdrawalQueue.requestWithdrawal(
+            msg.sender,
+            shares,
+            assets
+        );
     }
 
     // =================================================================================
@@ -132,4 +156,20 @@ contract Wrapper is ERC4626 {
         // Auto-deposit ETH sent directly to the contract
         depositETH(msg.sender);
     }
-} 
+
+    // =================================================================================
+    // MANAGEMENT FUNCTIONS
+    // =================================================================================
+
+    function setConfirmExpiry(
+        uint256 _newConfirmExpiry
+    ) external onlyRole(DEFAULT_ADMIN_ROLE) returns (bool) {
+        return dashboard.setConfirmExpiry(_newConfirmExpiry);
+    }
+
+    function setNodeOperatorFeeRate(
+        uint256 _newNodeOperatorFeeRate
+    ) external onlyRole(DEFAULT_ADMIN_ROLE) returns (bool) {
+        return dashboard.setNodeOperatorFeeRate(_newNodeOperatorFeeRate);
+    }
+}
