@@ -8,58 +8,58 @@ contract ExampleStrategy is IStrategy {
     IERC20 public immutable stvToken;
     IERC20 public immutable stETH;
     address public immutable aavePool;
-    
+
     struct UserPosition {
         uint256 shares;
         uint256 borrowAmount;
         bool isExiting;
     }
-    
+
     UserPosition public userPosition;
-    
+
     constructor(address _stETH, address _aavePool) {
         stETH = IERC20(_stETH);
         aavePool = _aavePool;
     }
-    
+
     function execute(address user, uint256 shares) external override {
-        
-        // 1. Рассчитываем сколько можно занять на основе shares
+
+        // 1. Calculate how much can be borrowed based on shares
         uint256 borrowAmount = _calculateBorrowAmount(shares);
-        
-        // 2. Используем stETH как коллатерал в Aave
+
+        // 2. Use stETH as collateral in Aave
         stETH.approve(aavePool, shares);
         // aavePool.supply(address(stETH), shares, address(this), 0);
-        
-        // 3. Берем заем в ETH
+
+        // 3. Borrow ETH
         // aavePool.borrow(address(weth), borrowAmount, 2, 0, address(this));
-        
-        // 4. Конвертируем WETH в ETH
+
+        // 4. Convert WETH to ETH
         // IWETH(weth).withdraw(borrowAmount);
-        
-        // 5. Кладим ETH в vault
+
+        // 5. Put ETH in vault
         // vault.deposit{value: borrowAmount}();
-        
-        
-        // Сохраняем позицию пользователя
-        // todo делаем updatePosition
+
+
+        // Save user position
+        // todo implement updatePosition
         userPosition = UserPosition({
             shares: shares,
             borrowAmount: borrowAmount,
             isExiting: false
         });
-        
+
         emit StrategyExecuted(user, shares, borrowAmount);
     }
 
     function initiateExit(address user, uint256 assets) external {}
-    
+
     function _calculateBorrowAmount(uint256 shares) internal view returns (uint256) {
-        // Стратегия сама определяет сколько можно занять
-        // Например, на основе LTV ratio и текущих цен
-        return shares * 2; // Упрощенный пример: 2x leverage
+        // Strategy determines how much can be borrowed
+        // For example, based on LTV ratio and current prices
+        return shares * 2; // Simplified example: 2x leverage
     }
-    
+
     function getBorrowDetails() external view override returns (
         uint256 borrowAssets,
         uint256 userAssets,
@@ -67,25 +67,25 @@ contract ExampleStrategy is IStrategy {
     ) {
         return (userPosition.borrowAmount, 0, 0);
     }
-    
+
     function isExiting() external view override returns (bool) {
         return userPosition.isExiting;
     }
-    
+
     function finalizeExit(address user) external override returns (uint256 assets) {
         UserPosition storage position = userPosition;
         require(position.isExiting, "Not exiting");
-        
-        // Логика закрытия позиции в Aave
-        // 1. Возвращаем заем
-        // 2. Получаем обратно коллатерал
-        // 3. Возвращаем shares пользователю
-        
+
+        // Logic for closing position in Aave
+        // 1. Repay the loan
+        // 2. Get back the collateral
+        // 3. Return shares to the user
+
         assets = position.shares;
         delete userPosition;
-        
+
         return assets;
     }
-    
+
     event StrategyExecuted(address indexed user, uint256 shares, uint256 borrowAmount);
 }

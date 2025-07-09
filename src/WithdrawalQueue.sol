@@ -54,24 +54,24 @@ contract WithdrawalQueue is Ownable {
         dashboard = IDashboard(_dashboard);
     }
 
-    function requestWithdrawal(address user, uint256 shares, uint256 assets) 
-        external 
-        onlyOwner 
-        returns (uint256) 
+    function requestWithdrawal(address user, uint256 shares, uint256 assets)
+        external
+        onlyOwner
+        returns (uint256)
     {
 
         uint256 availableAssets = dashboard.withdrawableValue();
-        
+
         // If enough assets - immediate withdrawal
         // requestId = 0 means immediate withdrawal
         if (availableAssets >= assets) {
             dashboard.withdraw(user, assets);
-            return 0; 
+            return 0;
         }
 
         // if not enough assets - withdraw from the vault to the queue and create a request
         dashboard.withdraw(address(this), availableAssets);
-        
+
         uint256 requestId = nextRequestId++;
 
         uint256 cumulativeAssets = requestId == 1 ? assets : requests[requestId - 1].cumulativeAssets + assets;
@@ -85,9 +85,9 @@ contract WithdrawalQueue is Ownable {
             isFinalized: false,
             isClaimed: false
         });
-        
+
         requestsByOwner[user].push(requestId);
-        
+
         emit WithdrawalRequested(requestId, user, shares, assets);
         return requestId;
     }
@@ -95,57 +95,57 @@ contract WithdrawalQueue is Ownable {
     function finalize(uint256 lastRequestIdToFinalize, uint256 amountOfETH, uint256 shareRate) external onlyOwner {
         require(lastRequestIdToFinalize > lastFinalizedRequestId, "Invalid request ID");
         require(lastRequestIdToFinalize <= nextRequestId - 1, "Request not found");
-        
+
         uint256 firstRequestIdToFinalize = lastFinalizedRequestId + 1;
-        
-        // Вычисляем общую сумму для финализации
+
+        // Calculate total amount for finalization
         WithdrawalRequest memory lastFinalized = requests[lastFinalizedRequestId];
         WithdrawalRequest memory toFinalize = requests[lastRequestIdToFinalize];
-        
+
         uint256 totalAssetsToFinalize = toFinalize.cumulativeAssets - lastFinalized.cumulativeAssets;
         uint256 totalSharesToFinalize = toFinalize.cumulativeShares - lastFinalized.cumulativeShares;
 
         if (amountOfETH > totalAssetsToFinalize) {
             revert TooMuchEtherToFinalize(amountOfETH, totalAssetsToFinalize);
         }
-        
-        // Финализируем все запросы в диапазоне
+
+        // Finalize all requests in the range
         for (uint256 i = firstRequestIdToFinalize; i <= lastRequestIdToFinalize; i++) {
             requests[i].isFinalized = true;
         }
 
-         // Создаем checkpoint с ShareRate
+         // Create checkpoint with ShareRate
         lastCheckpointIndex++;
         checkpoints[lastCheckpointIndex] = Checkpoint({
             fromRequestId: firstRequestIdToFinalize,
             shareRate: shareRate
         });
-        
+
         lastFinalizedRequestId = lastRequestIdToFinalize;
         totalLockedAssets += totalAssetsToFinalize;
-        
+
         emit WithdrawalsFinalized(firstRequestIdToFinalize, lastRequestIdToFinalize, totalAssetsToFinalize, totalSharesToFinalize);
     }
-    
+
     function claim(uint256 requestId) external {
         require(requestId > 0 && requestId <= nextRequestId - 1, "Invalid request ID");
         require(requestId <= lastFinalizedRequestId, "Request not finalized");
-        
+
         WithdrawalRequest storage request = requests[requestId];
         require(request.user == msg.sender, "Not owner");
         require(!request.isClaimed, "Already claimed");
-        
+
         request.isClaimed = true;
-        
-        uint256 assets = requestId == 1 
-            ? request.cumulativeAssets 
+
+        uint256 assets = requestId == 1
+            ? request.cumulativeAssets
             : request.cumulativeAssets - requests[requestId - 1].cumulativeAssets;
-        
+
         totalLockedAssets -= assets;
-        
+
         (bool success, ) = msg.sender.call{value: assets}("");
         require(success, "Transfer failed");
-        
+
         emit WithdrawalClaimed(requestId, msg.sender, assets);
     }
 
@@ -153,29 +153,29 @@ contract WithdrawalQueue is Ownable {
     function calculateClaimableAssets(uint256 requestId) external view returns (uint256) {
         if (requestId == 0 || requestId > nextRequestId - 1) return 0;
         if (requestId > lastFinalizedRequestId) return 0;
-        
+
         WithdrawalRequest storage request = requests[requestId];
         if (request.isClaimed) return 0;
-        
-        // Вычисляем assets для этого конкретного запроса
-        uint256 baseAssets = requestId == 1 ? request.cumulativeAssets : 
+
+                // Calculate assets for this specific request
+        uint256 baseAssets = requestId == 1 ? request.cumulativeAssets :
                             request.cumulativeAssets - requests[requestId - 1].cumulativeAssets;
-        
-        // Находим соответствующий checkpoint для этого запроса
+
+        // Find the corresponding checkpoint for this request
         for (uint256 i = lastCheckpointIndex; i > 0; i--) {
             if (checkpoints[i].fromRequestId <= requestId) {
-                // Применяем ShareRate из checkpoint
+                // Apply ShareRate from checkpoint
                 return (baseAssets * checkpoints[i].shareRate) / E27_PRECISION_BASE;
             }
         }
-        
+
         return 0; // Checkpoint not found
     }
-    
+
     function getPendingRequests(address user) external view returns (uint256[] memory) {
         return requestsByOwner[user];
     }
-    
+
     function getRequest(uint256 requestId) external view returns (WithdrawalRequest memory) {
         return requests[requestId];
     }

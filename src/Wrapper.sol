@@ -78,7 +78,7 @@ contract Wrapper is ERC4626 {
 
         // Fund vault through Dashboard. This increases the totalAssets value.
         dashboard.fund{value: msg.value}();
-        emit VaultFunded(msg.value);
+        // NB: emit no VaultFunded event cause it is emitted in Vault contract
 
         // Mint the pre-calculated shares to the receiver.
         _mint(receiver, shares);
@@ -108,9 +108,9 @@ contract Wrapper is ERC4626 {
         uint256 totalBorrowedAssets = escrow.getTotalBorrowedAssets();
 
         uint256 userTotalAssets = _vaultTotalAssets - totalBorrowedAssets;
-        
+
         if (_totalSupply == 0) return E27_PRECISION_BASE; // 1.0
-        
+
         return (userTotalAssets * E27_PRECISION_BASE) / _totalSupply;
     }
 
@@ -121,7 +121,7 @@ contract Wrapper is ERC4626 {
 
         _burn(msg.sender, shares);
 
-        requestId = withdrawalQueue.requestWithdrawal(msg.sender, shares, assets);    
+        requestId = withdrawalQueue.requestWithdrawal(msg.sender, shares, assets);
     }
 
     // =================================================================================
@@ -132,4 +132,4 @@ contract Wrapper is ERC4626 {
         // Auto-deposit ETH sent directly to the contract
         depositETH(msg.sender);
     }
-} 
+}

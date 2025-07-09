@@ -32,7 +32,7 @@ contract StVaultWrapperV3Test is Test {
         stakingVault = new MockStakingVault();
         vaultHub = new MockVaultHub();
         dashboard = new MockDashboard(address(vaultHub), address(stakingVault));
-        
+
         wrapper = new Wrapper(
             address(dashboard),
             address(withdrawalQueue),
@@ -43,19 +43,19 @@ contract StVaultWrapperV3Test is Test {
         address aavePool = address(0x1);
         strategy = new ExampleStrategy(address(stakingVault), address(aavePool));
         escrow = new Escrow(address(wrapper), address(withdrawalQueue), address(strategy));
-        
+
         // Fund the vault initially
         // vm.deal(address(vaultHub), 100 ether);
         // vaultHub.simulateRewards(dashboard.stakingVault(), 100 ether);
 
-         // Fund users
+        // Fund users
         vm.deal(user1, 1000 ether);
         vm.deal(user2, 1000 ether);
     }
 
     function test_DepositETH() public {
         vm.deal(user1, 10 ether);
-        
+
         vm.startPrank(user1);
         uint256 user1shares = wrapper.depositETH{value: 10 ether}();
         vm.stopPrank();
@@ -66,10 +66,10 @@ contract StVaultWrapperV3Test is Test {
 
         assertEq(wrapper.balanceOf(user1), user1shares);
         assertEq(wrapper.balanceOf(user2), user2shares);
-        
+
         assertEq(wrapper.totalAssets(), 32 ether);
         assertEq(address(dashboard.stakingVault()).balance, 32 ether);
-    
+
         console.log("=== Initial State ===");
         console.log("User1 shares:", user1shares, "stvW");
         console.log("User2 shares:", user2shares, "stvW");
@@ -93,10 +93,10 @@ contract StVaultWrapperV3Test is Test {
         // Verify shares didn't change
         assertEq(wrapper.balanceOf(user1), user1shares);
         assertEq(wrapper.balanceOf(user2), user2shares);
-        
+
         // Verify totalAssets increased
         assertEq(wrapper.totalAssets(), 32 ether + uint256(rewards));
-        
+
         // Calculate new exchange rate
         uint256 newExchangeRate = (wrapper.totalAssets() * 1e18) / wrapper.totalSupply();
         console.log("New exchange rate:", newExchangeRate, "ETH per stvW");
@@ -108,9 +108,9 @@ contract StVaultWrapperV3Test is Test {
         // Calculate how much ETH each user can get for their shares now
         uint256 user1EthValue = wrapper.previewRedeem(user1shares);
         uint256 user2EthValue = wrapper.previewRedeem(user2shares);
-        
+
         console.log("\n=== ETH Value of Shares After Rewards ===");
         console.log("User1 ETH value:", user1EthValue / 1e18, "ETH (was 10 ETH)");
         console.log("User2 ETH value:", user2EthValue / 1e18, "ETH (was 22 ETH)");
     }
-} 
+}

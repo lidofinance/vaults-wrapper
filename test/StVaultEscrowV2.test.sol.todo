@@ -11,7 +11,7 @@ import {MockStakingVault} from "./mocks/MockStakingVault.sol";
 
 /**
  * @title StVaultEscrowV2Test
- * @notice Тест упрощенной версии StVaultEscrowV2
+ * @notice Test for simplified version of StVaultEscrowV2
  */
 contract StVaultEscrowV2Test is Test {
     DeFiWrapper public defiWrapper;
@@ -20,19 +20,19 @@ contract StVaultEscrowV2Test is Test {
     MockERC20 public stETH;
     MockVaultHub public vaultHub;
     MockStakingVault public stakingVault;
-    
+
     address public user = address(0x1);
     address public owner = address(0x2);
-    
+
     uint256 public constant INITIAL_ETH = 10 ether;
     uint256 public constant TARGET_LEVERAGE = 2e18; // 200%
-    
+
     function setUp() public {
         // Deploy mocks
         stETH = new MockERC20("Liquid staked Ether 2.0", "stETH");
         vaultHub = new MockVaultHub();
         stakingVault = new MockStakingVault();
-        
+
         // Deploy DeFiWrapper
         defiWrapper = new DeFiWrapper(
             address(stakingVault),
@@ -42,14 +42,14 @@ contract StVaultEscrowV2Test is Test {
             "StVault Wrapper",
             "stvToken"
         );
-        
+
         // Deploy strategy
         strategy = new SimpleLeverageStrategy(
             address(0), // escrow - will set later
             address(stETH),
             address(defiWrapper)
         );
-        
+
         // Deploy StVaultEscrowV2
         escrow = new StVaultEscrowV2(
             address(defiWrapper),
@@ -58,216 +58,216 @@ contract StVaultEscrowV2Test is Test {
             address(stETH),
             address(strategy)
         );
-        
+
         // Setup permissions
         defiWrapper.setEscrow(address(escrow));
-        
+
         // Fund user
         vm.deal(user, INITIAL_ETH);
-        
+
         // Setup mocks
         stETH.mint(address(vaultHub), 1000 ether);
         vaultHub.setStakingVault(address(stakingVault));
     }
-    
+
     function testSimplifiedUserJourney() public {
+                // ============================================================================
+        // Step 1: Deposit ETH to DeFiWrapper
         // ============================================================================
-        // Шаг 1: Депозит ETH в DeFiWrapper
-        // ============================================================================
-        
+
         vm.startPrank(user);
-        
-        // Депозит ETH
+
+        // Deposit ETH
         defiWrapper.deposit{value: INITIAL_ETH}(INITIAL_ETH, user);
         uint256 stvTokenBalance = defiWrapper.balanceOf(user);
-        
+
         console.log("✅ Step 1: ETH deposit successful");
         console.log("   ETH deposited:", INITIAL_ETH);
         console.log("   stvToken received:", stvTokenBalance);
-        
+
+                // ============================================================================
+        // Step 2: Deposit stvToken to StVaultEscrowV2 (automatically executes strategy)
         // ============================================================================
-        // Шаг 2: Депозит stvToken в StVaultEscrowV2 (автоматически выполняет стратегию)
-        // ============================================================================
-        
+
         // Approve stvToken
         defiWrapper.approve(address(escrow), stvTokenBalance);
-        
-        // Депозит с leverage - ВСЕ В ОДНОМ ВЫЗОВЕ!
+
+        // Deposit with leverage - ALL IN ONE CALL!
         uint256 positionId = escrow.deposit(stvTokenBalance, TARGET_LEVERAGE);
-        
+
         console.log("✅ Step 2: Simplified deposit successful");
         console.log("   Position ID:", positionId);
-        
+
         // ============================================================================
-        // Шаг 3: Проверяем созданную позицию
+        // Step 3: Check the created position
         // ============================================================================
-        
+
         StVaultEscrowV2.Position memory position = escrow.getPosition(positionId);
         assertEq(position.owner, user, "Position owner should be user");
         assertEq(position.collateral, stvTokenBalance, "Collateral should match deposit");
         assertGt(position.debt, 0, "Should have debt after strategy execution");
         assertTrue(position.active, "Position should be active");
-        
+
         console.log("✅ Step 3: Position created successfully");
         console.log("   Collateral:", position.collateral);
         console.log("   Debt:", position.debt);
         console.log("   Created at:", position.createdAt);
-        
+
         // ============================================================================
-        // Шаг 4: Проверяем health factor
+        // Step 4: Check health factor
         // ============================================================================
-        
+
         uint256 healthFactor = escrow.getHealthFactor(positionId);
         assertGt(healthFactor, 150e16, "Health factor should be above 150%");
-        
+
         bool isHealthy = escrow.isHealthyPosition(positionId);
         assertTrue(isHealthy, "Position should be healthy");
-        
+
         console.log("✅ Step 4: Position health verified");
         console.log("   Health factor:", healthFactor);
-        
+
         // ============================================================================
-        // Шаг 5: Проверяем пользовательские позиции
+        // Step 5: Check user positions
         // ============================================================================
-        
+
         uint256[] memory userPositions = escrow.getUserPositions(user);
         assertEq(userPositions.length, 1, "Should have 1 position");
         assertEq(userPositions[0], positionId, "Position ID should match");
-        
+
         StVaultEscrowV2.Position[] memory activePositions = escrow.getActivePositions(user);
         assertEq(activePositions.length, 1, "Should have 1 active position");
         assertEq(activePositions[0].id, positionId, "Active position ID should match");
-        
+
         console.log("✅ Step 5: User positions tracked correctly");
-        
+
+                // ============================================================================
+        // Step 6: Close position
         // ============================================================================
-        // Шаг 6: Закрытие позиции
-        // ============================================================================
-        
-        // Закрываем 100% позиции
+
+        // Close 100% of position
         (uint256 collateralReturned, uint256 debtBurned) = escrow.closePosition(positionId, 1e18);
-        
+
         assertGt(collateralReturned, 0, "Should return collateral");
         assertEq(debtBurned, position.debt, "Should burn all debt");
-        
-        // Проверяем, что позиция неактивна
+
+        // Check that position is inactive
         position = escrow.getPosition(positionId);
         assertFalse(position.active, "Position should be inactive after closing");
-        
+
         console.log("✅ Step 6: Position closed successfully");
         console.log("   Collateral returned:", collateralReturned);
         console.log("   Debt burned:", debtBurned);
-        
+
         vm.stopPrank();
-        
+
         // ============================================================================
-        // Финальные проверки
+        // Final checks
         // ============================================================================
-        
+
         console.log("\n🎉 Simplified user journey successful!");
         console.log("   Total steps: 2 (vs 6 in old version)");
         console.log("   Initial ETH:", INITIAL_ETH);
         console.log("   Final stvToken:", collateralReturned);
     }
-    
-    function testMultiplePositions() public {
+
+        function testMultiplePositions() public {
         vm.startPrank(user);
-        
-        // Депозит ETH
+
+        // Deposit ETH
         defiWrapper.deposit{value: INITIAL_ETH}(INITIAL_ETH, user);
         uint256 stvTokenBalance = defiWrapper.balanceOf(user);
         defiWrapper.approve(address(escrow), stvTokenBalance);
-        
-        // Создаем несколько позиций
+
+        // Create multiple positions
         uint256 position1 = escrow.deposit(stvTokenBalance / 2, 2e18); // 200% leverage
         uint256 position2 = escrow.deposit(stvTokenBalance / 2, 3e18); // 300% leverage
-        
-        // Проверяем, что позиции разные
+
+                // Check that positions are different
         assertEq(position1, 0, "First position should have ID 0");
         assertEq(position2, 1, "Second position should have ID 1");
-        
-        // Проверяем пользовательские позиции
+
+        // Check user positions
         uint256[] memory userPositions = escrow.getUserPositions(user);
         assertEq(userPositions.length, 2, "Should have 2 positions");
-        
+
         StVaultEscrowV2.Position[] memory activePositions = escrow.getActivePositions(user);
         assertEq(activePositions.length, 2, "Should have 2 active positions");
-        
+
         console.log("✅ Multiple positions created successfully");
         console.log("   Position 1 ID:", position1);
         console.log("   Position 2 ID:", position2);
-        
+
         vm.stopPrank();
     }
-    
-    function testPartialPositionClose() public {
+
+        function testPartialPositionClose() public {
         vm.startPrank(user);
-        
-        // Депозит ETH и создаем позицию
+
+        // Deposit ETH and create position
         defiWrapper.deposit{value: INITIAL_ETH}(INITIAL_ETH, user);
         uint256 stvTokenBalance = defiWrapper.balanceOf(user);
         defiWrapper.approve(address(escrow), stvTokenBalance);
-        
+
         uint256 positionId = escrow.deposit(stvTokenBalance, TARGET_LEVERAGE);
         StVaultEscrowV2.Position memory initialPosition = escrow.getPosition(positionId);
-        
-        // Закрываем 50% позиции
+
+        // Close 50% of position
         (uint256 collateralReturned, uint256 debtBurned) = escrow.closePosition(positionId, 0.5e18);
-        
-        // Проверяем, что позиция все еще активна
+
+        // Check that position is still active
         StVaultEscrowV2.Position memory updatedPosition = escrow.getPosition(positionId);
         assertTrue(updatedPosition.active, "Position should still be active");
         assertEq(updatedPosition.collateral, initialPosition.collateral - collateralReturned, "Collateral should be reduced");
         assertEq(updatedPosition.debt, initialPosition.debt - debtBurned, "Debt should be reduced");
-        
+
         console.log("✅ Partial position close successful");
         console.log("   Initial collateral:", initialPosition.collateral);
         console.log("   Remaining collateral:", updatedPosition.collateral);
         console.log("   Initial debt:", initialPosition.debt);
         console.log("   Remaining debt:", updatedPosition.debt);
-        
+
         vm.stopPrank();
     }
-    
-    function testRevertOnInvalidLeverage() public {
+
+        function testRevertOnInvalidLeverage() public {
         vm.startPrank(user);
-        
-        // Депозит ETH
+
+        // Deposit ETH
         defiWrapper.deposit{value: INITIAL_ETH}(INITIAL_ETH, user);
         uint256 stvTokenBalance = defiWrapper.balanceOf(user);
         defiWrapper.approve(address(escrow), stvTokenBalance);
-        
-        // Пытаемся создать позицию с leverage <= 100%
+
+        // Try to create position with leverage <= 100%
         vm.expectRevert("Leverage must be > 100%");
         escrow.deposit(stvTokenBalance, 1e18); // 100% leverage
-        
+
         vm.expectRevert("Leverage must be > 100%");
         escrow.deposit(stvTokenBalance, 0.5e18); // 50% leverage
-        
+
         console.log("✅ Invalid leverage correctly rejected");
-        
+
         vm.stopPrank();
     }
-    
-    function testRevertOnNotPositionOwner() public {
+
+        function testRevertOnNotPositionOwner() public {
         vm.startPrank(user);
-        
-        // Депозит ETH и создаем позицию
+
+        // Deposit ETH and create position
         defiWrapper.deposit{value: INITIAL_ETH}(INITIAL_ETH, user);
         uint256 stvTokenBalance = defiWrapper.balanceOf(user);
         defiWrapper.approve(address(escrow), stvTokenBalance);
-        
+
         uint256 positionId = escrow.deposit(stvTokenBalance, TARGET_LEVERAGE);
-        
+
         vm.stopPrank();
-        
-        // Пытаемся закрыть позицию от другого пользователя
+
+        // Try to close position from another user
         vm.startPrank(address(0x999));
         vm.expectRevert("Not position owner");
         escrow.closePosition(positionId, 1e18);
-        
+
         console.log("✅ Unauthorized access correctly rejected");
-        
+
         vm.stopPrank();
     }
-} 
+}

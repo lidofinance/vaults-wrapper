@@ -10,7 +10,7 @@ contract Escrow {
     address public immutable vaultHub;
     IStrategy public immutable strategy;
     WithdrawalQueue public immutable withdrawalQueue;
-    
+
     struct Position {
         address user;
         uint256 stvTokenShares;
@@ -21,36 +21,36 @@ contract Escrow {
         bool isExiting;
         uint256 timestamp;
     }
-    
+
     mapping(address => uint256) public userStvShares;
     mapping(address => uint256) public userBorrowedAssets;
     mapping(uint256 => Position) public positions;
     mapping(address => uint256) public userPositionId;
-    
+
     uint256 public totalBorrowedAssets;
     uint256 public nextPositionId;
-    
+
     mapping(address => bool) public authorizedStrategies;
-    
+
     event PositionOpened(
-        address indexed user, 
-        uint256 indexed positionId, 
-        uint256 stvTokenShares, 
+        address indexed user,
+        uint256 indexed positionId,
+        uint256 stvTokenShares,
         uint256 borrowedAssets
     );
     event PositionClosing(
-        address indexed user, 
-        uint256 indexed positionId, 
+        address indexed user,
+        uint256 indexed positionId,
         uint256 withdrawalRequestId
     );
     event PositionClaimed(
-        address indexed user, 
-        uint256 indexed positionId, 
+        address indexed user,
+        uint256 indexed positionId,
         uint256 assets
     );
-    
+
     constructor(
-        address _wrapper, 
+        address _wrapper,
         address _withdrawalQueue,
         address _strategy
     ) {
@@ -58,29 +58,29 @@ contract Escrow {
         withdrawalQueue = WithdrawalQueue(_withdrawalQueue);
         strategy = IStrategy(_strategy);
     }
-    
+
     function openPosition(uint256 stvTokenShares) external returns (uint256 positionId) {
         require(stvTokenShares > 0, "Zero shares");
         require(userPositionId[msg.sender] == 0, "Position already exists");
 
         require(!IStrategy(strategy).isExiting(), "Strategy is exiting");
-        
-        // 1. Переводим stvToken в escrow
+
+        // 1. Transfer stvToken to escrow
         wrapper.transferFrom(msg.sender, address(this), stvTokenShares);
-        
-        // 2. Запоминаем шар для пользователя
+
+        // 2. Remember shares for the user
         userStvShares[msg.sender] = stvTokenShares;
-        
-        // 3. Минтим stETH через vaultHub
+
+        // 3. Mint stETH through vaultHub
         uint256 mintedStETH = IVaultHub(vaultHub).mintShares(stvTokenShares);
-        
-        // 4. Запускаем стратегию
+
+        // 4. Execute strategy
         IStrategy(strategy).execute(msg.sender, mintedStETH);
-        
-        // 5. Получаем информацию о заемных активах
+
+        // 5. Get information about borrowed assets
         (uint256 borrowAssets, , ) = IStrategy(strategy).getBorrowDetails();
-        
-        // 6. Сохраняем данные позиции
+
+        // 6. Save position data
         positionId = nextPositionId++;
         positions[positionId] = Position({
             user: msg.sender,
@@ -92,83 +92,83 @@ contract Escrow {
             isExiting: false,
             timestamp: block.timestamp
         });
-        
+
         userPositionId[msg.sender] = positionId;
         userBorrowedAssets[msg.sender] = borrowAssets;
         totalBorrowedAssets += borrowAssets;
-        
+
         emit PositionOpened(msg.sender, positionId, stvTokenShares, borrowAssets);
         return positionId;
     }
-    
+
     function closePosition(uint256 positionId) external returns (uint256 withdrawalRequestId) {
         Position storage position = positions[positionId];
         require(position.user == msg.sender, "Not position owner");
         require(position.isActive, "Position not active");
         require(!position.isExiting, "Already exiting");
-        
-        // 1. Помечаем стратегию на выход
+
+        // 1. Mark strategy for exit
         position.isExiting = true;
 
-        // 2. Запускаем выход 
+        // 2. Initiate exit
         IStrategy(strategy).initiateExit(msg.sender, position.borrowedAssets);
-        
-        // 2. Инициируем выход через withdrawal queue
-        // Нужно рассчитать сколько ETH нужно вывести
+
+        // 2. Initiate exit through withdrawal queue
+        // Need to calculate how much ETH to withdraw
         uint256 totalAssets = position.stvTokenShares + position.borrowedAssets;
-        
-        // 3. Создаем withdrawal request
+
+        // 3. Create withdrawal request
         withdrawalRequestId = withdrawalQueue.requestWithdrawal(
             msg.sender,
             position.stvTokenShares,
             totalAssets
         );
-        
+
         position.withdrawalRequestId = withdrawalRequestId;
-        
+
         emit PositionClosing(msg.sender, positionId, withdrawalRequestId);
         return withdrawalRequestId;
     }
-    
+
     function claimPosition(uint256 positionId) external returns (uint256 assets) {
         Position storage position = positions[positionId];
         require(position.user == msg.sender, "Not position owner");
         require(position.isExiting, "Position not exiting");
         require(position.withdrawalRequestId > 0, "No withdrawal request");
-        
-        // 1. Проверяем что withdrawal request финализирован
+
+        // 1. Check that withdrawal request is finalized
         require(
             withdrawalQueue.getRequest(position.withdrawalRequestId).isFinalized,
             "Withdrawal not finalized"
         );
-        
-        // 2. Клеймим withdrawal
+
+        // 2. Claim withdrawal
         withdrawalQueue.claim(position.withdrawalRequestId);
-        
-        // 3. Закрываем позицию в стратегии
+
+        // 3. Close position in strategy
         IStrategy(strategy).finalizeExit(msg.sender);
-        
-        // 4. Возвращаем stvToken пользователю
+
+        // 4. Return stvToken to user
         wrapper.transfer(msg.sender, position.stvTokenShares);
-        
-        // 5. Обновляем глобальные счетчики
+
+        // 5. Update global counters
         totalBorrowedAssets -= position.borrowedAssets;
         userBorrowedAssets[msg.sender] = 0;
         userStvShares[msg.sender] = 0;
         userPositionId[msg.sender] = 0;
-        
-        // 6. Закрываем позицию
+
+        // 6. Close position
         position.isActive = false;
-        
+
         emit PositionClaimed(msg.sender, positionId, assets);
         return assets;
     }
-    
-    // Геттеры
+
+    // Getters
     function getPosition(uint256 positionId) external view returns (Position memory) {
         return positions[positionId];
     }
-    
+
     function getUserPosition(address user) external view returns (Position memory) {
         uint256 positionId = userPositionId[user];
         return positionId > 0 ? positions[positionId] : Position({
@@ -182,11 +182,11 @@ contract Escrow {
             timestamp: 0
         });
     }
-    
+
     function getTotalUserAssets() external view returns (uint256) {
         return totalBorrowedAssets;
     }
-    
+
     function getTotalBorrowedAssets() external view returns (uint256) {
         return totalBorrowedAssets;
     }
