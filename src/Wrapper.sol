@@ -13,11 +13,11 @@ contract Wrapper is ERC4626 {
 
     uint256 public constant E27_PRECISION_BASE = 1e27;
 
-    IDashboard public immutable dashboard;
-    IVaultHub public immutable vaultHub;
-    address public immutable stakingVault;
-    WithdrawalQueue public immutable withdrawalQueue;
-    Escrow public immutable escrow;
+    IDashboard public immutable DASHBOARD;
+    IVaultHub public immutable VAULT_HUB;
+    address public immutable STAKING_VAULT;
+    WithdrawalQueue public immutable WITHDRAWAL_QUEUE;
+    Escrow public immutable ESCROW;
 
     bool public autoLeverageEnabled = true;
 
@@ -42,10 +42,10 @@ contract Wrapper is ERC4626 {
         // (totalAssets, deposit, withdraw, redeem) to use our own ETH-based logic.
         ERC4626(ERC20(address(0)))
     {
-        dashboard = IDashboard(_dashboard);
-        vaultHub = dashboard.vaultHub();
-        stakingVault = dashboard.stakingVault();
-        withdrawalQueue = WithdrawalQueue(_withdrawalQueue);
+        DASHBOARD = IDashboard(_dashboard);
+        VAULT_HUB = DASHBOARD.vaultHub();
+        STAKING_VAULT = DASHBOARD.stakingVault();
+        WITHDRAWAL_QUEUE = WithdrawalQueue(_withdrawalQueue);
     }
 
     // =================================================================================
@@ -53,7 +53,7 @@ contract Wrapper is ERC4626 {
     // =================================================================================
 
     function totalAssets() public view override returns (uint256) {
-        return vaultHub.totalValue(stakingVault);
+        return VAULT_HUB.totalValue(STAKING_VAULT);
     }
 
     /**
@@ -77,7 +77,7 @@ contract Wrapper is ERC4626 {
         shares = previewDeposit(msg.value);
 
         // Fund vault through Dashboard. This increases the totalAssets value.
-        dashboard.fund{value: msg.value}();
+        DASHBOARD.fund{value: msg.value}();
         // NB: emit no VaultFunded event cause it is emitted in Vault contract
 
         // Mint the pre-calculated shares to the receiver.
@@ -105,7 +105,7 @@ contract Wrapper is ERC4626 {
     function calculateShareRate() public view returns (uint256) {
         uint256 _vaultTotalAssets = totalAssets();
         uint256 _totalSupply = totalSupply();
-        uint256 totalBorrowedAssets = escrow.getTotalBorrowedAssets();
+        uint256 totalBorrowedAssets = ESCROW.getTotalBorrowedAssets();
 
         uint256 userTotalAssets = _vaultTotalAssets - totalBorrowedAssets;
 
@@ -121,7 +121,7 @@ contract Wrapper is ERC4626 {
 
         _burn(msg.sender, shares);
 
-        requestId = withdrawalQueue.requestWithdrawal(msg.sender, shares, assets);
+        requestId = WITHDRAWAL_QUEUE.requestWithdrawal(msg.sender, shares, assets);
     }
 
     // =================================================================================

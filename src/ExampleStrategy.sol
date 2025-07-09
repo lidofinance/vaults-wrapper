@@ -5,9 +5,9 @@ import {IStrategy} from "./interfaces/IStrategy.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 contract ExampleStrategy is IStrategy {
-    IERC20 public immutable stvToken;
-    IERC20 public immutable stETH;
-    address public immutable aavePool;
+    IERC20 public immutable STV_TOKEN;
+    IERC20 public immutable STETH;
+    address public immutable AAVE_POOL;
 
     struct UserPosition {
         uint256 shares;
@@ -18,8 +18,8 @@ contract ExampleStrategy is IStrategy {
     UserPosition public userPosition;
 
     constructor(address _stETH, address _aavePool) {
-        stETH = IERC20(_stETH);
-        aavePool = _aavePool;
+        STETH = IERC20(_stETH);
+        AAVE_POOL = _aavePool;
     }
 
     function execute(address user, uint256 shares) external override {
@@ -28,7 +28,7 @@ contract ExampleStrategy is IStrategy {
         uint256 borrowAmount = _calculateBorrowAmount(shares);
 
         // 2. Use stETH as collateral in Aave
-        stETH.approve(aavePool, shares);
+        STETH.approve(AAVE_POOL, shares);
         // aavePool.supply(address(stETH), shares, address(this), 0);
 
         // 3. Borrow ETH

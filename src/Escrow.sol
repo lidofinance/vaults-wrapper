@@ -2,14 +2,18 @@
 pragma solidity 0.8.25;
 
 import {IStrategy} from "./interfaces/IStrategy.sol";
+import {IVaultHub} from "./interfaces/IVaultHub.sol";
 import {WithdrawalQueue} from "./WithdrawalQueue.sol";
 import {Wrapper} from "./Wrapper.sol";
 
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+
 contract Escrow {
-    Wrapper public immutable wrapper;
-    address public immutable vaultHub;
-    IStrategy public immutable strategy;
-    WithdrawalQueue public immutable withdrawalQueue;
+    Wrapper public immutable WRAPPER;
+    address public immutable VAULT_HUB;
+    IStrategy public immutable STRATEGY;
+    WithdrawalQueue public immutable WITHDRAWAL_QUEUE;
+    IERC20 public immutable STETH;
 
     struct Position {
         address user;
@@ -52,33 +56,42 @@ contract Escrow {
     constructor(
         address _wrapper,
         address _withdrawalQueue,
-        address _strategy
+        address _strategy,
+        address _steth
     ) {
-        wrapper = Wrapper(payable(_wrapper));
-        withdrawalQueue = WithdrawalQueue(_withdrawalQueue);
-        strategy = IStrategy(_strategy);
+        WRAPPER = Wrapper(payable(_wrapper));
+        WITHDRAWAL_QUEUE = WithdrawalQueue(_withdrawalQueue);
+        STRATEGY = IStrategy(_strategy);
+        STETH = IERC20(_steth);
     }
 
     function openPosition(uint256 stvTokenShares) external returns (uint256 positionId) {
         require(stvTokenShares > 0, "Zero shares");
         require(userPositionId[msg.sender] == 0, "Position already exists");
 
-        require(!IStrategy(strategy).isExiting(), "Strategy is exiting");
+        require(!IStrategy(STRATEGY).isExiting(), "Strategy is exiting");
 
         // 1. Transfer stvToken to escrow
-        wrapper.transferFrom(msg.sender, address(this), stvTokenShares);
+        WRAPPER.transferFrom(msg.sender, address(this), stvTokenShares);
 
         // 2. Remember shares for the user
         userStvShares[msg.sender] = stvTokenShares;
 
         // 3. Mint stETH through vaultHub
-        uint256 mintedStETH = IVaultHub(vaultHub).mintShares(stvTokenShares);
+        address vault = WRAPPER.DASHBOARD().stakingVault();
+
+        uint256 stethBeforeMint = STETH.balanceOf(address(this));
+        IVaultHub(VAULT_HUB).mintShares(vault, address(this), stvTokenShares);
+        uint256 stethAfterMint = STETH.balanceOf(address(this));
+        uint256 mintedSteth = stethAfterMint - stethBeforeMint;
+
+        // uint256 mintedStETH = IVaultHub(vaultHub).vaultConnection(vault).shareLimit;
 
         // 4. Execute strategy
-        IStrategy(strategy).execute(msg.sender, mintedStETH);
+        IStrategy(STRATEGY).execute(msg.sender, mintedSteth);
 
         // 5. Get information about borrowed assets
-        (uint256 borrowAssets, , ) = IStrategy(strategy).getBorrowDetails();
+        (uint256 borrowAssets, , ) = IStrategy(STRATEGY).getBorrowDetails();
 
         // 6. Save position data
         positionId = nextPositionId++;
@@ -111,14 +124,14 @@ contract Escrow {
         position.isExiting = true;
 
         // 2. Initiate exit
-        IStrategy(strategy).initiateExit(msg.sender, position.borrowedAssets);
+        IStrategy(STRATEGY).initiateExit(msg.sender, position.borrowedAssets);
 
         // 2. Initiate exit through withdrawal queue
         // Need to calculate how much ETH to withdraw
         uint256 totalAssets = position.stvTokenShares + position.borrowedAssets;
 
         // 3. Create withdrawal request
-        withdrawalRequestId = withdrawalQueue.requestWithdrawal(
+        withdrawalRequestId = WITHDRAWAL_QUEUE.requestWithdrawal(
             msg.sender,
             position.stvTokenShares,
             totalAssets
@@ -138,18 +151,18 @@ contract Escrow {
 
         // 1. Check that withdrawal request is finalized
         require(
-            withdrawalQueue.getRequest(position.withdrawalRequestId).isFinalized,
+            WITHDRAWAL_QUEUE.getRequest(position.withdrawalRequestId).isFinalized,
             "Withdrawal not finalized"
         );
 
         // 2. Claim withdrawal
-        withdrawalQueue.claim(position.withdrawalRequestId);
+        WITHDRAWAL_QUEUE.claim(position.withdrawalRequestId);
 
         // 3. Close position in strategy
-        IStrategy(strategy).finalizeExit(msg.sender);
+        IStrategy(STRATEGY).finalizeExit(msg.sender);
 
         // 4. Return stvToken to user
-        wrapper.transfer(msg.sender, position.stvTokenShares);
+        WRAPPER.transfer(msg.sender, position.stvTokenShares);
 
         // 5. Update global counters
         totalBorrowedAssets -= position.borrowedAssets;
@@ -190,8 +203,4 @@ contract Escrow {
     function getTotalBorrowedAssets() external view returns (uint256) {
         return totalBorrowedAssets;
     }
-}
-
-interface IVaultHub {
-    function mintShares(uint256 stvTokenShares) external returns (uint256 mintedStETH);
 }

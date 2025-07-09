@@ -9,10 +9,12 @@ import {MockStakingVault} from "./mocks/MockStakingVault.sol";
 import {WithdrawalQueue} from "../src/WithdrawalQueue.sol";
 import {Escrow} from "../src/Escrow.sol";
 import {ExampleStrategy} from "../src/ExampleStrategy.sol";
+import {MockERC20} from "./mocks/MockERC20.sol";
 
 contract StVaultWrapperV3Test is Test {
     Wrapper public wrapper;
     MockDashboard public dashboard;
+    MockERC20 public steth;
     MockVaultHub public vaultHub;
     MockStakingVault public stakingVault;
     WithdrawalQueue public withdrawalQueue;
@@ -32,6 +34,7 @@ contract StVaultWrapperV3Test is Test {
         stakingVault = new MockStakingVault();
         vaultHub = new MockVaultHub();
         dashboard = new MockDashboard(address(vaultHub), address(stakingVault));
+        steth = new MockERC20("stETH", "stETH");
 
         wrapper = new Wrapper(
             address(dashboard),
@@ -42,7 +45,7 @@ contract StVaultWrapperV3Test is Test {
 
         address aavePool = address(0x1);
         strategy = new ExampleStrategy(address(stakingVault), address(aavePool));
-        escrow = new Escrow(address(wrapper), address(withdrawalQueue), address(strategy));
+        escrow = new Escrow(address(wrapper), address(withdrawalQueue), address(strategy), address(steth));
 
         // Fund the vault initially
         // vm.deal(address(vaultHub), 100 ether);
