@@ -1,0 +1,273 @@
+// SPDX-License-Identifier: UNLICENSED
+pragma solidity 0.8.25;
+
+import {Test, console} from "forge-std/Test.sol";
+
+import {ILidoLocator} from "lido-core/contracts/common/interfaces/ILidoLocator.sol";
+import {IStETH} from "../src/interfaces/IStETH.sol";
+
+import {Wrapper} from "../src/Wrapper.sol";
+import {MockDashboard} from "./mocks/MockDashboard.sol";
+import {MockVaultHub} from "./mocks/MockVaultHub.sol";
+import {MockStakingVault} from "./mocks/MockStakingVault.sol";
+import {WithdrawalQueue} from "../src/WithdrawalQueue.sol";
+import {Escrow} from "../src/Escrow.sol";
+import {ExampleStrategy} from "../src/ExampleStrategy.sol";
+import {MockERC20} from "./mocks/MockERC20.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+
+
+contract StVaultWrapperV3Test is Test {
+    ILidoLocator public locator;
+    Wrapper public wrapper;
+    MockDashboard public dashboard;
+    MockERC20 public steth;
+    // IStETH public steth;
+    MockVaultHub public vaultHub;
+    MockStakingVault public stakingVault;
+    WithdrawalQueue public withdrawalQueue;
+    Escrow public escrow;
+    ExampleStrategy public strategy;
+
+    address public user1 = address(0x1);
+    address public user2 = address(0x2);
+
+    event VaultFunded(uint256 amount);
+    event WithdrawalRequested(uint256 indexed requestId, address indexed user, uint256 shares, uint256 assets);
+    event WithdrawalProcessed(uint256 indexed requestId, address indexed user, uint256 shares, uint256 assets);
+    event ValidatorExitRequested(bytes pubkeys);
+    event ValidatorWithdrawalsTriggered(bytes pubkeys, uint64[] amounts);
+
+    function setUp() public {
+        // Fund the test contract with ETH so it can fund the vault during Wrapper construction
+        vm.deal(address(this), 1000 ether);
+
+        string memory deployedJson = vm.readFile("lido-core/deployed-local.json");
+        locator = ILidoLocator(vm.parseJsonAddress(deployedJson, "$.lidoLocator.proxy.address"));
+
+        stakingVault = new MockStakingVault();
+        vaultHub = new MockVaultHub();
+        dashboard = new MockDashboard(address(vaultHub), address(stakingVault));
+
+        // steth = IStETH(locator.lido());
+        steth = new MockERC20("stETH", "stETH");
+
+        // Create withdrawal queue first
+        withdrawalQueue = new WithdrawalQueue(address(dashboard));
+
+        // Create wrapper first without escrow
+        wrapper = new Wrapper{value: 0 wei}(
+            address(dashboard),
+            address(withdrawalQueue),
+            address(0), // placeholder for escrow
+            "Staked ETH Vault Wrapper",
+            "stvETH"
+        );
+
+        // Create strategy and escrow
+        address aavePool = address(0x1);
+        uint256 strategyLoops = 2;
+        strategy = new ExampleStrategy(address(steth), address(aavePool), address(wrapper), address(0), strategyLoops);
+        escrow = new Escrow(address(wrapper), address(withdrawalQueue), address(strategy), address(steth));
+
+        // Update wrapper and strategy with escrow address
+        wrapper.setEscrowAddress(address(escrow));
+        strategy.setEscrowAddress(address(escrow));
+
+        // Fund the LenderMock contract with ETH so it can lend
+        vm.deal(address(strategy.LENDER_MOCK()), 1234 ether);
+
+        // Set the stETH token address in MockVaultHub so it can mint stETH
+        vaultHub.setStethToken(address(steth));
+
+        // Fund users
+        vm.deal(user1, 1000 ether);
+        vm.deal(user2, 1000 ether);
+    }
+
+    function xtest_DepositETH() public {
+        vm.deal(user1, 10 ether);
+
+        vm.startPrank(user1);
+        uint256 user1shares = wrapper.depositETH{value: 10 ether}();
+        vm.stopPrank();
+
+        vm.startPrank(user2);
+        uint256 user2shares = wrapper.depositETH{value: 22 ether}();
+        vm.stopPrank();
+
+        assertEq(wrapper.balanceOf(user1), user1shares);
+        assertEq(wrapper.balanceOf(user2), user2shares);
+
+        assertEq(wrapper.totalAssets(), 32 ether);
+        assertEq(address(dashboard.stakingVault()).balance, 32 ether);
+
+        console.log("=== Initial State ===");
+        console.log("User1 shares:", user1shares, "stvW");
+        console.log("User2 shares:", user2shares, "stvW");
+        console.log("Total supply:", wrapper.totalSupply(), "stvW");
+        console.log("Total assets:", wrapper.totalAssets(), "ETH");
+
+        // Calculate initial exchange rate
+        uint256 initialExchangeRate = (wrapper.totalAssets() * 1e18) / wrapper.totalSupply();
+        console.log("Initial exchange rate:", initialExchangeRate, "ETH per stvW");
+
+        // 2. Simulate rewards (vault totalValue increases)
+        int256 rewards = 8 ether; // 25% increase in total value
+        vaultHub.mock_simulateRewards(address(stakingVault), rewards);
+
+        console.log("\n=== After Rewards ===");
+        console.log("Rewards added:", uint256(rewards), "ETH");
+        console.log("New total assets:", wrapper.totalAssets(), "ETH");
+        console.log("User1 shares (unchanged):", wrapper.balanceOf(user1), "stvW");
+        console.log("User2 shares (unchanged):", wrapper.balanceOf(user2), "stvW");
+
+        // Verify shares didn't change
+        assertEq(wrapper.balanceOf(user1), user1shares);
+        assertEq(wrapper.balanceOf(user2), user2shares);
+
+        // Verify totalAssets increased
+        assertEq(wrapper.totalAssets(), 32 ether + uint256(rewards));
+
+        // Calculate new exchange rate
+        uint256 newExchangeRate = (wrapper.totalAssets() * 1e18) / wrapper.totalSupply();
+        console.log("New exchange rate:", newExchangeRate, "ETH per stvW");
+
+        // Verify exchange rate increased
+        assertGt(newExchangeRate, initialExchangeRate);
+
+        // 3. Test that users can now withdraw more ETH for the same shares
+        // Calculate how much ETH each user can get for their shares now
+        uint256 user1EthValue = wrapper.previewRedeem(user1shares);
+        uint256 user2EthValue = wrapper.previewRedeem(user2shares);
+
+        console.log("\n=== ETH Value of Shares After Rewards ===");
+        console.log("User1 ETH value:", user1EthValue / 1e18, "ETH (was 10 ETH)");
+        console.log("User2 ETH value:", user2EthValue / 1e18, "ETH (was 22 ETH)");
+    }
+
+
+    function test_openClosePosition() public {
+        uint256 initialETH = 10_000 wei;
+
+        // Setup: User deposits ETH and gets stvToken shares
+        vm.deal(user1, initialETH);
+
+        vm.prank(user1);
+        uint256 user1shares = wrapper.depositETH{value: initialETH}();
+
+        assertEq(wrapper.totalAssets(), initialETH, "wrapper totalAssets should equal initial deposit");
+        assertEq(wrapper.totalSupply(), user1shares, "wrapper totalSupply should equal user1shares");
+
+        vm.prank(user1);
+        wrapper.openPosition(user1shares);
+
+        logAllBalances(4);
+
+        // Assert all logged balances
+        address stETH = address(strategy.STETH());
+        address lenderMock = address(strategy.LENDER_MOCK());
+
+        // Calculate expected values based on strategy logic
+        // Strategy constants
+        uint256 borrowRatio = strategy.LENDER_MOCK().BORROW_RATIO(); // 7500 (75%)
+        uint256 totalBasisPoints = strategy.LENDER_MOCK().TOTAL_BASIS_POINTS(); // 10000
+
+        // Loop 0: Use initial shares (user1shares)
+        // - Mint stETH 1:1 with shares: user1shares stETH
+        // - Borrow ETH: user1shares * 0.75
+        // - Deposit borrowed ETH gets same amount of shares: user1shares * 0.75 shares
+        uint256 borrowedEth0 = (user1shares * borrowRatio) / totalBasisPoints;
+
+        // Loop 1: Use shares from loop 0
+        // - Mint stETH 1:1: borrowedEth0 stETH
+        // - Borrow ETH: borrowedEth0 * 0.75
+        // - Deposit borrowed ETH gets same amount of shares: borrowedEth0 * 0.75 shares
+        uint256 borrowedEth1 = (borrowedEth0 * borrowRatio) / totalBasisPoints;
+
+        // Final calculated values (computed inline to avoid stack too deep)
+        // expectedWrapperStvShares = user1shares + borrowedEth0 (shares accumulated from minting)
+        // expectedStrategyStvShares = borrowedEth1 (remaining from last deposit)
+        // expectedStakingVaultETH = initialETH + borrowedEth0 + borrowedEth1
+        // expectedLenderMockETH = 1234 ether - (borrowedEth0 + borrowedEth1)
+        // expectedLenderMockStETH = user1shares + borrowedEth0 (total stETH minted)
+
+        // // User1 balances
+        // assertEq(user1.balance, 0, "user1 ETH balance should be 0 (spent on initial deposit)");
+        // assertEq(wrapper.balanceOf(user1), 0, "user1 stvETH balance should be 0 after opening position");
+        // assertEq(IERC20(stETH).balanceOf(user1), 0, "user1 stETH balance should be 0");
+
+        // // Wrapper balances
+        // assertEq(address(wrapper).balance, 0, "wrapper ETH balance should be 0");
+        // assertEq(wrapper.balanceOf(address(wrapper)), user1shares + borrowedEth0, "wrapper stvETH balance should match calculated value");
+        // assertEq(IERC20(stETH).balanceOf(address(wrapper)), 0, "wrapper stETH balance should be 0");
+
+        // // Strategy balances
+        // assertEq(address(strategy).balance, 0, "strategy ETH balance should be 0");
+        // assertEq(wrapper.balanceOf(address(strategy)), borrowedEth1, "strategy stvETH balance should match calculated value");
+        // assertEq(IERC20(stETH).balanceOf(address(strategy)), 0, "strategy stETH balance should be 0");
+
+        // // StakingVault balances
+        // assertEq(address(stakingVault).balance, initialETH + borrowedEth0 + borrowedEth1, "stakingVault ETH balance should match calculated value");
+
+        // // LenderMock balances
+        // assertEq(lenderMock.balance, 1234 ether - (borrowedEth0 + borrowedEth1), "lenderMock ETH balance should match calculated value");
+        // assertEq(wrapper.balanceOf(lenderMock), 0, "lenderMock stvETH balance should be 0");
+        // assertEq(IERC20(stETH).balanceOf(lenderMock), user1shares + borrowedEth0, "lenderMock stETH balance should match calculated value");
+    }
+
+    function logAllBalances(uint256 _context) public view {
+        address stETH = address(strategy.STETH());
+        address lenderMock = address(strategy.LENDER_MOCK());
+
+        console.log("");
+        console.log("=== Balances ===", _context);
+
+        console.log(
+            string.concat(
+                "user1: ETH=", vm.toString(user1.balance),
+                " stvETH=", vm.toString(wrapper.balanceOf(user1)),
+                " stETH=", vm.toString(IERC20(stETH).balanceOf(user1))
+            )
+        );
+        console.log(
+            string.concat(
+                "wrapper: ETH=", vm.toString(address(wrapper).balance),
+                " stvETH=", vm.toString(wrapper.balanceOf(address(wrapper))),
+                " stETH=", vm.toString(IERC20(stETH).balanceOf(address(wrapper)))
+            )
+        );
+        // console.log(
+        //     string.concat(
+        //         "escrow: ETH=", vm.toString(address(escrow).balance),
+        //         " stvETH=", vm.toString(wrapper.balanceOf(address(escrow))),
+        //         " stETH=", vm.toString(IERC20(stETH).balanceOf(address(escrow)))
+        //     )
+        // );
+        console.log(
+            string.concat(
+                "strategy: ETH=", vm.toString(address(strategy).balance),
+                " stvETH=", vm.toString(wrapper.balanceOf(address(strategy))),
+                " stETH=", vm.toString(IERC20(stETH).balanceOf(address(strategy)))
+            )
+        );
+        // Log dashboard balances as well
+        // address dashboard_ = address(dashboard);
+        // console.log(
+        //     string.concat(
+        //         "dashboard: ETH=", vm.toString(dashboard_.balance),
+        //         " stvETH=", vm.toString(wrapper.balanceOf(dashboard_)),
+        //         " stETH=", vm.toString(IERC20(stETH).balanceOf(dashboard_))
+        //     )
+        // );
+        console.log("stakingVault: ETH=", vm.toString(address(stakingVault).balance));
+        console.log(
+            string.concat(
+                "LenderMock: ETH=", vm.toString(lenderMock.balance),
+                " stvETH=", vm.toString(wrapper.balanceOf(lenderMock)),
+                " stETH=", vm.toString(IERC20(stETH).balanceOf(lenderMock))
+            )
+        );
+    }
+
+}

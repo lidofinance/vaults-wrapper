@@ -2,12 +2,21 @@
 pragma solidity 0.8.25;
 
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+
 import {ERC4626} from "@openzeppelin/contracts/token/ERC20/extensions/ERC4626.sol";
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+
 import {WithdrawalQueue} from "./WithdrawalQueue.sol";
 import {Escrow} from "./Escrow.sol";
+import {ExampleStrategy} from "./ExampleStrategy.sol";
 import {IVaultHub} from "./interfaces/IVaultHub.sol";
 import {IDashboard} from "./interfaces/IDashboard.sol";
 
+
+interface IStETH is IERC20 {
+    function sharesOf(address account) external view returns (uint256);
+}
 
 contract Wrapper is ERC4626 {
 
@@ -17,9 +26,13 @@ contract Wrapper is ERC4626 {
     IVaultHub public immutable VAULT_HUB;
     address public immutable STAKING_VAULT;
     WithdrawalQueue public immutable WITHDRAWAL_QUEUE;
-    Escrow public immutable ESCROW;
+    Escrow public ESCROW;
+
+    uint256 public totalLockedStvShares;
 
     bool public autoLeverageEnabled = true;
+    address public escrowAddress; // Temporary storage for escrow address
+    mapping(address => uint256) public lockedStvSharesByUser;
 
     event VaultFunded(uint256 amount);
     event AutoLeverageExecuted(address indexed user, uint256 shares);
@@ -29,23 +42,36 @@ contract Wrapper is ERC4626 {
     event ValidatorWithdrawalsTriggered(bytes pubkeys, uint64[] amounts);
     event WithdrawalRequested(uint256 indexed requestId, address indexed user, uint256 shares, uint256 assets);
     event ImmediateWithdrawal(address indexed user, uint256 shares, uint256 assets);
+    event EscrowDeposit(address indexed escrow, uint256 amount, uint256 shares);
+    event TransferAttempt(address from, address to, uint256 amount, uint256 allowance);
+
+    event Debug(string message, uint256 value1, uint256 value2);
 
     constructor(
         address _dashboard,
         address _withdrawalQueue,
+        address _escrow,
         string memory name_,
         string memory symbol_
-    )
+    ) payable
         ERC20(name_, symbol_)
         // The asset is native ETH. We pass address(0) as a placeholder for the ERC20 asset token.
         // This is safe because we override all functions that would interact with the asset
         // (totalAssets, deposit, withdraw, redeem) to use our own ETH-based logic.
         ERC4626(ERC20(address(0)))
     {
-        DASHBOARD = IDashboard(_dashboard);
-        VAULT_HUB = DASHBOARD.vaultHub();
-        STAKING_VAULT = DASHBOARD.stakingVault();
+        DASHBOARD = IDashboard(payable(_dashboard));
+        VAULT_HUB = IVaultHub(DASHBOARD.VAULT_HUB());
+        STAKING_VAULT = address(DASHBOARD.stakingVault());
         WITHDRAWAL_QUEUE = WithdrawalQueue(_withdrawalQueue);
+        if (_escrow != address(0)) {
+            ESCROW = Escrow(_escrow);
+            escrowAddress = _escrow;
+        }
+
+        // Fund the vault with 100 wei to ensure totalAssets is never 0
+        // This allows the ERC4626 share calculation logic to work correctly
+        // DASHBOARD.fund{value: 100 wei}(); // REMOVED
     }
 
     // =================================================================================
@@ -54,6 +80,15 @@ contract Wrapper is ERC4626 {
 
     function totalAssets() public view override returns (uint256) {
         return VAULT_HUB.totalValue(STAKING_VAULT);
+    }
+
+    function previewDeposit(uint256 assets) public view override returns (uint256) {
+        uint256 supply = totalSupply();
+        if (supply == 0) {
+            return assets; // 1:1 for the first deposit
+        }
+        // TODO: replace in favor of the stone?
+        return super.previewDeposit(assets);
     }
 
     /**
@@ -65,6 +100,13 @@ contract Wrapper is ERC4626 {
     }
 
     /**
+     * @notice Convenience function to deposit ETH to msg.sender
+     */
+    function depositETH() public payable returns (uint256) {
+        return depositETH(msg.sender);
+    }
+
+    /**
      * @notice Deposit native ETH and receive stvToken shares
      * @param receiver Address to receive the minted shares
      * @return shares Number of shares minted
@@ -73,12 +115,17 @@ contract Wrapper is ERC4626 {
         require(msg.value > 0, "Zero deposit");
         require(receiver != address(0), "Invalid receiver");
 
+        uint256 totalAssetsBefore = totalAssets();
+        uint256 totalSupplyBefore = totalSupply();
+        emit Debug("depositETH", totalAssetsBefore, totalSupplyBefore);
+
         // Calculate shares to be minted based on the assets value BEFORE this deposit.
         shares = previewDeposit(msg.value);
 
         // Fund vault through Dashboard. This increases the totalAssets value.
         DASHBOARD.fund{value: msg.value}();
-        // NB: emit no VaultFunded event cause it is emitted in Vault contract
+        // DEV: there is check inside that Wrapper is the Vault owner
+        // NB: emit no VaultFunded event because it is emitted in Vault contract
 
         // Mint the pre-calculated shares to the receiver.
         _mint(receiver, shares);
@@ -88,14 +135,37 @@ contract Wrapper is ERC4626 {
         // //     _autoExecuteLeverage(receiver, shares);
         // // }
         emit Deposit(msg.sender, receiver, msg.value, shares);
+        assert(totalAssets() == totalAssetsBefore + msg.value);
+        assert(totalSupply() == totalSupplyBefore + shares);
         return shares;
     }
 
-    /**
-     * @notice Convenience function to deposit ETH to msg.sender
-     */
-    function depositETH() public payable returns (uint256) {
-        return depositETH(msg.sender);
+
+    function openPosition(uint256 stvShares) external {
+        address payable strategy = payable(address(ESCROW.STRATEGY()));
+
+        _transfer(msg.sender, address(this), stvShares);
+        _approve(address(this), strategy, stvShares);
+        ExampleStrategy(strategy).execute(msg.sender, stvShares);
+    }
+
+    function closePosition(uint256 stvShares) external {
+        address payable strategy = payable(address(ESCROW.STRATEGY()));
+        ExampleStrategy(strategy).finalizeExit(msg.sender);
+    }
+
+    function mintStETHForEscrow(uint256 stvShares, address stethReceiver) external returns (uint256 mintedStethShares) {
+        _transfer(address(ESCROW), address(this), stvShares);
+        totalLockedStvShares += stvShares;
+
+        uint256 userEthInPool = _convertToAssets(stvShares, Math.Rounding.Floor);
+        uint256 remainingMintingCapacity = DASHBOARD.remainingMintingCapacityShares(0);
+
+        // TODO: not all minting capacity is for the user!
+        emit Debug("remainingMintingCapacity", remainingMintingCapacity, userEthInPool);
+
+        mintedStethShares = remainingMintingCapacity;
+        DASHBOARD.mintShares(stethReceiver, mintedStethShares);
     }
 
     // =================================================================================
@@ -105,13 +175,28 @@ contract Wrapper is ERC4626 {
     function calculateShareRate() public view returns (uint256) {
         uint256 _vaultTotalAssets = totalAssets();
         uint256 _totalSupply = totalSupply();
-        uint256 totalBorrowedAssets = ESCROW.getTotalBorrowedAssets();
+        uint256 totalBorrowedAssets = 0;
+
+        if (escrowAddress != address(0)) {
+            totalBorrowedAssets = ESCROW.getTotalBorrowedAssets();
+        }
 
         uint256 userTotalAssets = _vaultTotalAssets - totalBorrowedAssets;
 
         if (_totalSupply == 0) return E27_PRECISION_BASE; // 1.0
 
         return (userTotalAssets * E27_PRECISION_BASE) / _totalSupply;
+    }
+
+    /**
+     * @notice Set the escrow address after construction
+     * @dev This is needed to resolve circular dependency
+     */
+    function setEscrowAddress(address _escrow) external {
+        require(escrowAddress == address(0), "Escrow already set");
+        require(_escrow != address(0), "Invalid escrow address");
+        ESCROW = Escrow(_escrow);
+        escrowAddress = _escrow;
     }
 
     function withdraw(uint256 shares) external returns (uint256 requestId) {
@@ -124,12 +209,43 @@ contract Wrapper is ERC4626 {
         requestId = WITHDRAWAL_QUEUE.requestWithdrawal(msg.sender, shares, assets);
     }
 
+    /**
+     * @notice Mint stETH from stvToken shares for strategy operations
+     * @dev This function is called by the Strategy contract during looping
+     * @param stvTokenShares Number of stvToken shares to use for minting
+     * @param stethToken Address of the stETH token
+     * @return mintedSteth Amount of stETH minted
+     */
+    function mintStETHFromShares(uint256 stvTokenShares, address stethToken) external returns (uint256 mintedSteth) {
+        require(msg.sender == address(ESCROW), "Only escrow can call");
+        require(stvTokenShares <= balanceOf(address(ESCROW)), "Insufficient stvToken shares");
+
+        // Log allowance before transfer
+        uint256 allowance = IERC20(address(this)).allowance(address(ESCROW), address(this));
+        emit TransferAttempt(address(ESCROW), address(this), stvTokenShares, allowance);
+
+        // Transfer stvToken shares from Escrow to Wrapper
+        _transfer(address(ESCROW), address(this), stvTokenShares);
+
+        uint256 stethBeforeMint = IERC20(stethToken).balanceOf(address(ESCROW));
+        VAULT_HUB.mintShares(STAKING_VAULT, address(ESCROW), stvTokenShares);
+        uint256 stethAfterMint = IERC20(stethToken).balanceOf(address(ESCROW));
+        mintedSteth = stethAfterMint - stethBeforeMint;
+
+        return mintedSteth;
+    }
+
+    event MintStETHStep(string step, uint256 value1, uint256 value2, address addr1, address addr2);
+
+
+    event MintStETHCompleted(address indexed user, uint256 initialShares, uint256 totalShares, uint256 totalBorrowed);
+
     // =================================================================================
     // RECEIVE FUNCTION
     // =================================================================================
 
     receive() external payable {
         // Auto-deposit ETH sent directly to the contract
-        depositETH(msg.sender);
+        depositETH(address(this));
     }
 }

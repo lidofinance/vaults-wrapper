@@ -1,13 +1,189 @@
+// SPDX-FileCopyrightText: 2025 Lido <info@lido.fi>
 // SPDX-License-Identifier: GPL-3.0
 
-pragma solidity 0.8.25;
+pragma solidity >=0.8.0;
 
-import {IVaultHub} from "./IVaultHub.sol";
+import {IStakingVault} from "./IStakingVault.sol";
 
 interface IDashboard {
-    function vaultHub() external view returns (IVaultHub);
-    function stakingVault() external view returns (address);
-    function fund() external payable;
-    function withdraw(address recipient, uint256 _ether) external;
+    // ==================== Structs ====================
+    struct RoleAssignment {
+        address account;
+        bytes32 role;
+    }
+
+    struct VaultConnection {
+        uint256 shareLimit;
+        uint16 reserveRatioBP;
+        uint16 forcedRebalanceThresholdBP;
+        uint16 infraFeeBP;
+        uint16 liquidityFeeBP;
+        uint16 reservationFeeBP;
+    }
+
+    struct Report {
+        uint104 totalValue;
+        int152 inOutDelta;
+        uint64 timestamp;
+    }
+
+    // ==================== Events ====================
+    event UnguaranteedDeposits(address indexed stakingVault, uint256 deposits, uint256 totalAmount);
+    event ERC20Recovered(address indexed to, address indexed token, uint256 amount);
+    event ERC721Recovered(address indexed to, address indexed token, uint256 tokenId);
+    event ConfirmExpirySet(address indexed sender, uint256 oldConfirmExpiry, uint256 newConfirmExpiry);
+    event RoleMemberConfirmed(address indexed member, bytes32 indexed role, uint256 confirmTimestamp, uint256 expiryTimestamp, bytes data);
+    event NodeOperatorFeeSet(address indexed sender, uint256 oldNodeOperatorFeeRate, uint256 newNodeOperatorFeeRate);
+    event NodeOperatorFeeRecipientSet(address indexed sender, address oldNodeOperatorFeeRecipient, address newNodeOperatorFeeRecipient);
+    event NodeOperatorFeeDisbursed(address indexed recipient, uint256 amount, VaultConnection vaultConnection, Report feePeriodStartReport, Report feePeriodEndReport);
+
+    // ==================== Errors ====================
+    error ExceedsWithdrawable(uint256 amount, uint256 withdrawableValue);
+    error ExceedsMintingCapacity(uint256 requestedShares, uint256 remainingShares);
+    error EthTransferFailed(address recipient, uint256 amount);
+    error ConnectedToVaultHub();
+    error TierChangeNotConfirmed();
+    error DashboardNotAllowed();
+    error FeeValueExceed100Percent();
+    error IncreasedOverLimit();
+    error InvalidatedAdjustmentVote(uint256 currentAdjustment, uint256 currentAtPropositionAdjustment);
+    error SameAdjustment();
+    error SameRecipient();
+    error ReportStale();
+    error AdjustmentNotReported();
+    error AdjustmentNotSettled();
+    error VaultQuarantined();
+    error NonProxyCallsForbidden();
+    error AlreadyInitialized();
+    error ZeroArgument();
+    error ZeroAddress();
+    error ConfirmExpiryOutOfBounds();
+    error SenderNotMember();
+    error ZeroConfirmingRoles();
+
+    // ==================== Constants and Immutables ====================
+    function STETH() external view returns (address);
+    function WSTETH() external view returns (address);
+    function ETH() external view returns (address);
+    function FUND_ON_RECEIVE_FLAG_SLOT() external view returns (bytes32);
+    function VAULT_HUB() external view returns (address);
+    function LIDO_LOCATOR() external view returns (address);
+    function NODE_OPERATOR_MANAGER_ROLE() external view returns (bytes32);
+    function NODE_OPERATOR_REWARDS_ADJUST_ROLE() external view returns (bytes32);
+    function MANUAL_REWARDS_ADJUSTMENT_LIMIT() external view returns (uint256);
+    function RECOVER_ASSETS_ROLE() external view returns (bytes32);
+    function DEFAULT_ADMIN_ROLE() external view returns (bytes32);
+    function MIN_CONFIRM_EXPIRY() external view returns (uint256);
+    function MAX_CONFIRM_EXPIRY() external view returns (uint256);
+
+    // Role constants
+    function FUND_ROLE() external view returns (bytes32);
+    function WITHDRAW_ROLE() external view returns (bytes32);
+    function MINT_ROLE() external view returns (bytes32);
+    function BURN_ROLE() external view returns (bytes32);
+    function REBALANCE_ROLE() external view returns (bytes32);
+    function PAUSE_BEACON_CHAIN_DEPOSITS_ROLE() external view returns (bytes32);
+    function RESUME_BEACON_CHAIN_DEPOSITS_ROLE() external view returns (bytes32);
+    function REQUEST_VALIDATOR_EXIT_ROLE() external view returns (bytes32);
+    function TRIGGER_VALIDATOR_WITHDRAWAL_ROLE() external view returns (bytes32);
+    function VOLUNTARY_DISCONNECT_ROLE() external view returns (bytes32);
+    function PDG_COMPENSATE_PREDEPOSIT_ROLE() external view returns (bytes32);
+    function PDG_PROVE_VALIDATOR_ROLE() external view returns (bytes32);
+    function UNGUARANTEED_BEACON_CHAIN_DEPOSIT_ROLE() external view returns (bytes32);
+    function CHANGE_TIER_ROLE() external view returns (bytes32);
+
+    // ==================== Initialization ====================
+    function initialize(
+        address _defaultAdmin,
+        address _nodeOperatorManager,
+        uint256 _nodeOperatorFeeBP,
+        uint256 _confirmExpiry
+    ) external;
+
+    function initialized() external view returns (bool);
+
+    // ==================== View Functions ====================
+    function stakingVault() external view returns (IStakingVault);
+    function vaultConnection() external view returns (VaultConnection memory);
+    function shareLimit() external view returns (uint256);
+    function liabilityShares() external view returns (uint256);
+    function reserveRatioBP() external view returns (uint16);
+    function forcedRebalanceThresholdBP() external view returns (uint16);
+    function infraFeeBP() external view returns (uint16);
+    function liquidityFeeBP() external view returns (uint16);
+    function reservationFeeBP() external view returns (uint16);
+    function totalValue() external view returns (uint256);
+    function unsettledObligations() external view returns (uint256);
+    function locked() external view returns (uint256);
+    function maxLockableValue() external view returns (uint256);
+    function totalMintingCapacityShares() external view returns (uint256);
+    function remainingMintingCapacityShares(uint256 _etherToFund) external view returns (uint256);
     function withdrawableValue() external view returns (uint256);
+
+    // ==================== Node Operator Fee Functions ====================
+    function nodeOperatorFeeRate() external view returns (uint256);
+    function nodeOperatorFeeRecipient() external view returns (address);
+    function latestReport() external view returns (Report memory);
+    function nodeOperatorDisbursableFee() external view returns (uint256);
+    function disburseNodeOperatorFee() external;
+    function setNodeOperatorFeeRate(uint256 _newNodeOperatorFeeRate) external returns (bool);
+    function setNodeOperatorFeeRecipient(address _newNodeOperatorFeeRecipient) external;
+    function increaseRewardsAdjustment(uint256 _adjustmentIncrease) external;
+    function setRewardsAdjustment(uint256 _proposedAdjustment, uint256 _expectedAdjustment) external returns (bool);
+
+    // ==================== Confirmation Functions ====================
+    function confirmingRoles() external pure returns (bytes32[] memory);
+    function getConfirmExpiry() external view returns (uint256);
+    function confirmation(bytes memory _callData, bytes32 _role) external view returns (uint256);
+    function setConfirmExpiry(uint256 _newConfirmExpiry) external returns (bool);
+
+    // ==================== Access Control Functions ====================
+    function hasRole(bytes32 role, address account) external view returns (bool);
+    function getRoleAdmin(bytes32 role) external view returns (bytes32);
+    function grantRole(bytes32 role, address account) external;
+    function revokeRole(bytes32 role, address account) external;
+    function renounceRole(bytes32 role, address callerConfirmation) external;
+    function grantRoles(RoleAssignment[] calldata _assignments) external;
+    function revokeRoles(RoleAssignment[] calldata _assignments) external;
+    function getRoleMember(bytes32 role, uint256 index) external view returns (address);
+    function getRoleMemberCount(bytes32 role) external view returns (uint256);
+
+    // ==================== Vault Management Functions ====================
+    function transferVaultOwnership(address _newOwner) external;
+    function voluntaryDisconnect() external;
+    function abandonDashboard(address _newOwner) external;
+    function reconnectToVaultHub() external;
+    function connectToVaultHub() external payable;
+    function connectAndAcceptTier(uint256 _tierId, uint256 _requestedShareLimit) external payable;
+    function changeTier(uint256 _tierId, uint256 _requestedShareLimit) external returns (bool);
+
+    // ==================== Vault Operations ====================
+    function fund() external payable;
+    function withdraw(address _recipient, uint256 _ether) external;
+    function mintShares(address _recipient, uint256 _amountOfShares) external payable;
+    function mintStETH(address _recipient, uint256 _amountOfStETH) external payable;
+    function mintWstETH(address _recipient, uint256 _amountOfWstETH) external payable;
+    function burnShares(uint256 _amountOfShares) external;
+    function burnStETH(uint256 _amountOfStETH) external;
+    function burnWstETH(uint256 _amountOfWstETH) external;
+    function rebalanceVaultWithShares(uint256 _shares) external;
+    function rebalanceVaultWithEther(uint256 _ether) external payable;
+
+    // ==================== Beacon Chain Operations ====================
+    function pauseBeaconChainDeposits() external;
+    function resumeBeaconChainDeposits() external;
+    function requestValidatorExit(bytes calldata _pubkeys) external;
+    function triggerValidatorWithdrawals(bytes calldata _pubkeys, uint64[] calldata _amounts, address _refundRecipient) external payable;
+    function unguaranteedDepositToBeaconChain(IStakingVault.Deposit[] calldata _deposits) external returns (uint256 totalAmount);
+
+    // ==================== PDG Operations ====================
+    // function proveUnknownValidatorsToPDG(IPredepositGuarantee.ValidatorWitness[] calldata _witnesses) external;
+    function compensateDisprovenPredepositFromPDG(bytes calldata _pubkey, address _recipient) external;
+
+    // ==================== Asset Recovery ====================
+    function recoverERC20(address _token, address _recipient, uint256 _amount) external;
+    function recoverERC721(address _token, uint256 _tokenId, address _recipient) external;
+
+    // ==================== Receive Function ====================
+    receive() external payable;
 }
