@@ -71,6 +71,17 @@ contract Escrow {
         VAULT_HUB = address(WRAPPER.VAULT_HUB());
     }
 
+    function openPosition(uint256 stvShares) external {
+        WRAPPER.transferFrom(msg.sender, address(this), stvShares);
+
+        WRAPPER.approve(address(STRATEGY), stvShares);
+        STRATEGY.execute(msg.sender, stvShares);
+    }
+
+    function closePosition(uint256 stvShares) external {
+        STRATEGY.finalizeExit(msg.sender);
+    }
+
 
     function mintStETH(uint256 stvShares) external returns (uint256 mintedStethShares) {
         WRAPPER.transferFrom(msg.sender, address(this), stvShares);

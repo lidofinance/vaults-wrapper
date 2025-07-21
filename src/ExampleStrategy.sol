@@ -80,7 +80,7 @@ contract ExampleStrategy is IStrategy {
         uint256 totalBorrowedEth = 0;
         uint256 totalStvTokenShares = 0;
 
-        STV_TOKEN.transferFrom(address(WRAPPER), address(this), stvTokenShares);
+        STV_TOKEN.transferFrom(address(msg.sender), address(this), stvTokenShares);
 
         // Execute the looping strategy
         for (uint256 i = 0; i < LOOPS; i++) {

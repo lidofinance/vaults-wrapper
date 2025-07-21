@@ -84,10 +84,10 @@ contract Wrapper is ERC4626 {
 
     function previewDeposit(uint256 assets) public view override returns (uint256) {
         uint256 supply = totalSupply();
+        // TODO: replace in favor of the stone?
         if (supply == 0) {
             return assets; // 1:1 for the first deposit
         }
-        // TODO: replace in favor of the stone?
         return super.previewDeposit(assets);
     }
 
@@ -140,19 +140,6 @@ contract Wrapper is ERC4626 {
         return shares;
     }
 
-
-    function openPosition(uint256 stvShares) external {
-        address payable strategy = payable(address(ESCROW.STRATEGY()));
-
-        _transfer(msg.sender, address(this), stvShares);
-        _approve(address(this), strategy, stvShares);
-        ExampleStrategy(strategy).execute(msg.sender, stvShares);
-    }
-
-    function closePosition(uint256 stvShares) external {
-        address payable strategy = payable(address(ESCROW.STRATEGY()));
-        ExampleStrategy(strategy).finalizeExit(msg.sender);
-    }
 
     function mintStETHForEscrow(uint256 stvShares, address stethReceiver) external returns (uint256 mintedStethShares) {
         _transfer(address(ESCROW), address(this), stvShares);

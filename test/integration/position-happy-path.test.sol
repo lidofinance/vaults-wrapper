@@ -174,8 +174,10 @@ contract StVaultWrapperV3Test is Test {
         uint256 borrowRatio = lenderMock.BORROW_RATIO();
         console.log("borrowRatio", borrowRatio);
 
-        vm.prank(user1);
-        wrapper.openPosition(user1StvShares);
+        vm.startPrank(user1);
+        wrapper.approve(address(escrow), user1StvShares);
+        escrow.openPosition(user1StvShares);
+        vm.stopPrank();
 
         logAllBalances(4);
 
