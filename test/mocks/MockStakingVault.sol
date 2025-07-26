@@ -12,12 +12,14 @@ contract MockStakingVault {
     uint256 public totalAssets;
 
     event Funded(address indexed sender, uint256 amount);
+    event StakingVaultFunded(address sender, uint256 amount);
 
     constructor() {
         nodeOperator = address(0x123);
     }
 
     function fund() external payable {
+        emit StakingVaultFunded(msg.sender, msg.value);
         totalAssets += msg.value;
         emit Funded(msg.sender, msg.value);
     }

@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0
 pragma solidity 0.8.25;
 
-interface IVaultHub {
+import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
+
+interface IVaultHub is IAccessControl {
     struct VaultConnection {
         // ### 1st slot
         /// @notice address of the vault owner
@@ -30,9 +32,10 @@ interface IVaultHub {
         /// 64 bits gap
     }
 
+    function CONNECT_DEPOSIT() external view returns (uint256);
 
     function fund(address vault) external payable;
-    function withdraw(address vault, address recipient, uint256 etherAmount) external;
+    // function withdraw(address vault, address recipient, uint256 etherAmount) external;
     function totalValue(address vault) external view returns (uint256);
     function withdrawableValue(address vault) external view returns (uint256);
     function requestValidatorExit(address vault, bytes calldata pubkeys) external;
@@ -44,4 +47,72 @@ interface IVaultHub {
     ) external payable;
     function mintShares(address _vault, address _recipient, uint256 _amountOfShares) external;
     function vaultConnection(address _vault) external view returns (VaultConnection memory);
+    function maxLockableValue(address _vault) external view returns (uint256);
+
+    function transferVaultOwnership(address _vault, address _newOwner) external;
+
+
+    // -----------------------------
+    //           ERRORS
+    // -----------------------------
+
+    event BadDebtSocialized(address indexed vaultDonor, address indexed vaultAcceptor, uint256 badDebtShares);
+    event BadDebtWrittenOffToBeInternalized(address indexed vault, uint256 badDebtShares);
+
+    error ZeroBalance();
+
+    /**
+     * @notice Thrown when attempting to rebalance more ether than the current total value of the vault
+     * @param totalValue Current total value of the vault
+     * @param rebalanceAmount Amount attempting to rebalance (in ether)
+     */
+    error RebalanceAmountExceedsTotalValue(uint256 totalValue, uint256 rebalanceAmount);
+
+    /**
+     * @notice Thrown when attempting to withdraw more ether than the available value of the vault
+     * @param vault The address of the vault
+     * @param withdrawable The available value of the vault
+     * @param requested The amount attempting to withdraw
+     */
+    error AmountExceedsWithdrawableValue(address vault, uint256 withdrawable, uint256 requested);
+
+    error AlreadyHealthy(address vault);
+    error VaultMintingCapacityExceeded(
+        address vault,
+        uint256 totalValue,
+        uint256 liabilityShares,
+        uint256 newRebalanceThresholdBP
+    );
+    error InsufficientSharesToBurn(address vault, uint256 amount);
+    error ShareLimitExceeded(address vault, uint256 expectedSharesAfterMint, uint256 shareLimit);
+    error AlreadyConnected(address vault, uint256 index);
+    error NotConnectedToHub(address vault);
+    error NotAuthorized();
+    error ZeroAddress();
+    error ZeroArgument();
+    error InvalidBasisPoints(uint256 valueBP, uint256 maxValueBP);
+    error ShareLimitTooHigh(uint256 shareLimit, uint256 maxShareLimit);
+    error InsufficientValueToMint(address vault, uint256 maxLockableValue);
+    error NoLiabilitySharesShouldBeLeft(address vault, uint256 liabilityShares);
+    error CodehashNotAllowed(address vault, bytes32 codehash);
+    error InvalidFees(address vault, uint256 newFees, uint256 oldFees);
+    error VaultOssified(address vault);
+    error VaultInsufficientBalance(address vault, uint256 currentBalance, uint256 expectedBalance);
+    error VaultReportStale(address vault);
+    error PDGNotDepositor(address vault);
+    error ZeroCodehash();
+    error VaultHubNotPendingOwner(address vault);
+    error UnhealthyVaultCannotDeposit(address vault);
+    error VaultIsDisconnecting(address vault);
+    error VaultHasUnsettledObligations(address vault, uint256 unsettledObligations, uint256 allowedUnsettled);
+    error PartialValidatorWithdrawalNotAllowed();
+    error ForcedValidatorExitNotAllowed();
+    error NoBadDebtToWriteOff(address vault, uint256 totalValueShares, uint256 liabilityShares);
+    error BadDebtSocializationNotAllowed();
+
+    // PausableUntil errors
+    error ZeroPauseDuration();
+    error PausedExpected();
+    error ResumedExpected();
+    error PauseUntilMustBeInFuture();
 }
