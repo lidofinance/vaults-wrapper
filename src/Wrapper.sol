@@ -25,7 +25,8 @@ contract Wrapper is ERC4626 {
     IDashboard public immutable DASHBOARD;
     IVaultHub public immutable VAULT_HUB;
     address public immutable STAKING_VAULT;
-    WithdrawalQueue public immutable WITHDRAWAL_QUEUE;
+    
+    WithdrawalQueue public withdrawalQueue;
     Escrow public ESCROW;
 
     uint256 public totalLockedStvShares;
@@ -40,7 +41,6 @@ contract Wrapper is ERC4626 {
     event AutoLeverageToggled(bool enabled);
     event ValidatorExitRequested(bytes pubkeys);
     event ValidatorWithdrawalsTriggered(bytes pubkeys, uint64[] amounts);
-    event WithdrawalRequested(uint256 indexed requestId, address indexed user, uint256 shares, uint256 assets);
     event ImmediateWithdrawal(address indexed user, uint256 shares, uint256 assets);
     event EscrowDeposit(address indexed escrow, uint256 amount, uint256 shares);
     event TransferAttempt(address from, address to, uint256 amount, uint256 allowance);
@@ -49,7 +49,6 @@ contract Wrapper is ERC4626 {
 
     constructor(
         address _dashboard,
-        address _withdrawalQueue,
         address _escrow,
         string memory name_,
         string memory symbol_
@@ -63,7 +62,6 @@ contract Wrapper is ERC4626 {
         DASHBOARD = IDashboard(payable(_dashboard));
         VAULT_HUB = IVaultHub(DASHBOARD.VAULT_HUB());
         STAKING_VAULT = address(DASHBOARD.stakingVault());
-        WITHDRAWAL_QUEUE = WithdrawalQueue(_withdrawalQueue);
         if (_escrow != address(0)) {
             ESCROW = Escrow(_escrow);
             escrowAddress = _escrow;
@@ -159,20 +157,12 @@ contract Wrapper is ERC4626 {
     // WITHDRAWAL SYSTEM WITH EXTERNAL QUEUE
     // =================================================================================
 
-    function calculateShareRate() public view returns (uint256) {
-        uint256 _vaultTotalAssets = totalAssets();
-        uint256 _totalSupply = totalSupply();
-        uint256 totalBorrowedAssets = 0;
+    function burnShares(uint256 shares) external {
+        _burn(msg.sender, shares);
+    }
 
-        if (escrowAddress != address(0)) {
-            totalBorrowedAssets = ESCROW.getTotalBorrowedAssets();
-        }
-
-        uint256 userTotalAssets = _vaultTotalAssets - totalBorrowedAssets;
-
-        if (_totalSupply == 0) return E27_PRECISION_BASE; // 1.0
-
-        return (userTotalAssets * E27_PRECISION_BASE) / _totalSupply;
+    function setWithdrawalQueue(address _withdrawalQueue) external {
+        withdrawalQueue = WithdrawalQueue(payable(_withdrawalQueue));
     }
 
     /**
@@ -184,16 +174,6 @@ contract Wrapper is ERC4626 {
         require(_escrow != address(0), "Invalid escrow address");
         ESCROW = Escrow(_escrow);
         escrowAddress = _escrow;
-    }
-
-    function withdraw(uint256 shares) external returns (uint256 requestId) {
-        require(shares <= maxWithdraw(msg.sender), "ERC4626: withdraw more than max");
-
-        uint256 assets = previewRedeem(shares);
-
-        _burn(msg.sender, shares);
-
-        requestId = WITHDRAWAL_QUEUE.requestWithdrawal(msg.sender, shares, assets);
     }
 
     /**

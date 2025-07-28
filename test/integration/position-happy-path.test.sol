@@ -54,8 +54,6 @@ contract StVaultWrapperV3Test is Test {
     address public user2 = address(0x2);
 
     event VaultFunded(uint256 amount);
-    event WithdrawalRequested(uint256 indexed requestId, address indexed user, uint256 shares, uint256 assets);
-    event WithdrawalProcessed(uint256 indexed requestId, address indexed user, uint256 shares, uint256 assets);
     event ValidatorExitRequested(bytes pubkeys);
     event ValidatorWithdrawalsTriggered(bytes pubkeys, uint64[] amounts);
 
@@ -111,16 +109,16 @@ contract StVaultWrapperV3Test is Test {
         stakingVault = IStakingVault(vaultAddress);
         vm.label(address(stakingVault), "StakingVault");
 
-        // Create withdrawal queue first
-        withdrawalQueue = new WithdrawalQueue(address(dashboard));
-
         wrapper = new Wrapper{value: 0 wei}(
             address(dashboard),
-            address(withdrawalQueue),
             address(0), // placeholder for escrow
             "Staked ETH Vault Wrapper",
             "stvETH"
         );
+
+        withdrawalQueue = new WithdrawalQueue(wrapper);
+
+        wrapper.setWithdrawalQueue(address(withdrawalQueue));
 
         address vaultOwner = vaultHub.vaultConnection(address(stakingVault)).owner;
         console.log("vaultOwner", vaultOwner);
