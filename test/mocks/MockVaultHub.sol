@@ -4,10 +4,7 @@ pragma solidity 0.8.25;
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {MockERC20} from "./MockERC20.sol";
 import {IVaultHub} from "src/interfaces/IVaultHub.sol";
-
-interface IStakingVault {
-    function fund() external payable;
-}
+import {IStakingVault} from "../../src/interfaces/IStakingVault.sol";
 
 contract MockVaultHub { // TODO: maybe inherit IVaultHub
 
@@ -34,7 +31,7 @@ contract MockVaultHub { // TODO: maybe inherit IVaultHub
         return (vaultBalances[_vault] * (TOTAL_BASIS_POINTS - RESERVE_RATIO_BP)) / TOTAL_BASIS_POINTS;
     }
 
-    function vaultConnection(address _vault) external view returns (IVaultHub.VaultConnection memory) {
+    function vaultConnection(address _vault) external pure returns (IVaultHub.VaultConnection memory) {
         return IVaultHub.VaultConnection({
             owner: address(0),
             shareLimit: 0,
@@ -64,11 +61,16 @@ contract MockVaultHub { // TODO: maybe inherit IVaultHub
         IStakingVault(_vault).fund{value: msg.value}();
     }
 
+    function withdraw(address _vault, address _recipient, uint256 _amount) external {
+        vaultBalances[_vault] -= _amount;
+        IStakingVault(_vault).withdraw(_recipient, _amount);
+    }
+
     function totalValue(address _vault) external view returns (uint256) {
         return vaultBalances[_vault];
     }
 
-    function withdrawableValue(address _vault) external view returns (uint256) {
+    function withdrawableValue(address _vault) external pure returns (uint256) {
         return 0; // Dummy implementation - returns 0 for testing
     }
 
@@ -134,11 +136,15 @@ contract MockVaultHub { // TODO: maybe inherit IVaultHub
         // payable(address(this)).transfer(_amount);
     }
 
-    function CONNECT_DEPOSIT() external view returns (uint256) {
+    function CONNECT_DEPOSIT() external pure returns (uint256) {
         return 1 ether;
     }
 
-    function transferVaultOwnership(address _vault, address _newOwner) external {
+    function transferVaultOwnership(address _vault, address _newOwner) external pure {
         revert("Not implemented");
+    }
+
+    function isReportFresh(address _vault) external pure returns (bool) {
+        return true;
     }
 }

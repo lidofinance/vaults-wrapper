@@ -14,7 +14,6 @@ contract Escrow {
     Wrapper public immutable WRAPPER;
     address public immutable VAULT_HUB;
     IStrategy public immutable STRATEGY;
-    WithdrawalQueue public immutable WITHDRAWAL_QUEUE;
     IERC20 public immutable STETH;
     IERC20 public immutable STV_TOKEN;
 
@@ -64,7 +63,6 @@ contract Escrow {
         address _steth
     ) {
         WRAPPER = Wrapper(payable(_wrapper));
-        WITHDRAWAL_QUEUE = WithdrawalQueue(_withdrawalQueue);
         STRATEGY = IStrategy(_strategy);
         STETH = IERC20(_steth);
         STV_TOKEN = IERC20(_wrapper);

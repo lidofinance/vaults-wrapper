@@ -48,7 +48,8 @@ interface IVaultHub is IAccessControl {
     function mintShares(address _vault, address _recipient, uint256 _amountOfShares) external;
     function vaultConnection(address _vault) external view returns (VaultConnection memory);
     function maxLockableValue(address _vault) external view returns (uint256);
-
+    function isReportFresh(address _vault) external view returns (bool);
+    
     function transferVaultOwnership(address _vault, address _newOwner) external;
 
 

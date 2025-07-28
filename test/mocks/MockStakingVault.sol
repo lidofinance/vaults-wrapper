@@ -18,6 +18,8 @@ contract MockStakingVault {
         nodeOperator = address(0x123);
     }
 
+    receive() external payable {}
+
     function fund() external payable {
         emit StakingVaultFunded(msg.sender, msg.value);
         totalAssets += msg.value;
