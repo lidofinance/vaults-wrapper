@@ -1,5 +1,5 @@
 CORE_RPC_PORT ?= 9123
-CORE_BRANCH ?= chore/wrapper-dev
+CORE_BRANCH ?= feat/testnet-2
 CORE_SUBDIR ?= lido-core
 
 test-integration:
@@ -14,8 +14,10 @@ core-init:
 	git clone https://github.com/lidofinance/core.git -b $(CORE_BRANCH) --depth 1 $(CORE_SUBDIR)
 
 	cd $(CORE_SUBDIR) && \
+	git apply ../test/core-mocking.patch && \
 	yarn && \
-	SKIP_CONTRACTS_SIZE=true SKIP_GAS_REPORT=true yarn compile
+	LOG_LEVEL=warn SKIP_CONTRACTS_SIZE=true SKIP_GAS_REPORT=true SKIP_INTERFACES_CHECK=true \
+	yarn compile
 
 core-deploy:
 	cd $(CORE_SUBDIR) && \
@@ -27,7 +29,12 @@ core-deploy:
 	NETWORK_STATE_FILE="deployed-local.json" \
 	NETWORK_STATE_DEFAULTS_FILE="scripts/defaults/testnet-defaults.json" \
 	RPC_URL=http://localhost:$(CORE_RPC_PORT) \
+	SKIP_CONTRACTS_SIZE=true SKIP_GAS_REPORT=true SKIP_INTERFACES_CHECK=true LOG_LEVEL=warn \
 	bash scripts/dao-deploy.sh
 
 start-fork:
 	anvil --chain-id 1 --auto-impersonate --port $(CORE_RPC_PORT)
+
+core-save-patch:
+	cd $(CORE_SUBDIR) && \
+	git diff > ../test/core-mocking.patch

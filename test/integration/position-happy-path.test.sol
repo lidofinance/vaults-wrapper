@@ -28,7 +28,7 @@ interface IACL {
 }
 
 interface IVaultHub is IVaultHubIntact {
-    function setReportIsAlwaysFreshFor(address _vault) external;
+    function mock__setReportIsAlwaysFresh(bool _reportIsAlwaysFresh) external;
 }
 
 contract StVaultWrapperV3Test is Test {
@@ -126,7 +126,7 @@ contract StVaultWrapperV3Test is Test {
         console.log("vaultOwner", vaultOwner);
 
         vm.prank(vaultOwner);
-        vaultHub.setReportIsAlwaysFreshFor(address(stakingVault));
+        vaultHub.mock__setReportIsAlwaysFresh(true);
 
         dashboard.grantRole(dashboard.FUND_ROLE(), address(wrapper));
 
@@ -205,7 +205,17 @@ contract StVaultWrapperV3Test is Test {
             string.concat(
                 "user1: ETH=", vm.toString(user1.balance),
                 " stvETH=", vm.toString(wrapper.balanceOf(user1)),
-                " stETH=", vm.toString(IERC20(stETH).balanceOf(user1))
+                " stETH=", vm.toString(IERC20(stETH).balanceOf(user1)),
+                " lockedStv=", vm.toString(escrow.lockedStvSharesByUser(user1))
+            )
+        );
+
+        console.log(
+            string.concat(
+                "user2: ETH=", vm.toString(user2.balance),
+                " stvETH=", vm.toString(wrapper.balanceOf(user2)),
+                " stETH=", vm.toString(IERC20(stETH).balanceOf(user2)),
+                " lockedStv=", vm.toString(escrow.lockedStvSharesByUser(user2))
             )
         );
 
@@ -213,7 +223,17 @@ contract StVaultWrapperV3Test is Test {
             string.concat(
                 "wrapper: ETH=", vm.toString(address(wrapper).balance),
                 " stvETH=", vm.toString(wrapper.balanceOf(address(wrapper))),
-                " stETH=", vm.toString(IERC20(stETH).balanceOf(address(wrapper)))
+                " stETH=", vm.toString(IERC20(stETH).balanceOf(address(wrapper))),
+                " lockedStv=", vm.toString(escrow.lockedStvSharesByUser(address(wrapper)))
+            )
+        );
+
+        console.log(
+            string.concat(
+                "escrow: ETH=", vm.toString(address(escrow).balance),
+                " stvETH=", vm.toString(wrapper.balanceOf(address(escrow))),
+                " stETH=", vm.toString(IERC20(stETH).balanceOf(address(escrow))),
+                " lockedStv=", vm.toString(escrow.lockedStvSharesByUser(address(escrow)))
             )
         );
 
@@ -221,16 +241,31 @@ contract StVaultWrapperV3Test is Test {
             string.concat(
                 "strategy: ETH=", vm.toString(address(strategy).balance),
                 " stvETH=", vm.toString(wrapper.balanceOf(address(strategy))),
-                " stETH=", vm.toString(IERC20(stETH).balanceOf(address(strategy)))
+                " stETH=", vm.toString(IERC20(stETH).balanceOf(address(strategy))),
+                " lockedStv=", vm.toString(escrow.lockedStvSharesByUser(address(strategy)))
             )
         );
 
-        console.log("stakingVault: ETH=", vm.toString(address(stakingVault).balance));
+        console.log(
+            string.concat(
+                "stakingVault: ETH=", vm.toString(address(stakingVault).balance),
+                " lockedStv=", vm.toString(escrow.lockedStvSharesByUser(address(stakingVault)))
+            )
+        );
         console.log(
             string.concat(
                 "LenderMock: ETH=", vm.toString(lenderMock.balance),
                 " stvETH=", vm.toString(wrapper.balanceOf(lenderMock)),
-                " stETH=", vm.toString(IERC20(stETH).balanceOf(lenderMock))
+                " stETH=", vm.toString(IERC20(stETH).balanceOf(lenderMock)),
+                " lockedStv=", vm.toString(escrow.lockedStvSharesByUser(lenderMock))
+            )
+        );
+
+        // Escrow totals
+        console.log(
+            string.concat(
+                "Escrow totals: totalBorrowedAssets=", vm.toString(escrow.totalBorrowedAssets()),
+                " totalLockedStvShares=", vm.toString(wrapper.totalLockedStvShares())
             )
         );
     }
