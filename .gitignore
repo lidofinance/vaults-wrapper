@@ -10,6 +10,9 @@ lido-core/
 .code/
 .vscode/
 
+# LLM files
+**/CLAUDE.md
+
 # Ignores development broadcast logs
 !/broadcast
 /broadcast/*/31337/

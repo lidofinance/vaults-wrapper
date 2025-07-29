@@ -25,7 +25,7 @@ contract Wrapper is ERC4626 {
     IDashboard public immutable DASHBOARD;
     IVaultHub public immutable VAULT_HUB;
     address public immutable STAKING_VAULT;
-    
+
     WithdrawalQueue public withdrawalQueue;
     Escrow public ESCROW;
 
@@ -34,6 +34,12 @@ contract Wrapper is ERC4626 {
     bool public autoLeverageEnabled = true;
     address public escrowAddress; // Temporary storage for escrow address
     mapping(address => uint256) public lockedStvSharesByUser;
+
+
+    // ----------------------------- DEBUG SECTION -----------------------------
+    uint256 public immutable INITIAL_VAULT_BALANCE; // equals to CONNECT_DEPOSIT
+    // ----------------------------- DEBUG SECTION -----------------------------
+
 
     event VaultFunded(uint256 amount);
     event AutoLeverageExecuted(address indexed user, uint256 shares);
@@ -67,6 +73,8 @@ contract Wrapper is ERC4626 {
             escrowAddress = _escrow;
         }
 
+        INITIAL_VAULT_BALANCE = address(STAKING_VAULT).balance;
+
         // Fund the vault with 100 wei to ensure totalAssets is never 0
         // This allows the ERC4626 share calculation logic to work correctly
         // DASHBOARD.fund{value: 100 wei}(); // REMOVED
@@ -77,7 +85,7 @@ contract Wrapper is ERC4626 {
     // =================================================================================
 
     function totalAssets() public view override returns (uint256) {
-        return VAULT_HUB.totalValue(STAKING_VAULT);
+        return VAULT_HUB.totalValue(STAKING_VAULT) - INITIAL_VAULT_BALANCE;
     }
 
     function previewDeposit(uint256 assets) public view override returns (uint256) {
@@ -88,6 +96,9 @@ contract Wrapper is ERC4626 {
         }
         return super.previewDeposit(assets);
     }
+
+
+    // TODO?: implement maxWithdraw, maxRedeem, previewWithdraw, previewRedeem, withdraw, redeem
 
     /**
      * @notice Standard ERC4626 deposit function - DISABLED for this ETH wrapper
@@ -152,6 +163,17 @@ contract Wrapper is ERC4626 {
         mintedStethShares = remainingMintingCapacity;
         DASHBOARD.mintShares(stethReceiver, mintedStethShares);
     }
+
+    // function mintStETH(uint256 stvShares, address stethReceiver) external returns (uint256 mintedStethShares) {
+    //     _transfer(msg.sender, address(this), stvShares);
+
+    //     uint256 userAssetsInPool = _convertToAssets(stvShares, Math.Rounding.Floor);
+    //     totalLockedStvShares += stvShares;
+    //     uint256 maxMintableStethShares = DASHBOARD.remainingMintingCapacityShares(0);
+
+    //     LIDO.getSh
+
+    // }
 
     // =================================================================================
     // WITHDRAWAL SYSTEM WITH EXTERNAL QUEUE

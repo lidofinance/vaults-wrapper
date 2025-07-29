@@ -75,7 +75,6 @@ contract StVaultWrapperV3Test is Test {
         steth = ILido(locator.lido());
         vm.label(address(steth), "Lido");
 
-        // TODO: set setMaxExternalRatioBP here but LidoTemplate
         vm.prank(agent);
         steth.setMaxExternalRatioBP(LIDO_TOTAL_BASIS_POINTS);
 
@@ -137,7 +136,6 @@ contract StVaultWrapperV3Test is Test {
 
         // TODO: make escrow mint
         dashboard.grantRole(dashboard.MINT_ROLE(), address(escrow));
-        dashboard.grantRole(dashboard.MINT_ROLE(), address(wrapper));
 
         // Fund the LenderMock contract with ETH so it can lend
         vm.deal(address(strategy.LENDER_MOCK()), 1234 ether);
@@ -149,10 +147,96 @@ contract StVaultWrapperV3Test is Test {
         IACL acl = IACL(vm.parseJsonAddress(deployedJson, "$.aragon-acl.proxy.address"));
         vm.label(address(acl), "ACL");
 
-
     }
 
-    function test_openClosePosition() public {
+    function test_deposit() public {
+        uint256 user1InitialETH = 10_000 wei;
+        uint256 user2InitialETH = 15_000 wei;
+        uint256 initialVaultBalance = wrapper.INITIAL_VAULT_BALANCE();
+        assertEq(initialVaultBalance, CONNECT_DEPOSIT, "initialVaultBalance should be equal to CONNECT_DEPOSIT");
+
+        // Setup: User1 deposits ETH and gets stvToken shares
+        vm.deal(user1, user1InitialETH);
+
+        vm.prank(user1);
+        uint256 user1StvShares = wrapper.depositETH{value: user1InitialETH}();
+
+        uint256 ethAfterFirstDeposit = user1InitialETH; // CONNECT_DEPOSIT is ignored in totalAssets
+
+        // Main invariants for user1 deposit
+        assertEq(wrapper.totalAssets(), ethAfterFirstDeposit, "wrapper totalAssets should match deposited ETH");
+        assertEq(address(stakingVault).balance, ethAfterFirstDeposit + initialVaultBalance, "stakingVault balance should match total assets");
+        assertEq(wrapper.totalSupply(), user1StvShares, "wrapper totalSupply should equal user shares");
+        assertEq(wrapper.balanceOf(user1), user1StvShares, "user1 balance should equal returned shares");
+        assertEq(wrapper.balanceOf(address(escrow)), 0, "escrow should have no shares initially");
+        assertEq(user1StvShares, user1InitialETH, "shares should equal deposited amount (1:1 ratio)");
+        assertEq(user1.balance, 0, "user1 ETH balance should be zero after deposit");
+        assertEq(wrapper.totalLockedStvShares(), 0, "no shares should be locked initially");
+
+        // Setup: User2 deposits different amount of ETH
+        vm.deal(user2, user2InitialETH);
+
+        vm.prank(user2);
+        uint256 user2StvShares = wrapper.depositETH{value: user2InitialETH}();
+
+        uint256 totalDeposits = user1InitialETH + user2InitialETH;
+        uint256 ethAfterBothDeposits = totalDeposits;
+
+        // Main invariants for multi-user deposits
+        assertEq(user2.balance, 0, "user2 ETH balance should be zero after deposit");
+        assertEq(wrapper.totalLockedStvShares(), 0, "no shares should be locked with multiple users");
+        assertEq(wrapper.totalAssets(), ethAfterBothDeposits, "wrapper totalAssets should match both deposits");
+        assertEq(address(stakingVault).balance, ethAfterBothDeposits + initialVaultBalance, "stakingVault balance should match total assets");
+        assertEq(wrapper.totalSupply(), user1StvShares + user2StvShares, "wrapper totalSupply should equal sum of user shares");
+        assertEq(wrapper.balanceOf(user1), user1StvShares, "user1 balance should remain unchanged");
+        assertEq(wrapper.balanceOf(user2), user2StvShares, "user2 balance should equal returned shares");
+        assertEq(wrapper.balanceOf(address(escrow)), 0, "escrow should still have no shares");
+
+        // For ERC4626, shares = assets * totalSupply / totalAssets
+        // After first deposit: totalSupply = user1InitialETH, totalAssets = ethAfterFirstDeposit
+        // User2's shares = user2InitialETH * user1StvShares / ethAfterFirstDeposit
+        uint256 expectedUser2Shares = user2InitialETH * user1StvShares / ethAfterFirstDeposit;
+        assertEq(user2StvShares, expectedUser2Shares, "user2 shares should follow ERC4626 formula");
+
+        // Verify share-to-asset conversion works correctly for both users
+        assertEq(wrapper.convertToAssets(user1StvShares), user1InitialETH, "user1 assets should be equal to its initial deposit");
+        assertEq(wrapper.convertToAssets(user2StvShares), user2InitialETH, "user2 assets should be equal to its initial deposit");
+        assertEq(wrapper.convertToAssets(user1StvShares + user2StvShares), user1InitialETH + user2InitialETH, "sum of user assets should be equal to sum of initial deposits");
+        assertEq(wrapper.convertToAssets(user1StvShares) + wrapper.convertToAssets(user2StvShares), user1InitialETH + user2InitialETH, "sum of user assets should be equal to sum of initial deposits");
+
+        // Setup: User1 makes a second deposit
+        uint256 user1SecondDeposit = 1_000 wei;
+        vm.deal(user1, user1SecondDeposit);
+
+        uint256 totalSupplyBeforeSecond = wrapper.totalSupply();
+        uint256 totalAssetsBeforeSecond = wrapper.totalAssets();
+
+        vm.prank(user1);
+        uint256 user1SecondShares = wrapper.depositETH{value: user1SecondDeposit}();
+
+        uint256 totalDepositsAfterSecond = totalDeposits + user1SecondDeposit;
+        uint256 user1TotalShares = user1StvShares + user1SecondShares;
+
+        // Main invariants after user1's second deposit
+        assertEq(user1.balance, 0, "user1 ETH balance should be zero after second deposit");
+        assertEq(wrapper.totalAssets(), totalDepositsAfterSecond, "wrapper totalAssets should include second deposit");
+        assertEq(address(stakingVault).balance, totalDepositsAfterSecond + initialVaultBalance, "stakingVault balance should include second deposit");
+        assertEq(wrapper.totalSupply(), totalSupplyBeforeSecond + user1SecondShares, "totalSupply should increase by second shares");
+        assertEq(wrapper.balanceOf(user1), user1TotalShares, "user1 balance should be sum of both deposits' shares");
+        assertEq(wrapper.balanceOf(user2), user2StvShares, "user2 balance should remain unchanged");
+
+        // ERC4626 calculation for user1's second deposit
+        uint256 expectedUser1SecondShares = user1SecondDeposit * totalSupplyBeforeSecond / totalAssetsBeforeSecond;
+        assertEq(user1SecondShares, expectedUser1SecondShares, "user1 second shares should follow ERC4626 formula");
+
+        // Verify final share-to-asset conversions
+        uint256 user1ExpectedAssets = user1InitialETH + user1SecondDeposit;
+        assertEq(wrapper.convertToAssets(user1TotalShares), user1ExpectedAssets, "user1 total assets should equal both deposits");
+        assertEq(wrapper.convertToAssets(user2StvShares), user2InitialETH, "user2 assets should remain unchanged");
+        assertEq(wrapper.convertToAssets(wrapper.totalSupply()), totalDepositsAfterSecond, "total assets should equal all deposits");
+    }
+
+    function test_openClosePositionSingleUser() public {
         uint256 initialETH = 10_000 wei;
         LenderMock lenderMock = strategy.LENDER_MOCK();
 
@@ -162,9 +246,14 @@ contract StVaultWrapperV3Test is Test {
         vm.prank(user1);
         uint256 user1StvShares = wrapper.depositETH{value: initialETH}();
 
-        assertEq(wrapper.totalAssets(), initialETH + CONNECT_DEPOSIT, "wrapper totalAssets should equal initial deposit");
-        assertEq(wrapper.totalSupply(), user1StvShares, "wrapper totalSupply should equal user1StvShares");
-        assertEq(address(stakingVault).balance, initialETH + CONNECT_DEPOSIT, "stakingVault ETH balance should equal initial deposit");
+        uint256 ethAfterFirstDeposit = initialETH;
+
+        assertEq(wrapper.totalAssets(), ethAfterFirstDeposit);
+        assertEq(address(stakingVault).balance - wrapper.INITIAL_VAULT_BALANCE(), ethAfterFirstDeposit);
+        assertEq(wrapper.totalSupply(), user1StvShares);
+        assertEq(wrapper.balanceOf(user1), user1StvShares);
+        assertEq(wrapper.balanceOf(address(escrow)), 0);
+        assertEq(user1StvShares, initialETH);
 
         uint256 reserveRatioBP = dashboard.reserveRatioBP();
         console.log("reserveRatioBP", reserveRatioBP);
@@ -190,6 +279,59 @@ contract StVaultWrapperV3Test is Test {
         uint256 mintedStETHShares1 = user1StvShares1 * (LIDO_TOTAL_BASIS_POINTS - reserveRatioBP) / LIDO_TOTAL_BASIS_POINTS;
         uint256 borrowedEth1 = (mintedStETHShares1 * borrowRatio) / totalBasisPoints;
         console.log("borrowedEth1", borrowedEth1);
+    }
+
+    function xtest_openClosePositionTwoUsers() public {
+        uint256 user1InitialETH = 10_000 wei;
+        uint256 user2InitialETH = 15_000 wei;
+        LenderMock lenderMock = strategy.LENDER_MOCK();
+
+        // Setup: Both users deposit different amounts of ETH and get stvToken shares
+        vm.deal(user1, user1InitialETH);
+        vm.deal(user2, user2InitialETH);
+
+        vm.prank(user1);
+        uint256 user1StvShares = wrapper.depositETH{value: user1InitialETH}();
+
+        vm.prank(user2);
+        uint256 user2StvShares = wrapper.depositETH{value: user2InitialETH}();
+
+        uint256 totalDeposits = user1InitialETH + user2InitialETH;
+        assertEq(wrapper.totalAssets(), totalDeposits + CONNECT_DEPOSIT, "wrapper totalAssets should equal both deposits");
+        assertEq(wrapper.totalSupply(), user1StvShares + user2StvShares, "wrapper totalSupply should equal both users' shares");
+        assertEq(address(stakingVault).balance, totalDeposits + CONNECT_DEPOSIT, "stakingVault ETH balance should equal both deposits");
+
+        uint256 reserveRatioBP = dashboard.reserveRatioBP();
+        console.log("reserveRatioBP", reserveRatioBP);
+
+        uint256 borrowRatio = lenderMock.BORROW_RATIO();
+        console.log("borrowRatio", borrowRatio);
+
+        // User1 opens position
+        vm.startPrank(user1);
+        wrapper.approve(address(escrow), user1StvShares);
+        escrow.openPosition(user1StvShares);
+        vm.stopPrank();
+
+        logAllBalances(1);
+
+        // User2 opens position
+        vm.startPrank(user2);
+        wrapper.approve(address(escrow), user2StvShares);
+        escrow.openPosition(user2StvShares);
+        vm.stopPrank();
+
+        logAllBalances(2);
+
+        // Assert both users have locked shares
+        assertGt(escrow.lockedStvSharesByUser(user1), 0, "user1 should have locked shares");
+        assertGt(escrow.lockedStvSharesByUser(user2), 0, "user2 should have locked shares");
+
+        // Verify total locked shares equals sum of individual locked shares
+        uint256 totalLocked = wrapper.totalLockedStvShares();
+        uint256 user1Locked = escrow.lockedStvSharesByUser(user1);
+        uint256 user2Locked = escrow.lockedStvSharesByUser(user2);
+        assertEq(totalLocked, user1Locked + user2Locked, "total locked should equal sum of user locked shares");
     }
 
     function logAllBalances(uint256 _context) public view {
