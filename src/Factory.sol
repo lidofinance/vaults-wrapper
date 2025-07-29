@@ -2,6 +2,7 @@
 pragma solidity 0.8.25;
 
 import {Wrapper} from "./Wrapper.sol";
+import {Escrow} from "./Escrow.sol";
 import {WithdrawalQueue} from "./WithdrawalQueue.sol";
 
 import {IVaultFactory} from "./interfaces/IVaultFactory.sol";
@@ -9,15 +10,18 @@ import {IDashboard} from "./interfaces/IDashboard.sol";
 
 contract Factory {
     IVaultFactory immutable VAULT_FACTORY;
+    address immutable STETH;
 
     event VaultWrapperCreated(
         address vault,
-        address dashboard,
-        address wrapper
+        address wrapper,
+        address withdrawalQueue,
+        address escrow
     );
 
-    constructor(address _vaultFactory) {
+    constructor(address _vaultFactory, address _steth) {
         VAULT_FACTORY = IVaultFactory(_vaultFactory);
+        STETH = _steth;
     }
 
     function createVaultWithWrapper(
@@ -25,6 +29,7 @@ contract Factory {
         address _nodeOperatorManager,
         uint256 _nodeOperatorFeeBP,
         uint256 _confirmExpiry,
+        address _strategy,
         string calldata _name,
         string calldata _symbol
     )
@@ -32,9 +37,10 @@ contract Factory {
         payable
         returns (
             address vault,
-            IDashboard dashboard,
+            address dashboard,
             Wrapper wrapper,
-            WithdrawalQueue withdrawalQueue
+            WithdrawalQueue withdrawalQueue,
+            Escrow escrow
         )
     {
         (vault, dashboard) = VAULT_FACTORY.createVaultWithDashboard(
@@ -43,27 +49,46 @@ contract Factory {
             _nodeOperatorManager, // node operator manager
             _nodeOperatorFeeBP, // node operator fee BP
             _confirmExpiry, // confirm expiry
-            new IVaultFactory.RoleAssignment[](0) // no role assignments
+            new IVaultFactory.RoleAssignment[](0)
         );
 
+        IDashboard _dashboard = IDashboard(payable(dashboard));
+
         // TODO: proxy when decided on contract setup
-        withdrawalQueue = new WithdrawalQueue(address(dashboard));
         wrapper = new Wrapper(
-            address(dashboard),
-            address(withdrawalQueue),
+            dashboard,
+            address(0),
             msg.sender,
             _name,
             _symbol
         );
 
+        withdrawalQueue = new WithdrawalQueue(wrapper);
+
+        // optionally deploy Escrow if a strategy is provided
+        if (address(_strategy) != address(0)) {
+            escrow = new Escrow(
+                address(wrapper),
+                address(withdrawalQueue),
+                _strategy,
+                STETH
+            );
+            wrapper.setEscrowAddress(address(escrow));
+        }
+
         // Set the wrapper as owner
-        dashboard.grantRole(dashboard.DEFAULT_ADMIN_ROLE(), address(wrapper));
+        _dashboard.grantRole(_dashboard.DEFAULT_ADMIN_ROLE(), address(wrapper));
 
         // Revokation of factory roles
-        dashboard.revokeRole(dashboard.DEFAULT_ADMIN_ROLE(), address(this));
+        _dashboard.revokeRole(_dashboard.DEFAULT_ADMIN_ROLE(), address(this));
 
-        emit VaultWrapperCreated(vault, address(dashboard), address(wrapper));
+        emit VaultWrapperCreated(
+            vault,
+            address(wrapper),
+            address(withdrawalQueue),
+            address(escrow)
+        );
 
-        return (vault, dashboard, wrapper, withdrawalQueue);
+        return (vault, dashboard, wrapper, withdrawalQueue, escrow);
     }
 }
