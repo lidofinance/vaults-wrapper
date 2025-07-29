@@ -2,6 +2,14 @@
 cache/
 out/
 
+# Core
+lido-core/
+
+# IDE
+.cursor/
+.code/
+.vscode/
+
 # Ignores development broadcast logs
 !/broadcast
 /broadcast/*/31337/
