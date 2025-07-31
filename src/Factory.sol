@@ -74,6 +74,8 @@ contract Factory {
                 STETH
             );
             wrapper.setEscrowAddress(address(escrow));
+            _dashboard.grantRole(_dashboard.MINT_ROLE(), address(escrow));
+            _dashboard.grantRole(_dashboard.BURN_ROLE(), address(escrow));
         }
 
         // Set the wrapper as owner
