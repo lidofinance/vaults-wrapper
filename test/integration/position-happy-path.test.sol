@@ -4,7 +4,7 @@ pragma solidity >=0.8.25;
 import {Test, console} from "forge-std/Test.sol";
 
 import {CoreHarness} from "test/utils/CoreHarness.sol";
-import {DefiWrapper, ICoreHarness} from "test/utils/DefiWrapper.sol";
+import {DefiWrapper} from "test/utils/DefiWrapper.sol";
 import {IDashboard} from "src/interfaces/IDashboard.sol";
 import {IVaultHub} from "src/interfaces/IVaultHub.sol";
 import {IStakingVault} from "src/interfaces/IStakingVault.sol";
@@ -56,9 +56,6 @@ contract StVaultWrapperV3Test is Test {
         steth = core.steth();
         vaultHub = core.vaultHub();
         stakingVault = core.stakingVault();
-
-        // Grant roles (must be done by the admin, which is the CoreHarness contract)
-        core.grantWrapperRoles(address(wrapper), address(escrow));
 
         // Fund users
         vm.deal(user1, 1000 ether);
@@ -262,59 +259,6 @@ contract StVaultWrapperV3Test is Test {
         console.log("borrowedEth1", borrowedEth1);
     }
 
-    function xtest_openClosePositionTwoUsers() public {
-        uint256 user1InitialETH = 10_000 wei;
-        uint256 user2InitialETH = 15_000 wei;
-        LenderMock lenderMock = strategy.LENDER_MOCK();
-
-        // Setup: Both users deposit different amounts of ETH and get stvToken shares
-        vm.deal(user1, user1InitialETH);
-        vm.deal(user2, user2InitialETH);
-
-        vm.prank(user1);
-        uint256 user1StvShares = wrapper.depositETH{value: user1InitialETH}();
-
-        vm.prank(user2);
-        uint256 user2StvShares = wrapper.depositETH{value: user2InitialETH}();
-
-        uint256 totalDeposits = user1InitialETH + user2InitialETH;
-        assertEq(wrapper.totalAssets(), totalDeposits + core.CONNECT_DEPOSIT(), "wrapper totalAssets should equal both deposits");
-        assertEq(wrapper.totalSupply(), user1StvShares + user2StvShares, "wrapper totalSupply should equal both users' shares");
-        assertEq(address(stakingVault).balance, totalDeposits + core.CONNECT_DEPOSIT(), "stakingVault ETH balance should equal both deposits");
-
-        uint256 reserveRatioBP = dashboard.reserveRatioBP();
-        console.log("reserveRatioBP", reserveRatioBP);
-
-        uint256 borrowRatio = lenderMock.BORROW_RATIO();
-        console.log("borrowRatio", borrowRatio);
-
-        // User1 opens position
-        vm.startPrank(user1);
-        wrapper.approve(address(escrow), user1StvShares);
-        escrow.openPosition(user1StvShares);
-        vm.stopPrank();
-
-        logAllBalances(1);
-
-        // User2 opens position
-        vm.startPrank(user2);
-        wrapper.approve(address(escrow), user2StvShares);
-        escrow.openPosition(user2StvShares);
-        vm.stopPrank();
-
-        logAllBalances(2);
-
-        // Assert both users have locked shares
-        assertGt(escrow.lockedStvSharesByUser(user1), 0, "user1 should have locked shares");
-        assertGt(escrow.lockedStvSharesByUser(user2), 0, "user2 should have locked shares");
-
-        // Verify total locked shares equals sum of individual locked shares
-        uint256 totalLocked = wrapper.totalLockedStvShares();
-        uint256 user1Locked = escrow.lockedStvSharesByUser(user1);
-        uint256 user2Locked = escrow.lockedStvSharesByUser(user2);
-        assertEq(totalLocked, user1Locked + user2Locked, "total locked should equal sum of user locked shares");
-    }
-
     function test_mintStETHProportionalSharing() public {
         uint256 user1InitialETH = 10_000 wei;
         uint256 user2InitialETH = 20_000 wei;
@@ -337,7 +281,7 @@ contract StVaultWrapperV3Test is Test {
         assertEq(user2StvShares, user2InitialETH);
 
         // Check initial minting capacity for the entire vault
-        uint256 totalMintingCapacity = IDashboard(payable(address(wrapper.DASHBOARD()))).remainingMintingCapacityShares(0);
+        uint256 totalMintingCapacity = core.dashboard().remainingMintingCapacityShares(0);
         console.log("Total vault minting capacity:", totalMintingCapacity);
 
         // User1 should only be able to mint proportional to their share (1/3 of capacity)
@@ -349,8 +293,8 @@ contract StVaultWrapperV3Test is Test {
         console.log("User1 minted stETH shares:", user1MintedStethShares);
 
         // Compare totalMintingCapacityShares and remainingMintingCapacityShares
-        uint256 totalMintingCapacityShares = IDashboard(payable(address(wrapper.DASHBOARD()))).totalMintingCapacityShares();
-        uint256 remainingMintingCapacityShares = IDashboard(payable(address(wrapper.DASHBOARD()))).remainingMintingCapacityShares(0);
+        uint256 totalMintingCapacityShares = core.dashboard().totalMintingCapacityShares();
+        uint256 remainingMintingCapacityShares = core.dashboard().remainingMintingCapacityShares(0);
         console.log("totalMintingCapacityShares:", totalMintingCapacityShares);
         console.log("remainingMintingCapacityShares:", remainingMintingCapacityShares);
 
@@ -373,7 +317,7 @@ contract StVaultWrapperV3Test is Test {
         vm.startPrank(user2);
         wrapper.approve(address(escrow), user2StvShares);
 
-        uint256 remainingCapacityAfterUser1 = IDashboard(payable(address(wrapper.DASHBOARD()))).remainingMintingCapacityShares(0);
+        uint256 remainingCapacityAfterUser1 = core.dashboard().remainingMintingCapacityShares(0);
         console.log("Remaining capacity after User1:", remainingCapacityAfterUser1);
 
         uint256 user2MintedStethShares = escrow.mintStETH(user2StvShares);
@@ -407,10 +351,10 @@ contract StVaultWrapperV3Test is Test {
         console.log("=== Initial State (No Liabilities) ===");
 
         // Check initial capacity when vault has no liabilities
-        uint256 initialTotalCapacity = IDashboard(payable(address(wrapper.DASHBOARD()))).totalMintingCapacityShares();
-        uint256 initialRemainingCapacity = IDashboard(payable(address(wrapper.DASHBOARD()))).remainingMintingCapacityShares(0);
-        uint256 initialLiabilityShares = IDashboard(payable(address(wrapper.DASHBOARD()))).liabilityShares();
-        uint256 initialUnsettledObligations = IDashboard(payable(address(wrapper.DASHBOARD()))).unsettledObligations();
+        uint256 initialTotalCapacity = core.dashboard().totalMintingCapacityShares();
+        uint256 initialRemainingCapacity = core.dashboard().remainingMintingCapacityShares(0);
+        uint256 initialLiabilityShares = core.dashboard().liabilityShares();
+        uint256 initialUnsettledObligations = core.dashboard().unsettledObligations();
 
         console.log("Initial total minting capacity:", initialTotalCapacity);
         console.log("Initial remaining capacity:", initialRemainingCapacity);
@@ -438,8 +382,8 @@ contract StVaultWrapperV3Test is Test {
         console.log("User2 deposited:", user2InitialETH, "received shares:", user2StvShares);
 
         // Check capacity after deposits (should still be equal since no stETH minted yet)
-        uint256 totalCapacityAfterDeposits = IDashboard(payable(address(wrapper.DASHBOARD()))).totalMintingCapacityShares();
-        uint256 remainingCapacityAfterDeposits = IDashboard(payable(address(wrapper.DASHBOARD()))).remainingMintingCapacityShares(0);
+        uint256 totalCapacityAfterDeposits = core.dashboard().totalMintingCapacityShares();
+        uint256 remainingCapacityAfterDeposits = core.dashboard().remainingMintingCapacityShares(0);
 
         console.log("Total capacity after deposits:", totalCapacityAfterDeposits);
         console.log("Remaining capacity after deposits:", remainingCapacityAfterDeposits);
@@ -458,10 +402,10 @@ contract StVaultWrapperV3Test is Test {
         console.log("User1 minted stETH shares:", user1MintedShares);
 
         // Check capacity after User1 mints (now we should have liabilities)
-        uint256 totalCapacityAfterUser1Mint = IDashboard(payable(address(wrapper.DASHBOARD()))).totalMintingCapacityShares();
-        uint256 remainingCapacityAfterUser1Mint = IDashboard(payable(address(wrapper.DASHBOARD()))).remainingMintingCapacityShares(0);
-        uint256 liabilitySharesAfterUser1Mint = IDashboard(payable(address(wrapper.DASHBOARD()))).liabilityShares();
-        uint256 unsettledObligationsAfterUser1Mint = IDashboard(payable(address(wrapper.DASHBOARD()))).unsettledObligations();
+        uint256 totalCapacityAfterUser1Mint = core.dashboard().totalMintingCapacityShares();
+        uint256 remainingCapacityAfterUser1Mint = core.dashboard().remainingMintingCapacityShares(0);
+        uint256 liabilitySharesAfterUser1Mint = core.dashboard().liabilityShares();
+        uint256 unsettledObligationsAfterUser1Mint = core.dashboard().unsettledObligations();
 
         console.log("Total capacity after User1 mint:", totalCapacityAfterUser1Mint);
         console.log("Remaining capacity after User1 mint:", remainingCapacityAfterUser1Mint);
@@ -495,9 +439,9 @@ contract StVaultWrapperV3Test is Test {
         console.log("User2 minted stETH shares:", user2MintedShares);
 
         // Check final state
-        uint256 finalTotalCapacity = IDashboard(payable(address(wrapper.DASHBOARD()))).totalMintingCapacityShares();
-        uint256 finalRemainingCapacity = IDashboard(payable(address(wrapper.DASHBOARD()))).remainingMintingCapacityShares(0);
-        uint256 finalLiabilityShares = IDashboard(payable(address(wrapper.DASHBOARD()))).liabilityShares();
+        uint256 finalTotalCapacity = core.dashboard().totalMintingCapacityShares();
+        uint256 finalRemainingCapacity = core.dashboard().remainingMintingCapacityShares(0);
+        uint256 finalLiabilityShares = core.dashboard().liabilityShares();
 
         console.log("Final total capacity:", finalTotalCapacity);
         console.log("Final remaining capacity:", finalRemainingCapacity);
@@ -562,78 +506,157 @@ contract StVaultWrapperV3Test is Test {
         vm.stopPrank();
     }
 
-    function test_mintStETHCapacityExhaustion() public {
-        uint256 user1InitialETH = 10_000 wei;
-        uint256 user2InitialETH = 20_000 wei;
+    function test_withdrawalSimplestHappyPath() public {
+        uint256 userInitialETH = 10_000 wei;
 
-        // Setup: Both users deposit ETH
-        vm.deal(user1, user1InitialETH);
-        vm.deal(user2, user2InitialETH);
+        console.log("=== Case 4: Withdrawal simplest happy path (no stETH minted, no boost) ===");
+
+        // Phase 1: User deposits ETH
+        console.log("=== Phase 1: User deposits ETH ===");
+        vm.deal(user1, userInitialETH);
 
         vm.prank(user1);
-        uint256 user1StvShares = wrapper.depositETH{value: user1InitialETH}();
+        uint256 userStvShares = wrapper.depositETH{value: userInitialETH}();
 
-        vm.prank(user2);
-        uint256 user2StvShares = wrapper.depositETH{value: user2InitialETH}();
+        console.log("User deposited ETH:", userInitialETH);
+        console.log("User received stvETH shares:", userStvShares);
 
-        // Test Case: Multiple users exhaust minting capacity
-        // First user mints their proportional share
+        // Verify initial state - user has shares, no stETH minted, no boost
+        assertEq(wrapper.balanceOf(user1), userStvShares, "User should have stvETH shares");
+        assertEq(wrapper.totalAssets(), userInitialETH, "Total assets should equal user deposit");
+        assertEq(user1.balance, 0, "User ETH balance should be zero after deposit");
+        assertEq(escrow.lockedStvSharesByUser(user1), 0, "User should have no locked shares (no stETH minted)");
+
+        // Phase 2: User requests withdrawal
+        console.log("=== Phase 2: User requests withdrawal ===");
+
+        uint256 withdrawalAmount = userInitialETH; // Withdraw all deposited ETH
+
         vm.startPrank(user1);
-        wrapper.approve(address(escrow), user1StvShares);
-        uint256 user1MintedShares = escrow.mintStETH(user1StvShares);
+        wrapper.approve(address(withdrawalQueue), userStvShares);
+        uint256 requestId = withdrawalQueue.requestWithdrawal(user1, withdrawalAmount);
         vm.stopPrank();
 
-        // Second user mints their proportional share
-        vm.startPrank(user2);
-        wrapper.approve(address(escrow), user2StvShares);
-        uint256 user2MintedShares = escrow.mintStETH(user2StvShares);
-        vm.stopPrank();
+        console.log("Withdrawal requested. RequestId:", requestId);
+        console.log("Withdrawal amount:", withdrawalAmount);
 
-        console.log("User1 minted:", user1MintedShares);
-        console.log("User2 minted:", user2MintedShares);
+        // Verify withdrawal request state
+        assertGt(requestId, 0, "Request ID should be valid");
+        assertEq(wrapper.balanceOf(user1), 0, "User stvETH shares should be moved to withdrawal queue for withdrawal");
 
-        // Check remaining capacity after both users have minted
-        uint256 remainingCapacity = IDashboard(payable(address(wrapper.DASHBOARD()))).remainingMintingCapacityShares(0);
-        console.log("Remaining capacity after both users:", remainingCapacity);
+        // Check withdrawal queue state using getWithdrawalStatus
+        WithdrawalQueue.WithdrawalRequestStatus memory status = withdrawalQueue.getWithdrawalStatus(requestId);
+        assertEq(status.amountOfAssets, withdrawalAmount, "Requested amount should match");
+        assertEq(status.owner, user1, "Owner should be user1");
+        assertFalse(status.isFinalized, "Request should not be finalized yet");
+        assertFalse(status.isClaimed, "Request should not be claimed yet");
 
-        // Allow for small rounding errors (up to WEI_ROUNDING_TOLERANCE wei tolerance)
-        assertTrue(remainingCapacity <= WEI_ROUNDING_TOLERANCE, "Minting capacity should be nearly fully exhausted after both users mint");
+        // Phase 3: Simulate validator operations and ETH flow
+        console.log("=== Phase 3: Simulate validator operations ===");
 
-        // // Third user joins and tries to mint
-        // address user3 = address(0x3);
-        // uint256 user3InitialETH = 5_000 wei;
-        // vm.deal(user3, user3InitialETH);
+        // Simulate validators receiving ETH (staking vault balance sent to beacon chain)
+        address beaconChain = address(0xbeac0);
+        uint256 stakingVaultBalance = address(stakingVault).balance;
+        console.log("Staking vault balance before beacon chain transfer:", stakingVaultBalance);
 
-        // vm.prank(user3);
-        // uint256 user3StvShares = wrapper.depositETH{value: user3InitialETH}();
+        vm.prank(address(stakingVault));
+        (bool sent, ) = beaconChain.call{value: stakingVaultBalance}("");
+        require(sent, "ETH send to beacon chain failed");
 
-        // // User3 should not be able to mint if capacity is fully consumed
-        // if (remainingCapacity == 0) {
-        //     vm.startPrank(user3);
-        //     wrapper.approve(address(escrow), user3StvShares);
-        //     vm.expectRevert(abi.encodeWithSignature("NoMintingCapacityAvailable()"));
-        //     escrow.mintStETH(user3StvShares);
-        //     vm.stopPrank();
-        // } else {
-        //     // If there's remaining capacity, user3 should only get proportional amount
-        //     vm.startPrank(user3);
-        //     wrapper.approve(address(escrow), user3StvShares);
-        //     uint256 user3MintedShares = escrow.mintStETH(user3StvShares);
-        //     vm.stopPrank();
+        console.log("ETH sent to beacon chain:", stakingVaultBalance);
 
-        //     uint256 totalAssets = wrapper.totalAssets();
-        //     uint256 user3Assets = wrapper.convertToAssets(user3StvShares);
-        //     uint256 expectedUser3Mintable = (user3Assets * remainingCapacity) / totalAssets;
+        // Phase 4: Calculate finalization batches and requirements
+        console.log("=== Phase 4: Calculate finalization requirements ===");
 
-        //     // Allow for small rounding differences (up to 1000 wei tolerance)
-        //     uint256 tolerance = 1000;
-        //     assertTrue(
-        //         user3MintedShares >= expectedUser3Mintable - tolerance &&
-        //         user3MintedShares <= expectedUser3Mintable + tolerance,
-        //         "User3 should get approximately proportional share of remaining capacity"
-        //     );
-        //     assertTrue(user3MintedShares <= remainingCapacity, "User3 cannot mint more than remaining capacity");
-        // }
+        uint256 remainingEthBudget = withdrawalQueue.unfinalizedAssets();
+        console.log("Unfinalized assets requiring ETH:", remainingEthBudget);
+
+        WithdrawalQueue.BatchesCalculationState memory state;
+        state.remainingEthBudget = remainingEthBudget;
+        state.finished = false;
+        state.batchesLength = 0;
+
+        // Calculate batches for finalization
+        while (!state.finished) {
+            state = withdrawalQueue.calculateFinalizationBatches(1, state);
+        }
+
+        console.log("Batches calculation finished, batches length:", state.batchesLength);
+
+        // Convert batches to array for prefinalize
+        uint256[] memory batches = new uint256[](state.batchesLength);
+        for (uint256 i = 0; i < state.batchesLength; i++) {
+            batches[i] = state.batches[i];
+        }
+
+        // Calculate exact ETH needed for finalization
+        uint256 shareRate = withdrawalQueue.calculateCurrentShareRate();
+        (uint256 ethToLock, ) = withdrawalQueue.prefinalize(batches, shareRate);
+
+        console.log("ETH required for finalization:", ethToLock);
+        console.log("Current share rate:", shareRate);
+
+        // Phase 5: Simulate validator exit and ETH return
+        console.log("=== Phase 5: Simulate validator exit and ETH return ===");
+
+        // Simulate validator exit returning ETH to staking vault
+        vm.deal(beaconChain, ethToLock + 1 ether); // Extra ETH for beacon chain
+
+        vm.prank(beaconChain);
+        (bool success, ) = address(stakingVault).call{value: ethToLock}("");
+        require(success, "ETH return from beacon chain failed");
+
+        console.log("ETH returned from beacon chain to staking vault:", ethToLock);
+
+        // Phase 6: Finalize withdrawal requests
+        console.log("=== Phase 6: Finalize withdrawal requests ===");
+
+        // Finalize the withdrawal request using DefiWrapper (which has FINALIZE_ROLE)
+        vm.prank(address(dw));
+        withdrawalQueue.finalize(requestId);
+
+        console.log("Withdrawal request finalized");
+
+        // Verify finalization state
+        WithdrawalQueue.WithdrawalRequestStatus memory statusAfterFinalization = withdrawalQueue.getWithdrawalStatus(requestId);
+        assertTrue(statusAfterFinalization.isFinalized, "Request should be finalized");
+        assertFalse(statusAfterFinalization.isClaimed, "Request should not be claimed yet");
+
+        // Phase 7: User claims withdrawal
+        console.log("=== Phase 7: User claims withdrawal ===");
+
+        uint256 userETHBalanceBefore = user1.balance;
+
+        vm.prank(user1);
+        withdrawalQueue.claimWithdrawal(requestId);
+
+        uint256 userETHBalanceAfter = user1.balance;
+        uint256 claimedAmount = userETHBalanceAfter - userETHBalanceBefore;
+
+        console.log("User claimed ETH:", claimedAmount);
+        console.log("User final ETH balance:", userETHBalanceAfter);
+
+        // Phase 8: Final verification - user gets back the same amount
+        console.log("=== Phase 8: Final verification ===");
+
+        // Core requirement: user gets back the same amount of ETH they deposited
+        assertEq(claimedAmount, userInitialETH, "User should receive the same amount of ETH they deposited");
+
+        // Verify system state is clean
+        assertEq(wrapper.balanceOf(user1), 0, "User should have no remaining stvETH shares");
+        assertEq(escrow.lockedStvSharesByUser(user1), 0, "User should have no locked shares");
+        assertEq(wrapper.totalSupply(), 0, "Total supply should be zero after withdrawal");
+        assertEq(wrapper.totalAssets(), 0, "Total assets should be zero after withdrawal");
+        assertEq(address(withdrawalQueue).balance, 0, "Withdrawal queue should have no ETH left");
+
+        // Verify withdrawal request is consumed
+        WithdrawalQueue.WithdrawalRequestStatus memory finalStatus = withdrawalQueue.getWithdrawalStatus(requestId);
+        assertTrue(finalStatus.isClaimed, "Request should be marked as claimed");
+
+        console.log("=== Case 4 Test Summary ===");
+        console.log("PASS: User deposited and received back same amount");
+        console.log("PASS: Complete withdrawal happy path completed without stETH minting or boost");
+        console.log("PASS: System state clean after withdrawal (all balances zero)");
     }
 
     function test_user3DepositsAndFullyMintsAfterUsers() public {
@@ -670,7 +693,7 @@ contract StVaultWrapperV3Test is Test {
         console.log("User2 minted stETH shares:", user2MintedShares);
 
         // Check remaining capacity after first two users - should be nearly zero
-        uint256 remainingCapacityAfterTwoUsers = IDashboard(payable(address(wrapper.DASHBOARD()))).remainingMintingCapacityShares(0);
+        uint256 remainingCapacityAfterTwoUsers = core.dashboard().remainingMintingCapacityShares(0);
         console.log("Remaining capacity after User1 and User2:", remainingCapacityAfterTwoUsers);
 
         // Verify capacity is nearly exhausted (scenario requirement)
@@ -688,8 +711,8 @@ contract StVaultWrapperV3Test is Test {
 
         // Check new total vault assets and minting capacity after user3 deposit
         uint256 totalVaultAssetsAfterUser3 = wrapper.totalAssets();
-        uint256 totalMintingCapacityAfterUser3 = IDashboard(payable(address(wrapper.DASHBOARD()))).totalMintingCapacityShares();
-        uint256 remainingCapacityAfterUser3Deposit = IDashboard(payable(address(wrapper.DASHBOARD()))).remainingMintingCapacityShares(0);
+        uint256 totalMintingCapacityAfterUser3 = core.dashboard().totalMintingCapacityShares();
+        uint256 remainingCapacityAfterUser3Deposit = core.dashboard().remainingMintingCapacityShares(0);
 
         console.log("Total vault assets after User3 deposit:", totalVaultAssetsAfterUser3);
         console.log("Total minting capacity after User3 deposit:", totalMintingCapacityAfterUser3);
@@ -707,7 +730,7 @@ contract StVaultWrapperV3Test is Test {
         console.log("=== Phase 3: Final verification ===");
 
         // Check final remaining capacity - should be nearly zero again
-        uint256 finalRemainingCapacity = IDashboard(payable(address(wrapper.DASHBOARD()))).remainingMintingCapacityShares(0);
+        uint256 finalRemainingCapacity = core.dashboard().remainingMintingCapacityShares(0);
         console.log("Final remaining capacity:", finalRemainingCapacity);
 
         // Verify capacity is nearly exhausted again (scenario requirement)

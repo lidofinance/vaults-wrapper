@@ -11,6 +11,7 @@ import {IVaultHub as IVaultHubIntact} from "src/interfaces/IVaultHub.sol";
 import {IVaultFactory} from "src/interfaces/IVaultFactory.sol";
 import {IStakingVault} from "src/interfaces/IStakingVault.sol";
 
+import {CoreHarness} from "test/utils/CoreHarness.sol";
 import {Wrapper} from "src/Wrapper.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
 import {Escrow} from "src/Escrow.sol";
@@ -31,10 +32,6 @@ interface IVaultHub is IVaultHubIntact {
     function mock__setReportIsAlwaysFresh(bool _reportIsAlwaysFresh) external;
 }
 
-interface ICoreHarness {
-    function dashboard() external view returns (IDashboard);
-    function steth() external view returns (ILido);
-}
 
 contract DefiWrapper is Test {
     Wrapper public wrapper;
@@ -45,7 +42,7 @@ contract DefiWrapper is Test {
     uint256 public constant STRATEGY_LOOPS = 2;
 
     constructor(address coreHarnessAddress) {
-        ICoreHarness core = ICoreHarness(coreHarnessAddress);
+        CoreHarness core = CoreHarness(coreHarnessAddress);
 
         wrapper = new Wrapper{value: 0 wei}(
             address(core.dashboard()),
@@ -65,5 +62,14 @@ contract DefiWrapper is Test {
 
         // Fund the LenderMock contract with ETH so it can lend
         vm.deal(address(strategy.LENDER_MOCK()), 1234 ether);
+
+        core.grantWrapperRoles(address(wrapper), address(escrow));
+
+        core.grantWithdrawalQueueRoles(address(withdrawalQueue));
+
+        withdrawalQueue.initialize(address(this));
+        withdrawalQueue.grantRole(withdrawalQueue.FINALIZE_ROLE(), address(this));
+        withdrawalQueue.grantRole(withdrawalQueue.RESUME_ROLE(), address(this));
+        withdrawalQueue.resume();
     }
 }

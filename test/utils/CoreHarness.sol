@@ -112,8 +112,13 @@ contract CoreHarness is Test {
     function grantWrapperRoles(address wrapper, address escrow) external {
         dashboard.grantRole(dashboard.FUND_ROLE(), wrapper);
         dashboard.grantRole(dashboard.WITHDRAW_ROLE(), wrapper);
+
         dashboard.grantRole(dashboard.MINT_ROLE(), escrow);
         dashboard.grantRole(dashboard.BURN_ROLE(), escrow);
+    }
+
+    function grantWithdrawalQueueRoles(address withdrawalQueue) external {
+        dashboard.grantRole(dashboard.WITHDRAW_ROLE(), withdrawalQueue);
     }
 
     function applyVaultReport(uint256 _totalValue, uint256 _totalValueIncreaseBP, uint256 _cumulativeLidoFees) public {
