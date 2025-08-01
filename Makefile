@@ -2,8 +2,12 @@ CORE_RPC_PORT ?= 9123
 CORE_BRANCH ?= feat/testnet-2
 CORE_SUBDIR ?= lido-core
 
+test-integration-debug:
+	# FOUNDRY_PROFILE=test forge test --match-test test_deposit -vvvv --fork-url http://localhost:$(CORE_RPC_PORT)
+	FOUNDRY_PROFILE=test forge test test/integration/**/*.test.sol -vvvv --fork-url http://localhost:$(CORE_RPC_PORT)
+
 test-integration:
-	forge test test/integration/**/*.test.sol -vvv --fork-url http://localhost:$(CORE_RPC_PORT)
+	FOUNDRY_PROFILE=test forge test test/integration/**/*.test.sol -vv --fork-url http://localhost:$(CORE_RPC_PORT)
 
 # Requires entr util
 test-watch:

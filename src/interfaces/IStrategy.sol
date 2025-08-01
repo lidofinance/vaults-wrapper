@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0
-pragma solidity 0.8.25;
+pragma solidity >= 0.5.0;
 
 interface IStrategy {
     function execute(address user, uint256 stvTokenShares) external;

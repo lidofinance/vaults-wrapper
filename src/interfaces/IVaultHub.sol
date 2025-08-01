@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0
-pragma solidity 0.8.25;
+pragma solidity >= 0.5.0;
 
 import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
 
@@ -49,8 +49,18 @@ interface IVaultHub is IAccessControl {
     function vaultConnection(address _vault) external view returns (VaultConnection memory);
     function maxLockableValue(address _vault) external view returns (uint256);
     function isReportFresh(address _vault) external view returns (bool);
-    
+
     function transferVaultOwnership(address _vault, address _newOwner) external;
+
+    function applyVaultReport(
+        address _vault,
+        uint256 _reportTimestamp,
+        uint256 _reportTotalValue,
+        int256 _reportInOutDelta,
+        uint256 _reportCumulativeLidoFees,
+        uint256 _reportLiabilityShares,
+        uint256 _reportSlashingReserve
+    ) external;
 
 
     // -----------------------------

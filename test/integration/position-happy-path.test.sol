@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity 0.8.25;
+pragma solidity 0.8.30;
 
 import {Test, console} from "forge-std/Test.sol";
 
-import {ILidoLocator} from "lido-core/contracts/common/interfaces/ILidoLocator.sol";
-import {ILido} from "src/interfaces/ILido.sol";
+import {CoreHarness} from "test/utils/CoreHarness.sol";
+import {DefiWrapper, ICoreHarness} from "test/utils/DefiWrapper.sol";
 import {IDashboard} from "src/interfaces/IDashboard.sol";
-import {IVaultHub as IVaultHubIntact} from "src/interfaces/IVaultHub.sol";
-import {IVaultFactory} from "src/interfaces/IVaultFactory.sol";
+import {IVaultHub} from "src/interfaces/IVaultHub.sol";
 import {IStakingVault} from "src/interfaces/IStakingVault.sol";
+import {ILido} from "src/interfaces/ILido.sol";
 
 import {Wrapper} from "src/Wrapper.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
@@ -16,23 +16,12 @@ import {Escrow} from "src/Escrow.sol";
 import {ExampleStrategy, LenderMock} from "src/ExampleStrategy.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
-interface IHashConsensus {
-    function updateInitialEpoch(uint256 initialEpoch) external;
-}
-
-interface IACL {
-    function grantPermission(address _entity, address _app, bytes32 _role) external;
-    function grantRole(bytes32 role, address account) external;
-    function createPermission(address _entity, address _app, bytes32 _role, address _manager) external;
-    function setPermissionManager(address _newManager, address _app, bytes32 _role) external;
-}
-
-interface IVaultHub is IVaultHubIntact {
-    function mock__setReportIsAlwaysFresh(bool _reportIsAlwaysFresh) external;
-}
 
 contract StVaultWrapperV3Test is Test {
-    ILidoLocator public locator;
+    CoreHarness public core;
+    DefiWrapper public dw;
+
+    // Access to harness components
     Wrapper public wrapper;
     IDashboard public dashboard;
     ILido public steth;
@@ -42,118 +31,110 @@ contract StVaultWrapperV3Test is Test {
     Escrow public escrow;
     ExampleStrategy public strategy;
 
-    // uint256 public constant THE_STONE = 10 wei;
-    uint256 public constant INITIAL_LIDO_SUBMISSION = 10_000 ether;
-    uint256 public constant CONNECT_DEPOSIT = 1 ether;
-    uint256 public constant LIDO_TOTAL_BASIS_POINTS = 10000;
-
-    address public agent;
-    address public hashConsensus;
+    uint256 public constant WEI_ROUNDING_TOLERANCE = 2;
 
     address public user1 = address(0x1);
     address public user2 = address(0x2);
+    address public user3 = address(0x3);
 
     event VaultFunded(uint256 amount);
     event ValidatorExitRequested(bytes pubkeys);
     event ValidatorWithdrawalsTriggered(bytes pubkeys, uint64[] amounts);
 
     function setUp() public {
-        vm.deal(address(this), 10000000 ether);
+        core = new CoreHarness("lido-core/deployed-local.json");
+        dw = new DefiWrapper(address(core));
 
-        string memory deployedJson = vm.readFile("lido-core/deployed-local.json");
-        locator = ILidoLocator(vm.parseJsonAddress(deployedJson, "$.lidoLocator.proxy.address"));
-        vm.label(address(locator), "LidoLocator");
+        // Get references to deployed contracts
+        wrapper = dw.wrapper();
+        withdrawalQueue = dw.withdrawalQueue();
+        escrow = dw.escrow();
+        strategy = dw.strategy();
 
-        agent = vm.parseJsonAddress(deployedJson, "$.['app:aragon-agent'].proxy.address");
-        vm.label(agent, "Agent");
+        // Get references from core
+        dashboard = core.dashboard();
+        steth = core.steth();
+        vaultHub = core.vaultHub();
+        stakingVault = core.stakingVault();
 
-        hashConsensus = vm.parseJsonAddress(deployedJson, "$.hashConsensusForAccountingOracle.address");
-        vm.label(hashConsensus, "HashConsensusForAO");
-        vm.prank(agent);
-        IHashConsensus(hashConsensus).updateInitialEpoch(1);
-
-        steth = ILido(locator.lido());
-        vm.label(address(steth), "Lido");
-
-        vm.prank(agent);
-        steth.setMaxExternalRatioBP(LIDO_TOTAL_BASIS_POINTS);
-
-        vm.prank(agent);
-        steth.resume();
-
-        // Need some ether in Lido to pass ShareLimitTooHigh check upon vault creation/connection
-        steth.submit{value: INITIAL_LIDO_SUBMISSION}(address(this));
-
-        vaultHub = IVaultHub(locator.vaultHub());
-        vm.label(address(vaultHub), "VaultHub");
-
-        IVaultFactory vaultFactory = IVaultFactory(locator.vaultFactory());
-        vm.label(address(vaultFactory), "VaultFactory");
-
-        assertEq(vaultHub.CONNECT_DEPOSIT(), CONNECT_DEPOSIT, "CONNECT_DEPOSIT wrong constant");
-
-        uint256 confirmExpiry = 1 hours;
-        (address vaultAddress, address dashboardAddress) = vaultFactory.createVaultWithDashboard{value: CONNECT_DEPOSIT}(
-            address(this),
-            address(this),
-            address(this),
-            0,
-            confirmExpiry,
-            new IVaultFactory.RoleAssignment[](0)
-        );
-
-        dashboard = IDashboard(payable(dashboardAddress));
-        vm.label(address(dashboard), "Dashboard");
-
-        stakingVault = IStakingVault(vaultAddress);
-        vm.label(address(stakingVault), "StakingVault");
-
-        wrapper = new Wrapper{value: 0 wei}(
-            address(dashboard),
-            address(0), // placeholder for escrow
-            "Staked ETH Vault Wrapper",
-            "stvETH"
-        );
-
-        withdrawalQueue = new WithdrawalQueue(wrapper);
-
-        wrapper.setWithdrawalQueue(address(withdrawalQueue));
-
-        address vaultOwner = vaultHub.vaultConnection(address(stakingVault)).owner;
-        console.log("vaultOwner", vaultOwner);
-
-        vm.prank(vaultOwner);
-        vaultHub.mock__setReportIsAlwaysFresh(true);
-
-        dashboard.grantRole(dashboard.FUND_ROLE(), address(wrapper));
-
-
-        uint256 strategyLoops = 2;
-        strategy = new ExampleStrategy(address(steth), address(wrapper), strategyLoops);
-
-        escrow = new Escrow(address(wrapper), address(withdrawalQueue), address(strategy), address(steth));
-        wrapper.setEscrowAddress(address(escrow));
-
-        // TODO: make escrow mint
-        dashboard.grantRole(dashboard.MINT_ROLE(), address(escrow));
-
-        // Fund the LenderMock contract with ETH so it can lend
-        vm.deal(address(strategy.LENDER_MOCK()), 1234 ether);
+        // Grant roles (must be done by the admin, which is the CoreHarness contract)
+        core.grantWrapperRoles(address(wrapper), address(escrow));
 
         // Fund users
         vm.deal(user1, 1000 ether);
         vm.deal(user2, 1000 ether);
-
-        IACL acl = IACL(vm.parseJsonAddress(deployedJson, "$.aragon-acl.proxy.address"));
-        vm.label(address(acl), "ACL");
-
+        vm.deal(user3, 1000 ether);
     }
+
+    function test_debug() public {
+        uint256 user1InitialETH = 10_000 wei;
+        uint256 user2InitialETH = 20_000 wei;
+        uint256 lidoFees = 100 wei;
+
+        vm.deal(user1, user1InitialETH);
+        vm.deal(user2, user2InitialETH);
+
+        vm.prank(user1);
+        wrapper.depositETH{value: user1InitialETH}();
+
+        // vm.prank(user2);
+        // uint256 user2StvShares = wrapper.depositETH{value: user2InitialETH}();
+
+        console.log("=== Before Vault Report ===");
+        uint256 totalMintingCapacity = dashboard.totalMintingCapacityShares();
+        console.log("totalMintingCapacity:", totalMintingCapacity);
+
+        uint256 remainingMintingCapacity = dashboard.remainingMintingCapacityShares(0);
+        console.log("remainingMintingCapacity:", remainingMintingCapacity);
+
+        assertEq(remainingMintingCapacity, totalMintingCapacity, "remainingMintingCapacity should equal totalMintingCapacity");
+
+        uint256 nodeOperatorDisbursableFee = dashboard.nodeOperatorDisbursableFee();
+        console.log("nodeOperatorDisbursableFee:", nodeOperatorDisbursableFee);
+
+        uint256 totalValue = dashboard.totalValue();
+        console.log("totalValue before report:", totalValue);
+
+        // Apply a vault report to simulate rewards and Lido fees
+        console.log("=== Applying Vault Report ===");
+
+        core.applyVaultReport(0, 0, lidoFees);
+
+        console.log("=== After Vault Report ===");
+
+        // Check values after the report
+        uint256 totalValueAfter = dashboard.totalValue();
+        console.log("totalValue after report:", totalValueAfter);
+
+        uint256 totalMintingCapacityAfter = dashboard.totalMintingCapacityShares();
+        console.log("totalMintingCapacity after:", totalMintingCapacityAfter);
+
+        uint256 remainingMintingCapacityAfter = dashboard.remainingMintingCapacityShares(0);
+        console.log("remainingMintingCapacity after:", remainingMintingCapacityAfter);
+
+        uint256 nodeOperatorDisbursableFeeAfter = dashboard.nodeOperatorDisbursableFee();
+        console.log("nodeOperatorDisbursableFee after:", nodeOperatorDisbursableFeeAfter);
+
+        uint256 unsettledObligations = dashboard.unsettledObligations();
+        console.log("unsettledObligations after:", unsettledObligations);
+
+        // Verify the report had the expected effects
+        assertEq(totalValueAfter + lidoFees, totalValue, "Total value should decrease due to Lido fees");
+        // assertGt(totalMintingCapacityAfter, totalMintingCapacity, "Minting capacity should increase with rewards");
+        // assertGt(nodeOperatorDisbursableFeeAfter, nodeOperatorDisbursableFee, "Node operator fee should increase");
+
+        // console.log("=== Report Applied Successfully ===");
+        console.log("Report applied: total value changed from", totalValue, "to", totalValueAfter);
+        // console.log("Node operator fee generated:", nodeOperatorDisbursableFeeAfter - nodeOperatorDisbursableFee);
+        // console.log("Minting capacity increased by:", totalMintingCapacity);
+    }
+
 
     function test_deposit() public {
         uint256 user1InitialETH = 10_000 wei;
         uint256 user2InitialETH = 15_000 wei;
         uint256 initialVaultBalance = wrapper.INITIAL_VAULT_BALANCE();
-        assertEq(initialVaultBalance, CONNECT_DEPOSIT, "initialVaultBalance should be equal to CONNECT_DEPOSIT");
+        assertEq(initialVaultBalance, core.CONNECT_DEPOSIT(), "initialVaultBalance should be equal to CONNECT_DEPOSIT");
 
         // Setup: User1 deposits ETH and gets stvToken shares
         vm.deal(user1, user1InitialETH);
@@ -271,12 +252,12 @@ contract StVaultWrapperV3Test is Test {
         // Assert all logged balances
         uint256 totalBasisPoints = strategy.LENDER_MOCK().TOTAL_BASIS_POINTS(); // 10000
 
-        uint256 mintedStETHShares0 = user1StvShares * (LIDO_TOTAL_BASIS_POINTS - reserveRatioBP) / LIDO_TOTAL_BASIS_POINTS;
+        uint256 mintedStETHShares0 = user1StvShares * (core.LIDO_TOTAL_BASIS_POINTS() - reserveRatioBP) / core.LIDO_TOTAL_BASIS_POINTS();
         uint256 borrowedEth0 = (mintedStETHShares0 * borrowRatio) / totalBasisPoints;
         console.log("borrowedEth0", borrowedEth0);
 
         uint256 user1StvShares1 = borrowedEth0;
-        uint256 mintedStETHShares1 = user1StvShares1 * (LIDO_TOTAL_BASIS_POINTS - reserveRatioBP) / LIDO_TOTAL_BASIS_POINTS;
+        uint256 mintedStETHShares1 = user1StvShares1 * (core.LIDO_TOTAL_BASIS_POINTS() - reserveRatioBP) / core.LIDO_TOTAL_BASIS_POINTS();
         uint256 borrowedEth1 = (mintedStETHShares1 * borrowRatio) / totalBasisPoints;
         console.log("borrowedEth1", borrowedEth1);
     }
@@ -297,9 +278,9 @@ contract StVaultWrapperV3Test is Test {
         uint256 user2StvShares = wrapper.depositETH{value: user2InitialETH}();
 
         uint256 totalDeposits = user1InitialETH + user2InitialETH;
-        assertEq(wrapper.totalAssets(), totalDeposits + CONNECT_DEPOSIT, "wrapper totalAssets should equal both deposits");
+        assertEq(wrapper.totalAssets(), totalDeposits + core.CONNECT_DEPOSIT(), "wrapper totalAssets should equal both deposits");
         assertEq(wrapper.totalSupply(), user1StvShares + user2StvShares, "wrapper totalSupply should equal both users' shares");
-        assertEq(address(stakingVault).balance, totalDeposits + CONNECT_DEPOSIT, "stakingVault ETH balance should equal both deposits");
+        assertEq(address(stakingVault).balance, totalDeposits + core.CONNECT_DEPOSIT(), "stakingVault ETH balance should equal both deposits");
 
         uint256 reserveRatioBP = dashboard.reserveRatioBP();
         console.log("reserveRatioBP", reserveRatioBP);
@@ -332,6 +313,446 @@ contract StVaultWrapperV3Test is Test {
         uint256 user1Locked = escrow.lockedStvSharesByUser(user1);
         uint256 user2Locked = escrow.lockedStvSharesByUser(user2);
         assertEq(totalLocked, user1Locked + user2Locked, "total locked should equal sum of user locked shares");
+    }
+
+    function test_mintStETHProportionalSharing() public {
+        uint256 user1InitialETH = 10_000 wei;
+        uint256 user2InitialETH = 20_000 wei;
+
+        // Setup: Both users deposit ETH
+        vm.deal(user1, user1InitialETH);
+        vm.deal(user2, user2InitialETH);
+
+        vm.prank(user1);
+        uint256 user1StvShares = wrapper.depositETH{value: user1InitialETH}();
+
+        vm.prank(user2);
+        uint256 user2StvShares = wrapper.depositETH{value: user2InitialETH}();
+
+        uint256 totalDeposits = user1InitialETH + user2InitialETH;
+        assertEq(wrapper.totalAssets(), totalDeposits);
+
+        // User1 has 1/3 of total shares, User2 has 2/3
+        assertEq(user1StvShares, user1InitialETH);
+        assertEq(user2StvShares, user2InitialETH);
+
+        // Check initial minting capacity for the entire vault
+        uint256 totalMintingCapacity = IDashboard(payable(address(wrapper.DASHBOARD()))).remainingMintingCapacityShares(0);
+        console.log("Total vault minting capacity:", totalMintingCapacity);
+
+        // User1 should only be able to mint proportional to their share (1/3 of capacity)
+        vm.startPrank(user1);
+        wrapper.approve(address(escrow), user1StvShares);
+        uint256 user1MintedStethShares = escrow.mintStETH(user1StvShares);
+        vm.stopPrank();
+
+        console.log("User1 minted stETH shares:", user1MintedStethShares);
+
+        // Compare totalMintingCapacityShares and remainingMintingCapacityShares
+        uint256 totalMintingCapacityShares = IDashboard(payable(address(wrapper.DASHBOARD()))).totalMintingCapacityShares();
+        uint256 remainingMintingCapacityShares = IDashboard(payable(address(wrapper.DASHBOARD()))).remainingMintingCapacityShares(0);
+        console.log("totalMintingCapacityShares:", totalMintingCapacityShares);
+        console.log("remainingMintingCapacityShares:", remainingMintingCapacityShares);
+
+        // The remaining capacity should be equal to the total capacity minus what user1 minted
+        assertEq(
+            remainingMintingCapacityShares,
+            totalMintingCapacityShares - user1MintedStethShares,
+            "remainingMintingCapacityShares should decrease by user1's minted amount"
+        );
+
+        // Calculate expected proportional amount for User1 (1/3 of total capacity)
+        uint256 expectedUser1Mintable = (user1InitialETH * totalMintingCapacity) / totalDeposits;
+        console.log("Expected User1 mintable:", expectedUser1Mintable);
+
+        // User1 should only get their proportional share
+        assertEq(user1MintedStethShares, expectedUser1Mintable, "User1 should only mint proportional to their share");
+        assertTrue(user1MintedStethShares < totalMintingCapacity, "User1 should not mint entire vault capacity");
+
+        // Now User2 tries to mint their proportional share
+        vm.startPrank(user2);
+        wrapper.approve(address(escrow), user2StvShares);
+
+        uint256 remainingCapacityAfterUser1 = IDashboard(payable(address(wrapper.DASHBOARD()))).remainingMintingCapacityShares(0);
+        console.log("Remaining capacity after User1:", remainingCapacityAfterUser1);
+
+        uint256 user2MintedStethShares = escrow.mintStETH(user2StvShares);
+        vm.stopPrank();
+
+        console.log("User2 minted stETH shares:", user2MintedStethShares);
+
+        // Calculate expected proportional amount for User2 (2/3 of total capacity)
+        uint256 expectedUser2Mintable = (user2InitialETH * totalMintingCapacity) / totalDeposits;
+        console.log("Expected User2 mintable:", expectedUser2Mintable);
+
+        // User2 should get their proportional share of the total capacity
+        assertEq(user2MintedStethShares, expectedUser2Mintable, "User2 should mint proportional to their share");
+
+        // Both users should have received proportional amounts
+        uint256 user1ShareRatio = (user1InitialETH * 10000) / totalDeposits;  // 3333 (33.33%)
+        uint256 user2ShareRatio = (user2InitialETH * 10000) / totalDeposits;  // 6666 (66.67%)
+
+        console.log("User1 share ratio (bp):", user1ShareRatio);
+        console.log("User2 share ratio (bp):", user2ShareRatio);
+
+        assertTrue(user2MintedStethShares > user1MintedStethShares, "User2 should mint more than User1 due to larger share");
+    }
+
+    function test_mockLiabilities() public {
+
+        uint256 user1InitialETH = 10_000 wei;
+        uint256 user2InitialETH = 20_000 wei;
+
+        // Setup: Initial state without any liabilities
+        console.log("=== Initial State (No Liabilities) ===");
+
+        // Check initial capacity when vault has no liabilities
+        uint256 initialTotalCapacity = IDashboard(payable(address(wrapper.DASHBOARD()))).totalMintingCapacityShares();
+        uint256 initialRemainingCapacity = IDashboard(payable(address(wrapper.DASHBOARD()))).remainingMintingCapacityShares(0);
+        uint256 initialLiabilityShares = IDashboard(payable(address(wrapper.DASHBOARD()))).liabilityShares();
+        uint256 initialUnsettledObligations = IDashboard(payable(address(wrapper.DASHBOARD()))).unsettledObligations();
+
+        console.log("Initial total minting capacity:", initialTotalCapacity);
+        console.log("Initial remaining capacity:", initialRemainingCapacity);
+        console.log("Initial liability shares:", initialLiabilityShares);
+        console.log("Initial unsettled obligations:", initialUnsettledObligations);
+
+        // In initial state, remaining should equal total (no liabilities)
+        assertEq(initialRemainingCapacity, initialTotalCapacity, "Initially, remaining capacity should equal total capacity");
+        assertEq(initialLiabilityShares, 0, "Initially, there should be no liability shares");
+        assertEq(initialUnsettledObligations, 0, "Initially, there should be no unsettled obligations");
+
+        // Phase 1: Users deposit ETH
+        console.log("=== Phase 1: Users deposit ETH ===");
+
+        vm.deal(user1, user1InitialETH);
+        vm.deal(user2, user2InitialETH);
+
+        vm.prank(user1);
+        uint256 user1StvShares = wrapper.depositETH{value: user1InitialETH}();
+
+        vm.prank(user2);
+        uint256 user2StvShares = wrapper.depositETH{value: user2InitialETH}();
+
+        console.log("User1 deposited:", user1InitialETH, "received shares:", user1StvShares);
+        console.log("User2 deposited:", user2InitialETH, "received shares:", user2StvShares);
+
+        // Check capacity after deposits (should still be equal since no stETH minted yet)
+        uint256 totalCapacityAfterDeposits = IDashboard(payable(address(wrapper.DASHBOARD()))).totalMintingCapacityShares();
+        uint256 remainingCapacityAfterDeposits = IDashboard(payable(address(wrapper.DASHBOARD()))).remainingMintingCapacityShares(0);
+
+        console.log("Total capacity after deposits:", totalCapacityAfterDeposits);
+        console.log("Remaining capacity after deposits:", remainingCapacityAfterDeposits);
+
+        // Should still be equal since no stETH has been minted yet
+        assertEq(remainingCapacityAfterDeposits, totalCapacityAfterDeposits, "After deposits, remaining should still equal total (no stETH minted yet)");
+
+        // Phase 2: User1 mints stETH to create liabilities
+        console.log("=== Phase 2: User1 mints stETH (creates liabilities) ===");
+
+        vm.startPrank(user1);
+        wrapper.approve(address(escrow), user1StvShares);
+        uint256 user1MintedShares = escrow.mintStETH(user1StvShares);
+        vm.stopPrank();
+
+        console.log("User1 minted stETH shares:", user1MintedShares);
+
+        // Check capacity after User1 mints (now we should have liabilities)
+        uint256 totalCapacityAfterUser1Mint = IDashboard(payable(address(wrapper.DASHBOARD()))).totalMintingCapacityShares();
+        uint256 remainingCapacityAfterUser1Mint = IDashboard(payable(address(wrapper.DASHBOARD()))).remainingMintingCapacityShares(0);
+        uint256 liabilitySharesAfterUser1Mint = IDashboard(payable(address(wrapper.DASHBOARD()))).liabilityShares();
+        uint256 unsettledObligationsAfterUser1Mint = IDashboard(payable(address(wrapper.DASHBOARD()))).unsettledObligations();
+
+        console.log("Total capacity after User1 mint:", totalCapacityAfterUser1Mint);
+        console.log("Remaining capacity after User1 mint:", remainingCapacityAfterUser1Mint);
+        console.log("Liability shares after User1 mint:", liabilitySharesAfterUser1Mint);
+        console.log("Unsettled obligations after User1 mint:", unsettledObligationsAfterUser1Mint);
+
+        // Now we should see the difference: remainingMintingCapacityShares != totalMintingCapacityShares
+        console.log("=== Liability Impact Verification ===");
+
+        // The core test: remaining capacity should be less than total capacity due to liabilities
+        assertTrue(remainingCapacityAfterUser1Mint < totalCapacityAfterUser1Mint, "CASE 3 CONDITION: remainingMintingCapacityShares should be less than totalMintingCapacityShares due to liabilities");
+
+        // The difference should be related to the liability shares created
+        uint256 capacityDifference = totalCapacityAfterUser1Mint - remainingCapacityAfterUser1Mint;
+        console.log("Capacity difference due to liabilities:", capacityDifference);
+
+        // The liability shares should now be greater than 0
+        assertGt(liabilitySharesAfterUser1Mint, 0, "Liability shares should be created after minting stETH");
+
+        // The difference in capacity should equal the minted stETH shares (the liability)
+        assertEq(capacityDifference, user1MintedShares, "Capacity difference should equal the minted stETH shares");
+
+        // Phase 3: User2 mints to further increase liabilities
+        console.log("=== Phase 3: User2 mints stETH (increases liabilities) ===");
+
+        vm.startPrank(user2);
+        wrapper.approve(address(escrow), user2StvShares);
+        uint256 user2MintedShares = escrow.mintStETH(user2StvShares);
+        vm.stopPrank();
+
+        console.log("User2 minted stETH shares:", user2MintedShares);
+
+        // Check final state
+        uint256 finalTotalCapacity = IDashboard(payable(address(wrapper.DASHBOARD()))).totalMintingCapacityShares();
+        uint256 finalRemainingCapacity = IDashboard(payable(address(wrapper.DASHBOARD()))).remainingMintingCapacityShares(0);
+        uint256 finalLiabilityShares = IDashboard(payable(address(wrapper.DASHBOARD()))).liabilityShares();
+
+        console.log("Final total capacity:", finalTotalCapacity);
+        console.log("Final remaining capacity:", finalRemainingCapacity);
+        console.log("Final liability shares:", finalLiabilityShares);
+
+        // Final verification
+        uint256 totalMintedStETH = user1MintedShares + user2MintedShares;
+        uint256 finalCapacityDifference = finalTotalCapacity - finalRemainingCapacity;
+
+        console.log("Total stETH minted by both users:", totalMintedStETH);
+        console.log("Final capacity difference:", finalCapacityDifference);
+
+        // The final difference should equal the total stETH minted (total liabilities)
+        assertEq(finalCapacityDifference, totalMintedStETH, "Final capacity difference should equal total minted stETH");
+
+        // Summary: This test demonstrates Case 3 from scenarios.md
+        console.log("=== Test Summary ===");
+        console.log("PASS: Demonstrated that remainingMintingCapacityShares < totalMintingCapacityShares when vault has liabilities");
+        console.log("PASS: Liabilities are created by minting stETH against stvToken collateral");
+        console.log("PASS: The difference in capacity equals the outstanding stETH shares (liabilities)");
+        console.log("PASS: Case 3 condition successfully verified");
+    }
+
+    function test_mintStETHInputValidation() public {
+        uint256 user1InitialETH = 10_000 wei;
+
+        // Setup: User deposits ETH
+        vm.deal(user1, user1InitialETH);
+        vm.prank(user1);
+        wrapper.depositETH{value: user1InitialETH}();
+
+        // Test Case: User tries to mint with 0 shares
+        // This should revert with ZeroStvShares custom error
+        vm.startPrank(user1);
+        wrapper.approve(address(escrow), 0);
+        vm.expectRevert(abi.encodeWithSignature("ZeroStvShares()"));
+        escrow.mintStETH(0);
+        vm.stopPrank();
+    }
+
+    function test_mintStETHERC20Errors() public {
+        uint256 user1InitialETH = 10_000 wei;
+
+        // Setup: User deposits ETH
+        vm.deal(user1, user1InitialETH);
+        vm.prank(user1);
+        uint256 user1StvShares = wrapper.depositETH{value: user1InitialETH}();
+
+        // Test Case 1: User tries to mint more than they own
+        // This should revert due to insufficient balance
+        vm.startPrank(user1);
+        wrapper.approve(address(escrow), user1StvShares);
+        vm.expectRevert(); // Should revert with ERC20 transfer error
+        escrow.mintStETH(user1StvShares + 1);
+        vm.stopPrank();
+
+        // Test Case 2: User tries to mint without sufficient allowance
+        vm.startPrank(user1);
+        wrapper.approve(address(escrow), user1StvShares - 1);
+        vm.expectRevert(); // Should revert with ERC20 allowance error
+        escrow.mintStETH(user1StvShares);
+        vm.stopPrank();
+    }
+
+    function test_mintStETHCapacityExhaustion() public {
+        uint256 user1InitialETH = 10_000 wei;
+        uint256 user2InitialETH = 20_000 wei;
+
+        // Setup: Both users deposit ETH
+        vm.deal(user1, user1InitialETH);
+        vm.deal(user2, user2InitialETH);
+
+        vm.prank(user1);
+        uint256 user1StvShares = wrapper.depositETH{value: user1InitialETH}();
+
+        vm.prank(user2);
+        uint256 user2StvShares = wrapper.depositETH{value: user2InitialETH}();
+
+        // Test Case: Multiple users exhaust minting capacity
+        // First user mints their proportional share
+        vm.startPrank(user1);
+        wrapper.approve(address(escrow), user1StvShares);
+        uint256 user1MintedShares = escrow.mintStETH(user1StvShares);
+        vm.stopPrank();
+
+        // Second user mints their proportional share
+        vm.startPrank(user2);
+        wrapper.approve(address(escrow), user2StvShares);
+        uint256 user2MintedShares = escrow.mintStETH(user2StvShares);
+        vm.stopPrank();
+
+        console.log("User1 minted:", user1MintedShares);
+        console.log("User2 minted:", user2MintedShares);
+
+        // Check remaining capacity after both users have minted
+        uint256 remainingCapacity = IDashboard(payable(address(wrapper.DASHBOARD()))).remainingMintingCapacityShares(0);
+        console.log("Remaining capacity after both users:", remainingCapacity);
+
+        // Allow for small rounding errors (up to WEI_ROUNDING_TOLERANCE wei tolerance)
+        assertTrue(remainingCapacity <= WEI_ROUNDING_TOLERANCE, "Minting capacity should be nearly fully exhausted after both users mint");
+
+        // // Third user joins and tries to mint
+        // address user3 = address(0x3);
+        // uint256 user3InitialETH = 5_000 wei;
+        // vm.deal(user3, user3InitialETH);
+
+        // vm.prank(user3);
+        // uint256 user3StvShares = wrapper.depositETH{value: user3InitialETH}();
+
+        // // User3 should not be able to mint if capacity is fully consumed
+        // if (remainingCapacity == 0) {
+        //     vm.startPrank(user3);
+        //     wrapper.approve(address(escrow), user3StvShares);
+        //     vm.expectRevert(abi.encodeWithSignature("NoMintingCapacityAvailable()"));
+        //     escrow.mintStETH(user3StvShares);
+        //     vm.stopPrank();
+        // } else {
+        //     // If there's remaining capacity, user3 should only get proportional amount
+        //     vm.startPrank(user3);
+        //     wrapper.approve(address(escrow), user3StvShares);
+        //     uint256 user3MintedShares = escrow.mintStETH(user3StvShares);
+        //     vm.stopPrank();
+
+        //     uint256 totalAssets = wrapper.totalAssets();
+        //     uint256 user3Assets = wrapper.convertToAssets(user3StvShares);
+        //     uint256 expectedUser3Mintable = (user3Assets * remainingCapacity) / totalAssets;
+
+        //     // Allow for small rounding differences (up to 1000 wei tolerance)
+        //     uint256 tolerance = 1000;
+        //     assertTrue(
+        //         user3MintedShares >= expectedUser3Mintable - tolerance &&
+        //         user3MintedShares <= expectedUser3Mintable + tolerance,
+        //         "User3 should get approximately proportional share of remaining capacity"
+        //     );
+        //     assertTrue(user3MintedShares <= remainingCapacity, "User3 cannot mint more than remaining capacity");
+        // }
+    }
+
+    function test_user3DepositsAndFullyMintsAfterUsers() public {
+        uint256 user1InitialETH = 10_000 wei;
+        uint256 user2InitialETH = 20_000 wei;
+        uint256 user3InitialETH = 15_000 wei;
+
+        // Phase 1: Two users mint up to full vault capacity
+        // Setup: User1 and User2 deposit ETH
+        vm.deal(user1, user1InitialETH);
+        vm.deal(user2, user2InitialETH);
+
+        vm.prank(user1);
+        uint256 user1StvShares = wrapper.depositETH{value: user1InitialETH}();
+
+        vm.prank(user2);
+        uint256 user2StvShares = wrapper.depositETH{value: user2InitialETH}();
+
+        console.log("=== Phase 1: User1 and User2 mint to full capacity ===");
+
+        // User1 mints their proportional share
+        vm.startPrank(user1);
+        wrapper.approve(address(escrow), user1StvShares);
+        uint256 user1MintedShares = escrow.mintStETH(user1StvShares);
+        vm.stopPrank();
+
+        // User2 mints their proportional share
+        vm.startPrank(user2);
+        wrapper.approve(address(escrow), user2StvShares);
+        uint256 user2MintedShares = escrow.mintStETH(user2StvShares);
+        vm.stopPrank();
+
+        console.log("User1 minted stETH shares:", user1MintedShares);
+        console.log("User2 minted stETH shares:", user2MintedShares);
+
+        // Check remaining capacity after first two users - should be nearly zero
+        uint256 remainingCapacityAfterTwoUsers = IDashboard(payable(address(wrapper.DASHBOARD()))).remainingMintingCapacityShares(0);
+        console.log("Remaining capacity after User1 and User2:", remainingCapacityAfterTwoUsers);
+
+        // Verify capacity is nearly exhausted (scenario requirement)
+        assertTrue(remainingCapacityAfterTwoUsers <= WEI_ROUNDING_TOLERANCE, "Minting capacity should be nearly fully exhausted after first two users");
+
+        // Phase 2: User3 deposits more ETH
+        console.log("=== Phase 2: User3 deposits and mints ===");
+
+        vm.deal(user3, user3InitialETH);
+        vm.prank(user3);
+        uint256 user3StvShares = wrapper.depositETH{value: user3InitialETH}();
+
+        console.log("User3 deposited ETH:", user3InitialETH);
+        console.log("User3 received stvETH shares:", user3StvShares);
+
+        // Check new total vault assets and minting capacity after user3 deposit
+        uint256 totalVaultAssetsAfterUser3 = wrapper.totalAssets();
+        uint256 totalMintingCapacityAfterUser3 = IDashboard(payable(address(wrapper.DASHBOARD()))).totalMintingCapacityShares();
+        uint256 remainingCapacityAfterUser3Deposit = IDashboard(payable(address(wrapper.DASHBOARD()))).remainingMintingCapacityShares(0);
+
+        console.log("Total vault assets after User3 deposit:", totalVaultAssetsAfterUser3);
+        console.log("Total minting capacity after User3 deposit:", totalMintingCapacityAfterUser3);
+        console.log("Remaining capacity after User3 deposit:", remainingCapacityAfterUser3Deposit);
+
+        // User3 mints for all stvETH it has
+        vm.startPrank(user3);
+        wrapper.approve(address(escrow), user3StvShares);
+        uint256 user3MintedShares = escrow.mintStETH(user3StvShares);
+        vm.stopPrank();
+
+        console.log("User3 minted stETH shares:", user3MintedShares);
+
+        // Phase 3: Verify final state
+        console.log("=== Phase 3: Final verification ===");
+
+        // Check final remaining capacity - should be nearly zero again
+        uint256 finalRemainingCapacity = IDashboard(payable(address(wrapper.DASHBOARD()))).remainingMintingCapacityShares(0);
+        console.log("Final remaining capacity:", finalRemainingCapacity);
+
+        // Verify capacity is nearly exhausted again (scenario requirement)
+        assertTrue(finalRemainingCapacity <= WEI_ROUNDING_TOLERANCE, "Minting capacity should be nearly fully exhausted after all three users mint");
+
+        // Calculate total stETH value of all three users
+        uint256 totalStETHMinted = user1MintedShares + user2MintedShares + user3MintedShares;
+        console.log("Total stETH minted by all users:", totalStETHMinted);
+
+        // Get total locked stvETH value on Escrow
+        uint256 totalLockedStvShares = escrow.lockedStvSharesByUser(user1) + escrow.lockedStvSharesByUser(user2) + escrow.lockedStvSharesByUser(user3);
+        uint256 totalLockedStvValue = wrapper.convertToAssets(totalLockedStvShares);
+        console.log("Total locked stvETH shares:", totalLockedStvShares);
+        console.log("Total locked stvETH value:", totalLockedStvValue);
+
+        // Verify that locked stvETH value corresponds to all three users' total stETH value (scenario requirement)
+        // The values should be approximately equal (within rounding tolerance)
+        uint256 expectedTotalDeposits = user1InitialETH + user2InitialETH + user3InitialETH;
+        assertEq(totalLockedStvValue, expectedTotalDeposits, "Total locked stvETH value should equal all three users' deposits");
+
+        // Additional verification: each user should have their shares locked in escrow
+        assertEq(escrow.lockedStvSharesByUser(user1), user1StvShares, "User1 should have all their shares locked");
+        assertEq(escrow.lockedStvSharesByUser(user2), user2StvShares, "User2 should have all their shares locked");
+        assertEq(escrow.lockedStvSharesByUser(user3), user3StvShares, "User3 should have all their shares locked");
+
+        // Verify that users received their stETH based on when they minted
+        // User1 and User2 minted when there were only 30k ETH, so their amounts are based on that
+        // User3 minted when there were 45k ETH total, so gets proportional to remaining capacity
+
+        // User1 and User2 already minted correctly based on original capacity, no need to re-verify here
+        // User3 should have received the remaining capacity after their deposit
+        uint256 expectedUser3StETH = remainingCapacityAfterUser3Deposit;
+        assertEq(user3MintedShares, expectedUser3StETH, "User3 should receive all remaining capacity");
+
+        // Verify the core scenario requirements are met:
+        // 1. Users can utilize full capacity progressively
+        // 2. Total minted approaches total capacity
+        uint256 totalCapacityUtilized = user1MintedShares + user2MintedShares + user3MintedShares;
+        uint256 capacityUtilizationRatio = (totalCapacityUtilized * 10000) / totalMintingCapacityAfterUser3;
+        console.log("Capacity utilization ratio (bp):", capacityUtilizationRatio);
+
+        // Should be very close to 100% utilization (within rounding tolerance)
+        assertTrue(capacityUtilizationRatio >= 9999, "Should achieve near-complete capacity utilization");
+
+        console.log("=== Test completed successfully ===");
     }
 
     function logAllBalances(uint256 _context) public view {

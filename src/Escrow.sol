@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0
-pragma solidity 0.8.25;
+pragma solidity 0.8.30;
 
 import {IStrategy} from "./interfaces/IStrategy.sol";
 import {IVaultHub} from "./interfaces/IVaultHub.sol";
@@ -58,7 +58,6 @@ contract Escrow {
 
     constructor(
         address _wrapper,
-        address _withdrawalQueue,
         address _strategy,
         address _steth
     ) {
@@ -78,21 +77,37 @@ contract Escrow {
 
     function closePosition(uint256 stvShares) external {
         STRATEGY.finalizeExit(msg.sender);
+        stvShares = stvShares; // TODO
     }
 
-
     function mintStETH(uint256 stvShares) external returns (uint256 mintedStethShares) {
+        if (stvShares == 0) revert ZeroStvShares();
+
+        IDashboard dashboard = IDashboard(payable(address(WRAPPER.DASHBOARD())));
+
         WRAPPER.transferFrom(msg.sender, address(this), stvShares);
         lockedStvSharesByUser[msg.sender] += stvShares;
 
-        uint256 remainingMintingCapacity = IDashboard(payable(address(WRAPPER.DASHBOARD()))).remainingMintingCapacityShares(0);
+        uint256 remainingMintingCapacity = dashboard.remainingMintingCapacityShares(0);
 
-        // TODO: fix
-        // uint256 userEthInPool = WRAPPER.convertToAssets(stvShares);
-        // require(userEthInPool <= remainingMintingCapacity, "Insufficient minting capacity");
-        mintedStethShares = remainingMintingCapacity;
+        // Calculate user's maximum mintable amount based on their share of total vault
+        // User can mint stETH proportional to their stvToken share of the total vault
+        uint256 userEthInPool = WRAPPER.convertToAssets(stvShares);
+        uint256 totalVaultAssets = WRAPPER.totalAssets();
 
-        IDashboard(payable(address(WRAPPER.DASHBOARD()))).mintShares(msg.sender, mintedStethShares);
+        // Get total possible minting capacity (not just remaining)
+        uint256 totalMintingCapacity = dashboard.totalMintingCapacityShares();
+
+        // User's total fair share = (user's assets / total assets) * total capacity
+        uint256 userTotalFairShare = (userEthInPool * totalMintingCapacity) / totalVaultAssets;
+
+        // User can mint up to their fair share, limited by remaining capacity
+        mintedStethShares = userTotalFairShare < remainingMintingCapacity ? userTotalFairShare : remainingMintingCapacity;
+
+        if (mintedStethShares == 0) revert NoMintingCapacityAvailable();
+
+        dashboard.mintShares(msg.sender, mintedStethShares);
+
     }
 
     function getUserStvShares(address _user) external view returns (uint256) {
@@ -106,5 +121,9 @@ contract Escrow {
     function getTotalBorrowedAssets() external view returns (uint256) {
         return totalBorrowedAssets;
     }
+
+
+    error NoMintingCapacityAvailable();
+    error ZeroStvShares();
 
 }

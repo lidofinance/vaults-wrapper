@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0
-pragma solidity 0.8.25;
+pragma solidity 0.8.30;
 
 import {AccessControlEnumerable} from "@openzeppelin/contracts/access/extensions/AccessControlEnumerable.sol";
 import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
@@ -17,7 +17,7 @@ contract WithdrawalQueue is AccessControlEnumerable, Pausable {
 
     /// @dev maximal length of the batch array provided for prefinalization. See `prefinalize()`
     uint256 public constant MAX_BATCHES_LENGTH = 36;
-    
+
     // ACL
     bytes32 public constant PAUSE_ROLE = keccak256("PAUSE_ROLE");
     bytes32 public constant RESUME_ROLE = keccak256("RESUME_ROLE");
@@ -86,7 +86,7 @@ contract WithdrawalQueue is AccessControlEnumerable, Pausable {
     uint256 public totalLockedAssets;
     /// @dev withdrawal requests mapped to the owners
     mapping(address => EnumerableSet.UintSet) private requestsByOwner;
-    
+
     event Initialized(address indexed admin);
     event WithdrawalRequested(
         uint256 indexed requestId,
@@ -169,6 +169,8 @@ contract WithdrawalQueue is AccessControlEnumerable, Pausable {
     /// @dev Reverts reason if sender has no `PAUSE_ROLE`
     function pauseFor(uint256 _duration) external onlyRole(PAUSE_ROLE) {
         _pause();
+        _duration = _duration;
+        require(false, "NOT IMPLEMENTED");
     }
 
     //
@@ -237,7 +239,7 @@ contract WithdrawalQueue is AccessControlEnumerable, Pausable {
     ///  the function with returned `state` until it returns a state with `finished` flag set
     /// @return state that is changing on each call and should be passed to the next call until `state.finished` is true
 
-    ///TODO: removed _maxTimestamp 
+    ///TODO: removed _maxTimestamp
     function calculateFinalizationBatches(
         uint256 _maxRequestsPerCall,
         BatchesCalculationState memory _state
@@ -414,7 +416,7 @@ contract WithdrawalQueue is AccessControlEnumerable, Pausable {
         IDashboard dashboard = IDashboard(WRAPPER.DASHBOARD());
         IVaultHub vaultHub = IVaultHub(dashboard.VAULT_HUB());
         if (!vaultHub.isReportFresh(WRAPPER.STAKING_VAULT())) revert ReportStale();
-    
+
         uint256 lastFinalizedRequestId_ = getLastFinalizedRequestId();
         uint256 firstRequestIdToFinalize = lastFinalizedRequestId_ + 1;
         uint256 currentShareRate = calculateCurrentShareRate();
@@ -461,11 +463,11 @@ contract WithdrawalQueue is AccessControlEnumerable, Pausable {
     function calculateCurrentShareRate() public view returns (uint256) {
         uint256 totalStvToken = WRAPPER.totalSupply();
         uint256 totalEthInVault = WRAPPER.totalAssets();
-        
+
         if (totalStvToken == 0) {
             return E27_PRECISION_BASE;
         }
-        
+
         return (totalEthInVault * E27_PRECISION_BASE) / totalStvToken;
     }
 
@@ -493,6 +495,8 @@ contract WithdrawalQueue is AccessControlEnumerable, Pausable {
         for (uint256 i = 0; i < _requestIds.length; ++i) {
             _claim(_requestIds[i], _hints[i], msg.sender);
         }
+
+        _recipient = _recipient; // TODO
     }
 
     /// @notice Finds the list of hints for the given `_requestIds` searching among the checkpoints with indices
@@ -592,7 +596,7 @@ contract WithdrawalQueue is AccessControlEnumerable, Pausable {
         emit WithdrawalClaimed(_requestId, msg.sender, _recipient, ethWithDiscount);
     }
 
-    
+
 
     /// @notice Returns all withdrawal requests that belong to the `_owner` address
     /// @param _owner address to get requests for
@@ -752,4 +756,4 @@ contract WithdrawalQueue is AccessControlEnumerable, Pausable {
 
     /// @notice Receive ETH
     receive() external payable {}
-} 
+}

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0
-pragma solidity 0.8.25;
+pragma solidity 0.8.30;
 
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -148,32 +148,6 @@ contract Wrapper is ERC4626 {
         assert(totalSupply() == totalSupplyBefore + shares);
         return shares;
     }
-
-
-    function mintStETHForEscrow(uint256 stvShares, address stethReceiver) external returns (uint256 mintedStethShares) {
-        _transfer(address(ESCROW), address(this), stvShares);
-        totalLockedStvShares += stvShares;
-
-        uint256 userEthInPool = _convertToAssets(stvShares, Math.Rounding.Floor);
-        uint256 remainingMintingCapacity = DASHBOARD.remainingMintingCapacityShares(0);
-
-        // TODO: not all minting capacity is for the user!
-        emit Debug("remainingMintingCapacity", remainingMintingCapacity, userEthInPool);
-
-        mintedStethShares = remainingMintingCapacity;
-        DASHBOARD.mintShares(stethReceiver, mintedStethShares);
-    }
-
-    // function mintStETH(uint256 stvShares, address stethReceiver) external returns (uint256 mintedStethShares) {
-    //     _transfer(msg.sender, address(this), stvShares);
-
-    //     uint256 userAssetsInPool = _convertToAssets(stvShares, Math.Rounding.Floor);
-    //     totalLockedStvShares += stvShares;
-    //     uint256 maxMintableStethShares = DASHBOARD.remainingMintingCapacityShares(0);
-
-    //     LIDO.getSh
-
-    // }
 
     // =================================================================================
     // WITHDRAWAL SYSTEM WITH EXTERNAL QUEUE

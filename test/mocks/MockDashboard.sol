@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0
-pragma solidity 0.8.25;
+pragma solidity 0.8.30;
 
 import {MockVaultHub} from "./MockVaultHub.sol";
 import {IStakingVault} from "../../src/interfaces/IStakingVault.sol";
