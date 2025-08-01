@@ -12,7 +12,9 @@ runs:
       uses: foundry-rs/foundry-toolchain@v1
 
     - name: Install Foundry dependencies
+      shell: bash
       run: forge install
 
     - name: Build contracts
+      shell: bash
       run: forge build
