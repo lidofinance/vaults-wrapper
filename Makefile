@@ -19,6 +19,7 @@ core-init:
 
 	cd $(CORE_SUBDIR) && \
 	git apply ../test/core-mocking.patch && \
+	corepack enable && \
 	yarn && \
 	LOG_LEVEL=warn SKIP_CONTRACTS_SIZE=true SKIP_GAS_REPORT=true SKIP_INTERFACES_CHECK=true \
 	yarn compile

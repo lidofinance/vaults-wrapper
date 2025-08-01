@@ -19,26 +19,10 @@ jobs:
           - 9123:8545
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Install Foundry
-        uses: foundry-rs/foundry-toolchain@v1
-        # Use a specific version of Foundry in case nightly is broken
-        # https://github.com/foundry-rs/foundry/releases
-        # with:
-        #   version: nightly-54d8510c0f2b0f791f4c5ef99866c6af99b7606a
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Install Foundry dependencies
-        run: forge install
-
-      - name: Build contracts
-        run: forge build
+      - name: Common setup
+        uses: ./.github/workflows/setup
 
       - name: Initialize Lido Core
         run: make core-init
