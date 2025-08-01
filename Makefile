@@ -20,9 +20,7 @@ core-init:
 	cd $(CORE_SUBDIR) && \
 	git apply ../test/core-mocking.patch && \
 	corepack enable && \
-	yarn && \
-	LOG_LEVEL=warn SKIP_CONTRACTS_SIZE=true SKIP_GAS_REPORT=true SKIP_INTERFACES_CHECK=true \
-	yarn compile
+	yarn install --frozen-lockfile
 
 core-deploy:
 	cd $(CORE_SUBDIR) && \
@@ -34,7 +32,7 @@ core-deploy:
 	NETWORK_STATE_FILE="deployed-local.json" \
 	NETWORK_STATE_DEFAULTS_FILE="scripts/defaults/testnet-defaults.json" \
 	RPC_URL=http://localhost:$(CORE_RPC_PORT) \
-	SKIP_CONTRACTS_SIZE=true SKIP_GAS_REPORT=true SKIP_INTERFACES_CHECK=true LOG_LEVEL=warn \
+	SKIP_CONTRACT_SIZE=true SKIP_GAS_REPORT=true SKIP_INTERFACES_CHECK=true LOG_LEVEL=warn \
 	bash scripts/dao-deploy.sh
 
 start-fork:
