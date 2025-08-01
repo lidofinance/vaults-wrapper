@@ -3,7 +3,7 @@ pragma solidity >=0.8.25;
 
 import {Test, console} from "forge-std/Test.sol";
 
-import {ILidoLocator} from "lido-core/contracts/common/interfaces/ILidoLocator.sol";
+import {ILidoLocator} from "src/interfaces/ILidoLocator.sol";
 import {ILido} from "src/interfaces/ILido.sol";
 import {ILazyOracle} from "src/interfaces/ILazyOracle.sol";
 import {IDashboard} from "src/interfaces/IDashboard.sol";
