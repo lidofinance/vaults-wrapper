@@ -1,0 +1,57 @@
+name: Integration Tests On Scratch
+
+on:
+  push:
+    branches: [ "*" ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  test_integration:
+    name: Integration Tests On Scratch Core
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      FOUNDRY_PROFILE: test
+
+    services:
+      hardhat-node:
+        image: ghcr.io/lidofinance/hardhat-node:2.26.0-scratch
+        ports:
+          - 9123:8545
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: nightly
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'yarn'
+
+      - name: Install Foundry dependencies
+        run: forge install
+
+      - name: Build contracts
+        run: forge build
+
+      - name: Initialize Lido Core
+        run: make core-init
+        env:
+          CORE_BRANCH: "feat/testnet-2"
+
+      - name: Deploy Lido Core
+        run: make core-deploy
+        env:
+          CORE_RPC_PORT: 9123
+
+      - name: Run integration tests
+        run: make test-integration
+        env:
+          CORE_RPC_PORT: 9123
