@@ -40,8 +40,7 @@ contract CoreHarness is Test {
     uint256 public constant LIDO_TOTAL_BASIS_POINTS = 10000;
     uint256 public constant NODE_OPERATOR_FEE_RATE = 1_00; // 1% in basis points
 
-    address public agent;
-    address public hashConsensus;
+    address public constant BEACON_CHAIN = address(0xbeac0);
 
     constructor(string memory deployedJsonPath) {
         vm.deal(address(this), 10000000 ether);
@@ -50,7 +49,7 @@ contract CoreHarness is Test {
         locator = ILidoLocator(vm.parseJsonAddress(deployedJson, "$.lidoLocator.proxy.address"));
         vm.label(address(locator), "LidoLocator");
 
-        agent = vm.parseJsonAddress(deployedJson, "$.['app:aragon-agent'].proxy.address");
+        address agent = vm.parseJsonAddress(deployedJson, "$.['app:aragon-agent'].proxy.address");
         vm.label(agent, "Agent");
 
         IACL acl = IACL(vm.parseJsonAddress(deployedJson, "$.aragon-acl.proxy.address"));
@@ -60,7 +59,7 @@ contract CoreHarness is Test {
         lazyOracle = ILazyOracle(locator.lazyOracle());
         vm.label(address(lazyOracle), "LazyOracle");
 
-        hashConsensus = vm.parseJsonAddress(deployedJson, "$.hashConsensusForAccountingOracle.address");
+        address hashConsensus = vm.parseJsonAddress(deployedJson, "$.hashConsensusForAccountingOracle.address");
         vm.label(hashConsensus, "HashConsensusForAO");
         vm.prank(agent);
         IHashConsensus(hashConsensus).updateInitialEpoch(1);
@@ -146,5 +145,29 @@ contract CoreHarness is Test {
             reportLiabilityShares,
             reportSlashingReserve
         );
+    }
+
+    /**
+     * @dev Mock function to simulate validators receiving ETH from the staking vault
+     * This replaces the manual beacon chain transfer simulation in tests
+     */
+    function mockValidatorsReceiveETH() external returns (uint256 transferredAmount) {
+        transferredAmount = address(stakingVault).balance;
+        if (transferredAmount > 0) {
+            vm.prank(address(stakingVault));
+            (bool sent, ) = BEACON_CHAIN.call{value: transferredAmount}("");
+            require(sent, "ETH send to beacon chain failed");
+        }
+        return transferredAmount;
+    }
+
+    /**
+     * @dev Mock function to simulate validator exits returning ETH to the staking vault
+     * This replaces the manual ETH return simulation in tests
+     */
+    function mockValidatorExitReturnETH(uint256 ethAmount) external {
+        vm.prank(BEACON_CHAIN);
+        (bool success, ) = address(stakingVault).call{value: ethAmount}("");
+        require(success, "ETH return from beacon chain failed");
     }
 }

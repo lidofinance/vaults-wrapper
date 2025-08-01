@@ -554,16 +554,12 @@ contract StVaultWrapperV3Test is Test {
         // Phase 3: Simulate validator operations and ETH flow
         console.log("=== Phase 3: Simulate validator operations ===");
 
-        // Simulate validators receiving ETH (staking vault balance sent to beacon chain)
-        address beaconChain = address(0xbeac0);
+        // Simulate validators receiving ETH using CoreHarness
         uint256 stakingVaultBalance = address(stakingVault).balance;
         console.log("Staking vault balance before beacon chain transfer:", stakingVaultBalance);
 
-        vm.prank(address(stakingVault));
-        (bool sent, ) = beaconChain.call{value: stakingVaultBalance}("");
-        require(sent, "ETH send to beacon chain failed");
-
-        console.log("ETH sent to beacon chain:", stakingVaultBalance);
+        uint256 transferredAmount = core.mockValidatorsReceiveETH();
+        console.log("ETH sent to beacon chain:", transferredAmount);
 
         // Phase 4: Calculate finalization batches and requirements
         console.log("=== Phase 4: Calculate finalization requirements ===");
@@ -599,13 +595,8 @@ contract StVaultWrapperV3Test is Test {
         // Phase 5: Simulate validator exit and ETH return
         console.log("=== Phase 5: Simulate validator exit and ETH return ===");
 
-        // Simulate validator exit returning ETH to staking vault
-        vm.deal(beaconChain, ethToLock + 1 ether); // Extra ETH for beacon chain
-
-        vm.prank(beaconChain);
-        (bool success, ) = address(stakingVault).call{value: ethToLock}("");
-        require(success, "ETH return from beacon chain failed");
-
+        // Simulate validator exit returning ETH to staking vault using CoreHarness
+        core.mockValidatorExitReturnETH(ethToLock);
         console.log("ETH returned from beacon chain to staking vault:", ethToLock);
 
         // Phase 6: Finalize withdrawal requests
@@ -776,6 +767,165 @@ contract StVaultWrapperV3Test is Test {
         assertTrue(capacityUtilizationRatio >= 9999, "Should achieve near-complete capacity utilization");
 
         console.log("=== Test completed successfully ===");
+    }
+
+    function test_twoUsersUnevenWithdrawals() public {
+        uint256 user1InitialETH = 15_000 wei;
+        uint256 user2InitialETH = 25_000 wei;
+
+        console.log("=== Two Users with Uneven Withdrawals Integration Test ===");
+
+        // Phase 1: Both users deposit ETH
+        console.log("=== Phase 1: Users deposit ETH ===");
+        vm.deal(user1, user1InitialETH);
+        vm.deal(user2, user2InitialETH);
+
+        vm.prank(user1);
+        uint256 user1StvShares = wrapper.depositETH{value: user1InitialETH}();
+
+        vm.prank(user2);
+        uint256 user2StvShares = wrapper.depositETH{value: user2InitialETH}();
+
+        console.log("User1 deposited:", user1InitialETH, "received shares:", user1StvShares);
+        console.log("User2 deposited:", user2InitialETH, "received shares:", user2StvShares);
+
+        uint256 totalDeposits = user1InitialETH + user2InitialETH;
+        assertEq(wrapper.totalAssets(), totalDeposits, "Total assets should equal both deposits");
+
+        // Phase 2: Simulate validators receiving ETH
+        console.log("=== Phase 2: Simulate validator operations ===");
+        uint256 transferredAmount = core.mockValidatorsReceiveETH();
+        console.log("ETH sent to beacon chain:", transferredAmount);
+
+        // Phase 3: User2 makes uneven withdrawal requests (withdraws entire capital in 2 unequal requests)
+        console.log("=== Phase 3: User2 makes uneven withdrawal requests ===");
+
+        uint256 user2FirstWithdrawal = 7_000 wei;  // Smaller first request
+        uint256 user2SecondWithdrawal = user2InitialETH - user2FirstWithdrawal; // Larger second request (18,000 wei)
+
+        console.log("User2 total to withdraw:", user2InitialETH);
+        console.log("User2 first withdrawal:", user2FirstWithdrawal);
+        console.log("User2 second withdrawal:", user2SecondWithdrawal);
+
+        // First withdrawal request
+        vm.startPrank(user2);
+        uint256 firstRequestShares = wrapper.convertToShares(user2FirstWithdrawal);
+        wrapper.approve(address(withdrawalQueue), firstRequestShares);
+        uint256 requestId1 = withdrawalQueue.requestWithdrawal(user2, user2FirstWithdrawal);
+        console.log("First request ID:", requestId1, "shares:", firstRequestShares);
+
+        // Second withdrawal request (remaining amount)
+        uint256 remainingShares = wrapper.balanceOf(user2);
+        wrapper.approve(address(withdrawalQueue), remainingShares);
+        uint256 requestId2 = withdrawalQueue.requestWithdrawal(user2, user2SecondWithdrawal);
+        console.log("Second request ID:", requestId2, "shares:", remainingShares);
+        vm.stopPrank();
+
+        // Verify user2 has no shares left
+        assertEq(wrapper.balanceOf(user2), 0, "User2 should have no shares left after withdrawal requests");
+
+        // Phase 4: Calculate total finalization requirements
+        console.log("=== Phase 4: Calculate finalization requirements ===");
+
+        uint256 totalUnfinalizedAssets = withdrawalQueue.unfinalizedAssets();
+        console.log("Total unfinalized assets:", totalUnfinalizedAssets);
+        assertEq(totalUnfinalizedAssets, user2InitialETH, "Unfinalized assets should equal user2's total deposit");
+
+        // Calculate batches for both requests
+        WithdrawalQueue.BatchesCalculationState memory state;
+        state.remainingEthBudget = totalUnfinalizedAssets;
+        state.finished = false;
+        state.batchesLength = 0;
+
+        while (!state.finished) {
+            state = withdrawalQueue.calculateFinalizationBatches(2, state);
+        }
+
+        console.log("Batches calculation finished, batches length:", state.batchesLength);
+
+        // Convert batches to array for prefinalize
+        uint256[] memory batches = new uint256[](state.batchesLength);
+        for (uint256 i = 0; i < state.batchesLength; i++) {
+            batches[i] = state.batches[i];
+        }
+
+        uint256 shareRate = withdrawalQueue.calculateCurrentShareRate();
+        (uint256 ethToLock, ) = withdrawalQueue.prefinalize(batches, shareRate);
+        console.log("ETH required for finalization:", ethToLock);
+
+        // Phase 5: Simulate validator exit returning required ETH
+        console.log("=== Phase 5: Simulate validator exit ===");
+        core.mockValidatorExitReturnETH(ethToLock);
+        console.log("ETH returned from validators:", ethToLock);
+
+        // Phase 6: Finalize both withdrawal requests
+        console.log("=== Phase 6: Finalize withdrawal requests ===");
+
+        vm.startPrank(address(dw));
+        withdrawalQueue.finalize(requestId1);
+        withdrawalQueue.finalize(requestId2);
+        vm.stopPrank();
+
+        console.log("Both withdrawal requests finalized");
+
+        // Verify finalization states
+        WithdrawalQueue.WithdrawalRequestStatus memory status1 = withdrawalQueue.getWithdrawalStatus(requestId1);
+        WithdrawalQueue.WithdrawalRequestStatus memory status2 = withdrawalQueue.getWithdrawalStatus(requestId2);
+
+        assertTrue(status1.isFinalized, "First request should be finalized");
+        assertTrue(status2.isFinalized, "Second request should be finalized");
+        assertFalse(status1.isClaimed, "First request should not be claimed yet");
+        assertFalse(status2.isClaimed, "Second request should not be claimed yet");
+
+        // Phase 7: User2 claims both withdrawals
+        console.log("=== Phase 7: User2 claims withdrawals ===");
+
+        uint256 user2ETHBefore = user2.balance;
+
+        vm.startPrank(user2);
+        withdrawalQueue.claimWithdrawal(requestId1);
+        uint256 user2ETHAfterFirst = user2.balance;
+        uint256 firstClaimedAmount = user2ETHAfterFirst - user2ETHBefore;
+
+        withdrawalQueue.claimWithdrawal(requestId2);
+        uint256 user2ETHAfterSecond = user2.balance;
+        uint256 secondClaimedAmount = user2ETHAfterSecond - user2ETHAfterFirst;
+        vm.stopPrank();
+
+        uint256 totalClaimedAmount = firstClaimedAmount + secondClaimedAmount;
+
+        console.log("User2 claimed from first request:", firstClaimedAmount);
+        console.log("User2 claimed from second request:", secondClaimedAmount);
+        console.log("User2 total claimed:", totalClaimedAmount);
+
+        // Phase 8: Final verification
+        console.log("=== Phase 8: Final verification ===");
+
+        // User2 should get back their entire deposit
+        assertEq(totalClaimedAmount, user2InitialETH, "User2 should receive back their entire deposit");
+
+        // Verify the uneven distribution worked correctly
+        assertEq(firstClaimedAmount, user2FirstWithdrawal, "First claim should match first withdrawal amount");
+        assertEq(secondClaimedAmount, user2SecondWithdrawal, "Second claim should match second withdrawal amount");
+
+        // User1 should still have their shares and assets unchanged
+        assertEq(wrapper.balanceOf(user1), user1StvShares, "User1 should still have their shares");
+        assertEq(wrapper.totalAssets(), user1InitialETH, "Total assets should equal user1's remaining deposit");
+        assertEq(wrapper.totalSupply(), user1StvShares, "Total supply should equal user1's shares");
+
+        // Verify withdrawal requests are consumed
+        WithdrawalQueue.WithdrawalRequestStatus memory finalStatus1 = withdrawalQueue.getWithdrawalStatus(requestId1);
+        WithdrawalQueue.WithdrawalRequestStatus memory finalStatus2 = withdrawalQueue.getWithdrawalStatus(requestId2);
+
+        assertTrue(finalStatus1.isClaimed, "First request should be claimed");
+        assertTrue(finalStatus2.isClaimed, "Second request should be claimed");
+
+        console.log("=== Test Summary ===");
+        console.log("PASS: User2 successfully withdrew entire capital in uneven requests");
+        console.log("PASS: First withdrawal (smaller):", user2FirstWithdrawal);
+        console.log("PASS: Second withdrawal (larger):", user2SecondWithdrawal);
+        console.log("PASS: User1 deposits unaffected by user2's withdrawals");
+        console.log("PASS: System correctly handled multiple withdrawal requests from same user");
     }
 
     function logAllBalances(uint256 _context) public view {
