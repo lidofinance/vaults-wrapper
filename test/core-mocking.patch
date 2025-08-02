@@ -1,31 +1,32 @@
-diff --git a/contracts/0.8.25/vaults/VaultHub.sol b/contracts/0.8.25/vaults/VaultHub.sol
-index d65a346..e8bc8b9 100644
---- a/contracts/0.8.25/vaults/VaultHub.sol
-+++ b/contracts/0.8.25/vaults/VaultHub.sol
-@@ -179,6 +179,15 @@ contract VaultHub is PausableUntilWithRoles {
-     /// @notice no unsettled obligations allowed on settlement
-     uint256 internal immutable NO_UNSETTLED_ALLOWED = 0;
- 
-+    // -----------------------------
-+    //           MOCKING FOR WRAPPER
-+    // -----------------------------
-+    bool public reportIsAlwaysFresh;
-+
-+    function mock__setReportIsAlwaysFresh(bool _reportIsAlwaysFresh) external {
-+        reportIsAlwaysFresh = _reportIsAlwaysFresh;
-+    }
-+
-     // -----------------------------
-     //           IMMUTABLES
-     // -----------------------------
-@@ -1177,6 +1186,10 @@ contract VaultHub is PausableUntilWithRoles {
+diff --git a/contracts/0.8.25/vaults/LazyOracle.sol b/contracts/0.8.25/vaults/LazyOracle.sol
+index 1e57295..1d08604 100644
+--- a/contracts/0.8.25/vaults/LazyOracle.sol
++++ b/contracts/0.8.25/vaults/LazyOracle.sol
+@@ -303,6 +303,27 @@ contract LazyOracle is ILazyOracle, AccessControlEnumerableUpgradeable {
+         );
      }
  
-     function _isReportFresh(VaultRecord storage _record) internal view returns (bool) {
-+        if (reportIsAlwaysFresh) {
-+            return true;
-+        }
++    function mock__updateVaultData(
++        address _vault,
++        uint256 _totalValue,
++        uint256 _cumulativeLidoFees,
++        uint256 _liabilityShares,
++        uint256 _slashingReserve
++    ) external {
++        int256 inOutDelta;
++        (_totalValue, inOutDelta) = _handleSanityChecks(_vault, _totalValue, _storage().vaultsDataRefSlot);
 +
-         uint256 latestReportTimestamp = _lazyOracle().latestReportTimestamp();
-         return
-             // check if AccountingOracle brought fresh report
++        _vaultHub().applyVaultReport(
++            _vault,
++            _storage().vaultsDataTimestamp,
++            _totalValue,
++            inOutDelta,
++            _cumulativeLidoFees,
++            _liabilityShares,
++            _slashingReserve
++        );
++    }
++
+     /// @notice handle sanity checks for the vault lazy report data
+     /// @param _vault the address of the vault
+     /// @param _totalValue the total value of the vault in refSlot

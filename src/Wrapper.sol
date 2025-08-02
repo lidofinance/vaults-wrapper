@@ -36,11 +36,6 @@ contract Wrapper is ERC4626 {
     mapping(address => uint256) public lockedStvSharesByUser;
 
 
-    // ----------------------------- DEBUG SECTION -----------------------------
-    uint256 public immutable INITIAL_VAULT_BALANCE; // equals to CONNECT_DEPOSIT
-    // ----------------------------- DEBUG SECTION -----------------------------
-
-
     event VaultFunded(uint256 amount);
     event AutoLeverageExecuted(address indexed user, uint256 shares);
     event DefaultStrategyUpdated(address indexed strategy);
@@ -56,6 +51,7 @@ contract Wrapper is ERC4626 {
     constructor(
         address _dashboard,
         address _escrow,
+        address _initialBalanceOwner,
         string memory name_,
         string memory symbol_
     ) payable
@@ -65,6 +61,8 @@ contract Wrapper is ERC4626 {
         // (totalAssets, deposit, withdraw, redeem) to use our own ETH-based logic.
         ERC4626(ERC20(address(0)))
     {
+        // TODO: check _initialBalanceOwner
+
         DASHBOARD = IDashboard(payable(_dashboard));
         VAULT_HUB = IVaultHub(DASHBOARD.VAULT_HUB());
         STAKING_VAULT = address(DASHBOARD.stakingVault());
@@ -73,11 +71,12 @@ contract Wrapper is ERC4626 {
             escrowAddress = _escrow;
         }
 
-        INITIAL_VAULT_BALANCE = address(STAKING_VAULT).balance;
+        uint256 initialVaultBalance = address(STAKING_VAULT).balance;
+        if (initialVaultBalance > 0) {
+            uint256 shares = previewDeposit(initialVaultBalance);
+            _mint(_initialBalanceOwner, shares);
+        }
 
-        // Fund the vault with 100 wei to ensure totalAssets is never 0
-        // This allows the ERC4626 share calculation logic to work correctly
-        // DASHBOARD.fund{value: 100 wei}(); // REMOVED
     }
 
     // =================================================================================
@@ -85,7 +84,7 @@ contract Wrapper is ERC4626 {
     // =================================================================================
 
     function totalAssets() public view override returns (uint256) {
-        return VAULT_HUB.totalValue(STAKING_VAULT) - INITIAL_VAULT_BALANCE;
+        return VAULT_HUB.totalValue(STAKING_VAULT);
     }
 
     function previewDeposit(uint256 assets) public view override returns (uint256) {
@@ -97,8 +96,16 @@ contract Wrapper is ERC4626 {
         return super.previewDeposit(assets);
     }
 
+    // TODO?: implement maxRedeem, previewWithdraw, previewRedeem, withdraw, redeem, mint, maxMint, mintPreview
 
-    // TODO?: implement maxWithdraw, maxRedeem, previewWithdraw, previewRedeem, withdraw, redeem
+    /**
+     * @notice Returns the maximum amount of underlying assets that can be withdrawn for a given owner
+     * @param owner The address to check withdrawal limits for
+     * @return Maximum withdrawable assets
+     */
+    function maxWithdraw(address owner) public view override returns (uint256) {
+        return convertToAssets(balanceOf(owner));
+    }
 
     /**
      * @notice Standard ERC4626 deposit function - DISABLED for this ETH wrapper
@@ -107,6 +114,7 @@ contract Wrapper is ERC4626 {
     function deposit(uint256 /*assets*/, address /*receiver*/) public pure override returns (uint256 /*shares*/) {
         revert("Use depositETH() for native ETH deposits");
     }
+
 
     /**
      * @notice Convenience function to deposit ETH to msg.sender
@@ -126,17 +134,14 @@ contract Wrapper is ERC4626 {
 
         uint256 totalAssetsBefore = totalAssets();
         uint256 totalSupplyBefore = totalSupply();
-        emit Debug("depositETH", totalAssetsBefore, totalSupplyBefore);
-
-        // Calculate shares to be minted based on the assets value BEFORE this deposit.
-        shares = previewDeposit(msg.value);
 
         // Fund vault through Dashboard. This increases the totalAssets value.
         DASHBOARD.fund{value: msg.value}();
         // DEV: there is check inside that Wrapper is the Vault owner
         // NB: emit no VaultFunded event because it is emitted in Vault contract
 
-        // Mint the pre-calculated shares to the receiver.
+        // Calculate shares to be minted based on the assets value BEFORE this deposit.
+        shares = previewDeposit(msg.value);
         _mint(receiver, shares);
 
         // // Auto-leverage
@@ -172,36 +177,6 @@ contract Wrapper is ERC4626 {
         escrowAddress = _escrow;
     }
 
-    /**
-     * @notice Mint stETH from stvToken shares for strategy operations
-     * @dev This function is called by the Strategy contract during looping
-     * @param stvTokenShares Number of stvToken shares to use for minting
-     * @param stethToken Address of the stETH token
-     * @return mintedSteth Amount of stETH minted
-     */
-    function mintStETHFromShares(uint256 stvTokenShares, address stethToken) external returns (uint256 mintedSteth) {
-        require(msg.sender == address(ESCROW), "Only escrow can call");
-        require(stvTokenShares <= balanceOf(address(ESCROW)), "Insufficient stvToken shares");
-
-        // Log allowance before transfer
-        uint256 allowance = IERC20(address(this)).allowance(address(ESCROW), address(this));
-        emit TransferAttempt(address(ESCROW), address(this), stvTokenShares, allowance);
-
-        // Transfer stvToken shares from Escrow to Wrapper
-        _transfer(address(ESCROW), address(this), stvTokenShares);
-
-        uint256 stethBeforeMint = IERC20(stethToken).balanceOf(address(ESCROW));
-        VAULT_HUB.mintShares(STAKING_VAULT, address(ESCROW), stvTokenShares);
-        uint256 stethAfterMint = IERC20(stethToken).balanceOf(address(ESCROW));
-        mintedSteth = stethAfterMint - stethBeforeMint;
-
-        return mintedSteth;
-    }
-
-    event MintStETHStep(string step, uint256 value1, uint256 value2, address addr1, address addr2);
-
-
-    event MintStETHCompleted(address indexed user, uint256 initialShares, uint256 totalShares, uint256 totalBorrowed);
 
     // =================================================================================
     // RECEIVE FUNCTION

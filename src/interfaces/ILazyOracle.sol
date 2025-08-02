@@ -13,4 +13,20 @@ interface ILazyOracle {
         bytes32 _vaultsDataTreeRoot,
         string memory _vaultsDataReportCid
     ) external;
+
+    function updateVaultData(
+        address _vault,
+        uint256 _totalValue,
+        uint256 _cumulativeLidoFees,
+        uint256 _liabilityShares,
+        uint256 _slashingReserve,
+        bytes32[] calldata _proof
+    ) external;
+
+    error AdminCannotBeZero();
+    error NotAuthorized();
+    error InvalidProof();
+    error UnderflowInTotalValueCalculation();
+    error TotalValueTooLarge();
+    error VaultReportIsFreshEnough();
 }

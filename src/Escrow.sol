@@ -80,6 +80,18 @@ contract Escrow {
         stvShares = stvShares; // TODO
     }
 
+    function maxMintableStETHAmount(uint256 stvShares) public view returns (uint256) {
+        IDashboard dashboard = IDashboard(payable(address(WRAPPER.DASHBOARD())));
+
+        uint256 remainingMintingCapacity = dashboard.remainingMintingCapacityShares(0);
+        uint256 totalMintingCapacity = dashboard.totalMintingCapacityShares();
+        assert(remainingMintingCapacity <= totalMintingCapacity);
+
+        uint256 userEthInPool = WRAPPER.convertToAssets(stvShares);
+        uint256 totalVaultAssets = WRAPPER.totalAssets();
+        uint256 userTotalMintingCapacity = (userEthInPool * totalMintingCapacity) / totalVaultAssets;
+    }
+
     function mintStETH(uint256 stvShares) external returns (uint256 mintedStethShares) {
         if (stvShares == 0) revert ZeroStvShares();
 
@@ -89,20 +101,15 @@ contract Escrow {
         lockedStvSharesByUser[msg.sender] += stvShares;
 
         uint256 remainingMintingCapacity = dashboard.remainingMintingCapacityShares(0);
+        uint256 totalMintingCapacity = dashboard.totalMintingCapacityShares();
+        assert(remainingMintingCapacity <= totalMintingCapacity);
 
-        // Calculate user's maximum mintable amount based on their share of total vault
-        // User can mint stETH proportional to their stvToken share of the total vault
         uint256 userEthInPool = WRAPPER.convertToAssets(stvShares);
         uint256 totalVaultAssets = WRAPPER.totalAssets();
-
-        // Get total possible minting capacity (not just remaining)
-        uint256 totalMintingCapacity = dashboard.totalMintingCapacityShares();
-
-        // User's total fair share = (user's assets / total assets) * total capacity
-        uint256 userTotalFairShare = (userEthInPool * totalMintingCapacity) / totalVaultAssets;
+        uint256 userTotalMintingCapacity = (userEthInPool * totalMintingCapacity) / totalVaultAssets;
 
         // User can mint up to their fair share, limited by remaining capacity
-        mintedStethShares = userTotalFairShare < remainingMintingCapacity ? userTotalFairShare : remainingMintingCapacity;
+        mintedStethShares = userTotalMintingCapacity < remainingMintingCapacity ? userTotalMintingCapacity : remainingMintingCapacity;
 
         if (mintedStethShares == 0) revert NoMintingCapacityAvailable();
 

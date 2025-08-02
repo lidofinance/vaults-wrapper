@@ -55,6 +55,7 @@ contract WithdrawalQueueTest is Test {
         wrapper = new Wrapper{value: 0 wei}(
             address(dashboard),
             address(0), // placeholder for escrow
+            address(0), // initial balance owner
             "Staked ETH Vault Wrapper",
             "stvETH"
         );

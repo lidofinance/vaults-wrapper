@@ -27,13 +27,16 @@ interface IVaultHub is IVaultHubIntact {
     function mock__setReportIsAlwaysFresh(bool _reportIsAlwaysFresh) external;
 }
 
+interface ILazyOracleMocked is ILazyOracle {
+    function mock__updateVaultData(address _vault, uint256 _totalValue, uint256 _cumulativeLidoFees, uint256 _liabilityShares, uint256 _slashingReserve) external;
+}
+
 contract CoreHarness is Test {
     ILidoLocator public locator;
     IDashboard public dashboard;
     ILido public steth;
     IVaultHub public vaultHub;
-    IStakingVault public stakingVault;
-    ILazyOracle public lazyOracle;
+    ILazyOracleMocked public lazyOracle;
 
     uint256 public constant INITIAL_LIDO_SUBMISSION = 10_000 ether;
     uint256 public constant CONNECT_DEPOSIT = 1 ether;
@@ -56,7 +59,7 @@ contract CoreHarness is Test {
         vm.label(address(acl), "ACL");
 
         // Get LazyOracle address from the deployed contracts
-        lazyOracle = ILazyOracle(locator.lazyOracle());
+        lazyOracle = ILazyOracleMocked(locator.lazyOracle());
         vm.label(address(lazyOracle), "LazyOracle");
 
         address hashConsensus = vm.parseJsonAddress(deployedJson, "$.hashConsensusForAccountingOracle.address");
@@ -82,79 +85,60 @@ contract CoreHarness is Test {
         IVaultFactory vaultFactory = IVaultFactory(locator.vaultFactory());
         vm.label(address(vaultFactory), "VaultFactory");
 
-        uint256 confirmExpiry = 1 hours;
-        (address vaultAddress, address dashboardAddress) = vaultFactory.createVaultWithDashboard{value: CONNECT_DEPOSIT}(
-            address(this),
-            address(this),
-            address(this),
-            0,
-            confirmExpiry,
-            new IVaultFactory.RoleAssignment[](0)
-        );
-
-        dashboard = IDashboard(payable(dashboardAddress));
+        dashboard = IDashboard(payable(address(0))); // Will be set by DefiWrapper
         vm.label(address(dashboard), "Dashboard");
 
-        stakingVault = IStakingVault(vaultAddress);
-        vm.label(address(stakingVault), "StakingVault");
-
-        address vaultOwner = vaultHub.vaultConnection(address(stakingVault)).owner;
-        console.log("vaultOwner", vaultOwner);
-
-        vm.prank(vaultOwner);
-        vaultHub.mock__setReportIsAlwaysFresh(true);
-
-        applyVaultReport(0, 0, 0);
-        dashboard.setNodeOperatorFeeRate(NODE_OPERATOR_FEE_RATE);
     }
 
-    function grantWrapperRoles(address wrapper, address escrow) external {
-        dashboard.grantRole(dashboard.FUND_ROLE(), wrapper);
-        dashboard.grantRole(dashboard.WITHDRAW_ROLE(), wrapper);
-
-        dashboard.grantRole(dashboard.MINT_ROLE(), escrow);
-        dashboard.grantRole(dashboard.BURN_ROLE(), escrow);
+    function setDashboard(address _dashboard) external {
+        dashboard = IDashboard(payable(_dashboard));
+        vm.label(address(dashboard), "Dashboard");
     }
 
-    function grantWithdrawalQueueRoles(address withdrawalQueue) external {
-        dashboard.grantRole(dashboard.WITHDRAW_ROLE(), withdrawalQueue);
-    }
 
-    function applyVaultReport(uint256 _totalValue, uint256 _totalValueIncreaseBP, uint256 _cumulativeLidoFees) public {
+    function applyVaultReport(address stakingVault, uint256 _totalValue, uint256 _totalValueIncreaseBP, uint256 _cumulativeLidoFees, bool _onlyUpdateReportData) public {
         uint256 reportTimestamp = block.timestamp;
         uint256 refSlot = 0;
         bytes32 treeRoot = bytes32(0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef);
         string memory reportCid = "dummy-cid";
 
         uint256 reportTotalValue = _totalValue + (_totalValue * _totalValueIncreaseBP) / 10000;
-        int256 reportInOutDelta = int256((_totalValue * _totalValueIncreaseBP) / 10000);
+        // int256 reportInOutDelta = int256((_totalValue * _totalValueIncreaseBP) / 10000);
         uint256 reportCumulativeLidoFees = _cumulativeLidoFees;
         uint256 reportLiabilityShares = 0;
         uint256 reportSlashingReserve = 0;
 
+        bool isFresh = vaultHub.isReportFresh(stakingVault);
+        console.log("isFresh 1", isFresh);
+
+        vm.warp(block.timestamp + 12);
         vm.prank(locator.accountingOracle());
         lazyOracle.updateReportData(reportTimestamp, refSlot, treeRoot, reportCid);
 
-        vm.prank(address(lazyOracle));
-        vaultHub.applyVaultReport(
-            address(stakingVault),
-            reportTimestamp,
-            reportTotalValue,
-            reportInOutDelta,
-            reportCumulativeLidoFees,
-            reportLiabilityShares,
-            reportSlashingReserve
-        );
+        if (!_onlyUpdateReportData) {
+            lazyOracle.mock__updateVaultData(stakingVault, reportTotalValue, reportCumulativeLidoFees, reportLiabilityShares, reportSlashingReserve);
+        }
+
+        // vm.prank(address(lazyOracle));
+        // vaultHub.applyVaultReport(
+        //     stakingVault,
+        //     reportTimestamp,
+        //     reportTotalValue,
+        //     reportInOutDelta,
+        //     reportCumulativeLidoFees,
+        //     reportLiabilityShares,
+        //     reportSlashingReserve
+        // );
     }
 
     /**
      * @dev Mock function to simulate validators receiving ETH from the staking vault
      * This replaces the manual beacon chain transfer simulation in tests
      */
-    function mockValidatorsReceiveETH() external returns (uint256 transferredAmount) {
-        transferredAmount = address(stakingVault).balance;
+    function mockValidatorsReceiveETH(address stakingVault) external returns (uint256 transferredAmount) {
+        transferredAmount = stakingVault.balance;
         if (transferredAmount > 0) {
-            vm.prank(address(stakingVault));
+            vm.prank(stakingVault);
             (bool sent, ) = BEACON_CHAIN.call{value: transferredAmount}("");
             require(sent, "ETH send to beacon chain failed");
         }
@@ -165,9 +149,9 @@ contract CoreHarness is Test {
      * @dev Mock function to simulate validator exits returning ETH to the staking vault
      * This replaces the manual ETH return simulation in tests
      */
-    function mockValidatorExitReturnETH(uint256 ethAmount) external {
+    function mockValidatorExitReturnETH(address stakingVault, uint256 ethAmount) external {
         vm.prank(BEACON_CHAIN);
-        (bool success, ) = address(stakingVault).call{value: ethAmount}("");
+        (bool success, ) = stakingVault.call{value: ethAmount}("");
         require(success, "ETH return from beacon chain failed");
     }
 }
