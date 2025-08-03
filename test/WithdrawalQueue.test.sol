@@ -33,7 +33,6 @@ contract WithdrawalQueueTest is Test {
     uint256 public constant REBASE_AMOUNT = 5_000 wei;
 
     function setUp() public {
-
         vm.deal(user1, initialBalance);
         vm.deal(user2, initialBalance);
         vm.deal(admin, initialBalance);
@@ -55,6 +54,7 @@ contract WithdrawalQueueTest is Test {
         wrapper = new Wrapper{value: 0 wei}(
             address(dashboard),
             address(0), // placeholder for escrow
+            admin,
             "Staked ETH Vault Wrapper",
             "stvETH"
         );
@@ -64,7 +64,7 @@ contract WithdrawalQueueTest is Test {
         vm.label(address(withdrawalQueue), "WithdrawalQueue");
 
         wrapper.setWithdrawalQueue(address(withdrawalQueue));
-        
+
         // Initialize withdrawal queue
         withdrawalQueue.initialize(admin);
 
@@ -98,21 +98,32 @@ contract WithdrawalQueueTest is Test {
         // Step 2: Users request withdrawals through wrapper
         vm.startPrank(user1);
         wrapper.approve(address(withdrawalQueue), USER1_DEPOSIT);
-        uint256 user1RequestId = withdrawalQueue.requestWithdrawal(user1, USER1_DEPOSIT);
+        uint256 user1RequestId = withdrawalQueue.requestWithdrawal(
+            user1,
+            USER1_DEPOSIT
+        );
         vm.stopPrank();
 
         vm.startPrank(user2);
         wrapper.approve(address(withdrawalQueue), USER2_DEPOSIT);
-        uint256 user2RequestId = withdrawalQueue.requestWithdrawal(user2, USER2_DEPOSIT);
+        uint256 user2RequestId = withdrawalQueue.requestWithdrawal(
+            user2,
+            USER2_DEPOSIT
+        );
         vm.stopPrank();
 
         // Simulate operator run validators and send ETH to the BeaconChain
         uint256 stakingVaultBalanceBefore = address(stakingVault).balance;
         console.log("Vault balance before:", stakingVaultBalanceBefore);
-        console.log("BeaconChain balance before:", address(beaconChain).balance);
-        
+        console.log(
+            "BeaconChain balance before:",
+            address(beaconChain).balance
+        );
+
         vm.prank(address(stakingVault));
-        (bool sent, ) = address(beaconChain).call{value: stakingVaultBalanceBefore}("");
+        (bool sent, ) = address(beaconChain).call{
+            value: stakingVaultBalanceBefore
+        }("");
         require(sent, "ETH send failed");
 
         console.log("Vault balance after:", address(stakingVault).balance);
@@ -123,14 +134,23 @@ contract WithdrawalQueueTest is Test {
         assertEq(user2RequestId, 2);
 
         // Verify stvTokens were transferred to withdrawalQueue
-        assertEq(wrapper.balanceOf(address(withdrawalQueue)), USER1_DEPOSIT + USER2_DEPOSIT);
+        assertEq(
+            wrapper.balanceOf(address(withdrawalQueue)),
+            USER1_DEPOSIT + USER2_DEPOSIT
+        );
         assertEq(wrapper.balanceOf(user1), 0);
         assertEq(wrapper.balanceOf(user2), 0);
 
         // Check request status
-        WithdrawalQueue.WithdrawalRequestStatus memory user1Status = withdrawalQueue.getWithdrawalStatus(user1RequestId);
-        WithdrawalQueue.WithdrawalRequestStatus memory user2Status = withdrawalQueue.getWithdrawalStatus(user2RequestId);
-        
+        WithdrawalQueue.WithdrawalRequestStatus
+            memory user1Status = withdrawalQueue.getWithdrawalStatus(
+                user1RequestId
+            );
+        WithdrawalQueue.WithdrawalRequestStatus
+            memory user2Status = withdrawalQueue.getWithdrawalStatus(
+                user2RequestId
+            );
+
         assertEq(user1Status.isFinalized, false);
         assertEq(user2Status.isFinalized, false);
 
@@ -139,7 +159,6 @@ contract WithdrawalQueueTest is Test {
 
         // Calculate batches first
         uint256 remaining_eth_budget = withdrawalQueue.unfinalizedAssets();
-    
 
         WithdrawalQueue.BatchesCalculationState memory state;
         state.remainingEthBudget = remaining_eth_budget;
@@ -177,10 +196,15 @@ contract WithdrawalQueueTest is Test {
         // operator exit validators and send ETH back to the Staking Vault
         deal(beaconChain, 1 ether + totalToFinalize1);
 
-        console.log("BeaconChain balance before:", address(beaconChain).balance);
+        console.log(
+            "BeaconChain balance before:",
+            address(beaconChain).balance
+        );
 
         vm.prank(beaconChain);
-        (bool success, ) = address(stakingVault).call{value: totalToFinalize1}("");
+        (bool success, ) = address(stakingVault).call{value: totalToFinalize1}(
+            ""
+        );
         require(success, "send failed");
 
         console.log("Vault balance after:", address(stakingVault).balance);
@@ -189,23 +213,41 @@ contract WithdrawalQueueTest is Test {
         console.log("Wrapper balance before:", address(wrapper).balance);
         console.log("Wrapper totalSupply before:", wrapper.totalSupply());
         console.log("Wrapper totalAssets before:", wrapper.totalAssets());
-        console.log("WithdrawalQueue balance ETH:", address(withdrawalQueue).balance);
-        console.log("WithdrawalQueue balance stvETH:", wrapper.balanceOf(address(withdrawalQueue)));
+        console.log(
+            "WithdrawalQueue balance ETH:",
+            address(withdrawalQueue).balance
+        );
+        console.log(
+            "WithdrawalQueue balance stvETH:",
+            wrapper.balanceOf(address(withdrawalQueue))
+        );
 
         vm.prank(operator);
         withdrawalQueue.finalize(2);
         console.log("--------------------------------");
-        console.log("unfinalizedRequestNumber", withdrawalQueue.unfinalizedRequestNumber());
+        console.log(
+            "unfinalizedRequestNumber",
+            withdrawalQueue.unfinalizedRequestNumber()
+        );
         console.log("unfinalizedAssets", withdrawalQueue.unfinalizedAssets());
         console.log("unfinalizedShares", withdrawalQueue.unfinalizedShares());
         console.log("lastRequestId", withdrawalQueue.getLastRequestId());
-        console.log("lastFinalizedRequestId", withdrawalQueue.getLastFinalizedRequestId());
-        
+        console.log(
+            "lastFinalizedRequestId",
+            withdrawalQueue.getLastFinalizedRequestId()
+        );
+
         console.log("Wrapper balance before:", address(wrapper).balance);
         console.log("Wrapper totalSupply before:", wrapper.totalSupply());
         console.log("Wrapper totalAssets before:", wrapper.totalAssets());
-        console.log("WithdrawalQueue balance ETH:", address(withdrawalQueue).balance);
-        console.log("WithdrawalQueue balance stvETH:", wrapper.balanceOf(address(withdrawalQueue)));
+        console.log(
+            "WithdrawalQueue balance ETH:",
+            address(withdrawalQueue).balance
+        );
+        console.log(
+            "WithdrawalQueue balance stvETH:",
+            wrapper.balanceOf(address(withdrawalQueue))
+        );
         console.log("user1 balance:", user1.balance);
         console.log("user2 balance:", user2.balance);
 
@@ -214,7 +256,6 @@ contract WithdrawalQueueTest is Test {
         user2Status = withdrawalQueue.getWithdrawalStatus(user2RequestId);
         assertEq(user1Status.isFinalized, true);
         assertEq(user2Status.isFinalized, true);
-
 
         // Claim withdrawals
         vm.startPrank(user1);
@@ -229,8 +270,14 @@ contract WithdrawalQueueTest is Test {
         console.log("Wrapper balance before:", address(wrapper).balance);
         console.log("Wrapper totalSupply before:", wrapper.totalSupply());
         console.log("Wrapper totalAssets before:", wrapper.totalAssets());
-        console.log("WithdrawalQueue balance ETH:", address(withdrawalQueue).balance);
-        console.log("WithdrawalQueue balance stvETH:", wrapper.balanceOf(address(withdrawalQueue)));
+        console.log(
+            "WithdrawalQueue balance ETH:",
+            address(withdrawalQueue).balance
+        );
+        console.log(
+            "WithdrawalQueue balance stvETH:",
+            wrapper.balanceOf(address(withdrawalQueue))
+        );
         console.log("user1 balance:", user1.balance);
         console.log("user2 balance:", user2.balance);
 
@@ -245,9 +292,7 @@ contract WithdrawalQueueTest is Test {
         assertEq(address(wrapper).balance, 0);
     }
 
-    function test_WithdrawalWithRebase() public {
-
-    }
+    function test_WithdrawalWithRebase() public {}
 
     // function test_WithdrawalQueueState() public {
     //     // Test initial state
@@ -306,7 +351,7 @@ contract WithdrawalQueueTest is Test {
     //     uint256 shares1 = wrapper.depositETH{value: 1e18}(user1);
     //     uint256 shares2 = wrapper.depositETH{value: 2e18}(user1);
     //     uint256 shares3 = wrapper.depositETH{value: 2e18}(user1);
-        
+
     //     uint256 requestId1 = wrapper.withdraw(shares1);
     //     uint256 requestId2 = wrapper.withdraw(shares2);
     //     uint256 requestId3 = wrapper.withdraw(shares3);
@@ -333,7 +378,7 @@ contract WithdrawalQueueTest is Test {
     //     // Try to create request while paused
     //     vm.startPrank(user1);
     //     uint256 shares = wrapper.depositETH{value: 1e18}(user1);
-        
+
     //     vm.expectRevert(); // Should revert when paused
     //     wrapper.withdraw(shares);
     //     vm.stopPrank();
@@ -346,7 +391,7 @@ contract WithdrawalQueueTest is Test {
     //     vm.startPrank(user1);
     //     uint256 requestId = wrapper.withdraw(shares);
     //     vm.stopPrank();
-        
+
     //     assertEq(requestId, 1);
     // }
 
@@ -355,7 +400,7 @@ contract WithdrawalQueueTest is Test {
     //     vm.startPrank(user1);
     //     uint256 shares1 = wrapper.depositETH{value: 1e18}(user1);
     //     uint256 shares2 = wrapper.depositETH{value: 1e18}(user1);
-        
+
     //     uint256 requestId1 = wrapper.withdraw(shares1);
     //     uint256 requestId2 = wrapper.withdraw(shares2);
     //     vm.stopPrank();
@@ -370,15 +415,15 @@ contract WithdrawalQueueTest is Test {
     //     uint256[] memory requestIds = new uint256[](2);
     //     requestIds[0] = requestId1;
     //     requestIds[1] = requestId2;
-        
+
     //     uint256[] memory hints = new uint256[](2);
     //     hints[0] = 1;
     //     hints[1] = 1;
-        
+
     //     uint256 balanceBefore = user1.balance;
     //     withdrawalQueue.claimWithdrawals(requestIds, hints, user1);
     //     uint256 balanceAfter = user1.balance;
-        
+
     //     assertGt(balanceAfter, balanceBefore);
     //     vm.stopPrank();
     // }
@@ -455,7 +500,7 @@ contract WithdrawalQueueTest is Test {
     //     // Create request with specific shares
     //     uint256 shares = 1000e18;
     //     uint256 assets = 1000e18;
-        
+
     //     uint256 requestId = withdrawalQueue.requestWithdrawal(user1, shares, assets);
 
     //     // Finalize with different share rates
@@ -472,7 +517,7 @@ contract WithdrawalQueueTest is Test {
     //     uint256[] memory hints = new uint256[](1);
     //     hints[0] = 1;
     //     uint256[] memory claimable = withdrawalQueue.getClaimableEther(requestIds, hints);
-        
+
     //     assertEq(claimable[0], expectedAmount);
     // }
 
@@ -492,13 +537,13 @@ contract WithdrawalQueueTest is Test {
 
     //     // Check checkpoints
     //     assertEq(withdrawalQueue.lastCheckpointIndex(), 2);
-        
+
     //     WithdrawalQueueV3.Checkpoint memory checkpoint1 = withdrawalQueue.checkpoints(1);
     //     WithdrawalQueueV3.Checkpoint memory checkpoint2 = withdrawalQueue.checkpoints(2);
-        
+
     //     assertEq(checkpoint1.fromRequestId, 1);
     //     assertEq(checkpoint1.shareRate, 1.1e27);
     //     assertEq(checkpoint2.fromRequestId, 3);
     //     assertEq(checkpoint2.shareRate, 1.2e27);
     // }
-} 
+}

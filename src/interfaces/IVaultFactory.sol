@@ -3,7 +3,6 @@
 
 pragma solidity >=0.5.0;
 
-
 interface IVaultFactory {
     struct RoleAssignment {
         address account;
@@ -12,7 +11,11 @@ interface IVaultFactory {
 
     // Events
     event VaultCreated(address indexed vault);
-    event DashboardCreated(address indexed dashboard, address indexed vault, address indexed admin);
+    event DashboardCreated(
+        address indexed dashboard,
+        address indexed vault,
+        address indexed admin
+    );
 
     // Errors
     error ZeroArgument(string argument);
@@ -20,7 +23,9 @@ interface IVaultFactory {
 
     // Immutable getters
     function LIDO_LOCATOR() external view returns (address);
+
     function BEACON() external view returns (address);
+
     function DASHBOARD_IMPL() external view returns (address);
 
     // Public/external functions
