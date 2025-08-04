@@ -1,4 +1,4 @@
-name: Integration Tests On Scratch
+name: Integrations On Scratch Core
 
 on:
   push:

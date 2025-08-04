@@ -135,13 +135,14 @@ contract Wrapper is ERC4626 {
         uint256 totalAssetsBefore = totalAssets();
         uint256 totalSupplyBefore = totalSupply();
 
+        // Calculate shares to be minted based on the assets value BEFORE this deposit.
+        shares = previewDeposit(msg.value);
+
         // Fund vault through Dashboard. This increases the totalAssets value.
         DASHBOARD.fund{value: msg.value}();
         // DEV: there is check inside that Wrapper is the Vault owner
         // NB: emit no VaultFunded event because it is emitted in Vault contract
 
-        // Calculate shares to be minted based on the assets value BEFORE this deposit.
-        shares = previewDeposit(msg.value);
         _mint(receiver, shares);
 
         // // Auto-leverage

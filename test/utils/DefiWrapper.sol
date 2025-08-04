@@ -3,6 +3,7 @@ pragma solidity >=0.8.25;
 
 import {Test, console} from "forge-std/Test.sol";
 
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {ILidoLocator} from "src/interfaces/ILidoLocator.sol";
 import {ILido} from "src/interfaces/ILido.sol";
 import {ILazyOracle} from "src/interfaces/ILazyOracle.sol";
@@ -39,8 +40,9 @@ contract DefiWrapper is Test {
     WithdrawalQueue public withdrawalQueue;
     Escrow public escrow;
     ExampleStrategy public strategy;
-    IStakingVault public stakingVault;
+    IStakingVault public vault;
     IDashboard public dashboard;
+    CoreHarness public core;
 
     uint256 public constant STRATEGY_LOOPS = 2;
     uint256 public immutable CONNECT_DEPOSIT;
@@ -48,7 +50,7 @@ contract DefiWrapper is Test {
     uint256 public constant CONFIRM_EXPIRY = 1 hours;
 
     constructor(address _coreHarnessAddress) {
-        CoreHarness core = CoreHarness(_coreHarnessAddress);
+        core = CoreHarness(_coreHarnessAddress);
 
         CONNECT_DEPOSIT = core.vaultHub().CONNECT_DEPOSIT();
 
@@ -70,14 +72,14 @@ contract DefiWrapper is Test {
         dashboard = IDashboard(payable(dashboardAddress));
         vm.label(address(dashboard), "Dashboard");
 
-        stakingVault = IStakingVault(vaultAddress);
-        vm.label(address(stakingVault), "StakingVault");
+        vault = IStakingVault(vaultAddress);
+        vm.label(address(vault), "StakingVault");
 
         // Set the dashboard in CoreHarness
         core.setDashboard(address(dashboard));
 
         // Apply initial vault report and set fee rate
-        core.applyVaultReport(address(stakingVault), 0, 0, 0, true);
+        core.applyVaultReport(address(vault), 0, 0, 0, true);
         dashboard.setNodeOperatorFeeRate(NODE_OPERATOR_FEE_RATE);
 
         wrapper = new Wrapper{value: 0 wei}(
@@ -95,7 +97,7 @@ contract DefiWrapper is Test {
         withdrawalQueue.grantRole(withdrawalQueue.RESUME_ROLE(), address(this));
         withdrawalQueue.resume();
 
-        address vaultOwner = core.vaultHub().vaultConnection(address(stakingVault)).owner;
+        address vaultOwner = core.vaultHub().vaultConnection(address(vault)).owner;
         console.log("vaultOwner", vaultOwner);
 
         strategy = new ExampleStrategy(address(core.steth()), address(wrapper), STRATEGY_LOOPS);
@@ -109,6 +111,88 @@ contract DefiWrapper is Test {
         dashboard.grantRole(dashboard.MINT_ROLE(), address(escrow));
         dashboard.grantRole(dashboard.BURN_ROLE(), address(escrow));
         dashboard.grantRole(dashboard.WITHDRAW_ROLE(), address(withdrawalQueue));
+    }
+
+    function stakingVault() external view returns (IStakingVault) {
+        return vault;
+    }
+
+    function logAllBalances(string memory _context, address _user1, address _user2) external view {
+        address stETH = address(core.steth());
+        address lenderMock = address(strategy.LENDER_MOCK());
+        address user1 = _user1;
+        address user2 = _user2;
+
+        console.log("");
+        console.log("=== Balances ===", _context);
+
+        console.log(
+            string.concat(
+                "user1: ETH=", vm.toString(user1.balance),
+                " stvETH=", vm.toString(wrapper.balanceOf(user1)),
+                " stETH=", vm.toString(IERC20(stETH).balanceOf(user1)),
+                " lockedStv=", vm.toString(escrow.lockedStvSharesByUser(user1))
+            )
+        );
+
+        console.log(
+            string.concat(
+                "user2: ETH=", vm.toString(user2.balance),
+                " stvETH=", vm.toString(wrapper.balanceOf(user2)),
+                " stETH=", vm.toString(IERC20(stETH).balanceOf(user2)),
+                " lockedStv=", vm.toString(escrow.lockedStvSharesByUser(user2))
+            )
+        );
+
+        console.log(
+            string.concat(
+                "wrapper: ETH=", vm.toString(address(wrapper).balance),
+                " stvETH=", vm.toString(wrapper.balanceOf(address(wrapper))),
+                " stETH=", vm.toString(IERC20(stETH).balanceOf(address(wrapper))),
+                " lockedStv=", vm.toString(escrow.lockedStvSharesByUser(address(wrapper)))
+            )
+        );
+
+        console.log(
+            string.concat(
+                "escrow: ETH=", vm.toString(address(escrow).balance),
+                " stvETH=", vm.toString(wrapper.balanceOf(address(escrow))),
+                " stETH=", vm.toString(IERC20(stETH).balanceOf(address(escrow))),
+                " lockedStv=", vm.toString(escrow.lockedStvSharesByUser(address(escrow)))
+            )
+        );
+
+        console.log(
+            string.concat(
+                "strategy: ETH=", vm.toString(address(strategy).balance),
+                " stvETH=", vm.toString(wrapper.balanceOf(address(strategy))),
+                " stETH=", vm.toString(IERC20(stETH).balanceOf(address(strategy))),
+                " lockedStv=", vm.toString(escrow.lockedStvSharesByUser(address(strategy)))
+            )
+        );
+
+        console.log(
+            string.concat(
+                "stakingVault: ETH=", vm.toString(address(vault).balance),
+                " lockedStv=", vm.toString(escrow.lockedStvSharesByUser(address(vault)))
+            )
+        );
+        console.log(
+            string.concat(
+                "LenderMock: ETH=", vm.toString(lenderMock.balance),
+                " stvETH=", vm.toString(wrapper.balanceOf(lenderMock)),
+                " stETH=", vm.toString(IERC20(stETH).balanceOf(lenderMock)),
+                " lockedStv=", vm.toString(escrow.lockedStvSharesByUser(lenderMock))
+            )
+        );
+
+        // Escrow totals
+        console.log(
+            string.concat(
+                "Escrow totals: totalBorrowedAssets=", vm.toString(escrow.totalBorrowedAssets()),
+                " totalLockedStvShares=", vm.toString(wrapper.totalLockedStvShares())
+            )
+        );
     }
 
 }
