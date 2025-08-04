@@ -11,6 +11,9 @@ test-integration-debug:
 test-integration:
 	FOUNDRY_PROFILE=test forge test test/integration/**/*.test.sol -$(VERBOSITY) --fork-url http://localhost:$(CORE_RPC_PORT)
 
+test-unit:
+	FOUNDRY_PROFILE=test forge test test/unit/**/*.test.sol -$(VERBOSITY)
+
 # Requires entr util
 test-watch:
 	find . -type f -name '*.sol' | entr -r bash -c 'make test-integration'

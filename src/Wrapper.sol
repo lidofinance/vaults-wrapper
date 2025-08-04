@@ -18,8 +18,16 @@ interface IStETH is IERC20 {
     function sharesOf(address account) external view returns (uint256);
 }
 
+// Custom errors
+error NotWhitelisted(address user);
+error WhitelistFull();
+error AlreadyWhitelisted(address user);
+error NotInWhitelist(address user);
+
 contract Wrapper is ERC4626, AccessControlEnumerable {
     uint256 public constant E27_PRECISION_BASE = 1e27;
+    uint256 public constant MAX_WHITELIST_SIZE = 1000;
+    bytes32 public constant DEPOSIT_ROLE = keccak256("DEPOSIT_ROLE");
 
     IDashboard public immutable DASHBOARD;
     IVaultHub public immutable VAULT_HUB;
@@ -33,6 +41,9 @@ contract Wrapper is ERC4626, AccessControlEnumerable {
     bool public autoLeverageEnabled = true;
     address public escrowAddress; // Temporary storage for escrow address
     mapping(address => uint256) public lockedStvSharesByUser;
+
+    // Whitelist state variables
+    bool public immutable whitelistEnabled;
 
 
     event VaultFunded(uint256 amount);
@@ -55,13 +66,16 @@ contract Wrapper is ERC4626, AccessControlEnumerable {
     );
 
     event Debug(string message, uint256 value1, uint256 value2);
+    event WhitelistAdded(address indexed user);
+    event WhitelistRemoved(address indexed user);
 
     constructor(
         address _dashboard,
         address _escrow,
         address _owner,
         string memory name_,
-        string memory symbol_
+        string memory symbol_,
+        bool _whitelistEnabled
     )
         payable
         ERC20(name_, symbol_)
@@ -70,6 +84,7 @@ contract Wrapper is ERC4626, AccessControlEnumerable {
         // (totalAssets, deposit, withdraw, redeem) to use our own ETH-based logic.
         ERC4626(ERC20(address(0)))
     {
+        whitelistEnabled = _whitelistEnabled;
         // TODO: check _initialBalanceOwner
 
         DASHBOARD = IDashboard(payable(_dashboard));
@@ -150,6 +165,11 @@ contract Wrapper is ERC4626, AccessControlEnumerable {
         require(msg.value > 0, "Zero deposit");
         require(receiver != address(0), "Invalid receiver");
 
+        // Check whitelist if enabled
+        if (whitelistEnabled && !hasRole(DEPOSIT_ROLE, msg.sender)) {
+            revert NotWhitelisted(msg.sender);
+        }
+
         uint256 totalAssetsBefore = totalAssets();
         uint256 totalSupplyBefore = totalSupply();
 
@@ -219,5 +239,64 @@ contract Wrapper is ERC4626, AccessControlEnumerable {
         uint256 _newNodeOperatorFeeRate
     ) external onlyRole(DEFAULT_ADMIN_ROLE) returns (bool) {
         return DASHBOARD.setNodeOperatorFeeRate(_newNodeOperatorFeeRate);
+    }
+
+    // =================================================================================
+    // WHITELIST MANAGEMENT
+    // =================================================================================
+
+    /**
+     * @notice Add an address to the whitelist
+     * @param user Address to whitelist
+     */
+    function addToWhitelist(address user) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        if (hasRole(DEPOSIT_ROLE, user)) revert AlreadyWhitelisted(user);
+        if (getRoleMemberCount(DEPOSIT_ROLE) >= MAX_WHITELIST_SIZE) revert WhitelistFull();
+        
+        grantRole(DEPOSIT_ROLE, user);
+        
+        emit WhitelistAdded(user);
+    }
+
+    /**
+     * @notice Remove an address from the whitelist
+     * @param user Address to remove from whitelist
+     */
+    function removeFromWhitelist(address user) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        if (!hasRole(DEPOSIT_ROLE, user)) revert NotInWhitelist(user);
+        
+        revokeRole(DEPOSIT_ROLE, user);
+        
+        emit WhitelistRemoved(user);
+    }
+
+    /**
+     * @notice Check if an address is whitelisted
+     * @param user Address to check
+     * @return bool True if whitelisted
+     */
+    function isWhitelisted(address user) public view returns (bool) {
+        return hasRole(DEPOSIT_ROLE, user);
+    }
+
+    /**
+     * @notice Get the current whitelist size
+     * @return uint256 Number of addresses in whitelist
+     */
+    function getWhitelistSize() public view returns (uint256) {
+        return getRoleMemberCount(DEPOSIT_ROLE);
+    }
+
+    /**
+     * @notice Get all whitelisted addresses
+     * @return address[] Array of whitelisted addresses
+     */
+    function getWhitelistAddresses() public view returns (address[] memory) {
+        uint256 count = getRoleMemberCount(DEPOSIT_ROLE);
+        address[] memory addresses = new address[](count);
+        for (uint256 i = 0; i < count; i++) {
+            addresses[i] = getRoleMember(DEPOSIT_ROLE, i);
+        }
+        return addresses;
     }
 }

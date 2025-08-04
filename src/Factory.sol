@@ -60,7 +60,8 @@ contract Factory {
             address(0),
             msg.sender,
             _name,
-            _symbol
+            _symbol,
+            false // whitelist disabled by default
         );
 
         withdrawalQueue = new WithdrawalQueue(wrapper);

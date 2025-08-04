@@ -87,7 +87,8 @@ contract DefiWrapper is Test {
             address(0), // placeholder for escrow
             address(this), // initial balance owner
             "Staked ETH Vault Wrapper",
-            "stvETH"
+            "stvETH",
+            false // whitelist disabled
         );
 
         withdrawalQueue = new WithdrawalQueue(wrapper);

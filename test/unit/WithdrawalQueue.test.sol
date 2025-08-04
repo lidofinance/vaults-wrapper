@@ -5,12 +5,12 @@ import {Test, console} from "forge-std/Test.sol";
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
-import {Wrapper} from "../src/Wrapper.sol";
-import {Escrow} from "../src/Escrow.sol";
-import {WithdrawalQueue} from "../src/WithdrawalQueue.sol";
-import {MockDashboard} from "./mocks/MockDashboard.sol";
-import {MockVaultHub} from "./mocks/MockVaultHub.sol";
-import {MockStakingVault} from "./mocks/MockStakingVault.sol";
+import {Wrapper} from "src/Wrapper.sol";
+import {Escrow} from "src/Escrow.sol";
+import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
+import {MockDashboard} from "../mocks/MockDashboard.sol";
+import {MockVaultHub} from "../mocks/MockVaultHub.sol";
+import {MockStakingVault} from "../mocks/MockStakingVault.sol";
 
 contract WithdrawalQueueTest is Test {
     WithdrawalQueue public withdrawalQueue;
@@ -56,7 +56,8 @@ contract WithdrawalQueueTest is Test {
             address(0), // placeholder for escrow
             admin,
             "Staked ETH Vault Wrapper",
-            "stvETH"
+            "stvETH",
+            false // whitelist disabled
         );
 
         // Deploy withdrawal queue
