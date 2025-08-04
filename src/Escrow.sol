@@ -2,8 +2,6 @@
 pragma solidity >=0.8.25;
 
 import {IStrategy} from "./interfaces/IStrategy.sol";
-import {IVaultHub} from "./interfaces/IVaultHub.sol";
-import {WithdrawalQueue} from "./WithdrawalQueue.sol";
 import {Wrapper} from "./Wrapper.sol";
 import {IDashboard} from "./interfaces/IDashboard.sol";
 

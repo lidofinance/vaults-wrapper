@@ -5,6 +5,7 @@ import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import {ERC4626} from "@openzeppelin/contracts/token/ERC20/extensions/ERC4626.sol";
+import {AccessControlEnumerable} from "@openzeppelin/contracts/access/extensions/AccessControlEnumerable.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
 import {WithdrawalQueue} from "./WithdrawalQueue.sol";
@@ -13,13 +14,11 @@ import {ExampleStrategy} from "./ExampleStrategy.sol";
 import {IVaultHub} from "./interfaces/IVaultHub.sol";
 import {IDashboard} from "./interfaces/IDashboard.sol";
 
-
 interface IStETH is IERC20 {
     function sharesOf(address account) external view returns (uint256);
 }
 
-contract Wrapper is ERC4626 {
-
+contract Wrapper is ERC4626, AccessControlEnumerable {
     uint256 public constant E27_PRECISION_BASE = 1e27;
 
     IDashboard public immutable DASHBOARD;
@@ -42,19 +41,29 @@ contract Wrapper is ERC4626 {
     event AutoLeverageToggled(bool enabled);
     event ValidatorExitRequested(bytes pubkeys);
     event ValidatorWithdrawalsTriggered(bytes pubkeys, uint64[] amounts);
-    event ImmediateWithdrawal(address indexed user, uint256 shares, uint256 assets);
+    event ImmediateWithdrawal(
+        address indexed user,
+        uint256 shares,
+        uint256 assets
+    );
     event EscrowDeposit(address indexed escrow, uint256 amount, uint256 shares);
-    event TransferAttempt(address from, address to, uint256 amount, uint256 allowance);
+    event TransferAttempt(
+        address from,
+        address to,
+        uint256 amount,
+        uint256 allowance
+    );
 
     event Debug(string message, uint256 value1, uint256 value2);
 
     constructor(
         address _dashboard,
         address _escrow,
-        address _initialBalanceOwner,
+        address _owner,
         string memory name_,
         string memory symbol_
-    ) payable
+    )
+        payable
         ERC20(name_, symbol_)
         // The asset is native ETH. We pass address(0) as a placeholder for the ERC20 asset token.
         // This is safe because we override all functions that would interact with the asset
@@ -66,17 +75,19 @@ contract Wrapper is ERC4626 {
         DASHBOARD = IDashboard(payable(_dashboard));
         VAULT_HUB = IVaultHub(DASHBOARD.VAULT_HUB());
         STAKING_VAULT = address(DASHBOARD.stakingVault());
+
         if (_escrow != address(0)) {
             ESCROW = Escrow(_escrow);
             escrowAddress = _escrow;
         }
 
+        _grantRole(DEFAULT_ADMIN_ROLE, _owner);
+
         uint256 initialVaultBalance = address(STAKING_VAULT).balance;
         if (initialVaultBalance > 0) {
             uint256 shares = previewDeposit(initialVaultBalance);
-            _mint(_initialBalanceOwner, shares);
+            _mint(_owner, shares);
         }
-
     }
 
     // =================================================================================
@@ -87,7 +98,9 @@ contract Wrapper is ERC4626 {
         return VAULT_HUB.totalValue(STAKING_VAULT);
     }
 
-    function previewDeposit(uint256 assets) public view override returns (uint256) {
+    function previewDeposit(
+        uint256 assets
+    ) public view override returns (uint256) {
         uint256 supply = totalSupply();
         // TODO: replace in favor of the stone?
         if (supply == 0) {
@@ -111,7 +124,10 @@ contract Wrapper is ERC4626 {
      * @notice Standard ERC4626 deposit function - DISABLED for this ETH wrapper
      * @dev This function is overridden to revert, as this wrapper only accepts native ETH
      */
-    function deposit(uint256 /*assets*/, address /*receiver*/) public pure override returns (uint256 /*shares*/) {
+    function deposit(
+        uint256 /*assets*/,
+        address /*receiver*/
+    ) public pure override returns (uint256 /*shares*/) {
         revert("Use depositETH() for native ETH deposits");
     }
 
@@ -128,7 +144,9 @@ contract Wrapper is ERC4626 {
      * @param receiver Address to receive the minted shares
      * @return shares Number of shares minted
      */
-    function depositETH(address receiver) public payable returns (uint256 shares) {
+    function depositETH(
+        address receiver
+    ) public payable returns (uint256 shares) {
         require(msg.value > 0, "Zero deposit");
         require(receiver != address(0), "Invalid receiver");
 
@@ -178,7 +196,6 @@ contract Wrapper is ERC4626 {
         escrowAddress = _escrow;
     }
 
-
     // =================================================================================
     // RECEIVE FUNCTION
     // =================================================================================
@@ -186,5 +203,21 @@ contract Wrapper is ERC4626 {
     receive() external payable {
         // Auto-deposit ETH sent directly to the contract
         depositETH(address(this));
+    }
+
+    // =================================================================================
+    // MANAGEMENT FUNCTIONS
+    // =================================================================================
+
+    function setConfirmExpiry(
+        uint256 _newConfirmExpiry
+    ) external onlyRole(DEFAULT_ADMIN_ROLE) returns (bool) {
+        return DASHBOARD.setConfirmExpiry(_newConfirmExpiry);
+    }
+
+    function setNodeOperatorFeeRate(
+        uint256 _newNodeOperatorFeeRate
+    ) external onlyRole(DEFAULT_ADMIN_ROLE) returns (bool) {
+        return DASHBOARD.setNodeOperatorFeeRate(_newNodeOperatorFeeRate);
     }
 }

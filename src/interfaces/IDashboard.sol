@@ -3,9 +3,12 @@
 
 pragma solidity >=0.8.0;
 
+import {IAccessControlEnumerable} from "@openzeppelin/contracts/access/extensions/IAccessControlEnumerable.sol";
+
+
 import {IStakingVault} from "./IStakingVault.sol";
 
-interface IDashboard {
+interface IDashboard is IAccessControlEnumerable {
     // ==================== Structs ====================
     struct RoleAssignment {
         address account;
