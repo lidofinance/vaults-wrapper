@@ -11,6 +11,7 @@ import {WithdrawalQueue} from "../src/WithdrawalQueue.sol";
 import {MockERC20} from "./mocks/MockERC20.sol";
 
 import {MockVaultHub} from "./mocks/MockVaultHub.sol";
+import {MockDashboard} from "./mocks/MockDashboard.sol";
 import {MockVaultFactory} from "./mocks/MockVaultFactory.sol";
 
 contract FactoryTest is Test {
@@ -23,6 +24,8 @@ contract FactoryTest is Test {
     address public admin = address(0x1);
     address public nodeOperator = address(0x2);
     address public nodeOperatorManager = address(0x3);
+
+    address public strategyAddress = address(0x5555);
 
     uint256 public initialBalance = 100_000 wei;
 
@@ -69,5 +72,69 @@ contract FactoryTest is Test {
         assertEq(address(wrapper.withdrawalQueue()), address(withdrawalQueue));
         assertEq(address(escrow), address(0)); // no escrow created
         assertEq(address(wrapper.ESCROW()), address(0));
+
+        MockDashboard mockDashboard = MockDashboard(payable(dashboard));
+
+        assertTrue(
+            mockDashboard.hasRole(
+                mockDashboard.DEFAULT_ADMIN_ROLE(),
+                address(wrapper)
+            )
+        );
+
+        assertFalse(
+            mockDashboard.hasRole(
+                mockDashboard.DEFAULT_ADMIN_ROLE(),
+                address(WrapperFactory)
+            )
+        );
+    }
+
+    function test_revertWithoutConnectDeposit() public {
+        vm.startPrank(admin);
+        vm.expectRevert("InsufficientFunds()");
+        WrapperFactory.createVaultWithWrapper(
+            nodeOperator,
+            nodeOperatorManager,
+            100, // 1% fee
+            3600, // 1 hour confirm expiry
+            address(0), // no strategy for this test
+            "Test Vault",
+            "TVLT"
+        );
+    }
+
+    function test_canCreateWithEscrow() public {
+        vm.startPrank(admin);
+        (
+            address vault,
+            address dashboard,
+            Wrapper wrapper,
+            WithdrawalQueue withdrawalQueue,
+            Escrow escrow
+        ) = WrapperFactory.createVaultWithWrapper{value: connectDeposit}(
+                nodeOperator,
+                nodeOperatorManager,
+                100, // 1% fee
+                3600, // 1 hour confirm expiry
+                strategyAddress, // strategy for this test
+                "Test Vault",
+                "TVLT"
+            );
+        assertEq(address(wrapper.ESCROW()), address(escrow));
+        assertEq(address(escrow.WRAPPER()), address(wrapper));
+        assertEq(address(escrow.VAULT_HUB()), address(vaultHub));
+        assertEq(address(escrow.STRATEGY()), address(strategyAddress));
+        assertEq(address(escrow.STV_TOKEN()), address(wrapper));
+
+        MockDashboard mockDashboard = MockDashboard(payable(dashboard));
+
+        assertTrue(
+            mockDashboard.hasRole(mockDashboard.MINT_ROLE(), address(escrow))
+        );
+
+        assertTrue(
+            mockDashboard.hasRole(mockDashboard.BURN_ROLE(), address(escrow))
+        );
     }
 }

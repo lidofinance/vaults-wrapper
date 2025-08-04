@@ -12,6 +12,9 @@ contract MockDashboard is AccessControlEnumerable {
 
     uint256 public locked;
 
+    bytes32 public constant MINT_ROLE = keccak256("MINT_ROLE");
+    bytes32 public constant BURN_ROLE = keccak256("BURN_ROLE");
+
     constructor(address _vaultHub, address _stakingVault, address _admin) {
         VAULT_HUB = MockVaultHub(_vaultHub);
         STAKING_VAULT = _stakingVault; // Mock staking vault address
