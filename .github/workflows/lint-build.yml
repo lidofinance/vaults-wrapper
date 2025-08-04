@@ -1,4 +1,4 @@
-name: CI
+name: Lint & Build
 
 on:
   push:
@@ -8,7 +8,7 @@ env:
   FOUNDRY_PROFILE: ci
 
 jobs:
-  check:
+  lint:
     strategy:
       fail-fast: true
 
@@ -33,5 +33,25 @@ jobs:
 
       - name: Run Forge build
         run: |
-          forge build --sizes
+          forge build
         id: build
+
+  contract-sizes:
+    name: Check contract sizes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+
+      - name: Show Forge version
+        run: |
+          forge --version
+
+      - name: Check contract sizes
+        run: |
+          forge build --sizes
+        id: sizes
