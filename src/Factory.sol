@@ -64,6 +64,7 @@ contract Factory {
         );
 
         withdrawalQueue = new WithdrawalQueue(wrapper);
+        withdrawalQueue.initialize(msg.sender);
 
         // optionally deploy Escrow if a strategy is provided
         if (address(_strategy) != address(0)) {
