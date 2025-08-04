@@ -37,12 +37,12 @@ contract MockVaultFactory is IVaultFactory {
             revert InsufficientFunds();
         }
         vault = address(new MockStakingVault());
-        dashboard = address(new MockDashboard(VAULT_HUB, vault));
+        dashboard = address(new MockDashboard(VAULT_HUB, vault, _admin));
         return (vault, dashboard);
     }
 
     function createVaultWithDashboardWithoutConnectingToVaultHub(
-        address _defaultAdmin,
+        address _admin,
         address _nodeOperator,
         address _nodeOperatorManager,
         uint256 _nodeOperatorFeeBP,
@@ -51,7 +51,7 @@ contract MockVaultFactory is IVaultFactory {
     ) external payable returns (address vault, address dashboard) {
         require(msg.value == 0 ether, "invalid value sent");
         vault = address(new MockStakingVault());
-        dashboard = address(new MockDashboard(VAULT_HUB, vault));
+        dashboard = address(new MockDashboard(VAULT_HUB, vault, _admin));
         return (vault, dashboard);
     }
 }
