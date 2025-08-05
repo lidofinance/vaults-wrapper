@@ -79,6 +79,8 @@ contract WithdrawalQueueTest is Test {
         vm.stopPrank();
     }
 
+    // Tests the complete withdrawal queue flow from deposit to final ETH claim
+    // Verifies: user deposits → withdrawal requests → validator operations → finalization → claiming
     function test_CompleteWithdrawalFlow() public {
         // Step 1: Users deposit ETH and get stvToken
         vm.startPrank(user1);
@@ -281,6 +283,8 @@ contract WithdrawalQueueTest is Test {
         assertEq(address(wrapper).balance, 0);
     }
 
+    // Tests withdrawal handling when vault experiences staking rewards/rebases
+    // Placeholder for testing share rate changes during withdrawal process
     function test_WithdrawalWithRebase() public {}
 
     // function test_WithdrawalQueueState() public {

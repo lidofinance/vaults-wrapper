@@ -20,7 +20,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 contract DepositTest is Test {
     CoreHarness public core;
     DefiWrapper public dw;
-    
+
     // Access to harness components
     Wrapper public wrapper;
     IDashboard public dashboard;
@@ -58,25 +58,19 @@ contract DepositTest is Test {
         assertEq(TOTAL_BP, core.LIDO_TOTAL_BASIS_POINTS(), "TOTAL_BP should be equal to LIDO_TOTAL_BASIS_POINTS");
     }
 
+    // Tests multi-user deposit functionality with ERC4626 compliance
+    // Verifies proper share calculations, asset tracking, and multiple deposits from different users
     function test_deposit() public {
         uint256 user1InitialETH = 10_000 wei;
         uint256 user2InitialETH = 15_000 wei;
         vm.deal(user1, user1InitialETH);
 
-        uint256 initialVaultBalance = address(dw.vault()).balance;
-        assertEq(initialVaultBalance, dw.CONNECT_DEPOSIT(), "initialVaultBalance should be equal to CONNECT_DEPOSIT");
-
-        uint256 noBalance = wrapper.balanceOf(address(dw));
-        console.log("noBalance", noBalance);
+        assertEq(address(dw.vault()).balance, dw.CONNECT_DEPOSIT(), "initialVaultBalance should be equal to CONNECT_DEPOSIT");
 
         vm.prank(user1);
         uint256 user1StvShares = wrapper.depositETH{value: user1InitialETH}();
-        console.log("user1StvShares", user1StvShares);
-        console.log("user1Balance", wrapper.balanceOf(user1));
 
         uint256 ethAfterFirstDeposit = user1InitialETH + dw.CONNECT_DEPOSIT(); // Include initial vault balance
-        console.log("ethAfterFirstDeposit", ethAfterFirstDeposit);
-        dw.logAllBalances("test_deposit", user1, user2);
 
         // Main invariants for user1 deposit
         assertEq(wrapper.totalAssets(), ethAfterFirstDeposit, "wrapper totalAssets should match deposited ETH plus initial balance");
@@ -159,6 +153,8 @@ contract DepositTest is Test {
         assertTrue(totalSupplyAssets >= totalDepositsAfterSecond - 2 && totalSupplyAssets <= totalDepositsAfterSecond + 2, "total assets should approximately equal all deposits");
     }
 
+    // Tests that Lido fees applied via vault reports do not affect user share balances
+    // but properly reduce the vault's total value for minting capacity calculations
     function test_user1_deposit_and_lido_fees_reduce_minting_capacity() public {
         uint256 user1InitialETH = 10_000_000 wei;
         uint256 lidoFees = 100 wei;

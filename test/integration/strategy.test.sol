@@ -58,6 +58,8 @@ contract StrategyTest is Test {
         assertEq(TOTAL_BP, core.LIDO_TOTAL_BASIS_POINTS(), "TOTAL_BP should be equal to LIDO_TOTAL_BASIS_POINTS");
     }
 
+    // Tests opening a leveraged position with strategy execution for a single user
+    // Verifies deposit → escrow position opening → stETH minting → strategy leverage loop execution
     function test_openClosePositionSingleUser() public {
         uint256 initialETH = 10_000 wei;
         LenderMock lenderMock = strategy.LENDER_MOCK();

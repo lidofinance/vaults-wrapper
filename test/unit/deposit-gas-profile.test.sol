@@ -100,6 +100,8 @@ contract DepositGasProfileTest is Test {
         wrapperWithWhitelist.addToWhitelist(user);
     }
 
+    // Tests gas usage comparison between whitelisted and non-whitelisted wrappers for first deposit
+    // Measures and compares gas consumption to understand whitelist overhead
     function test_gasProfile_firstDeposit() public {
         // Test with whitelist enabled
         vm.prank(user);
@@ -119,6 +121,8 @@ contract DepositGasProfileTest is Test {
         console.log("  Difference:       ", int256(gasWithWhitelist) - int256(gasWithoutWhitelist));
     }
 
+    // Tests gas usage for second deposits to measure warm storage access patterns
+    // Compares gas usage after initial storage slots have been initialized
     function test_gasProfile_secondDeposit() public {
         // First deposits
         vm.prank(user);
@@ -143,6 +147,8 @@ contract DepositGasProfileTest is Test {
         console.log("  Difference:       ", int256(gasWithWhitelist) - int256(gasWithoutWhitelist));
     }
 
+    // Tests gas usage patterns across 5 consecutive deposits
+    // Analyzes how gas consumption changes with repeated operations
     function test_gasProfile_multipleDeposits() public {
         uint256[] memory gasWithWhitelist = new uint256[](5);
         uint256[] memory gasWithoutWhitelist = new uint256[](5);
@@ -167,6 +173,8 @@ contract DepositGasProfileTest is Test {
         }
     }
 
+    // Tests gas usage with different deposit amounts (1 wei to 50 ETH)
+    // Verifies gas consumption is independent of deposit amount
     function test_gasProfile_varyingAmounts() public {
         uint256[] memory amounts = new uint256[](4);
         amounts[0] = 1 wei;
@@ -192,6 +200,8 @@ contract DepositGasProfileTest is Test {
         }
     }
 
+    // Tests gas usage of the convenience depositETH() function without receiver parameter
+    // Compares gas cost when receiver defaults to msg.sender
     function test_gasProfile_convenienceFunction() public {
         // Test with whitelist enabled
         vm.prank(user);

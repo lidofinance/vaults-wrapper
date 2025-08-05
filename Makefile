@@ -4,15 +4,19 @@ CORE_SUBDIR ?= lido-core
 VERBOSITY ?= vv
 DEBUG_TEST ?= test_debug
 
-test-integration-debug:
-	FOUNDRY_PROFILE=test forge test --match-test $(DEBUG_TEST) -$(VERBOSITY) --fork-url http://localhost:$(CORE_RPC_PORT)
-	# FOUNDRY_PROFILE=test forge test test/integration/**/*.test.sol -vv --fork-url http://localhost:$(CORE_RPC_PORT)
-
 test-integration:
 	FOUNDRY_PROFILE=test forge test test/integration/**/*.test.sol -$(VERBOSITY) --fork-url http://localhost:$(CORE_RPC_PORT)
 
 test-unit:
 	FOUNDRY_PROFILE=test forge test test/unit/**/*.test.sol -$(VERBOSITY)
+
+test-integration-debug:
+	FOUNDRY_PROFILE=test forge test --match-test $(DEBUG_TEST) -$(VERBOSITY) --fork-url http://localhost:$(CORE_RPC_PORT)
+	# FOUNDRY_PROFILE=test forge test test/integration/**/*.test.sol -vv --fork-url http://localhost:$(CORE_RPC_PORT)
+
+test-all:
+	make test-unit
+	make test-integration
 
 # Requires entr util
 test-watch:

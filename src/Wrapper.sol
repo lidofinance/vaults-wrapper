@@ -23,11 +23,17 @@ error NotWhitelisted(address user);
 error WhitelistFull();
 error AlreadyWhitelisted(address user);
 error NotInWhitelist(address user);
+error ZeroDeposit();
+error InvalidReceiver();
+error EscrowAlreadySet();
+error InvalidEscrowAddress();
 
 contract Wrapper is ERC4626, AccessControlEnumerable {
     uint256 public constant E27_PRECISION_BASE = 1e27;
     uint256 public constant MAX_WHITELIST_SIZE = 1000;
     bytes32 public constant DEPOSIT_ROLE = keccak256("DEPOSIT_ROLE");
+
+    bool public immutable WHITELIST_ENABLED;
 
     IDashboard public immutable DASHBOARD;
     IVaultHub public immutable VAULT_HUB;
@@ -41,10 +47,6 @@ contract Wrapper is ERC4626, AccessControlEnumerable {
     bool public autoLeverageEnabled = true;
     address public escrowAddress; // Temporary storage for escrow address
     mapping(address => uint256) public lockedStvSharesByUser;
-
-    // Whitelist state variables
-    bool public immutable whitelistEnabled;
-
 
     event VaultFunded(uint256 amount);
     event AutoLeverageExecuted(address indexed user, uint256 shares);
@@ -84,8 +86,7 @@ contract Wrapper is ERC4626, AccessControlEnumerable {
         // (totalAssets, deposit, withdraw, redeem) to use our own ETH-based logic.
         ERC4626(ERC20(address(0)))
     {
-        whitelistEnabled = _whitelistEnabled;
-        // TODO: check _initialBalanceOwner
+        WHITELIST_ENABLED = _whitelistEnabled;
 
         DASHBOARD = IDashboard(payable(_dashboard));
         VAULT_HUB = IVaultHub(DASHBOARD.VAULT_HUB());
@@ -162,11 +163,11 @@ contract Wrapper is ERC4626, AccessControlEnumerable {
     function depositETH(
         address receiver
     ) public payable returns (uint256 shares) {
-        require(msg.value > 0, "Zero deposit");
-        require(receiver != address(0), "Invalid receiver");
+        if (msg.value == 0) revert ZeroDeposit();
+        if (receiver == address(0)) revert InvalidReceiver();
 
         // Check whitelist if enabled
-        if (whitelistEnabled && !hasRole(DEPOSIT_ROLE, msg.sender)) {
+        if (WHITELIST_ENABLED && !hasRole(DEPOSIT_ROLE, msg.sender)) {
             revert NotWhitelisted(msg.sender);
         }
 
@@ -210,8 +211,8 @@ contract Wrapper is ERC4626, AccessControlEnumerable {
      * @dev This is needed to resolve circular dependency
      */
     function setEscrowAddress(address _escrow) external {
-        require(escrowAddress == address(0), "Escrow already set");
-        require(_escrow != address(0), "Invalid escrow address");
+        if (escrowAddress != address(0)) revert EscrowAlreadySet();
+        if (_escrow == address(0)) revert InvalidEscrowAddress();
         ESCROW = Escrow(_escrow);
         escrowAddress = _escrow;
     }
@@ -231,13 +232,15 @@ contract Wrapper is ERC4626, AccessControlEnumerable {
 
     function setConfirmExpiry(
         uint256 _newConfirmExpiry
-    ) external onlyRole(DEFAULT_ADMIN_ROLE) returns (bool) {
+    ) external returns (bool) {
+        _checkRole(DEFAULT_ADMIN_ROLE, msg.sender);
         return DASHBOARD.setConfirmExpiry(_newConfirmExpiry);
     }
 
     function setNodeOperatorFeeRate(
         uint256 _newNodeOperatorFeeRate
-    ) external onlyRole(DEFAULT_ADMIN_ROLE) returns (bool) {
+    ) external returns (bool) {
+        _checkRole(DEFAULT_ADMIN_ROLE, msg.sender);
         return DASHBOARD.setNodeOperatorFeeRate(_newNodeOperatorFeeRate);
     }
 
@@ -249,12 +252,13 @@ contract Wrapper is ERC4626, AccessControlEnumerable {
      * @notice Add an address to the whitelist
      * @param user Address to whitelist
      */
-    function addToWhitelist(address user) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        if (hasRole(DEPOSIT_ROLE, user)) revert AlreadyWhitelisted(user);
+    function addToWhitelist(address user) external {
+        _checkRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        if (isWhitelisted(user)) revert AlreadyWhitelisted(user);
         if (getRoleMemberCount(DEPOSIT_ROLE) >= MAX_WHITELIST_SIZE) revert WhitelistFull();
-        
+
         grantRole(DEPOSIT_ROLE, user);
-        
+
         emit WhitelistAdded(user);
     }
 
@@ -262,11 +266,12 @@ contract Wrapper is ERC4626, AccessControlEnumerable {
      * @notice Remove an address from the whitelist
      * @param user Address to remove from whitelist
      */
-    function removeFromWhitelist(address user) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        if (!hasRole(DEPOSIT_ROLE, user)) revert NotInWhitelist(user);
-        
+    function removeFromWhitelist(address user) external {
+        _checkRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        if (!isWhitelisted(user)) revert NotInWhitelist(user);
+
         revokeRole(DEPOSIT_ROLE, user);
-        
+
         emit WhitelistRemoved(user);
     }
 
@@ -283,7 +288,7 @@ contract Wrapper is ERC4626, AccessControlEnumerable {
      * @notice Get the current whitelist size
      * @return uint256 Number of addresses in whitelist
      */
-    function getWhitelistSize() public view returns (uint256) {
+    function getWhitelistSize() external view returns (uint256) {
         return getRoleMemberCount(DEPOSIT_ROLE);
     }
 

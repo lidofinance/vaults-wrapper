@@ -16,6 +16,8 @@ contract WrapperCreationTest is Test {
         dw = new DefiWrapper(address(core));
     }
 
+    // Tests the initial state of the wrapper system after deployment
+    // Verifies proper setup of total supply, assets, balances, and vault connection
     function test_initialState() public view {
         assertEq(dw.wrapper().totalSupply(), dw.CONNECT_DEPOSIT(), "wrapper totalSupply should be equal to CONNECT_DEPOSIT");
         assertEq(dw.wrapper().totalAssets(), dw.CONNECT_DEPOSIT(), "wrapper totalAssets should be equal to CONNECT_DEPOSIT");

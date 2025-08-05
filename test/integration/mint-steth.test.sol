@@ -58,6 +58,8 @@ contract MintStethTest is Test {
         assertEq(TOTAL_BP, core.LIDO_TOTAL_BASIS_POINTS(), "TOTAL_BP should be equal to LIDO_TOTAL_BASIS_POINTS");
     }
 
+    // Tests that stETH minting respects proportional sharing based on user's vault ownership
+    // Verifies users can only mint stETH proportional to their stvToken share of total vault capacity
     function test_mintStETHProportionalSharing() public {
         uint256 user1InitialETH = 10_000 wei;
         uint256 user2InitialETH = 20_000 wei;
@@ -150,6 +152,8 @@ contract MintStethTest is Test {
         assertTrue(user2MintedStethShares > user1MintedStethShares, "User2 should mint more than User1 due to larger share");
     }
 
+    // Tests the liability tracking system when users mint stETH against their stvToken collateral
+    // Demonstrates Case 3: remainingMintingCapacity < totalMintingCapacity due to outstanding stETH liabilities
     function test_mockLiabilities() public {
         uint256 user1InitialETH = 10_000 wei;
         uint256 user2InitialETH = 20_000 wei;
@@ -274,6 +278,8 @@ contract MintStethTest is Test {
         console.log("PASS: Case 3 condition successfully verified");
     }
 
+    // Tests input validation for stETH minting operations
+    // Verifies that attempting to mint with zero shares reverts with ZeroStvShares error
     function test_mintStETHInputValidation() public {
         uint256 user1InitialETH = 10_000 wei;
 
@@ -292,6 +298,8 @@ contract MintStethTest is Test {
         vm.stopPrank();
     }
 
+    // Tests ERC20 token transfer error scenarios during stETH minting
+    // Verifies proper reversion when users attempt to mint more than balance or allowance
     function test_mintStETHERC20Errors() public {
         uint256 user1InitialETH = 10_000 wei;
 

@@ -58,6 +58,8 @@ contract WithdrawalTest is Test {
         assertEq(TOTAL_BP, core.LIDO_TOTAL_BASIS_POINTS(), "TOTAL_BP should be equal to LIDO_TOTAL_BASIS_POINTS");
     }
 
+    // Tests the complete withdrawal flow without stETH minting or leverage strategies
+    // Verifies: deposit ETH → request withdrawal → validator exit simulation → finalization → claim ETH
     function test_withdrawalSimplestHappyPath() public {
         uint256 userInitialETH = 10_000 wei;
 
