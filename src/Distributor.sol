@@ -4,10 +4,15 @@ pragma solidity >=0.8.25;
 import {MerkleProof} from "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
+import {AccessControlEnumerable} from "@openzeppelin/contracts/access/extensions/AccessControlEnumerable.sol";
 
-contract Distributor {
+contract Distributor is AccessControlEnumerable {
     using SafeERC20 for IERC20;
+    using EnumerableSet for EnumerableSet.AddressSet;
 
+    bytes32 public constant MANAGER_ROLE = keccak256("distributor.MANAGER_ROLE");
+    
     /// @notice Merkle root of the distribution
     bytes32 public root;
 
@@ -21,33 +26,39 @@ contract Distributor {
     mapping(address token => uint256 amount) public claimable;
 
     /// @notice List of supported tokens
-    address[] public supportedTokens;
+    EnumerableSet.AddressSet private tokens;
 
     /// @notice Last processed block number for user tracking
     uint256 public lastProcessedBlock;
 
-    constructor() {
+    constructor(address _owner) {
         lastProcessedBlock = block.number;
+
+        _grantRole(DEFAULT_ADMIN_ROLE, _owner);
+        _grantRole(MANAGER_ROLE, _owner);
     }
 
-    function addSupportedToken(address token) external {
-        supportedTokens.push(token);
+    /// @notice Add a token to the list of supported tokens
+    /// @param token The address of the token to add
+    function addToken(address token) external onlyRole(MANAGER_ROLE) {
+        tokens.add(token);
+
+        emit TokenAdded(token);
     }
 
-    /// @notice Get the amount of tokens that are pending to be distributed
-    /// @param token The token to check
-    /// @return amount The amount of tokens that are pending to distribute
-    function tokenToDistribute(address token) external view returns (uint256 amount) {
-        return IERC20(token).balanceOf(address(this)) - claimable[token];
+    /// @notice Get the list of supported tokens
+    /// @return tokens The list of supported tokens
+    function getTokens() external view returns (address[] memory) {
+        return tokens.values();
     }
 
-    function processDistribution(address _token, bytes32 _root, string calldata _cid, uint256 _distributed) external {
+    function setMerkleRoot(bytes32 _root, string calldata _cid) external onlyRole(MANAGER_ROLE) {
         if (_root == root || keccak256(bytes(_cid)) == keccak256(bytes(cid))) revert AlreadyProcessed();
+
+        emit MerkleRootUpdated(root, _root, cid, _cid, lastProcessedBlock, block.number);
 
         root = _root;
         cid = _cid;
-        claimable[_token] += _distributed;
-
         lastProcessedBlock = block.number;
     }
 
@@ -79,7 +90,12 @@ contract Distributor {
         emit Claimed(_recipient, _token, amount);
     }
 
+    event TokenAdded(address indexed token);
     event Claimed(address indexed recipient, address indexed token, uint256 amount);
+    event MerkleRootUpdated(
+        bytes32 oldRoot, bytes32 newRoot, 
+        string oldCid, string newCid, 
+        uint256 oldBlock, uint256 newBlock);
 
     error AlreadyProcessed();
     error InvalidProof();

@@ -12,6 +12,8 @@ interface ILido is IStETH {
 
     function resume() external;
 
+    function isStopped() external view returns (bool);
+
     function setMaxExternalRatioBP(uint256 _maxExternalRatioBP) external;
 
     function STAKING_CONTROL_ROLE() external view returns (bytes32);

@@ -18,6 +18,9 @@ test-all:
 	make test-unit
 	make test-integration
 
+test-unit:
+	forge test --via-ir -vvv --no-match-path 'test/integration/*' test
+
 # Requires entr util
 test-watch:
 	find . -type f -name '*.sol' | entr -r bash -c 'make test-integration'
@@ -50,3 +53,9 @@ start-fork:
 core-save-patch:
 	cd $(CORE_SUBDIR) && \
 	git diff > ../test/core-mocking.patch
+
+mock-deploy:
+	PRIVATE_KEY=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 \
+	VAULT_FACTORY=0x86A2EE8FAf9A840F7a2c64CA3d51209F9A02081D \
+	STETH=0xf2A08B9C303496f7FF99Ce2d4A6b6efb65E0e752 \
+	forge script script/DeployWrapper.s.sol --rpc-url localhost:9123 --broadcast

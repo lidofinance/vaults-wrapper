@@ -2,18 +2,23 @@
 pragma solidity >=0.8.25;
 
 import {MockVaultHub} from "./MockVaultHub.sol";
+import {AccessControlEnumerable} from "@openzeppelin/contracts/access/extensions/AccessControlEnumerable.sol";
 import {IStakingVault} from "../../src/interfaces/IStakingVault.sol";
 
-contract MockDashboard {
+contract MockDashboard is AccessControlEnumerable {
     MockVaultHub public immutable VAULT_HUB;
     address public immutable STAKING_VAULT;
     event DashboardFunded(address sender, uint256 amount);
 
     uint256 public locked;
 
-    constructor(address _vaultHub, address _stakingVault) {
+    bytes32 public constant MINT_ROLE = keccak256("MINT_ROLE");
+    bytes32 public constant BURN_ROLE = keccak256("BURN_ROLE");
+
+    constructor(address _vaultHub, address _stakingVault, address _admin) {
         VAULT_HUB = MockVaultHub(_vaultHub);
         STAKING_VAULT = _stakingVault; // Mock staking vault address
+        _grantRole(DEFAULT_ADMIN_ROLE, _admin);
     }
 
     function fund() external payable {

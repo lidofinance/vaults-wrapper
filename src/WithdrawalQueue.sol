@@ -8,8 +8,6 @@ import {Wrapper} from "./Wrapper.sol";
 import {IDashboard} from "./interfaces/IDashboard.sol";
 import {IVaultHub} from "./interfaces/IVaultHub.sol";
 
-import {console} from "forge-std/console.sol";
-
 /// @title Withdrawal Queue V3 for Staking Vault Wrapper
 /// @notice Handles withdrawal requests for stvToken holders
 contract WithdrawalQueue is AccessControlEnumerable, Pausable {
@@ -117,9 +115,15 @@ contract WithdrawalQueue is AccessControlEnumerable, Pausable {
     error NotOwner(address caller, address owner);
     error NotEnoughETH(uint256 available, uint256 required);
     error InvalidShareRate(uint256 shareRate);
-    error TooMuchEtherToFinalize(uint256 amountOfETH, uint256 totalAssetsToFinalize);
+    error TooMuchEtherToFinalize(
+        uint256 amountOfETH,
+        uint256 totalAssetsToFinalize
+    );
     error ZeroRecipient();
-    error ArraysLengthMismatch(uint256 firstArrayLength, uint256 secondArrayLength);
+    error ArraysLengthMismatch(
+        uint256 firstArrayLength,
+        uint256 secondArrayLength
+    );
     error ReportStale();
     error InvalidRequestIdRange(uint256 start, uint256 end);
     error RequestNotFoundOrNotFinalized(uint256 requestId);
@@ -130,15 +134,6 @@ contract WithdrawalQueue is AccessControlEnumerable, Pausable {
     error EmptyBatches();
     error BatchesAreNotSorted();
     error RequestIdsNotSorted();
-
-    /// @notice Structure for permit input data
-    struct PermitInput {
-        uint256 value;
-        uint256 deadline;
-        uint8 v;
-        bytes32 r;
-        bytes32 s;
-    }
 
     constructor(Wrapper _wrapper) {
         WRAPPER = _wrapper;
@@ -244,7 +239,8 @@ contract WithdrawalQueue is AccessControlEnumerable, Pausable {
         uint256 _maxRequestsPerCall,
         BatchesCalculationState memory _state
     ) external view returns (BatchesCalculationState memory) {
-        if (_state.finished || _state.remainingEthBudget == 0) revert InvalidState();
+        if (_state.finished || _state.remainingEthBudget == 0)
+            revert InvalidState();
         uint256 _maxShareRate = calculateCurrentShareRate();
 
         uint256 currentId;
@@ -336,16 +332,10 @@ contract WithdrawalQueue is AccessControlEnumerable, Pausable {
             WithdrawalRequest memory batchEnd = requests[batchEndRequestId];
 
             (uint256 batchShareRate, uint256 stETH, uint256 shares) = _calcBatch(prevBatchEnd, batchEnd);
-            console.log("batchShareRate", batchShareRate);
-            // console.log("stETH", stETH);
-            // console.log("shares", shares);
-            // console.log("batchEndRequestId", batchEndRequestId);
-            // console.log("prevBatchEndRequestId", prevBatchEndRequestId);
-            // console.log("prevBatchEnd", prevBatchEnd);
-            // console.log("batchEnd", batchEnd);
+
             if (batchShareRate > _maxShareRate) {
                 // discounted
-                ethToLock += shares * _maxShareRate / E27_PRECISION_BASE;
+                ethToLock += (shares * _maxShareRate) / E27_PRECISION_BASE;
             } else {
                 // nominal
                 ethToLock += stETH;
@@ -596,8 +586,6 @@ contract WithdrawalQueue is AccessControlEnumerable, Pausable {
         emit WithdrawalClaimed(_requestId, msg.sender, _recipient, ethWithDiscount);
     }
 
-
-
     /// @notice Returns all withdrawal requests that belong to the `_owner` address
     /// @param _owner address to get requests for
     /// @return requestIds array of request ids
@@ -717,7 +705,7 @@ contract WithdrawalQueue is AccessControlEnumerable, Pausable {
         (uint256 batchShareRate, uint256 eth, uint256 shares) = _calcBatch(prevRequest, _request);
 
         if (batchShareRate > checkpoint.shareRate) {
-            eth = shares * checkpoint.shareRate / E27_PRECISION_BASE;
+            eth = (shares * checkpoint.shareRate) / E27_PRECISION_BASE;
         }
 
         return eth;

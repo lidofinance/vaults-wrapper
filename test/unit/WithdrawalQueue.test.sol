@@ -45,7 +45,11 @@ contract WithdrawalQueueTest is Test {
         vm.label(address(vaultHub), "VaultHub");
 
         // Deploy dashboard
-        dashboard = new MockDashboard(address(vaultHub), address(stakingVault));
+        dashboard = new MockDashboard(
+            address(vaultHub),
+            address(stakingVault),
+            admin
+        );
         vm.label(address(dashboard), "Dashboard");
 
         stakingVault.setNodeOperator(address(vaultHub));

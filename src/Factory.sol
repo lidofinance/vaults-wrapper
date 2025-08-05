@@ -12,6 +12,9 @@ contract Factory {
     IVaultFactory immutable VAULT_FACTORY;
     address immutable STETH;
 
+    string constant NAME = "Staked ETH Vault Wrapper";
+    string constant SYMBOL = "stvToken";
+
     event VaultWrapperCreated(
         address vault,
         address wrapper,
@@ -29,9 +32,7 @@ contract Factory {
         address _nodeOperatorManager,
         uint256 _nodeOperatorFeeBP,
         uint256 _confirmExpiry,
-        address _strategy,
-        string calldata _name,
-        string calldata _symbol
+        address _strategy
     )
         external
         payable
@@ -43,7 +44,9 @@ contract Factory {
             Escrow escrow
         )
     {
-        (vault, dashboard) = VAULT_FACTORY.createVaultWithDashboard(
+        (vault, dashboard) = VAULT_FACTORY.createVaultWithDashboard{
+            value: msg.value
+        }(
             address(this), // default admin
             _nodeOperator, // node operator
             _nodeOperatorManager, // node operator manager
@@ -59,12 +62,13 @@ contract Factory {
             dashboard,
             address(0),
             msg.sender,
-            _name,
-            _symbol,
+            NAME,
+            SYMBOL,
             false // whitelist disabled by default
         );
 
         withdrawalQueue = new WithdrawalQueue(wrapper);
+        withdrawalQueue.initialize(msg.sender);
 
         // optionally deploy Escrow if a strategy is provided
         if (address(_strategy) != address(0)) {
@@ -77,6 +81,8 @@ contract Factory {
             _dashboard.grantRole(_dashboard.MINT_ROLE(), address(escrow));
             _dashboard.grantRole(_dashboard.BURN_ROLE(), address(escrow));
         }
+
+        wrapper.setWithdrawalQueue(address(withdrawalQueue));
 
         // Set the wrapper as owner
         _dashboard.grantRole(_dashboard.DEFAULT_ADMIN_ROLE(), address(wrapper));
