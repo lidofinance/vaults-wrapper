@@ -41,7 +41,7 @@ contract DeployWrapper is Script {
 
         MockStakingVault stakingVault = new MockStakingVault();
         MockVaultHub vaultHub = new MockVaultHub();
-        MockDashboard dashboard = new MockDashboard(address(vaultHub), address(stakingVault));
+        MockDashboard dashboard = new MockDashboard(address(vaultHub), address(stakingVault), deployer);
         
         Wrapper wrapper = new Wrapper(
             address(dashboard),

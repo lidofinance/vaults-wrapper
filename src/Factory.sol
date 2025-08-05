@@ -12,6 +12,9 @@ contract Factory {
     IVaultFactory immutable VAULT_FACTORY;
     address immutable STETH;
 
+    string constant NAME = "Staked ETH Vault Wrapper";
+    string constant SYMBOL = "stvToken";
+
     event VaultWrapperCreated(
         address vault,
         address wrapper,
@@ -29,9 +32,7 @@ contract Factory {
         address _nodeOperatorManager,
         uint256 _nodeOperatorFeeBP,
         uint256 _confirmExpiry,
-        address _strategy,
-        string calldata _name,
-        string calldata _symbol
+        address _strategy
     )
         external
         payable
@@ -61,8 +62,8 @@ contract Factory {
             dashboard,
             address(0),
             msg.sender,
-            _name,
-            _symbol
+            NAME,
+            SYMBOL
         );
 
         withdrawalQueue = new WithdrawalQueue(wrapper);
