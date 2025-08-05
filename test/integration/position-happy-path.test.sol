@@ -113,7 +113,7 @@ contract StVaultWrapperV3Test is Test {
         wrapper = new Wrapper{value: 0 wei}(
             address(dashboard),
             address(0), // placeholder for escrow
-            admin,
+            user1,
             "Staked ETH Vault Wrapper",
             "stvETH"
         );
@@ -122,7 +122,9 @@ contract StVaultWrapperV3Test is Test {
 
         wrapper.setWithdrawalQueue(address(withdrawalQueue));
 
-        address vaultOwner = vaultHub.vaultConnection(address(stakingVault)).owner;
+        address vaultOwner = vaultHub
+            .vaultConnection(address(stakingVault))
+            .owner;
         console.log("vaultOwner", vaultOwner);
 
         vm.prank(vaultOwner);
@@ -130,11 +132,19 @@ contract StVaultWrapperV3Test is Test {
 
         dashboard.grantRole(dashboard.FUND_ROLE(), address(wrapper));
 
-
         uint256 strategyLoops = 2;
-        strategy = new ExampleStrategy(address(steth), address(wrapper), strategyLoops);
+        strategy = new ExampleStrategy(
+            address(steth),
+            address(wrapper),
+            strategyLoops
+        );
 
-        escrow = new Escrow(address(wrapper), address(withdrawalQueue), address(strategy), address(steth));
+        escrow = new Escrow(
+            address(wrapper),
+            address(withdrawalQueue),
+            address(strategy),
+            address(steth)
+        );
         wrapper.setEscrowAddress(address(escrow));
 
         // TODO: make escrow mint
@@ -148,10 +158,10 @@ contract StVaultWrapperV3Test is Test {
         vm.deal(user1, 1000 ether);
         vm.deal(user2, 1000 ether);
 
-        IACL acl = IACL(vm.parseJsonAddress(deployedJson, "$.aragon-acl.proxy.address"));
+        IACL acl = IACL(
+            vm.parseJsonAddress(deployedJson, "$.aragon-acl.proxy.address")
+        );
         vm.label(address(acl), "ACL");
-
-
     }
 
     function test_openClosePosition() public {
@@ -164,9 +174,21 @@ contract StVaultWrapperV3Test is Test {
         vm.prank(user1);
         uint256 user1StvShares = wrapper.depositETH{value: initialETH}();
 
-        assertEq(wrapper.totalAssets(), initialETH + CONNECT_DEPOSIT, "wrapper totalAssets should equal initial deposit");
-        assertEq(wrapper.totalSupply(), user1StvShares, "wrapper totalSupply should equal user1StvShares");
-        assertEq(address(stakingVault).balance, initialETH + CONNECT_DEPOSIT, "stakingVault ETH balance should equal initial deposit");
+        assertEq(
+            wrapper.totalAssets(),
+            initialETH + CONNECT_DEPOSIT,
+            "wrapper totalAssets should equal initial deposit"
+        );
+        assertEq(
+            wrapper.totalSupply(),
+            user1StvShares,
+            "wrapper totalSupply should equal user1StvShares"
+        );
+        assertEq(
+            address(stakingVault).balance,
+            initialETH + CONNECT_DEPOSIT,
+            "stakingVault ETH balance should equal initial deposit"
+        );
 
         uint256 reserveRatioBP = dashboard.reserveRatioBP();
         console.log("reserveRatioBP", reserveRatioBP);
@@ -184,13 +206,19 @@ contract StVaultWrapperV3Test is Test {
         // Assert all logged balances
         uint256 totalBasisPoints = strategy.LENDER_MOCK().TOTAL_BASIS_POINTS(); // 10000
 
-        uint256 mintedStETHShares0 = user1StvShares * (LIDO_TOTAL_BASIS_POINTS - reserveRatioBP) / LIDO_TOTAL_BASIS_POINTS;
-        uint256 borrowedEth0 = (mintedStETHShares0 * borrowRatio) / totalBasisPoints;
+        uint256 mintedStETHShares0 = (user1StvShares *
+            (LIDO_TOTAL_BASIS_POINTS - reserveRatioBP)) /
+            LIDO_TOTAL_BASIS_POINTS;
+        uint256 borrowedEth0 = (mintedStETHShares0 * borrowRatio) /
+            totalBasisPoints;
         console.log("borrowedEth0", borrowedEth0);
 
         uint256 user1StvShares1 = borrowedEth0;
-        uint256 mintedStETHShares1 = user1StvShares1 * (LIDO_TOTAL_BASIS_POINTS - reserveRatioBP) / LIDO_TOTAL_BASIS_POINTS;
-        uint256 borrowedEth1 = (mintedStETHShares1 * borrowRatio) / totalBasisPoints;
+        uint256 mintedStETHShares1 = (user1StvShares1 *
+            (LIDO_TOTAL_BASIS_POINTS - reserveRatioBP)) /
+            LIDO_TOTAL_BASIS_POINTS;
+        uint256 borrowedEth1 = (mintedStETHShares1 * borrowRatio) /
+            totalBasisPoints;
         console.log("borrowedEth1", borrowedEth1);
     }
 
@@ -269,5 +297,4 @@ contract StVaultWrapperV3Test is Test {
             )
         );
     }
-
 }

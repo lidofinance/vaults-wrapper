@@ -15,7 +15,7 @@ contract WithdrawalQueue is AccessControlEnumerable, Pausable {
 
     /// @dev maximal length of the batch array provided for prefinalization. See `prefinalize()`
     uint256 public constant MAX_BATCHES_LENGTH = 36;
-    
+
     // ACL
     bytes32 public constant PAUSE_ROLE = keccak256("PAUSE_ROLE");
     bytes32 public constant RESUME_ROLE = keccak256("RESUME_ROLE");
@@ -84,7 +84,7 @@ contract WithdrawalQueue is AccessControlEnumerable, Pausable {
     uint256 public totalLockedAssets;
     /// @dev withdrawal requests mapped to the owners
     mapping(address => EnumerableSet.UintSet) private requestsByOwner;
-    
+
     event Initialized(address indexed admin);
     event WithdrawalRequested(
         uint256 indexed requestId,
@@ -115,9 +115,15 @@ contract WithdrawalQueue is AccessControlEnumerable, Pausable {
     error NotOwner(address caller, address owner);
     error NotEnoughETH(uint256 available, uint256 required);
     error InvalidShareRate(uint256 shareRate);
-    error TooMuchEtherToFinalize(uint256 amountOfETH, uint256 totalAssetsToFinalize);
+    error TooMuchEtherToFinalize(
+        uint256 amountOfETH,
+        uint256 totalAssetsToFinalize
+    );
     error ZeroRecipient();
-    error ArraysLengthMismatch(uint256 firstArrayLength, uint256 secondArrayLength);
+    error ArraysLengthMismatch(
+        uint256 firstArrayLength,
+        uint256 secondArrayLength
+    );
     error ReportStale();
     error InvalidRequestIdRange(uint256 start, uint256 end);
     error RequestNotFoundOrNotFinalized(uint256 requestId);
@@ -128,15 +134,6 @@ contract WithdrawalQueue is AccessControlEnumerable, Pausable {
     error EmptyBatches();
     error BatchesAreNotSorted();
     error RequestIdsNotSorted();
-
-    /// @notice Structure for permit input data
-    struct PermitInput {
-        uint256 value;
-        uint256 deadline;
-        uint8 v;
-        bytes32 r;
-        bytes32 s;
-    }
 
     constructor(Wrapper _wrapper) {
         WRAPPER = _wrapper;
@@ -235,12 +232,13 @@ contract WithdrawalQueue is AccessControlEnumerable, Pausable {
     ///  the function with returned `state` until it returns a state with `finished` flag set
     /// @return state that is changing on each call and should be passed to the next call until `state.finished` is true
 
-    ///TODO: removed _maxTimestamp 
+    ///TODO: removed _maxTimestamp
     function calculateFinalizationBatches(
         uint256 _maxRequestsPerCall,
         BatchesCalculationState memory _state
     ) external view returns (BatchesCalculationState memory) {
-        if (_state.finished || _state.remainingEthBudget == 0) revert InvalidState();
+        if (_state.finished || _state.remainingEthBudget == 0)
+            revert InvalidState();
         uint256 _maxShareRate = calculateCurrentShareRate();
 
         uint256 currentId;
@@ -335,7 +333,7 @@ contract WithdrawalQueue is AccessControlEnumerable, Pausable {
 
             if (batchShareRate > _maxShareRate) {
                 // discounted
-                ethToLock += shares * _maxShareRate / E27_PRECISION_BASE;
+                ethToLock += (shares * _maxShareRate) / E27_PRECISION_BASE;
             } else {
                 // nominal
                 ethToLock += stETH;
@@ -584,8 +582,6 @@ contract WithdrawalQueue is AccessControlEnumerable, Pausable {
         emit WithdrawalClaimed(_requestId, msg.sender, _recipient, ethWithDiscount);
     }
 
-    
-
     /// @notice Returns all withdrawal requests that belong to the `_owner` address
     /// @param _owner address to get requests for
     /// @return requestIds array of request ids
@@ -705,7 +701,7 @@ contract WithdrawalQueue is AccessControlEnumerable, Pausable {
         (uint256 batchShareRate, uint256 eth, uint256 shares) = _calcBatch(prevRequest, _request);
 
         if (batchShareRate > checkpoint.shareRate) {
-            eth = shares * checkpoint.shareRate / E27_PRECISION_BASE;
+            eth = (shares * checkpoint.shareRate) / E27_PRECISION_BASE;
         }
 
         return eth;
@@ -744,4 +740,4 @@ contract WithdrawalQueue is AccessControlEnumerable, Pausable {
 
     /// @notice Receive ETH
     receive() external payable {}
-} 
+}

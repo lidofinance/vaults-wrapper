@@ -5,6 +5,9 @@ CORE_SUBDIR ?= lido-core
 test-integration:
 	forge test test/integration/**/*.test.sol -vvv --fork-url http://localhost:$(CORE_RPC_PORT)
 
+test-unit:
+	forge test --via-ir -vvv --no-match-path test/integration/* test
+
 # Requires entr util
 test-watch:
 	find . -type f -name '*.sol' | entr -r bash -c 'make test-integration'
