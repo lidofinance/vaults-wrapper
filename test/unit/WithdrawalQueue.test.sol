@@ -53,14 +53,14 @@ contract WithdrawalQueueTest is Test {
         stakingVault.setNodeOperator(address(vaultHub));
 
         // Deploy wrapper
-        wrapper = new Wrapper{value: 0 wei}(
+        wrapper = new Wrapper(
             address(dashboard),
-            address(0), // strategy
-            address(0), // steth
             admin,
             "Staked ETH Vault Wrapper",
             "stvETH",
-            false // whitelist disabled
+            false, // whitelist disabled
+            false, // minting disabled
+            address(0) // no strategy
         );
 
         // Deploy withdrawal queue

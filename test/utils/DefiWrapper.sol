@@ -81,15 +81,15 @@ contract DefiWrapper is Test {
         dashboard.setNodeOperatorFeeRate(NODE_OPERATOR_FEE_RATE);
 
         strategy = new ExampleStrategy(address(core.steth()), address(0), STRATEGY_LOOPS);
-        
-        wrapper = new Wrapper{value: 0 wei}(
+
+        wrapper = new Wrapper(
             address(dashboard),
-            address(strategy),
-            address(core.steth()),
             address(this), // initial balance owner
             "Staked ETH Vault Wrapper",
             "stvETH",
-            false // whitelist disabled
+            false, // whitelist disabled
+            true, // minting allowed
+            address(strategy)
         );
 
         withdrawalQueue = new WithdrawalQueue(wrapper);
@@ -105,7 +105,7 @@ contract DefiWrapper is Test {
         // Update strategy's wrapper reference now that wrapper is deployed
         strategy = new ExampleStrategy(address(core.steth()), address(wrapper), STRATEGY_LOOPS);
         wrapper.setStrategy(address(strategy));
-        
+
         // Fund the LenderMock contract with ETH so it can lend
         vm.deal(address(strategy.LENDER_MOCK()), 1234 ether);
 

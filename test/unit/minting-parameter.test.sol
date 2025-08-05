@@ -1,0 +1,503 @@
+// SPDX-License-Identifier: UNLICENSED
+pragma solidity >=0.8.25;
+
+import {Test} from "forge-std/Test.sol";
+import {Wrapper, MintingMustBeAllowedForStrategy, ZeroStvShares} from "src/Wrapper.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+
+// Mock contracts for testing
+contract MockDashboard {
+    bytes32 public constant FUND_ROLE = keccak256("FUND_ROLE");
+    address public immutable VAULT_HUB;
+    address public immutable stakingVault;
+    MockStETH public stETH;
+
+    constructor(address _vaultHub, address _stakingVault) {
+        VAULT_HUB = _vaultHub;
+        stakingVault = _stakingVault;
+    }
+
+    function fund() external payable {
+        payable(stakingVault).transfer(msg.value);
+    }
+
+    function grantRole(bytes32, address) external {}
+
+    function remainingMintingCapacityShares(uint256) external pure returns (uint256) {
+        return 1000 ether; // Mock capacity
+    }
+
+    function totalMintingCapacityShares() external pure returns (uint256) {
+        return 1000 ether; // Mock capacity
+    }
+
+    function mintShares(address to, uint256 amount) external {
+        // Mock mint - actually mint stETH tokens to the user
+        stETH.mint(to, amount);
+    }
+
+    function setStETH(address _stETH) external {
+        stETH = MockStETH(_stETH);
+    }
+
+    function MINT_ROLE() external pure returns (bytes32) {
+        return keccak256("MINT_ROLE");
+    }
+
+    function BURN_ROLE() external pure returns (bytes32) {
+        return keccak256("BURN_ROLE");
+    }
+}
+
+contract MockVaultHub {
+    function totalValue(address vault) external view returns (uint256) {
+        return vault.balance;
+    }
+}
+
+contract MockStakingVault {
+    receive() external payable {}
+}
+
+contract MockStETH is IERC20 {
+    mapping(address => uint256) private _balances;
+    mapping(address => mapping(address => uint256)) private _allowances;
+    uint256 private _totalSupply;
+
+    function totalSupply() external view override returns (uint256) {
+        return _totalSupply;
+    }
+
+    function balanceOf(address account) external view override returns (uint256) {
+        return _balances[account];
+    }
+
+    function transfer(address to, uint256 amount) external override returns (bool) {
+        _balances[msg.sender] -= amount;
+        _balances[to] += amount;
+        emit Transfer(msg.sender, to, amount);
+        return true;
+    }
+
+    function allowance(address owner, address spender) external view override returns (uint256) {
+        return _allowances[owner][spender];
+    }
+
+    function approve(address spender, uint256 amount) external override returns (bool) {
+        _allowances[msg.sender][spender] = amount;
+        emit Approval(msg.sender, spender, amount);
+        return true;
+    }
+
+    function transferFrom(address from, address to, uint256 amount) external override returns (bool) {
+        _allowances[from][msg.sender] -= amount;
+        _balances[from] -= amount;
+        _balances[to] += amount;
+        emit Transfer(from, to, amount);
+        return true;
+    }
+
+    function mint(address to, uint256 amount) external {
+        _balances[to] += amount;
+        _totalSupply += amount;
+        emit Transfer(address(0), to, amount);
+    }
+
+    function sharesOf(address account) external view returns (uint256) {
+        return _balances[account];
+    }
+}
+
+contract MockStrategy {
+    bool public executeCalled = false;
+    address public lastUser;
+    uint256 public lastAmount;
+
+    function execute(address user, uint256 amount) external {
+        executeCalled = true;
+        lastUser = user;
+        lastAmount = amount;
+    }
+
+    function finalizeExit(address) external pure returns (uint256) {
+        return 0;
+    }
+
+    function getBorrowDetails() external pure returns (uint256, uint256, uint256) {
+        return (0, 0, 0);
+    }
+
+    function isExiting() external pure returns (bool) {
+        return false;
+    }
+}
+
+contract MintingParameterTest is Test {
+    // Three wrapper instances for the three scenarios
+    Wrapper public wrapperNoMintingNoStrategy;    // Case 1: no minting, no strategy
+    Wrapper public wrapperMintingNoStrategy;      // Case 2: minting enabled, no strategy
+    Wrapper public wrapperMintingWithStrategy;    // Case 3: minting enabled, with strategy
+
+    MockDashboard public dashboard;
+    MockVaultHub public vaultHub;
+    MockStakingVault public stakingVault;
+    MockStETH public stETH;
+    MockStrategy public strategy;
+
+    address public owner;
+    address public user;
+
+    function setUp() public {
+        owner = makeAddr("owner");
+        user = makeAddr("user");
+
+        vm.deal(owner, 100 ether);
+        vm.deal(user, 10 ether);
+
+        // Deploy mocks
+        stakingVault = new MockStakingVault();
+        vaultHub = new MockVaultHub();
+        stETH = new MockStETH();
+        dashboard = new MockDashboard(address(vaultHub), address(stakingVault));
+        dashboard.setStETH(address(stETH));
+        strategy = new MockStrategy();
+
+        // Fund the staking vault
+        vm.deal(address(stakingVault), 1 ether);
+
+        // Case 1: No minting, no strategy
+        wrapperNoMintingNoStrategy = new Wrapper(
+            address(dashboard),
+            owner,
+            "No Minting No Strategy Vault",
+            "nmnsETH",
+            false, // whitelist disabled
+            false, // minting disabled
+            address(0) // no strategy
+        );
+
+        // Case 2: Minting enabled, no strategy
+        wrapperMintingNoStrategy = new Wrapper(
+            address(dashboard),
+            owner,
+            "Minting No Strategy Vault",
+            "mnsETH",
+            false, // whitelist disabled
+            true,  // minting enabled
+            address(0) // no strategy
+        );
+
+        // Case 3: Minting enabled, with strategy
+        wrapperMintingWithStrategy = new Wrapper(
+            address(dashboard),
+            owner,
+            "Minting With Strategy Vault",
+            "mwsETH",
+            false, // whitelist disabled
+            true,  // minting enabled
+            address(strategy)
+        );
+
+        // Grant roles to all wrappers
+        dashboard.grantRole(dashboard.FUND_ROLE(), address(wrapperNoMintingNoStrategy));
+        dashboard.grantRole(dashboard.FUND_ROLE(), address(wrapperMintingNoStrategy));
+        dashboard.grantRole(dashboard.FUND_ROLE(), address(wrapperMintingWithStrategy));
+
+        // Grant minting roles only to wrappers that need them
+        dashboard.grantRole(dashboard.MINT_ROLE(), address(wrapperMintingNoStrategy));
+        dashboard.grantRole(dashboard.BURN_ROLE(), address(wrapperMintingNoStrategy));
+        dashboard.grantRole(dashboard.MINT_ROLE(), address(wrapperMintingWithStrategy));
+        dashboard.grantRole(dashboard.BURN_ROLE(), address(wrapperMintingWithStrategy));
+
+        // Grant admin role to user so they can call setStrategy in tests
+        vm.startPrank(owner);
+        wrapperMintingWithStrategy.grantRole(wrapperMintingWithStrategy.DEFAULT_ADMIN_ROLE(), user);
+        vm.stopPrank();
+    }
+
+    // =================================================================================
+    // CONSTRUCTOR VALIDATION TESTS
+    // =================================================================================
+
+    function test_constructorParameters() public view {
+        // Case 1: No minting, no strategy
+        assertFalse(wrapperNoMintingNoStrategy.MINTING_ALLOWED(), "Case 1: Minting should be disabled");
+        assertEq(address(wrapperNoMintingNoStrategy.STRATEGY()), address(0), "Case 1: Strategy should be zero address");
+
+        // Case 2: Minting enabled, no strategy
+        assertTrue(wrapperMintingNoStrategy.MINTING_ALLOWED(), "Case 2: Minting should be enabled");
+        assertEq(address(wrapperMintingNoStrategy.STRATEGY()), address(0), "Case 2: Strategy should be zero address");
+
+        // Case 3: Minting enabled, with strategy
+        assertTrue(wrapperMintingWithStrategy.MINTING_ALLOWED(), "Case 3: Minting should be enabled");
+        assertEq(address(wrapperMintingWithStrategy.STRATEGY()), address(strategy), "Case 3: Strategy should be set");
+    }
+
+    function test_constructorRejectsStrategyWithoutMinting() public {
+        // Should revert when trying to create wrapper with strategy but without minting
+        vm.expectRevert(MintingMustBeAllowedForStrategy.selector);
+        new Wrapper(
+            address(dashboard),
+            owner,
+            "Invalid Vault",
+            "INVALID",
+            false, // whitelist disabled
+            false, // minting disabled - this should cause revert
+            address(strategy) // strategy provided
+        );
+    }
+
+    // =================================================================================
+    // CASE 1: NO MINTING, NO STRATEGY
+    // =================================================================================
+
+    function test_case1_openPositionDoesNothing() public {
+        vm.startPrank(user);
+
+        // User deposits to get stvShares
+        uint256 depositAmount = 1 ether;
+        uint256 shares = wrapperNoMintingNoStrategy.depositETH{value: depositAmount}(user);
+
+        // Record initial state
+        uint256 initialStvBalance = wrapperNoMintingNoStrategy.balanceOf(user);
+        uint256 initialStETHBalance = stETH.balanceOf(user);
+        uint256 initialLockedShares = wrapperNoMintingNoStrategy.lockedStvSharesByUser(user);
+
+        // Open position - should do nothing since minting is disabled and no strategy
+        wrapperNoMintingNoStrategy.openPosition(shares);
+
+        // Verify nothing changed
+        assertEq(wrapperNoMintingNoStrategy.balanceOf(user), initialStvBalance, "STV balance should not change");
+        assertEq(stETH.balanceOf(user), initialStETHBalance, "stETH balance should not change");
+        assertEq(wrapperNoMintingNoStrategy.lockedStvSharesByUser(user), initialLockedShares, "Locked shares should not change");
+
+        vm.stopPrank();
+    }
+
+    // =================================================================================
+    // CASE 2: MINTING ENABLED, NO STRATEGY
+    // =================================================================================
+
+    function test_case2_openPositionOnlyMints() public {
+        vm.startPrank(user);
+
+        // User deposits to get stvShares
+        uint256 depositAmount = 1 ether;
+        uint256 shares = wrapperMintingNoStrategy.depositETH{value: depositAmount}(user);
+
+        // Record initial state
+        uint256 initialStvBalance = wrapperMintingNoStrategy.balanceOf(user);
+        uint256 initialStETHBalance = stETH.balanceOf(user);
+        uint256 initialLockedShares = wrapperMintingNoStrategy.lockedStvSharesByUser(user);
+
+        // Open position - should only mint stETH
+        wrapperMintingNoStrategy.openPosition(shares);
+
+        // Verify minting occurred
+        assertLt(wrapperMintingNoStrategy.balanceOf(user), initialStvBalance, "STV balance should decrease (transferred to wrapper)");
+        assertGt(stETH.balanceOf(user), initialStETHBalance, "stETH balance should increase (minted)");
+        assertGt(wrapperMintingNoStrategy.lockedStvSharesByUser(user), initialLockedShares, "Locked shares should increase");
+
+        // Verify shares were locked
+        assertEq(wrapperMintingNoStrategy.lockedStvSharesByUser(user), shares, "All shares should be locked");
+
+        vm.stopPrank();
+    }
+
+    function test_case2_canCallMintStETHDirectly() public {
+        vm.startPrank(user);
+
+        // User deposits to get stvShares
+        uint256 depositAmount = 1 ether;
+        uint256 shares = wrapperMintingNoStrategy.depositETH{value: depositAmount}(user);
+
+        // Call mintStETH directly
+        uint256 mintedAmount = wrapperMintingNoStrategy.mintStETH(shares);
+
+        // Verify minting worked
+        assertGt(mintedAmount, 0, "Should have minted some stETH");
+        assertEq(stETH.balanceOf(user), mintedAmount, "User should have the minted stETH");
+
+        vm.stopPrank();
+    }
+
+    // =================================================================================
+    // CASE 3: MINTING ENABLED, WITH STRATEGY
+    // =================================================================================
+
+    function test_case3_openPositionTransfersToStrategyAndExecutes() public {
+        vm.startPrank(user);
+
+        // User deposits to get stvShares
+        uint256 depositAmount = 1 ether;
+        uint256 shares = wrapperMintingWithStrategy.depositETH{value: depositAmount}(user);
+
+        // Record initial state
+        uint256 initialStvBalance = wrapperMintingWithStrategy.balanceOf(user);
+        uint256 initialStrategyBalance = wrapperMintingWithStrategy.balanceOf(address(strategy));
+
+        // Reset strategy state
+        strategy = new MockStrategy();
+        wrapperMintingWithStrategy.setStrategy(address(strategy));
+
+        // Open position - should transfer stvShares to strategy and execute
+        wrapperMintingWithStrategy.openPosition(shares);
+
+        // Verify stvShares were transferred to strategy
+        assertLt(wrapperMintingWithStrategy.balanceOf(user), initialStvBalance, "User STV balance should decrease");
+        assertGt(wrapperMintingWithStrategy.balanceOf(address(strategy)), initialStrategyBalance, "Strategy STV balance should increase");
+
+        // Verify strategy was executed with correct parameters
+        assertTrue(strategy.executeCalled(), "Strategy execute should be called");
+        assertEq(strategy.lastUser(), user, "Strategy should be called with user address");
+        assertEq(strategy.lastAmount(), shares, "Strategy should be called with stvShares amount");
+
+        vm.stopPrank();
+    }
+
+    function test_case3_strategyReceivesStvTokenShares() public {
+        vm.startPrank(user);
+
+        // User deposits to get stvShares
+        uint256 depositAmount = 1 ether;
+        uint256 shares = wrapperMintingWithStrategy.depositETH{value: depositAmount}(user);
+
+        // Reset strategy to capture fresh execution data
+        strategy = new MockStrategy();
+        wrapperMintingWithStrategy.setStrategy(address(strategy));
+
+        // Open position
+        wrapperMintingWithStrategy.openPosition(shares);
+
+        // The strategy should receive the stvToken shares amount
+        assertEq(strategy.lastAmount(), shares, "Strategy should receive the stvToken shares amount");
+        assertEq(wrapperMintingWithStrategy.balanceOf(address(strategy)), shares, "Strategy should have the stvToken shares");
+
+        vm.stopPrank();
+    }
+
+    // =================================================================================
+    // EDGE CASES AND VALIDATION
+    // =================================================================================
+
+    function test_cannotOpenPositionWithZeroShares() public {
+        vm.startPrank(user);
+
+        // Case 1 (no minting, no strategy) should do nothing with zero shares, not revert
+        wrapperNoMintingNoStrategy.openPosition(0); // This should just do nothing
+
+        // Case 2 should revert with zero shares because it tries to mint
+        vm.expectRevert(ZeroStvShares.selector);
+        wrapperMintingNoStrategy.openPosition(0);
+
+        // Case 3 will transfer 0 shares to strategy and call execute with 0
+        // This should work (no revert expected from the wrapper itself)
+        // The strategy might handle 0 shares differently, but wrapper won't revert
+        wrapperMintingWithStrategy.openPosition(0);
+
+        vm.stopPrank();
+    }
+
+    function test_cannotOpenPositionWithoutSufficientShares() public {
+        vm.startPrank(user);
+
+        uint256 shares = 1000 ether; // User doesn't have this many shares
+
+        // Should revert due to insufficient balance (ERC20 transfer will fail)
+        vm.expectRevert();
+        wrapperMintingNoStrategy.openPosition(shares);
+
+        vm.expectRevert();
+        wrapperMintingWithStrategy.openPosition(shares);
+
+        vm.stopPrank();
+    }
+
+    function test_mintingCapacityLimits() public {
+        // This test would verify that minting respects capacity limits
+        // For now, our mock returns unlimited capacity, but in real scenarios
+        // the minting would be limited by vault capacity
+
+        vm.startPrank(user);
+
+        uint256 depositAmount = 1 ether;
+        uint256 shares = wrapperMintingNoStrategy.depositETH{value: depositAmount}(user);
+
+        // Should succeed within capacity
+        uint256 mintedAmount = wrapperMintingNoStrategy.mintStETH(shares);
+        assertGt(mintedAmount, 0, "Should mint within capacity");
+
+        vm.stopPrank();
+    }
+
+    // =================================================================================
+    // COMPARATIVE TESTS
+    // =================================================================================
+
+    function test_compareAllThreeCases() public {
+        // Use different users for each wrapper to avoid interference
+        address user1 = makeAddr("user1");
+        address user2 = makeAddr("user2");
+        address user3 = makeAddr("user3");
+
+        vm.deal(user1, 10 ether);
+        vm.deal(user2, 10 ether);
+        vm.deal(user3, 10 ether);
+
+        uint256 depositAmount = 1 ether;
+
+        // Deposit to all three wrappers with different users
+        vm.prank(user1);
+        uint256 shares1 = wrapperNoMintingNoStrategy.depositETH{value: depositAmount}(user1);
+
+        vm.prank(user2);
+        uint256 shares2 = wrapperMintingNoStrategy.depositETH{value: depositAmount}(user2);
+
+        vm.prank(user3);
+        uint256 shares3 = wrapperMintingWithStrategy.depositETH{value: depositAmount}(user3);
+
+        // All should receive positive shares
+        assertGt(shares1, 0, "Should receive shares from wrapper 1");
+        assertGt(shares2, 0, "Should receive shares from wrapper 2");
+        assertGt(shares3, 0, "Should receive shares from wrapper 3");
+
+        // Record initial stETH balances
+        uint256 initialStETH1 = stETH.balanceOf(user1);
+        uint256 initialStETH2 = stETH.balanceOf(user2);
+        uint256 initialStETH3 = stETH.balanceOf(user3);
+
+        // Reset strategy for case 3
+        vm.prank(user);
+        strategy = new MockStrategy();
+        vm.prank(user);
+        wrapperMintingWithStrategy.setStrategy(address(strategy));
+
+        // Open positions in all three cases
+        vm.prank(user1);
+        wrapperNoMintingNoStrategy.openPosition(shares1);   // Should do nothing
+
+        vm.prank(user2);
+        wrapperMintingNoStrategy.openPosition(shares2);     // Should only mint
+
+        vm.prank(user3);
+        wrapperMintingWithStrategy.openPosition(shares3);   // Should transfer to strategy and execute
+
+        // Verify outcomes
+        uint256 finalStETH1 = stETH.balanceOf(user1);
+        uint256 finalStETH2 = stETH.balanceOf(user2);
+        uint256 finalStETH3 = stETH.balanceOf(user3);
+
+        // Case 1: No change in stETH balance
+        assertEq(finalStETH1, initialStETH1, "User1 should not receive stETH from case 1");
+
+        // Case 2: Should have received stETH
+        assertGt(finalStETH2, initialStETH2, "User2 should have received stETH from case 2");
+
+        // Case 3: User doesn't directly receive stETH (strategy handles it)
+        assertEq(finalStETH3, initialStETH3, "User3 should not directly receive stETH - strategy handles it");
+
+        // Strategy should have been called and received the stvToken shares
+        assertTrue(strategy.executeCalled(), "Strategy should be executed only for case 3");
+        assertEq(wrapperMintingWithStrategy.balanceOf(address(strategy)), shares3, "Strategy should have received stvToken shares");
+    }
+}

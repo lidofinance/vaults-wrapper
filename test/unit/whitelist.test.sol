@@ -87,23 +87,23 @@ contract WhitelistTest is Test {
         // Create wrapper with whitelist enabled
         wrapperWithWhitelist = new Wrapper(
             address(dashboard),
-            address(0), // strategy
-            address(0), // steth
             owner,
             "Whitelisted Staked ETH Vault",
             "wstvETH",
-            true // whitelist enabled
+            true, // whitelist enabled
+            false, // minting disabled
+            address(0) // no strategy
         );
 
         // Create wrapper without whitelist
         wrapperWithoutWhitelist = new Wrapper(
             address(dashboard),
-            address(0), // strategy
-            address(0), // steth
             owner,
             "Open Staked ETH Vault",
             "ostvETH",
-            false // whitelist disabled
+            false, // whitelist disabled
+            false, // minting disabled
+            address(0) // no strategy
         );
 
         // Setup withdrawal queue for whitelist wrapper

@@ -14,9 +14,6 @@ import {IStrategy} from "./interfaces/IStrategy.sol";
 import {IVaultHub} from "./interfaces/IVaultHub.sol";
 import {IDashboard} from "./interfaces/IDashboard.sol";
 
-interface IStETH is IERC20 {
-    function sharesOf(address account) external view returns (uint256);
-}
 
 // Custom errors
 error NotWhitelisted(address user);
@@ -27,6 +24,7 @@ error ZeroDeposit();
 error InvalidReceiver();
 error NoMintingCapacityAvailable();
 error ZeroStvShares();
+error MintingMustBeAllowedForStrategy();
 
 contract Wrapper is ERC4626, AccessControlEnumerable {
     uint256 public constant E27_PRECISION_BASE = 1e27;
@@ -34,6 +32,7 @@ contract Wrapper is ERC4626, AccessControlEnumerable {
     bytes32 public constant DEPOSIT_ROLE = keccak256("DEPOSIT_ROLE");
 
     bool public immutable WHITELIST_ENABLED;
+    bool public immutable MINTING_ALLOWED;
 
     IDashboard public immutable DASHBOARD;
     IVaultHub public immutable VAULT_HUB;
@@ -41,7 +40,6 @@ contract Wrapper is ERC4626, AccessControlEnumerable {
 
     WithdrawalQueue public withdrawalQueue;
     IStrategy public STRATEGY;
-    IERC20 public immutable STETH;
 
     uint256 public totalLockedStvShares;
     uint256 public totalBorrowedAssets;
@@ -74,12 +72,6 @@ contract Wrapper is ERC4626, AccessControlEnumerable {
         uint256 shares,
         uint256 assets
     );
-    event TransferAttempt(
-        address from,
-        address to,
-        uint256 amount,
-        uint256 allowance
-    );
     event PositionOpened(
         address indexed user,
         uint256 indexed positionId,
@@ -96,39 +88,38 @@ contract Wrapper is ERC4626, AccessControlEnumerable {
         uint256 indexed positionId,
         uint256 assets
     );
-    event AllowanceSet(address indexed owner, address indexed spender, uint256 amount);
 
-    event Debug(string message, uint256 value1, uint256 value2);
     event WhitelistAdded(address indexed user);
     event WhitelistRemoved(address indexed user);
 
     constructor(
         address _dashboard,
-        address _strategy,
-        address _steth,
         address _owner,
-        string memory name_,
-        string memory symbol_,
-        bool _whitelistEnabled
+        string memory _name,
+        string memory _symbol,
+        bool _whitelistEnabled,
+        bool _mintingEnabled,
+        address _strategy
     )
-        payable
-        ERC20(name_, symbol_)
+        ERC20(_name, _symbol)
         // The asset is native ETH. We pass address(0) as a placeholder for the ERC20 asset token.
         // This is safe because we override all functions that would interact with the asset
         // (totalAssets, deposit, withdraw, redeem) to use our own ETH-based logic.
         ERC4626(ERC20(address(0)))
     {
         WHITELIST_ENABLED = _whitelistEnabled;
+        MINTING_ALLOWED = _mintingEnabled;
 
         DASHBOARD = IDashboard(payable(_dashboard));
         VAULT_HUB = IVaultHub(DASHBOARD.VAULT_HUB());
         STAKING_VAULT = address(DASHBOARD.stakingVault());
-        
+
         if (_strategy != address(0)) {
+            if (!_mintingEnabled) {
+                revert MintingMustBeAllowedForStrategy();
+            }
             STRATEGY = IStrategy(_strategy);
         }
-        
-        STETH = IERC20(_steth);
 
         _grantRole(DEFAULT_ADMIN_ROLE, _owner);
 
@@ -253,8 +244,16 @@ contract Wrapper is ERC4626, AccessControlEnumerable {
     // =================================================================================
 
     function openPosition(uint256 stvShares) external {
-        _transfer(msg.sender, address(STRATEGY), stvShares);
-        STRATEGY.execute(msg.sender, stvShares);
+        if (address(STRATEGY) != address(0)) {
+            // Strategy is set - transfer stvShares to strategy and let it handle minting
+            assert(MINTING_ALLOWED);
+            _transfer(msg.sender, address(STRATEGY), stvShares);
+            STRATEGY.execute(msg.sender, stvShares);
+        } else if (MINTING_ALLOWED) {
+            // No strategy but minting enabled - mint stETH directly for user
+            mintStETH(stvShares);
+        }
+        // If no strategy and no minting - do nothing
     }
 
     function closePosition(uint256 stvShares) external {
@@ -262,7 +261,7 @@ contract Wrapper is ERC4626, AccessControlEnumerable {
         stvShares = stvShares; // TODO
     }
 
-    function mintStETH(uint256 stvShares) external returns (uint256 mintedStethShares) {
+    function mintStETH(uint256 stvShares) public returns (uint256 mintedStethShares) {
         if (stvShares == 0) revert ZeroStvShares();
 
         _transfer(msg.sender, address(this), stvShares);

@@ -58,12 +58,12 @@ contract Factory {
         // TODO: proxy when decided on contract setup
         wrapper = new Wrapper(
             dashboard,
-            _strategy,
-            STETH,
             msg.sender,
             NAME,
             SYMBOL,
-            false // whitelist disabled by default
+            false, // whitelist disabled by default
+            address(_strategy) != address(0), // enable minting if strategy is provided
+            _strategy
         );
 
         withdrawalQueue = new WithdrawalQueue(wrapper);

@@ -45,12 +45,12 @@ contract DeployWrapper is Script {
 
         Wrapper wrapper = new Wrapper(
             address(dashboard),
-            address(0), // strategy
-            address(0), // steth
             deployer,
             "STV",
             "STV",
-            false
+            false, // whitelist disabled
+            false, // minting disabled
+            address(0) // no strategy
         );
 
         MockERC20 obolToken = new MockERC20("ObolToken", "ObolTest");

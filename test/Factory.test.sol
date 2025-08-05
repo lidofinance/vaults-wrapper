@@ -112,7 +112,6 @@ contract FactoryTest is Test {
                 strategyAddress // strategy for this test
             );
         assertEq(address(wrapper.STRATEGY()), strategyAddress);
-        assertEq(address(wrapper.STETH()), address(stETH));
 
         MockDashboard mockDashboard = MockDashboard(payable(dashboard));
 
