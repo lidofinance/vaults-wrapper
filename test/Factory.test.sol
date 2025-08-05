@@ -63,9 +63,7 @@ contract FactoryTest is Test {
                 nodeOperatorManager,
                 100, // 1% fee
                 3600, // 1 hour confirm expiry
-                address(0), // no strategy for this test
-                "Test Vault",
-                "TVLT"
+                address(0) // no strategy for this test
             );
         assertEq(address(wrapper.STAKING_VAULT()), address(vault));
         assertEq(address(wrapper.DASHBOARD()), address(dashboard));
@@ -98,9 +96,7 @@ contract FactoryTest is Test {
             nodeOperatorManager,
             100, // 1% fee
             3600, // 1 hour confirm expiry
-            address(0), // no strategy for this test
-            "Test Vault",
-            "TVLT"
+            address(0) // no strategy for this test
         );
     }
 
@@ -117,9 +113,7 @@ contract FactoryTest is Test {
                 nodeOperatorManager,
                 100, // 1% fee
                 3600, // 1 hour confirm expiry
-                strategyAddress, // strategy for this test
-                "Test Vault",
-                "TVLT"
+                strategyAddress // strategy for this test
             );
         assertEq(address(wrapper.ESCROW()), address(escrow));
         assertEq(address(escrow.WRAPPER()), address(wrapper));
