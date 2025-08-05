@@ -7,9 +7,6 @@ DEBUG_TEST ?= test_debug
 test-integration:
 	FOUNDRY_PROFILE=test forge test test/integration/**/*.test.sol -$(VERBOSITY) --fork-url http://localhost:$(CORE_RPC_PORT)
 
-test-unit:
-	FOUNDRY_PROFILE=test forge test test/unit/**/*.test.sol -$(VERBOSITY)
-
 test-integration-debug:
 	FOUNDRY_PROFILE=test forge test --match-test $(DEBUG_TEST) -$(VERBOSITY) --fork-url http://localhost:$(CORE_RPC_PORT)
 	# FOUNDRY_PROFILE=test forge test test/integration/**/*.test.sol -vv --fork-url http://localhost:$(CORE_RPC_PORT)
@@ -19,7 +16,7 @@ test-all:
 	make test-integration
 
 test-unit:
-	forge test --via-ir -vvv --no-match-path 'test/integration/*' test
+	FOUNDRY_PROFILE=test forge test -$(VERBOSITY) --no-match-path 'test/integration/*' test
 
 # Requires entr util
 test-watch:

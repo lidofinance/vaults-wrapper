@@ -15,7 +15,6 @@ import {IStakingVault} from "src/interfaces/IStakingVault.sol";
 import {CoreHarness} from "test/utils/CoreHarness.sol";
 import {Wrapper} from "src/Wrapper.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
-import {Escrow} from "src/Escrow.sol";
 import {ExampleStrategy, LenderMock} from "src/ExampleStrategy.sol";
 
 interface IHashConsensus {
@@ -38,7 +37,6 @@ interface IVaultHub is IVaultHubIntact {
 contract DefiWrapper is Test {
     Wrapper public wrapper;
     WithdrawalQueue public withdrawalQueue;
-    Escrow public escrow;
     ExampleStrategy public strategy;
     IStakingVault public vault;
     IDashboard public dashboard;
@@ -82,9 +80,12 @@ contract DefiWrapper is Test {
         core.applyVaultReport(address(vault), 0, 0, 0, true);
         dashboard.setNodeOperatorFeeRate(NODE_OPERATOR_FEE_RATE);
 
+        strategy = new ExampleStrategy(address(core.steth()), address(0), STRATEGY_LOOPS);
+        
         wrapper = new Wrapper{value: 0 wei}(
             address(dashboard),
-            address(0), // placeholder for escrow
+            address(strategy),
+            address(core.steth()),
             address(this), // initial balance owner
             "Staked ETH Vault Wrapper",
             "stvETH",
@@ -101,16 +102,17 @@ contract DefiWrapper is Test {
         address vaultOwner = core.vaultHub().vaultConnection(address(vault)).owner;
         console.log("vaultOwner", vaultOwner);
 
+        // Update strategy's wrapper reference now that wrapper is deployed
         strategy = new ExampleStrategy(address(core.steth()), address(wrapper), STRATEGY_LOOPS);
-        escrow = new Escrow(address(wrapper), address(strategy), address(core.steth()));
-        wrapper.setEscrowAddress(address(escrow));
+        wrapper.setStrategy(address(strategy));
+        
         // Fund the LenderMock contract with ETH so it can lend
         vm.deal(address(strategy.LENDER_MOCK()), 1234 ether);
 
         dashboard.grantRole(dashboard.FUND_ROLE(), address(wrapper));
         dashboard.grantRole(dashboard.WITHDRAW_ROLE(), address(wrapper));
-        dashboard.grantRole(dashboard.MINT_ROLE(), address(escrow));
-        dashboard.grantRole(dashboard.BURN_ROLE(), address(escrow));
+        dashboard.grantRole(dashboard.MINT_ROLE(), address(wrapper));
+        dashboard.grantRole(dashboard.BURN_ROLE(), address(wrapper));
         dashboard.grantRole(dashboard.WITHDRAW_ROLE(), address(withdrawalQueue));
     }
 
@@ -132,7 +134,7 @@ contract DefiWrapper is Test {
                 "user1: ETH=", vm.toString(user1.balance),
                 " stvETH=", vm.toString(wrapper.balanceOf(user1)),
                 " stETH=", vm.toString(IERC20(stETH).balanceOf(user1)),
-                " lockedStv=", vm.toString(escrow.lockedStvSharesByUser(user1))
+                " lockedStv=", vm.toString(wrapper.lockedStvSharesByUser(user1))
             )
         );
 
@@ -141,7 +143,7 @@ contract DefiWrapper is Test {
                 "user2: ETH=", vm.toString(user2.balance),
                 " stvETH=", vm.toString(wrapper.balanceOf(user2)),
                 " stETH=", vm.toString(IERC20(stETH).balanceOf(user2)),
-                " lockedStv=", vm.toString(escrow.lockedStvSharesByUser(user2))
+                " lockedStv=", vm.toString(wrapper.lockedStvSharesByUser(user2))
             )
         );
 
@@ -150,32 +152,25 @@ contract DefiWrapper is Test {
                 "wrapper: ETH=", vm.toString(address(wrapper).balance),
                 " stvETH=", vm.toString(wrapper.balanceOf(address(wrapper))),
                 " stETH=", vm.toString(IERC20(stETH).balanceOf(address(wrapper))),
-                " lockedStv=", vm.toString(escrow.lockedStvSharesByUser(address(wrapper)))
+                " lockedStv=", vm.toString(wrapper.lockedStvSharesByUser(address(wrapper)))
             )
         );
 
-        console.log(
-            string.concat(
-                "escrow: ETH=", vm.toString(address(escrow).balance),
-                " stvETH=", vm.toString(wrapper.balanceOf(address(escrow))),
-                " stETH=", vm.toString(IERC20(stETH).balanceOf(address(escrow))),
-                " lockedStv=", vm.toString(escrow.lockedStvSharesByUser(address(escrow)))
-            )
-        );
+        // Escrow functionality is now in wrapper, no separate escrow to log
 
         console.log(
             string.concat(
                 "strategy: ETH=", vm.toString(address(strategy).balance),
                 " stvETH=", vm.toString(wrapper.balanceOf(address(strategy))),
                 " stETH=", vm.toString(IERC20(stETH).balanceOf(address(strategy))),
-                " lockedStv=", vm.toString(escrow.lockedStvSharesByUser(address(strategy)))
+                " lockedStv=", vm.toString(wrapper.lockedStvSharesByUser(address(strategy)))
             )
         );
 
         console.log(
             string.concat(
                 "stakingVault: ETH=", vm.toString(address(vault).balance),
-                " lockedStv=", vm.toString(escrow.lockedStvSharesByUser(address(vault)))
+                " lockedStv=", vm.toString(wrapper.lockedStvSharesByUser(address(vault)))
             )
         );
         console.log(
@@ -183,14 +178,14 @@ contract DefiWrapper is Test {
                 "LenderMock: ETH=", vm.toString(lenderMock.balance),
                 " stvETH=", vm.toString(wrapper.balanceOf(lenderMock)),
                 " stETH=", vm.toString(IERC20(stETH).balanceOf(lenderMock)),
-                " lockedStv=", vm.toString(escrow.lockedStvSharesByUser(lenderMock))
+                " lockedStv=", vm.toString(wrapper.lockedStvSharesByUser(lenderMock))
             )
         );
 
-        // Escrow totals
+        // Wrapper totals (previously Escrow totals)
         console.log(
             string.concat(
-                "Escrow totals: totalBorrowedAssets=", vm.toString(escrow.totalBorrowedAssets()),
+                "Wrapper totals: totalBorrowedAssets=", vm.toString(wrapper.totalBorrowedAssets()),
                 " totalLockedStvShares=", vm.toString(wrapper.totalLockedStvShares())
             )
         );

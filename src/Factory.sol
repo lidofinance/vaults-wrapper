@@ -2,7 +2,6 @@
 pragma solidity >=0.8.25;
 
 import {Wrapper} from "./Wrapper.sol";
-import {Escrow} from "./Escrow.sol";
 import {WithdrawalQueue} from "./WithdrawalQueue.sol";
 
 import {IVaultFactory} from "./interfaces/IVaultFactory.sol";
@@ -19,7 +18,7 @@ contract Factory {
         address vault,
         address wrapper,
         address withdrawalQueue,
-        address escrow
+        address strategy
     );
 
     constructor(address _vaultFactory, address _steth) {
@@ -40,8 +39,7 @@ contract Factory {
             address vault,
             address dashboard,
             Wrapper wrapper,
-            WithdrawalQueue withdrawalQueue,
-            Escrow escrow
+            WithdrawalQueue withdrawalQueue
         )
     {
         (vault, dashboard) = VAULT_FACTORY.createVaultWithDashboard{
@@ -60,7 +58,8 @@ contract Factory {
         // TODO: proxy when decided on contract setup
         wrapper = new Wrapper(
             dashboard,
-            address(0),
+            _strategy,
+            STETH,
             msg.sender,
             NAME,
             SYMBOL,
@@ -70,16 +69,10 @@ contract Factory {
         withdrawalQueue = new WithdrawalQueue(wrapper);
         withdrawalQueue.initialize(msg.sender);
 
-        // optionally deploy Escrow if a strategy is provided
+        // Grant mint/burn roles to wrapper if strategy is provided
         if (address(_strategy) != address(0)) {
-            escrow = new Escrow(
-                address(wrapper),
-                _strategy,
-                STETH
-            );
-            wrapper.setEscrowAddress(address(escrow));
-            _dashboard.grantRole(_dashboard.MINT_ROLE(), address(escrow));
-            _dashboard.grantRole(_dashboard.BURN_ROLE(), address(escrow));
+            _dashboard.grantRole(_dashboard.MINT_ROLE(), address(wrapper));
+            _dashboard.grantRole(_dashboard.BURN_ROLE(), address(wrapper));
         }
 
         wrapper.setWithdrawalQueue(address(withdrawalQueue));
@@ -94,9 +87,9 @@ contract Factory {
             vault,
             address(wrapper),
             address(withdrawalQueue),
-            address(escrow)
+            _strategy
         );
 
-        return (vault, dashboard, wrapper, withdrawalQueue, escrow);
+        return (vault, dashboard, wrapper, withdrawalQueue);
     }
 }

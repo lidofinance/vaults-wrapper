@@ -74,7 +74,8 @@ contract DepositGasProfileTest is Test {
         // Create wrapper with whitelist enabled
         wrapperWithWhitelist = new Wrapper(
             address(dashboardWithWhitelist),
-            address(0), // escrow placeholder
+            address(0), // strategy
+            address(0), // steth
             owner,
             "Whitelisted Vault",
             "wstvETH",
@@ -84,7 +85,8 @@ contract DepositGasProfileTest is Test {
         // Create wrapper without whitelist
         wrapperWithoutWhitelist = new Wrapper(
             address(dashboardWithoutWhitelist),
-            address(0), // escrow placeholder
+            address(0), // strategy
+            address(0), // steth
             owner,
             "Open Vault",
             "ostvETH",

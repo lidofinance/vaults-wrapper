@@ -12,7 +12,6 @@ import {ILido} from "src/interfaces/ILido.sol";
 
 import {Wrapper} from "src/Wrapper.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
-import {Escrow} from "src/Escrow.sol";
 import {ExampleStrategy, LenderMock} from "src/ExampleStrategy.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
@@ -28,7 +27,6 @@ contract StrategyTest is Test {
     IVaultHub public vaultHub;
     IStakingVault public stakingVault;
     WithdrawalQueue public withdrawalQueue;
-    Escrow public escrow;
     ExampleStrategy public strategy;
 
     uint256 public constant WEI_ROUNDING_TOLERANCE = 2;
@@ -44,7 +42,6 @@ contract StrategyTest is Test {
 
         wrapper = dw.wrapper();
         withdrawalQueue = dw.withdrawalQueue();
-        escrow = dw.escrow();
         strategy = dw.strategy();
         dashboard = dw.dashboard();
         steth = core.steth();
@@ -78,7 +75,7 @@ contract StrategyTest is Test {
         assertEq(address(stakingVault).balance - initialVaultBalance, initialETH);
         assertEq(wrapper.totalSupply(), user1StvShares + initialVaultBalance);
         assertEq(wrapper.balanceOf(user1), user1StvShares);
-        assertEq(wrapper.balanceOf(address(escrow)), 0);
+        assertEq(wrapper.balanceOf(address(wrapper)), 0);
         assertTrue(user1StvShares >= initialETH - 1 && user1StvShares <= initialETH, "shares should be approximately equal to deposited amount");
 
         uint256 reserveRatioBP = dashboard.reserveRatioBP();
@@ -88,8 +85,7 @@ contract StrategyTest is Test {
         console.log("borrowRatio", borrowRatio);
 
         vm.startPrank(user1);
-        wrapper.approve(address(escrow), user1StvShares);
-        escrow.openPosition(user1StvShares);
+        wrapper.openPosition(user1StvShares);
         vm.stopPrank();
 
         dw.logAllBalances("test_openClosePositionSingleUser", user1, user2);

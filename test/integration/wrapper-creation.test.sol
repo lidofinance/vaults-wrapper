@@ -21,7 +21,7 @@ contract WrapperCreationTest is Test {
     function test_initialState() public view {
         assertEq(dw.wrapper().totalSupply(), dw.CONNECT_DEPOSIT(), "wrapper totalSupply should be equal to CONNECT_DEPOSIT");
         assertEq(dw.wrapper().totalAssets(), dw.CONNECT_DEPOSIT(), "wrapper totalAssets should be equal to CONNECT_DEPOSIT");
-        assertEq(dw.wrapper().balanceOf(address(dw.escrow())), 0, "escrow should have no shares initially");
+        assertEq(dw.wrapper().balanceOf(address(dw.strategy())), 0, "strategy should have no shares initially");
         assertEq(dw.wrapper().balanceOf(address(dw.withdrawalQueue())), 0, "withdrawalQueue should have no shares initially");
         assertEq(dw.wrapper().balanceOf(address(dw)), dw.CONNECT_DEPOSIT(), "DefiWrapper should initially hold CONNECT_DEPOSIT shares");
         assertEq(address(dw.stakingVault()).balance, dw.CONNECT_DEPOSIT(), "Vault balance should equal CONNECT_DEPOSIT at start");

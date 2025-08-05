@@ -6,7 +6,6 @@ import {Test, console} from "forge-std/Test.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import {Wrapper} from "src/Wrapper.sol";
-import {Escrow} from "src/Escrow.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
 import {MockDashboard} from "../mocks/MockDashboard.sol";
 import {MockVaultHub} from "../mocks/MockVaultHub.sol";
@@ -16,7 +15,6 @@ contract WithdrawalQueueTest is Test {
     WithdrawalQueue public withdrawalQueue;
     MockVaultHub public vaultHub;
     Wrapper public wrapper;
-    Escrow public escrow;
     MockStakingVault public stakingVault;
     MockDashboard public dashboard;
 
@@ -54,10 +52,11 @@ contract WithdrawalQueueTest is Test {
 
         stakingVault.setNodeOperator(address(vaultHub));
 
-        // Deploy wrapper and escrow
+        // Deploy wrapper
         wrapper = new Wrapper{value: 0 wei}(
             address(dashboard),
-            address(0), // placeholder for escrow
+            address(0), // strategy
+            address(0), // steth
             admin,
             "Staked ETH Vault Wrapper",
             "stvETH",

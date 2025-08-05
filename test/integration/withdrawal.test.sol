@@ -12,7 +12,6 @@ import {ILido} from "src/interfaces/ILido.sol";
 
 import {Wrapper} from "src/Wrapper.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
-import {Escrow} from "src/Escrow.sol";
 import {ExampleStrategy, LenderMock} from "src/ExampleStrategy.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
@@ -28,7 +27,6 @@ contract WithdrawalTest is Test {
     IVaultHub public vaultHub;
     IStakingVault public stakingVault;
     WithdrawalQueue public withdrawalQueue;
-    Escrow public escrow;
     ExampleStrategy public strategy;
 
     uint256 public constant WEI_ROUNDING_TOLERANCE = 2;
@@ -44,7 +42,6 @@ contract WithdrawalTest is Test {
 
         wrapper = dw.wrapper();
         withdrawalQueue = dw.withdrawalQueue();
-        escrow = dw.escrow();
         strategy = dw.strategy();
         dashboard = dw.dashboard();
         steth = core.steth();
@@ -80,7 +77,7 @@ contract WithdrawalTest is Test {
         assertEq(wrapper.balanceOf(user1), userStvShares, "User should have stvETH shares");
         assertEq(wrapper.totalAssets(), userInitialETH + dw.CONNECT_DEPOSIT(), "Total assets should equal user deposit plus initial balance");
         assertEq(user1.balance, 0, "User ETH balance should be zero after deposit");
-        assertEq(escrow.lockedStvSharesByUser(user1), 0, "User should have no locked shares (no stETH minted)");
+        assertEq(wrapper.lockedStvSharesByUser(user1), 0, "User should have no locked shares (no stETH minted)");
 
         // Phase 2: User requests withdrawal
         console.log("=== Phase 2: User requests withdrawal ===");
@@ -191,7 +188,7 @@ contract WithdrawalTest is Test {
 
         // Verify system state is clean (except for initial supply held by DefiWrapper)
         assertEq(wrapper.balanceOf(user1), 0, "User should have no remaining stvETH shares");
-        assertEq(escrow.lockedStvSharesByUser(user1), 0, "User should have no locked shares");
+        assertEq(wrapper.lockedStvSharesByUser(user1), 0, "User should have no locked shares");
         assertEq(wrapper.totalSupply(), dw.CONNECT_DEPOSIT(), "Total supply should equal initial supply after withdrawal");
         assertTrue(
             wrapper.totalAssets() >= dw.CONNECT_DEPOSIT() - 1 && wrapper.totalAssets() <= dw.CONNECT_DEPOSIT() + 1,

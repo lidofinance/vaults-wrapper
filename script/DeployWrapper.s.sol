@@ -45,7 +45,8 @@ contract DeployWrapper is Script {
 
         Wrapper wrapper = new Wrapper(
             address(dashboard),
-            address(0),
+            address(0), // strategy
+            address(0), // steth
             deployer,
             "STV",
             "STV",

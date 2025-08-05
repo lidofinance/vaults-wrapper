@@ -5,7 +5,6 @@ import {Test} from "forge-std/Test.sol";
 
 import {Factory} from "../src/Factory.sol";
 import {Wrapper} from "../src/Wrapper.sol";
-import {Escrow} from "../src/Escrow.sol";
 import {WithdrawalQueue} from "../src/WithdrawalQueue.sol";
 
 import {MockERC20} from "./mocks/MockERC20.sol";
@@ -56,8 +55,7 @@ contract FactoryTest is Test {
             address vault,
             address dashboard,
             Wrapper wrapper,
-            WithdrawalQueue withdrawalQueue,
-            Escrow escrow
+            WithdrawalQueue withdrawalQueue
         ) = WrapperFactory.createVaultWithWrapper{value: connectDeposit}(
                 nodeOperator,
                 nodeOperatorManager,
@@ -68,8 +66,7 @@ contract FactoryTest is Test {
         assertEq(address(wrapper.STAKING_VAULT()), address(vault));
         assertEq(address(wrapper.DASHBOARD()), address(dashboard));
         assertEq(address(wrapper.withdrawalQueue()), address(withdrawalQueue));
-        assertEq(address(escrow), address(0)); // no escrow created
-        assertEq(address(wrapper.ESCROW()), address(0));
+        assertEq(address(wrapper.STRATEGY()), address(0)); // no strategy set
 
         MockDashboard mockDashboard = MockDashboard(payable(dashboard));
 
@@ -100,14 +97,13 @@ contract FactoryTest is Test {
         );
     }
 
-    function test_canCreateWithEscrow() public {
+    function test_canCreateWithStrategy() public {
         vm.startPrank(admin);
         (
             address vault,
             address dashboard,
             Wrapper wrapper,
-            WithdrawalQueue withdrawalQueue,
-            Escrow escrow
+            WithdrawalQueue withdrawalQueue
         ) = WrapperFactory.createVaultWithWrapper{value: connectDeposit}(
                 nodeOperator,
                 nodeOperatorManager,
@@ -115,20 +111,17 @@ contract FactoryTest is Test {
                 3600, // 1 hour confirm expiry
                 strategyAddress // strategy for this test
             );
-        assertEq(address(wrapper.ESCROW()), address(escrow));
-        assertEq(address(escrow.WRAPPER()), address(wrapper));
-        assertEq(address(escrow.VAULT_HUB()), address(vaultHub));
-        assertEq(address(escrow.STRATEGY()), address(strategyAddress));
-        assertEq(address(escrow.STV_TOKEN()), address(wrapper));
+        assertEq(address(wrapper.STRATEGY()), strategyAddress);
+        assertEq(address(wrapper.STETH()), address(stETH));
 
         MockDashboard mockDashboard = MockDashboard(payable(dashboard));
 
         assertTrue(
-            mockDashboard.hasRole(mockDashboard.MINT_ROLE(), address(escrow))
+            mockDashboard.hasRole(mockDashboard.MINT_ROLE(), address(wrapper))
         );
 
         assertTrue(
-            mockDashboard.hasRole(mockDashboard.BURN_ROLE(), address(escrow))
+            mockDashboard.hasRole(mockDashboard.BURN_ROLE(), address(wrapper))
         );
     }
 }

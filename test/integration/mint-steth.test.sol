@@ -12,7 +12,6 @@ import {ILido} from "src/interfaces/ILido.sol";
 
 import {Wrapper} from "src/Wrapper.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
-import {Escrow} from "src/Escrow.sol";
 import {ExampleStrategy, LenderMock} from "src/ExampleStrategy.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
@@ -20,7 +19,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 contract MintStethTest is Test {
     CoreHarness public core;
     DefiWrapper public dw;
-    
+
     // Access to harness components
     Wrapper public wrapper;
     IDashboard public dashboard;
@@ -28,7 +27,6 @@ contract MintStethTest is Test {
     IVaultHub public vaultHub;
     IStakingVault public stakingVault;
     WithdrawalQueue public withdrawalQueue;
-    Escrow public escrow;
     ExampleStrategy public strategy;
 
     uint256 public constant WEI_ROUNDING_TOLERANCE = 2;
@@ -44,7 +42,6 @@ contract MintStethTest is Test {
 
         wrapper = dw.wrapper();
         withdrawalQueue = dw.withdrawalQueue();
-        escrow = dw.escrow();
         strategy = dw.strategy();
         dashboard = dw.dashboard();
         steth = core.steth();
@@ -68,13 +65,11 @@ contract MintStethTest is Test {
         vm.deal(user1, user1InitialETH);
         vm.deal(user2, user2InitialETH);
 
-        vm.startPrank(user1);
+        vm.prank(user1);
         uint256 user1StvShares = wrapper.depositETH{value: user1InitialETH}(user1);
-        vm.stopPrank();
 
-        vm.startPrank(user2);
+        vm.prank(user2);
         uint256 user2StvShares = wrapper.depositETH{value: user2InitialETH}(user2);
-        vm.stopPrank();
 
         uint256 totalDeposits = user1InitialETH + user2InitialETH + dw.CONNECT_DEPOSIT();
         assertEq(wrapper.totalAssets(), totalDeposits);
@@ -89,8 +84,7 @@ contract MintStethTest is Test {
 
         // User1 should only be able to mint proportional to their share (1/3 of capacity)
         vm.startPrank(user1);
-        wrapper.approve(address(escrow), user1StvShares);
-        uint256 user1MintedStethShares = escrow.mintStETH(user1StvShares);
+        uint256 user1MintedStethShares = wrapper.mintStETH(user1StvShares);
         vm.stopPrank();
 
         console.log("User1 minted stETH shares:", user1MintedStethShares);
@@ -122,12 +116,10 @@ contract MintStethTest is Test {
 
         // Now User2 tries to mint their proportional share
         vm.startPrank(user2);
-        wrapper.approve(address(escrow), user2StvShares);
-
         uint256 remainingCapacityAfterUser1 = core.dashboard().remainingMintingCapacityShares(0);
         console.log("Remaining capacity after User1:", remainingCapacityAfterUser1);
 
-        uint256 user2MintedStethShares = escrow.mintStETH(user2StvShares);
+        uint256 user2MintedStethShares = wrapper.mintStETH(user2StvShares);
         vm.stopPrank();
 
         console.log("User2 minted stETH shares:", user2MintedStethShares);
@@ -208,8 +200,7 @@ contract MintStethTest is Test {
         console.log("=== Phase 2: User1 mints stETH (creates liabilities) ===");
 
         vm.startPrank(user1);
-        wrapper.approve(address(escrow), user1StvShares);
-        uint256 user1MintedShares = escrow.mintStETH(user1StvShares);
+        uint256 user1MintedShares = wrapper.mintStETH(user1StvShares);
         vm.stopPrank();
 
         console.log("User1 minted stETH shares:", user1MintedShares);
@@ -245,8 +236,7 @@ contract MintStethTest is Test {
         console.log("=== Phase 3: User2 mints stETH (increases liabilities) ===");
 
         vm.startPrank(user2);
-        wrapper.approve(address(escrow), user2StvShares);
-        uint256 user2MintedShares = escrow.mintStETH(user2StvShares);
+        uint256 user2MintedShares = wrapper.mintStETH(user2StvShares);
         vm.stopPrank();
 
         console.log("User2 minted stETH shares:", user2MintedShares);
@@ -292,9 +282,8 @@ contract MintStethTest is Test {
         // Test Case: User tries to mint with 0 shares
         // This should revert with ZeroStvShares custom error
         vm.startPrank(user1);
-        wrapper.approve(address(escrow), 0);
         vm.expectRevert(abi.encodeWithSignature("ZeroStvShares()"));
-        escrow.mintStETH(0);
+        wrapper.mintStETH(0);
         vm.stopPrank();
     }
 
@@ -312,16 +301,8 @@ contract MintStethTest is Test {
         // Test Case 1: User tries to mint more than they own
         // This should revert due to insufficient balance
         vm.startPrank(user1);
-        wrapper.approve(address(escrow), user1StvShares + 1);
         vm.expectRevert(); // Should revert with ERC20 transfer error
-        escrow.mintStETH(user1StvShares + 1);
-        vm.stopPrank();
-
-        // Test Case 2: User tries to mint without sufficient allowance
-        vm.startPrank(user1);
-        wrapper.approve(address(escrow), user1StvShares - 1);
-        vm.expectRevert(); // Should revert with ERC20 allowance error
-        escrow.mintStETH(user1StvShares);
+        wrapper.mintStETH(user1StvShares + 1);
         vm.stopPrank();
     }
 

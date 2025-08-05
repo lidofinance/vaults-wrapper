@@ -12,7 +12,6 @@ import {ILido} from "src/interfaces/ILido.sol";
 
 import {Wrapper} from "src/Wrapper.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
-import {Escrow} from "src/Escrow.sol";
 import {ExampleStrategy, LenderMock} from "src/ExampleStrategy.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
@@ -28,7 +27,6 @@ contract DepositTest is Test {
     IVaultHub public vaultHub;
     IStakingVault public stakingVault;
     WithdrawalQueue public withdrawalQueue;
-    Escrow public escrow;
     ExampleStrategy public strategy;
 
     uint256 public constant WEI_ROUNDING_TOLERANCE = 2;
@@ -44,7 +42,6 @@ contract DepositTest is Test {
 
         wrapper = dw.wrapper();
         withdrawalQueue = dw.withdrawalQueue();
-        escrow = dw.escrow();
         strategy = dw.strategy();
         dashboard = dw.dashboard();
         steth = core.steth();
@@ -78,7 +75,7 @@ contract DepositTest is Test {
         assertEq(wrapper.totalSupply(), user1StvShares + dw.CONNECT_DEPOSIT(), "wrapper totalSupply should equal user shares plus initial supply");
 
         assertEq(wrapper.balanceOf(user1), user1StvShares, "user1 balance should equal returned shares");
-        assertEq(wrapper.balanceOf(address(dw.escrow())), 0, "escrow should have no shares initially");
+        assertEq(wrapper.balanceOf(address(strategy)), 0, "strategy should have no shares initially");
         // With initial supply, shares might be slightly less due to rounding
         // The important thing is that user gets roughly proportional shares
         assertTrue(user1StvShares >= user1InitialETH - 1 && user1StvShares <= user1InitialETH, "shares should be approximately equal to deposited amount");
@@ -102,7 +99,7 @@ contract DepositTest is Test {
         assertEq(wrapper.totalSupply(), user1StvShares + user2StvShares + dw.CONNECT_DEPOSIT(), "wrapper totalSupply should equal sum of user shares plus initial supply");
         assertEq(wrapper.balanceOf(user1), user1StvShares, "user1 balance should remain unchanged");
         assertEq(wrapper.balanceOf(user2), user2StvShares, "user2 balance should equal returned shares");
-        assertEq(wrapper.balanceOf(address(dw.escrow())), 0, "escrow should still have no shares");
+        assertEq(wrapper.balanceOf(address(strategy)), 0, "strategy should still have no shares");
 
         // For ERC4626, shares = assets * totalSupply / totalAssets
         // After first deposit: totalSupply = user1StvShares + CONNECT_DEPOSIT, totalAssets = ethAfterFirstDeposit

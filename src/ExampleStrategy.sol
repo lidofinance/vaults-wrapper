@@ -7,9 +7,6 @@ import {Wrapper} from "./Wrapper.sol";
 import {IVaultHub} from "./interfaces/IVaultHub.sol";
 import {IDashboard} from "./interfaces/IDashboard.sol";
 
-interface IEscrow {
-    function mintStETH(uint256 stvShares) external returns (uint256 mintedStethShares);
-}
 
 contract LenderMock {
     address public immutable STETH;
@@ -39,8 +36,6 @@ contract ExampleStrategy is IStrategy {
     IERC20 public immutable STV_TOKEN;
     IERC20 public immutable STETH;
     Wrapper public immutable WRAPPER;
-    IVaultHub public immutable VAULT_HUB;
-    address public immutable STAKING_VAULT;
     LenderMock public immutable LENDER_MOCK;
 
     struct UserPosition {
@@ -66,8 +61,6 @@ contract ExampleStrategy is IStrategy {
         STETH = IERC20(_stETH);
         WRAPPER = Wrapper(payable(_wrapper));
         STV_TOKEN = IERC20(_wrapper);
-        VAULT_HUB = WRAPPER.VAULT_HUB();
-        STAKING_VAULT = WRAPPER.STAKING_VAULT();
 
         LOOPS = _loops;
 
@@ -80,7 +73,7 @@ contract ExampleStrategy is IStrategy {
         uint256 totalBorrowedEth = 0;
         uint256 totalStvTokenShares = 0;
 
-        STV_TOKEN.transferFrom(address(msg.sender), address(this), stvTokenShares);
+        // Tokens should already be transferred to this contract by the caller
 
         // Execute the looping strategy
         for (uint256 i = 0; i < LOOPS; i++) {
@@ -121,9 +114,8 @@ contract ExampleStrategy is IStrategy {
     }
 
     function _mintStETH(uint256 stvShares) internal returns (uint256 mintedStethShares) {
-        IEscrow escrow = IEscrow(address(WRAPPER.ESCROW()));
-        STV_TOKEN.approve(address(escrow), stvShares);
-        mintedStethShares = escrow.mintStETH(stvShares);
+        STV_TOKEN.approve(address(WRAPPER), stvShares);
+        mintedStethShares = WRAPPER.mintStETH(stvShares);
     }
 
     function _borrowFromPool(uint256 _stethCollateral) public returns (uint256 borrowedEth) {

@@ -9,8 +9,8 @@ import {AccessControlEnumerable} from "@openzeppelin/contracts/access/extensions
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
 import {WithdrawalQueue} from "./WithdrawalQueue.sol";
-import {Escrow} from "./Escrow.sol";
 import {ExampleStrategy} from "./ExampleStrategy.sol";
+import {IStrategy} from "./interfaces/IStrategy.sol";
 import {IVaultHub} from "./interfaces/IVaultHub.sol";
 import {IDashboard} from "./interfaces/IDashboard.sol";
 
@@ -25,8 +25,8 @@ error AlreadyWhitelisted(address user);
 error NotInWhitelist(address user);
 error ZeroDeposit();
 error InvalidReceiver();
-error EscrowAlreadySet();
-error InvalidEscrowAddress();
+error NoMintingCapacityAvailable();
+error ZeroStvShares();
 
 contract Wrapper is ERC4626, AccessControlEnumerable {
     uint256 public constant E27_PRECISION_BASE = 1e27;
@@ -40,13 +40,28 @@ contract Wrapper is ERC4626, AccessControlEnumerable {
     address public immutable STAKING_VAULT;
 
     WithdrawalQueue public withdrawalQueue;
-    Escrow public ESCROW;
+    IStrategy public STRATEGY;
+    IERC20 public immutable STETH;
 
     uint256 public totalLockedStvShares;
+    uint256 public totalBorrowedAssets;
+    uint256 public nextPositionId;
 
     bool public autoLeverageEnabled = true;
-    address public escrowAddress; // Temporary storage for escrow address
     mapping(address => uint256) public lockedStvSharesByUser;
+    mapping(address => bool) public authorizedStrategies;
+
+    struct Position {
+        address user;
+        uint256 stvTokenShares;
+        uint256 borrowedAssets;
+        uint256 positionId;
+        uint256 withdrawalRequestId;
+        bool isActive;
+        bool isExiting;
+        uint256 timestamp;
+        uint256 totalStvTokenShares;
+    }
 
     event VaultFunded(uint256 amount);
     event AutoLeverageExecuted(address indexed user, uint256 shares);
@@ -59,13 +74,29 @@ contract Wrapper is ERC4626, AccessControlEnumerable {
         uint256 shares,
         uint256 assets
     );
-    event EscrowDeposit(address indexed escrow, uint256 amount, uint256 shares);
     event TransferAttempt(
         address from,
         address to,
         uint256 amount,
         uint256 allowance
     );
+    event PositionOpened(
+        address indexed user,
+        uint256 indexed positionId,
+        uint256 stvTokenShares,
+        uint256 borrowedAssets
+    );
+    event PositionClosing(
+        address indexed user,
+        uint256 indexed positionId,
+        uint256 withdrawalRequestId
+    );
+    event PositionClaimed(
+        address indexed user,
+        uint256 indexed positionId,
+        uint256 assets
+    );
+    event AllowanceSet(address indexed owner, address indexed spender, uint256 amount);
 
     event Debug(string message, uint256 value1, uint256 value2);
     event WhitelistAdded(address indexed user);
@@ -73,7 +104,8 @@ contract Wrapper is ERC4626, AccessControlEnumerable {
 
     constructor(
         address _dashboard,
-        address _escrow,
+        address _strategy,
+        address _steth,
         address _owner,
         string memory name_,
         string memory symbol_,
@@ -91,11 +123,12 @@ contract Wrapper is ERC4626, AccessControlEnumerable {
         DASHBOARD = IDashboard(payable(_dashboard));
         VAULT_HUB = IVaultHub(DASHBOARD.VAULT_HUB());
         STAKING_VAULT = address(DASHBOARD.stakingVault());
-
-        if (_escrow != address(0)) {
-            ESCROW = Escrow(_escrow);
-            escrowAddress = _escrow;
+        
+        if (_strategy != address(0)) {
+            STRATEGY = IStrategy(_strategy);
         }
+        
+        STETH = IERC20(_steth);
 
         _grantRole(DEFAULT_ADMIN_ROLE, _owner);
 
@@ -207,14 +240,60 @@ contract Wrapper is ERC4626, AccessControlEnumerable {
     }
 
     /**
-     * @notice Set the escrow address after construction
+     * @notice Set the strategy address after construction
      * @dev This is needed to resolve circular dependency
      */
-    function setEscrowAddress(address _escrow) external {
-        if (escrowAddress != address(0)) revert EscrowAlreadySet();
-        if (_escrow == address(0)) revert InvalidEscrowAddress();
-        ESCROW = Escrow(_escrow);
-        escrowAddress = _escrow;
+    function setStrategy(address _strategy) external {
+        _checkRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        STRATEGY = IStrategy(_strategy);
+    }
+
+    // =================================================================================
+    // ESCROW FUNCTIONALITY (Moved from Escrow.sol)
+    // =================================================================================
+
+    function openPosition(uint256 stvShares) external {
+        _transfer(msg.sender, address(STRATEGY), stvShares);
+        STRATEGY.execute(msg.sender, stvShares);
+    }
+
+    function closePosition(uint256 stvShares) external {
+        STRATEGY.finalizeExit(msg.sender);
+        stvShares = stvShares; // TODO
+    }
+
+    function mintStETH(uint256 stvShares) external returns (uint256 mintedStethShares) {
+        if (stvShares == 0) revert ZeroStvShares();
+
+        _transfer(msg.sender, address(this), stvShares);
+        lockedStvSharesByUser[msg.sender] += stvShares;
+
+        uint256 remainingMintingCapacity = DASHBOARD.remainingMintingCapacityShares(0);
+        uint256 totalMintingCapacity = DASHBOARD.totalMintingCapacityShares();
+        assert(remainingMintingCapacity <= totalMintingCapacity);
+
+        uint256 userEthInPool = convertToAssets(stvShares);
+        uint256 totalVaultAssets = totalAssets();
+        uint256 userTotalMintingCapacity = (userEthInPool * totalMintingCapacity) / totalVaultAssets;
+
+        // User can mint up to their fair share, limited by remaining capacity
+        mintedStethShares = userTotalMintingCapacity < remainingMintingCapacity ? userTotalMintingCapacity : remainingMintingCapacity;
+
+        if (mintedStethShares == 0) revert NoMintingCapacityAvailable();
+
+        DASHBOARD.mintShares(msg.sender, mintedStethShares);
+    }
+
+    function getUserStvShares(address _user) external view returns (uint256) {
+        return lockedStvSharesByUser[_user];
+    }
+
+    function getTotalUserAssets() external view returns (uint256) {
+        return totalBorrowedAssets;
+    }
+
+    function getTotalBorrowedAssets() external view returns (uint256) {
+        return totalBorrowedAssets;
     }
 
     // =================================================================================
