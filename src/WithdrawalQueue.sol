@@ -8,8 +8,6 @@ import {Wrapper} from "./Wrapper.sol";
 import {IDashboard} from "./interfaces/IDashboard.sol";
 import {IVaultHub} from "./interfaces/IVaultHub.sol";
 
-import {console} from "forge-std/console.sol";
-
 /// @title Withdrawal Queue V3 for Staking Vault Wrapper
 /// @notice Handles withdrawal requests for stvToken holders
 contract WithdrawalQueue is AccessControlEnumerable, Pausable {
@@ -334,13 +332,7 @@ contract WithdrawalQueue is AccessControlEnumerable, Pausable {
             WithdrawalRequest memory batchEnd = requests[batchEndRequestId];
 
             (uint256 batchShareRate, uint256 stETH, uint256 shares) = _calcBatch(prevBatchEnd, batchEnd);
-            console.log("batchShareRate", batchShareRate);
-            // console.log("stETH", stETH);
-            // console.log("shares", shares);
-            // console.log("batchEndRequestId", batchEndRequestId);
-            // console.log("prevBatchEndRequestId", prevBatchEndRequestId);
-            // console.log("prevBatchEnd", prevBatchEnd);
-            // console.log("batchEnd", batchEnd);
+
             if (batchShareRate > _maxShareRate) {
                 // discounted
                 ethToLock += shares * _maxShareRate / E27_PRECISION_BASE;

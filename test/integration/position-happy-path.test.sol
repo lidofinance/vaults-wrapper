@@ -52,6 +52,7 @@ contract StVaultWrapperV3Test is Test {
 
     address public user1 = address(0x1);
     address public user2 = address(0x2);
+    address public admin = address(0x3);
 
     event VaultFunded(uint256 amount);
     event ValidatorExitRequested(bytes pubkeys);
@@ -112,6 +113,7 @@ contract StVaultWrapperV3Test is Test {
         wrapper = new Wrapper{value: 0 wei}(
             address(dashboard),
             address(0), // placeholder for escrow
+            admin,
             "Staked ETH Vault Wrapper",
             "stvETH"
         );
