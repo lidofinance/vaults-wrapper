@@ -21,10 +21,23 @@ interface IHashConsensus {
 }
 
 interface IACL {
-    function grantPermission(address _entity, address _app, bytes32 _role) external;
+    function grantPermission(
+        address _entity,
+        address _app,
+        bytes32 _role
+    ) external;
     function grantRole(bytes32 role, address account) external;
-    function createPermission(address _entity, address _app, bytes32 _role, address _manager) external;
-    function setPermissionManager(address _newManager, address _app, bytes32 _role) external;
+    function createPermission(
+        address _entity,
+        address _app,
+        bytes32 _role,
+        address _manager
+    ) external;
+    function setPermissionManager(
+        address _newManager,
+        address _app,
+        bytes32 _role
+    ) external;
 }
 
 interface IVaultHub is IVaultHubIntact {
@@ -60,14 +73,24 @@ contract StVaultWrapperV3Test is Test {
     function setUp() public {
         vm.deal(address(this), 10000000 ether);
 
-        string memory deployedJson = vm.readFile("lido-core/deployed-local.json");
-        locator = ILidoLocator(vm.parseJsonAddress(deployedJson, "$.lidoLocator.proxy.address"));
+        string memory deployedJson = vm.readFile(
+            "lido-core/deployed-local.json"
+        );
+        locator = ILidoLocator(
+            vm.parseJsonAddress(deployedJson, "$.lidoLocator.proxy.address")
+        );
         vm.label(address(locator), "LidoLocator");
 
-        agent = vm.parseJsonAddress(deployedJson, "$.['app:aragon-agent'].proxy.address");
+        agent = vm.parseJsonAddress(
+            deployedJson,
+            "$.['app:aragon-agent'].proxy.address"
+        );
         vm.label(agent, "Agent");
 
-        hashConsensus = vm.parseJsonAddress(deployedJson, "$.hashConsensusForAccountingOracle.address");
+        hashConsensus = vm.parseJsonAddress(
+            deployedJson,
+            "$.hashConsensusForAccountingOracle.address"
+        );
         vm.label(hashConsensus, "HashConsensusForAO");
         vm.prank(agent);
         IHashConsensus(hashConsensus).updateInitialEpoch(1);
@@ -91,10 +114,15 @@ contract StVaultWrapperV3Test is Test {
         IVaultFactory vaultFactory = IVaultFactory(locator.vaultFactory());
         vm.label(address(vaultFactory), "VaultFactory");
 
-        assertEq(vaultHub.CONNECT_DEPOSIT(), CONNECT_DEPOSIT, "CONNECT_DEPOSIT wrong constant");
+        assertEq(
+            vaultHub.CONNECT_DEPOSIT(),
+            CONNECT_DEPOSIT,
+            "CONNECT_DEPOSIT wrong constant"
+        );
 
         uint256 confirmExpiry = 1 hours;
-        (address vaultAddress, address dashboardAddress) = vaultFactory.createVaultWithDashboard{value: CONNECT_DEPOSIT}(
+        (address vaultAddress, address dashboardAddress) = vaultFactory
+            .createVaultWithDashboard{value: CONNECT_DEPOSIT}(
             address(this),
             address(this),
             address(this),
@@ -112,6 +140,7 @@ contract StVaultWrapperV3Test is Test {
         wrapper = new Wrapper{value: 0 wei}(
             address(dashboard),
             address(0), // placeholder for escrow
+            user1,
             "Staked ETH Vault Wrapper",
             "stvETH"
         );
@@ -120,7 +149,9 @@ contract StVaultWrapperV3Test is Test {
 
         wrapper.setWithdrawalQueue(address(withdrawalQueue));
 
-        address vaultOwner = vaultHub.vaultConnection(address(stakingVault)).owner;
+        address vaultOwner = vaultHub
+            .vaultConnection(address(stakingVault))
+            .owner;
         console.log("vaultOwner", vaultOwner);
 
         vm.prank(vaultOwner);
@@ -128,11 +159,19 @@ contract StVaultWrapperV3Test is Test {
 
         dashboard.grantRole(dashboard.FUND_ROLE(), address(wrapper));
 
-
         uint256 strategyLoops = 2;
-        strategy = new ExampleStrategy(address(steth), address(wrapper), strategyLoops);
+        strategy = new ExampleStrategy(
+            address(steth),
+            address(wrapper),
+            strategyLoops
+        );
 
-        escrow = new Escrow(address(wrapper), address(withdrawalQueue), address(strategy), address(steth));
+        escrow = new Escrow(
+            address(wrapper),
+            address(withdrawalQueue),
+            address(strategy),
+            address(steth)
+        );
         wrapper.setEscrowAddress(address(escrow));
 
         // TODO: make escrow mint
@@ -146,10 +185,10 @@ contract StVaultWrapperV3Test is Test {
         vm.deal(user1, 1000 ether);
         vm.deal(user2, 1000 ether);
 
-        IACL acl = IACL(vm.parseJsonAddress(deployedJson, "$.aragon-acl.proxy.address"));
+        IACL acl = IACL(
+            vm.parseJsonAddress(deployedJson, "$.aragon-acl.proxy.address")
+        );
         vm.label(address(acl), "ACL");
-
-
     }
 
     function test_openClosePosition() public {
@@ -162,9 +201,21 @@ contract StVaultWrapperV3Test is Test {
         vm.prank(user1);
         uint256 user1StvShares = wrapper.depositETH{value: initialETH}();
 
-        assertEq(wrapper.totalAssets(), initialETH + CONNECT_DEPOSIT, "wrapper totalAssets should equal initial deposit");
-        assertEq(wrapper.totalSupply(), user1StvShares, "wrapper totalSupply should equal user1StvShares");
-        assertEq(address(stakingVault).balance, initialETH + CONNECT_DEPOSIT, "stakingVault ETH balance should equal initial deposit");
+        assertEq(
+            wrapper.totalAssets(),
+            initialETH + CONNECT_DEPOSIT,
+            "wrapper totalAssets should equal initial deposit"
+        );
+        assertEq(
+            wrapper.totalSupply(),
+            user1StvShares,
+            "wrapper totalSupply should equal user1StvShares"
+        );
+        assertEq(
+            address(stakingVault).balance,
+            initialETH + CONNECT_DEPOSIT,
+            "stakingVault ETH balance should equal initial deposit"
+        );
 
         uint256 reserveRatioBP = dashboard.reserveRatioBP();
         console.log("reserveRatioBP", reserveRatioBP);
@@ -182,13 +233,19 @@ contract StVaultWrapperV3Test is Test {
         // Assert all logged balances
         uint256 totalBasisPoints = strategy.LENDER_MOCK().TOTAL_BASIS_POINTS(); // 10000
 
-        uint256 mintedStETHShares0 = user1StvShares * (LIDO_TOTAL_BASIS_POINTS - reserveRatioBP) / LIDO_TOTAL_BASIS_POINTS;
-        uint256 borrowedEth0 = (mintedStETHShares0 * borrowRatio) / totalBasisPoints;
+        uint256 mintedStETHShares0 = (user1StvShares *
+            (LIDO_TOTAL_BASIS_POINTS - reserveRatioBP)) /
+            LIDO_TOTAL_BASIS_POINTS;
+        uint256 borrowedEth0 = (mintedStETHShares0 * borrowRatio) /
+            totalBasisPoints;
         console.log("borrowedEth0", borrowedEth0);
 
         uint256 user1StvShares1 = borrowedEth0;
-        uint256 mintedStETHShares1 = user1StvShares1 * (LIDO_TOTAL_BASIS_POINTS - reserveRatioBP) / LIDO_TOTAL_BASIS_POINTS;
-        uint256 borrowedEth1 = (mintedStETHShares1 * borrowRatio) / totalBasisPoints;
+        uint256 mintedStETHShares1 = (user1StvShares1 *
+            (LIDO_TOTAL_BASIS_POINTS - reserveRatioBP)) /
+            LIDO_TOTAL_BASIS_POINTS;
+        uint256 borrowedEth1 = (mintedStETHShares1 * borrowRatio) /
+            totalBasisPoints;
         console.log("borrowedEth1", borrowedEth1);
     }
 
@@ -201,71 +258,98 @@ contract StVaultWrapperV3Test is Test {
 
         console.log(
             string.concat(
-                "user1: ETH=", vm.toString(user1.balance),
-                " stvETH=", vm.toString(wrapper.balanceOf(user1)),
-                " stETH=", vm.toString(IERC20(stETH).balanceOf(user1)),
-                " lockedStv=", vm.toString(escrow.lockedStvSharesByUser(user1))
+                "user1: ETH=",
+                vm.toString(user1.balance),
+                " stvETH=",
+                vm.toString(wrapper.balanceOf(user1)),
+                " stETH=",
+                vm.toString(IERC20(stETH).balanceOf(user1)),
+                " lockedStv=",
+                vm.toString(escrow.lockedStvSharesByUser(user1))
             )
         );
 
         console.log(
             string.concat(
-                "user2: ETH=", vm.toString(user2.balance),
-                " stvETH=", vm.toString(wrapper.balanceOf(user2)),
-                " stETH=", vm.toString(IERC20(stETH).balanceOf(user2)),
-                " lockedStv=", vm.toString(escrow.lockedStvSharesByUser(user2))
+                "user2: ETH=",
+                vm.toString(user2.balance),
+                " stvETH=",
+                vm.toString(wrapper.balanceOf(user2)),
+                " stETH=",
+                vm.toString(IERC20(stETH).balanceOf(user2)),
+                " lockedStv=",
+                vm.toString(escrow.lockedStvSharesByUser(user2))
             )
         );
 
         console.log(
             string.concat(
-                "wrapper: ETH=", vm.toString(address(wrapper).balance),
-                " stvETH=", vm.toString(wrapper.balanceOf(address(wrapper))),
-                " stETH=", vm.toString(IERC20(stETH).balanceOf(address(wrapper))),
-                " lockedStv=", vm.toString(escrow.lockedStvSharesByUser(address(wrapper)))
+                "wrapper: ETH=",
+                vm.toString(address(wrapper).balance),
+                " stvETH=",
+                vm.toString(wrapper.balanceOf(address(wrapper))),
+                " stETH=",
+                vm.toString(IERC20(stETH).balanceOf(address(wrapper))),
+                " lockedStv=",
+                vm.toString(escrow.lockedStvSharesByUser(address(wrapper)))
             )
         );
 
         console.log(
             string.concat(
-                "escrow: ETH=", vm.toString(address(escrow).balance),
-                " stvETH=", vm.toString(wrapper.balanceOf(address(escrow))),
-                " stETH=", vm.toString(IERC20(stETH).balanceOf(address(escrow))),
-                " lockedStv=", vm.toString(escrow.lockedStvSharesByUser(address(escrow)))
+                "escrow: ETH=",
+                vm.toString(address(escrow).balance),
+                " stvETH=",
+                vm.toString(wrapper.balanceOf(address(escrow))),
+                " stETH=",
+                vm.toString(IERC20(stETH).balanceOf(address(escrow))),
+                " lockedStv=",
+                vm.toString(escrow.lockedStvSharesByUser(address(escrow)))
             )
         );
 
         console.log(
             string.concat(
-                "strategy: ETH=", vm.toString(address(strategy).balance),
-                " stvETH=", vm.toString(wrapper.balanceOf(address(strategy))),
-                " stETH=", vm.toString(IERC20(stETH).balanceOf(address(strategy))),
-                " lockedStv=", vm.toString(escrow.lockedStvSharesByUser(address(strategy)))
+                "strategy: ETH=",
+                vm.toString(address(strategy).balance),
+                " stvETH=",
+                vm.toString(wrapper.balanceOf(address(strategy))),
+                " stETH=",
+                vm.toString(IERC20(stETH).balanceOf(address(strategy))),
+                " lockedStv=",
+                vm.toString(escrow.lockedStvSharesByUser(address(strategy)))
             )
         );
 
         console.log(
             string.concat(
-                "stakingVault: ETH=", vm.toString(address(stakingVault).balance),
-                " lockedStv=", vm.toString(escrow.lockedStvSharesByUser(address(stakingVault)))
+                "stakingVault: ETH=",
+                vm.toString(address(stakingVault).balance),
+                " lockedStv=",
+                vm.toString(escrow.lockedStvSharesByUser(address(stakingVault)))
             )
         );
         console.log(
             string.concat(
-                "LenderMock: ETH=", vm.toString(lenderMock.balance),
-                " stvETH=", vm.toString(wrapper.balanceOf(lenderMock)),
-                " stETH=", vm.toString(IERC20(stETH).balanceOf(lenderMock)),
-                " lockedStv=", vm.toString(escrow.lockedStvSharesByUser(lenderMock))
+                "LenderMock: ETH=",
+                vm.toString(lenderMock.balance),
+                " stvETH=",
+                vm.toString(wrapper.balanceOf(lenderMock)),
+                " stETH=",
+                vm.toString(IERC20(stETH).balanceOf(lenderMock)),
+                " lockedStv=",
+                vm.toString(escrow.lockedStvSharesByUser(lenderMock))
             )
         );
 
         // Escrow totals
         console.log(
             string.concat(
-                "Escrow totals: totalBorrowedAssets=", vm.toString(escrow.totalBorrowedAssets()),
-                " totalLockedStvShares=", vm.toString(wrapper.totalLockedStvShares())
+                "Escrow totals: totalBorrowedAssets=",
+                vm.toString(escrow.totalBorrowedAssets()),
+                " totalLockedStvShares=",
+                vm.toString(wrapper.totalLockedStvShares())
             )
         );
     }
-
 }
