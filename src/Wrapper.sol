@@ -25,6 +25,7 @@ error InvalidReceiver();
 error NoMintingCapacityAvailable();
 error ZeroStvShares();
 error MintingMustBeAllowedForStrategy();
+error OnlyStrategyCanCall();
 
 contract Wrapper is ERC4626, AccessControlEnumerable {
     uint256 public constant E27_PRECISION_BASE = 1e27;
@@ -139,25 +140,25 @@ contract Wrapper is ERC4626, AccessControlEnumerable {
     }
 
     function previewDeposit(
-        uint256 assets
+        uint256 _assets
     ) public view override returns (uint256) {
         uint256 supply = totalSupply();
         // TODO: replace in favor of the stone?
         if (supply == 0) {
-            return assets; // 1:1 for the first deposit
+            return _assets; // 1:1 for the first deposit
         }
-        return super.previewDeposit(assets);
+        return super.previewDeposit(_assets);
     }
 
     // TODO?: implement maxRedeem, previewWithdraw, previewRedeem, withdraw, redeem, mint, maxMint, mintPreview
 
     /**
      * @notice Returns the maximum amount of underlying assets that can be withdrawn for a given owner
-     * @param owner The address to check withdrawal limits for
+     * @param _owner The address to check withdrawal limits for
      * @return Maximum withdrawable assets
      */
-    function maxWithdraw(address owner) public view override returns (uint256) {
-        return convertToAssets(balanceOf(owner));
+    function maxWithdraw(address _owner) public view override returns (uint256) {
+        return convertToAssets(balanceOf(_owner));
     }
 
     /**
@@ -165,9 +166,9 @@ contract Wrapper is ERC4626, AccessControlEnumerable {
      * @dev This function is overridden to revert, as this wrapper only accepts native ETH
      */
     function deposit(
-        uint256 /*assets*/,
-        address /*receiver*/
-    ) public pure override returns (uint256 /*shares*/) {
+        uint256 /*_assets*/,
+        address /*_receiver*/
+    ) public pure override returns (uint256 /*_shares*/) {
         revert("Use depositETH() for native ETH deposits");
     }
 
@@ -181,14 +182,14 @@ contract Wrapper is ERC4626, AccessControlEnumerable {
 
     /**
      * @notice Deposit native ETH and receive stvToken shares
-     * @param receiver Address to receive the minted shares
+     * @param _receiver Address to receive the minted shares
      * @return shares Number of shares minted
      */
     function depositETH(
-        address receiver
+        address _receiver
     ) public payable returns (uint256 shares) {
         if (msg.value == 0) revert ZeroDeposit();
-        if (receiver == address(0)) revert InvalidReceiver();
+        if (_receiver == address(0)) revert InvalidReceiver();
 
         // Check whitelist if enabled
         if (WHITELIST_ENABLED && !hasRole(DEPOSIT_ROLE, msg.sender)) {
@@ -206,24 +207,78 @@ contract Wrapper is ERC4626, AccessControlEnumerable {
         // DEV: there is check inside that Wrapper is the Vault owner
         // NB: emit no VaultFunded event because it is emitted in Vault contract
 
-        _mint(receiver, shares);
+        _mint(_receiver, shares);
 
         // // Auto-leverage
         // // if (autoLeverageEnabled && address(defaultStrategy) != address(0) && address(escrow) != address(0)) {
         // //     _autoExecuteLeverage(receiver, shares);
         // // }
-        emit Deposit(msg.sender, receiver, msg.value, shares);
+        emit Deposit(msg.sender, _receiver, msg.value, shares);
         assert(totalAssets() == totalAssetsBefore + msg.value);
         assert(totalSupply() == totalSupplyBefore + shares);
         return shares;
+    }
+
+    /**
+     * @notice Enhanced deposit that automatically mints stETH for strategies
+     * @dev Only callable by the configured strategy
+     * @param user The end user who will receive stvToken shares
+     * @return shares Number of stvToken shares minted to user
+     * @return stETHAmount Amount of stETH minted to the strategy
+     */
+    function mintStETHForStrategy(address user) external payable returns (uint256 shares, uint256 stETHAmount) {
+        if (msg.sender != address(STRATEGY)) revert OnlyStrategyCanCall();
+        if (msg.value == 0) revert ZeroDeposit();
+        if (user == address(0)) revert InvalidReceiver();
+        if (!MINTING_ALLOWED) revert MintingMustBeAllowedForStrategy();
+
+        uint256 totalAssetsBefore = totalAssets();
+        uint256 totalSupplyBefore = totalSupply();
+
+        // Calculate shares to be minted based on the assets value BEFORE this deposit
+        shares = previewDeposit(msg.value);
+
+        // Fund vault through Dashboard. This increases the totalAssets value.
+        DASHBOARD.fund{value: msg.value}();
+
+        // Mint stvToken shares to the user (not the strategy)
+        _mint(user, shares);
+
+        // Lock stvToken shares and mint stETH to strategy
+        if (shares == 0) revert ZeroStvShares();
+
+        _transfer(user, address(this), shares);
+        lockedStvSharesByUser[user] += shares;
+
+        uint256 remainingMintingCapacity = DASHBOARD.remainingMintingCapacityShares(0);
+        uint256 totalMintingCapacity = DASHBOARD.totalMintingCapacityShares();
+        assert(remainingMintingCapacity <= totalMintingCapacity);
+
+        uint256 userEthInPool = convertToAssets(shares);
+        uint256 totalVaultAssets = totalAssets();
+        uint256 userTotalMintingCapacity = (userEthInPool * totalMintingCapacity) / totalVaultAssets;
+
+        // User can mint up to their fair share, limited by remaining capacity
+        stETHAmount = userTotalMintingCapacity < remainingMintingCapacity ? userTotalMintingCapacity : remainingMintingCapacity;
+
+        if (stETHAmount == 0) revert NoMintingCapacityAvailable();
+
+        DASHBOARD.mintShares(msg.sender, stETHAmount);
+
+        emit Deposit(msg.sender, user, msg.value, shares);
+
+        assert(totalAssets() == totalAssetsBefore + msg.value);
+        assert(totalSupply() == totalSupplyBefore + shares);
+
+        return (shares, stETHAmount);
     }
 
     // =================================================================================
     // WITHDRAWAL SYSTEM WITH EXTERNAL QUEUE
     // =================================================================================
 
-    function burnShares(uint256 shares) external {
-        _burn(msg.sender, shares);
+    function burnShares(uint256 _shares) external {
+        _burn(msg.sender, _shares);
     }
 
     function setWithdrawalQueue(address _withdrawalQueue) external {
@@ -243,35 +298,33 @@ contract Wrapper is ERC4626, AccessControlEnumerable {
     // ESCROW FUNCTIONALITY (Moved from Escrow.sol)
     // =================================================================================
 
-    function openPosition(uint256 stvShares) external {
+    function openPosition(uint256 _stvShares) external {
         if (address(STRATEGY) != address(0)) {
-            // Strategy is set - transfer stvShares to strategy and let it handle minting
+            // Strategy is set - strategy will handle its own deposits via depositPlus
             assert(MINTING_ALLOWED);
-            _transfer(msg.sender, address(STRATEGY), stvShares);
-            STRATEGY.execute(msg.sender, stvShares);
+            STRATEGY.execute(msg.sender, 0); // Strategy handles its own deposits now
         } else if (MINTING_ALLOWED) {
             // No strategy but minting enabled - mint stETH directly for user
-            mintStETH(stvShares);
+            mintStETH(_stvShares);
         }
         // If no strategy and no minting - do nothing
     }
 
-    function closePosition(uint256 stvShares) external {
-        STRATEGY.finalizeExit(msg.sender);
-        stvShares = stvShares; // TODO
+    function closePosition(uint256 _stvShares) external {
+        revert("not implemented");
     }
 
-    function mintStETH(uint256 stvShares) public returns (uint256 mintedStethShares) {
-        if (stvShares == 0) revert ZeroStvShares();
+    function mintStETH(uint256 _stvShares) public returns (uint256 mintedStethShares) {
+        if (_stvShares == 0) revert ZeroStvShares();
 
-        _transfer(msg.sender, address(this), stvShares);
-        lockedStvSharesByUser[msg.sender] += stvShares;
+        _transfer(msg.sender, address(this), _stvShares);
+        lockedStvSharesByUser[msg.sender] += _stvShares;
 
         uint256 remainingMintingCapacity = DASHBOARD.remainingMintingCapacityShares(0);
         uint256 totalMintingCapacity = DASHBOARD.totalMintingCapacityShares();
         assert(remainingMintingCapacity <= totalMintingCapacity);
 
-        uint256 userEthInPool = convertToAssets(stvShares);
+        uint256 userEthInPool = convertToAssets(_stvShares);
         uint256 totalVaultAssets = totalAssets();
         uint256 userTotalMintingCapacity = (userEthInPool * totalMintingCapacity) / totalVaultAssets;
 
@@ -305,61 +358,43 @@ contract Wrapper is ERC4626, AccessControlEnumerable {
     }
 
     // =================================================================================
-    // MANAGEMENT FUNCTIONS
-    // =================================================================================
-
-    function setConfirmExpiry(
-        uint256 _newConfirmExpiry
-    ) external returns (bool) {
-        _checkRole(DEFAULT_ADMIN_ROLE, msg.sender);
-        return DASHBOARD.setConfirmExpiry(_newConfirmExpiry);
-    }
-
-    function setNodeOperatorFeeRate(
-        uint256 _newNodeOperatorFeeRate
-    ) external returns (bool) {
-        _checkRole(DEFAULT_ADMIN_ROLE, msg.sender);
-        return DASHBOARD.setNodeOperatorFeeRate(_newNodeOperatorFeeRate);
-    }
-
-    // =================================================================================
     // WHITELIST MANAGEMENT
     // =================================================================================
 
     /**
      * @notice Add an address to the whitelist
-     * @param user Address to whitelist
+     * @param _user Address to whitelist
      */
-    function addToWhitelist(address user) external {
+    function addToWhitelist(address _user) external {
         _checkRole(DEFAULT_ADMIN_ROLE, msg.sender);
-        if (isWhitelisted(user)) revert AlreadyWhitelisted(user);
+        if (isWhitelisted(_user)) revert AlreadyWhitelisted(_user);
         if (getRoleMemberCount(DEPOSIT_ROLE) >= MAX_WHITELIST_SIZE) revert WhitelistFull();
 
-        grantRole(DEPOSIT_ROLE, user);
+        grantRole(DEPOSIT_ROLE, _user);
 
-        emit WhitelistAdded(user);
+        emit WhitelistAdded(_user);
     }
 
     /**
      * @notice Remove an address from the whitelist
-     * @param user Address to remove from whitelist
+     * @param _user Address to remove from whitelist
      */
-    function removeFromWhitelist(address user) external {
+    function removeFromWhitelist(address _user) external {
         _checkRole(DEFAULT_ADMIN_ROLE, msg.sender);
-        if (!isWhitelisted(user)) revert NotInWhitelist(user);
+        if (!isWhitelisted(_user)) revert NotInWhitelist(_user);
 
-        revokeRole(DEPOSIT_ROLE, user);
+        revokeRole(DEPOSIT_ROLE, _user);
 
-        emit WhitelistRemoved(user);
+        emit WhitelistRemoved(_user);
     }
 
     /**
      * @notice Check if an address is whitelisted
-     * @param user Address to check
+     * @param _user Address to check
      * @return bool True if whitelisted
      */
-    function isWhitelisted(address user) public view returns (bool) {
-        return hasRole(DEPOSIT_ROLE, user);
+    function isWhitelisted(address _user) public view returns (bool) {
+        return hasRole(DEPOSIT_ROLE, _user);
     }
 
     /**

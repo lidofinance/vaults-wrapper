@@ -45,10 +45,10 @@ contract CoreHarness is Test {
 
     address public constant BEACON_CHAIN = address(0xbeac0);
 
-    constructor(string memory deployedJsonPath) {
+    constructor(string memory _deployedJsonPath) {
         vm.deal(address(this), 10000000 ether);
 
-        string memory deployedJson = vm.readFile(deployedJsonPath);
+        string memory deployedJson = vm.readFile(_deployedJsonPath);
         locator = ILidoLocator(vm.parseJsonAddress(deployedJson, "$.lidoLocator.proxy.address"));
         vm.label(address(locator), "LidoLocator");
 
@@ -96,7 +96,7 @@ contract CoreHarness is Test {
     }
 
 
-    function applyVaultReport(address stakingVault, uint256 _totalValue, uint256 _totalValueIncreaseBP, uint256 _cumulativeLidoFees, bool _onlyUpdateReportData) public {
+    function applyVaultReport(address _stakingVault, uint256 _totalValue, uint256 _totalValueIncreaseBP, uint256 _cumulativeLidoFees, bool _onlyUpdateReportData) public {
         uint256 reportTimestamp = block.timestamp;
         uint256 refSlot = 0;
         bytes32 treeRoot = bytes32(0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef);
@@ -108,7 +108,7 @@ contract CoreHarness is Test {
         uint256 reportLiabilityShares = 0;
         uint256 reportSlashingReserve = 0;
 
-        bool isFresh = vaultHub.isReportFresh(stakingVault);
+        bool isFresh = vaultHub.isReportFresh(_stakingVault);
         console.log("isFresh 1", isFresh);
 
         vm.warp(block.timestamp + 12);
@@ -116,7 +116,7 @@ contract CoreHarness is Test {
         lazyOracle.updateReportData(reportTimestamp, refSlot, treeRoot, reportCid);
 
         if (!_onlyUpdateReportData) {
-            lazyOracle.mock__updateVaultData(stakingVault, reportTotalValue, reportCumulativeLidoFees, reportLiabilityShares, reportSlashingReserve);
+            lazyOracle.mock__updateVaultData(_stakingVault, reportTotalValue, reportCumulativeLidoFees, reportLiabilityShares, reportSlashingReserve);
         }
 
         // vm.prank(address(lazyOracle));
@@ -135,10 +135,10 @@ contract CoreHarness is Test {
      * @dev Mock function to simulate validators receiving ETH from the staking vault
      * This replaces the manual beacon chain transfer simulation in tests
      */
-    function mockValidatorsReceiveETH(address stakingVault) external returns (uint256 transferredAmount) {
-        transferredAmount = stakingVault.balance;
+    function mockValidatorsReceiveETH(address _stakingVault) external returns (uint256 transferredAmount) {
+        transferredAmount = _stakingVault.balance;
         if (transferredAmount > 0) {
-            vm.prank(stakingVault);
+            vm.prank(_stakingVault);
             (bool sent, ) = BEACON_CHAIN.call{value: transferredAmount}("");
             require(sent, "ETH send to beacon chain failed");
         }
@@ -149,9 +149,9 @@ contract CoreHarness is Test {
      * @dev Mock function to simulate validator exits returning ETH to the staking vault
      * This replaces the manual ETH return simulation in tests
      */
-    function mockValidatorExitReturnETH(address stakingVault, uint256 ethAmount) external {
+    function mockValidatorExitReturnETH(address _stakingVault, uint256 _ethAmount) external {
         vm.prank(BEACON_CHAIN);
-        (bool success, ) = stakingVault.call{value: ethAmount}("");
+        (bool success, ) = _stakingVault.call{value: _ethAmount}("");
         require(success, "ETH return from beacon chain failed");
     }
 }
