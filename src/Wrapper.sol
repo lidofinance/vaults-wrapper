@@ -30,7 +30,10 @@ error OnlyStrategyCanCall();
 contract Wrapper is ERC4626, AccessControlEnumerable {
     uint256 public constant E27_PRECISION_BASE = 1e27;
     uint256 public constant MAX_WHITELIST_SIZE = 1000;
+
     bytes32 public constant DEPOSIT_ROLE = keccak256("DEPOSIT_ROLE");
+    bytes32 public constant REQUEST_VALIDATOR_EXIT_ROLE = keccak256("REQUEST_VALIDATOR_EXIT_ROLE");
+    bytes32 public constant TRIGGER_VALIDATOR_WITHDRAWAL_ROLE = keccak256("TRIGGER_VALIDATOR_WITHDRAWAL_ROLE");
 
     bool public immutable WHITELIST_ENABLED;
     bool public immutable MINTING_ALLOWED;
@@ -416,5 +419,27 @@ contract Wrapper is ERC4626, AccessControlEnumerable {
             addresses[i] = getRoleMember(DEPOSIT_ROLE, i);
         }
         return addresses;
+    }
+
+    function requestValidatorExit(
+        bytes calldata _pubkeys
+    ) external onlyRoleOrEmergencyExit(REQUEST_VALIDATOR_EXIT_ROLE) {
+        DASHBOARD.requestValidatorExit(_pubkeys);
+    }
+
+    function triggerValidatorWithdrawals(
+        bytes calldata _pubkeys, 
+        uint64[] calldata _amounts, 
+        address _refundRecipient
+    ) external payable onlyRoleOrEmergencyExit(TRIGGER_VALIDATOR_WITHDRAWAL_ROLE) {
+        DASHBOARD.triggerValidatorWithdrawals{value: msg.value}(_pubkeys, _amounts, _refundRecipient);
+    }
+
+    /// @notice Modifier to check role or Emergency Exit
+    modifier onlyRoleOrEmergencyExit(bytes32 role) {
+        if (!withdrawalQueue.isEmergencyExitActivated()) {
+            _checkRole(role, msg.sender);
+        }
+        _;
     }
 }

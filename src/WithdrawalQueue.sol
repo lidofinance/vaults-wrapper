@@ -32,6 +32,9 @@ contract WithdrawalQueue is AccessControlEnumerable, Pausable {
     /// @dev return value for the `find...` methods in case of no result
     uint256 internal constant NOT_FOUND = 0;
 
+    /// @notice max time for finalization of the withdrawal request
+    uint256 public constant MAX_ACCEPTABLE_WQ_FINALIZATION_TIME_IN_SECONDS = 60 days;
+
     /// @notice structure representing a request for withdrawal
     struct WithdrawalRequest {
         /// @notice sum of all assets submitted for withdrawals including this request
@@ -84,6 +87,8 @@ contract WithdrawalQueue is AccessControlEnumerable, Pausable {
     uint256 public totalLockedAssets;
     /// @dev withdrawal requests mapped to the owners
     mapping(address => EnumerableSet.UintSet) private requestsByOwner;
+    /// @dev timestamp of emergency exit activation
+    uint256 public emergencyExitActivationTimestamp;
 
     event Initialized(address indexed admin);
     event WithdrawalRequested(
@@ -105,6 +110,7 @@ contract WithdrawalQueue is AccessControlEnumerable, Pausable {
         address indexed receiver,
         uint256 amountOfETH
     );
+    event EmergencyExitActivated(uint256 timestamp);
 
     error AdminZeroAddress();
     error RequestAmountTooSmall(uint256 amount);
@@ -134,6 +140,7 @@ contract WithdrawalQueue is AccessControlEnumerable, Pausable {
     error EmptyBatches();
     error BatchesAreNotSorted();
     error RequestIdsNotSorted();
+    error InvalidEmergencyExitActivation();
 
     constructor(Wrapper _wrapper) {
         WRAPPER = _wrapper;
@@ -397,7 +404,7 @@ contract WithdrawalQueue is AccessControlEnumerable, Pausable {
     /// @param _lastRequestIdToFinalize the last request ID to finalize
     function finalize(uint256 _lastRequestIdToFinalize)
         external
-        onlyRole(FINALIZE_ROLE)
+        onlyRoleOrEmergencyExit(FINALIZE_ROLE)
     {
         require(_lastRequestIdToFinalize > getLastFinalizedRequestId(), "Invalid request ID");
         require(_lastRequestIdToFinalize <= getLastRequestId(), "Request not found");
@@ -744,4 +751,45 @@ contract WithdrawalQueue is AccessControlEnumerable, Pausable {
 
     /// @notice Receive ETH
     receive() external payable {}
+
+    /// @notice Returns true if Emergency Exit is activated
+    function isEmergencyExitActivated() public view returns (bool) {
+        return emergencyExitActivationTimestamp > 0;
+    }
+
+    /// @notice Returns true if requests have not been finalized for a long time
+    function isWithdrawalQueueStuck() public view returns (bool) {
+        if (lastFinalizedRequestId >= lastRequestId) {
+            return false;
+        }
+
+        uint256 firstPendingRequest = lastFinalizedRequestId + 1;
+
+        if (firstPendingRequest > lastRequestId) {
+            return false;
+        }
+
+        uint256 firstPendingRequestTimestamp = requests[firstPendingRequest].timestamp;
+        uint256 maxAcceptableTime = firstPendingRequestTimestamp + MAX_ACCEPTABLE_WQ_FINALIZATION_TIME_IN_SECONDS;
+
+        return maxAcceptableTime < block.timestamp;
+    }
+
+    /// @notice Permissionless method to activate Emergency Exit
+    /// @dev can only be called if Withdrawal Queue is stuck
+    function activateEmergencyExit() external {
+        if (!isWithdrawalQueueStuck()) revert InvalidEmergencyExitActivation();
+
+        emergencyExitActivationTimestamp = block.timestamp;
+
+        emit EmergencyExitActivated(emergencyExitActivationTimestamp);
+    }
+
+    /// @notice Modifier to check role or Emergency Exit
+    modifier onlyRoleOrEmergencyExit(bytes32 role) {
+        if (!isEmergencyExitActivated()) {
+            _checkRole(role, msg.sender);
+        }
+        _;
+    }
 }
