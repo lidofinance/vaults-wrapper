@@ -772,7 +772,7 @@ contract WithdrawalQueue is AccessControlEnumerable, Pausable {
         uint256 firstPendingRequestTimestamp = requests[firstPendingRequest].timestamp;
         uint256 maxAcceptableTime = firstPendingRequestTimestamp + MAX_ACCEPTABLE_WQ_FINALIZATION_TIME_IN_SECONDS;
 
-        return maxAcceptableTime < block.timestamp;
+        return maxAcceptableTime <= block.timestamp;
     }
 
     /// @notice Permissionless method to activate Emergency Exit
