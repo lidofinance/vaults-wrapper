@@ -339,7 +339,7 @@ contract Wrapper is ERC4626, AccessControlEnumerable {
         DASHBOARD.mintShares(msg.sender, mintedStethShares);
     }
 
-    function getUserStvShares(address _user) external view returns (uint256) {
+    function getUserLockedStvShares(address _user) external view returns (uint256) {
         return lockedStvSharesByUser[_user];
     }
 
