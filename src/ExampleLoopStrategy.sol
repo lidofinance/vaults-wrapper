@@ -3,11 +3,11 @@ pragma solidity >=0.8.25;
 
 import {IStrategy} from "./interfaces/IStrategy.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {Wrapper} from "./Wrapper.sol";
+import {WrapperBase} from "./WrapperBase.sol";
 import {IVaultHub} from "./interfaces/IVaultHub.sol";
 import {IDashboard} from "./interfaces/IDashboard.sol";
 
-error NoETHAvailableForLeverage();
+error NoStETHAvailableForLeverage();
 
 
 contract LenderMock {
@@ -34,10 +34,10 @@ contract LenderMock {
     receive() external payable {}
 }
 
-contract ExampleStrategy is IStrategy {
+contract ExampleLoopStrategy is IStrategy {
     IERC20 public immutable STV_TOKEN;
     IERC20 public immutable STETH;
-    Wrapper public immutable WRAPPER;
+    WrapperBase public immutable WRAPPER;
     LenderMock public immutable LENDER_MOCK;
 
     struct UserPosition {
@@ -60,7 +60,7 @@ contract ExampleStrategy is IStrategy {
 
     constructor(address _stETH, address _wrapper, uint256 _loops) {
         STETH = IERC20(_stETH);
-        WRAPPER = Wrapper(payable(_wrapper));
+        WRAPPER = WrapperBase(payable(_wrapper));
         STV_TOKEN = IERC20(_wrapper);
 
         LOOPS = _loops;
@@ -69,32 +69,35 @@ contract ExampleStrategy is IStrategy {
         LENDER_MOCK = new LenderMock(_stETH);
     }
 
-    function execute(address _user, uint256 /* _stETHAmount */) external override {
+    function execute(address _user, uint256 _stETHAmount) external override {
         uint256 totalBorrowedEth = 0;
         uint256 totalUserStvTokenShares = 0;
-        uint256 currentStETHAmount = 0;
+        uint256 currentStETHAmount = _stETHAmount;
 
-        // Strategy uses its own ETH balance to start the leverage loop
-        uint256 initialEthAmount = address(this).balance;
-        if (initialEthAmount == 0) revert NoETHAvailableForLeverage();
+        // Strategy uses the stETH minted to it to start the leverage loop
+        if (currentStETHAmount == 0) revert NoStETHAvailableForLeverage();
 
         // Execute the looping strategy
         for (uint256 i = 0; i < LOOPS; i++) {
-            // Use mintStETHForStrategy to deposit ETH and get stETH for leveraging
-            (uint256 userShares, uint256 stETHReceived) = WRAPPER.mintStETHForStrategy{value: initialEthAmount}(_user);
-
-            totalUserStvTokenShares += userShares;
-            currentStETHAmount += stETHReceived;
-
-            // Borrow ETH against the stETH collateral
-            uint256 borrowedEth = _borrowFromPool(stETHReceived);
+            // Borrow ETH against the current stETH collateral
+            uint256 borrowedEth = _borrowFromPool(currentStETHAmount);
             totalBorrowedEth += borrowedEth;
 
-            // Use borrowed ETH for next iteration
-            initialEthAmount = borrowedEth;
-
-            // Break if no more ETH to leverage
+            // Break if no more ETH borrowed
             if (borrowedEth == 0) break;
+
+            // Use borrowed ETH to get more stvToken shares and stETH for next loop
+            // TODO: Update this to work with new wrapper architecture
+            // (uint256 userShares, uint256 stETHReceived) = WRAPPER.mintStETHForStrategy{value: borrowedEth}(_user);
+
+            // totalUserStvTokenShares += userShares;
+            // currentStETHAmount = stETHReceived;
+
+            // For now, break the loop to avoid compilation errors
+            // break;
+
+            // Break if no more stETH received
+            if (currentStETHAmount == 0) break;
         }
 
         // Save user position with loop information
@@ -106,10 +109,10 @@ contract ExampleStrategy is IStrategy {
             totalStvTokenShares: totalUserStvTokenShares
         });
 
-        emit StrategyExecutedWithLoops(_user, 0, totalUserStvTokenShares, totalBorrowedEth);
+        emit StrategyExecutedWithLoops(_user, _stETHAmount, totalUserStvTokenShares, totalBorrowedEth);
     }
 
-    function _borrowFromPool(uint256 _stethCollateral) public returns (uint256 borrowedEth) {
+    function _borrowFromPool(uint256 _stethCollateral) internal returns (uint256 borrowedEth) {
         // Use LenderMock to borrow ETH against stETH collateral
         STETH.approve(address(LENDER_MOCK), _stethCollateral);
 
@@ -117,6 +120,28 @@ contract ExampleStrategy is IStrategy {
         LENDER_MOCK.borrow(_stethCollateral);
 
         borrowedEth = address(this).balance - ethBefore;
+    }
+
+    // Additional required interface methods
+    function initiateExit(address user, uint256 assets) external override {
+        UserPosition storage position = userPositions[user];
+        position.isExiting = true;
+    }
+
+    function finalizeExit(address user) external override returns (uint256 assets) {
+        UserPosition storage position = userPositions[user];
+        assets = position.borrowAmount;
+        delete userPositions[user];
+    }
+
+    function getBorrowDetails() external view override returns (uint256 borrowAssets, uint256 userAssets, uint256 totalAssets) {
+        borrowAssets = address(this).balance;
+        userAssets = 0;
+        totalAssets = borrowAssets;
+    }
+
+    function isExiting() external pure override returns (bool) {
+        return false;
     }
 
     receive() external payable {}

@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0
 pragma solidity >=0.8.25;
 
-import {Wrapper} from "./Wrapper.sol";
+import {WrapperBase} from "./WrapperBase.sol";
+import {WrapperA} from "./WrapperA.sol";
+import {WrapperB} from "./WrapperB.sol";
+import {WrapperC} from "./WrapperC.sol";
 import {WithdrawalQueue} from "./WithdrawalQueue.sol";
 
 import {IVaultFactory} from "./interfaces/IVaultFactory.sol";
@@ -26,11 +29,18 @@ contract Factory {
         STETH = _steth;
     }
 
+    enum WrapperConfiguration {
+        NO_MINTING_NO_STRATEGY,    // (A) no minting, no strategy
+        MINTING_NO_STRATEGY,       // (B) minting, no strategy  
+        MINTING_AND_STRATEGY       // (C) minting and strategy
+    }
+    
     function createVaultWithWrapper(
         address _nodeOperator,
         address _nodeOperatorManager,
         uint256 _nodeOperatorFeeBP,
         uint256 _confirmExpiry,
+        WrapperConfiguration _configuration,
         address _strategy
     )
         external
@@ -38,7 +48,7 @@ contract Factory {
         returns (
             address vault,
             address dashboard,
-            Wrapper wrapper,
+            WrapperBase wrapper,
             WithdrawalQueue withdrawalQueue
         )
     {
@@ -55,25 +65,42 @@ contract Factory {
 
         IDashboard _dashboard = IDashboard(payable(dashboard));
 
-        // TODO: proxy when decided on contract setup
-        wrapper = new Wrapper(
-            dashboard,
-            msg.sender,
-            NAME,
-            SYMBOL,
-            false, // whitelist disabled by default
-            address(_strategy) != address(0), // enable minting if strategy is provided
-            _strategy
-        );
+        // Deploy the appropriate wrapper based on configuration
+        if (_configuration == WrapperConfiguration.NO_MINTING_NO_STRATEGY) {
+            wrapper = new WrapperA(
+                dashboard,
+                msg.sender,
+                NAME,
+                SYMBOL,
+                false // whitelist disabled by default
+            );
+        } else if (_configuration == WrapperConfiguration.MINTING_NO_STRATEGY) {
+            wrapper = new WrapperB(
+                dashboard,
+                msg.sender,
+                NAME,
+                SYMBOL,
+                false // whitelist disabled by default
+            );
+        } else if (_configuration == WrapperConfiguration.MINTING_AND_STRATEGY) {
+            wrapper = new WrapperC(
+                dashboard,
+                msg.sender,
+                NAME,
+                SYMBOL,
+                false, // whitelist disabled by default
+                _strategy
+            );
+        } else {
+            revert("Invalid configuration");
+        }
 
         withdrawalQueue = new WithdrawalQueue(wrapper);
         withdrawalQueue.initialize(msg.sender);
 
-        // Grant mint/burn roles to wrapper if strategy is provided
-        if (address(_strategy) != address(0)) {
-            _dashboard.grantRole(_dashboard.MINT_ROLE(), address(wrapper));
-            _dashboard.grantRole(_dashboard.BURN_ROLE(), address(wrapper));
-        }
+        // Grant fund/withdraw roles to wrapper for all configurations
+        _dashboard.grantRole(_dashboard.FUND_ROLE(), address(wrapper));
+        _dashboard.grantRole(_dashboard.WITHDRAW_ROLE(), address(wrapper));
 
         wrapper.setWithdrawalQueue(address(withdrawalQueue));
 

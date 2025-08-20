@@ -14,6 +14,8 @@ contract MockDashboard is AccessControlEnumerable {
 
     bytes32 public constant MINT_ROLE = keccak256("MINT_ROLE");
     bytes32 public constant BURN_ROLE = keccak256("BURN_ROLE");
+    bytes32 public constant FUND_ROLE = keccak256("FUND_ROLE");
+    bytes32 public constant WITHDRAW_ROLE = keccak256("WITHDRAW_ROLE");
 
     constructor(address _vaultHub, address _stakingVault, address _admin) {
         VAULT_HUB = MockVaultHub(_vaultHub);
@@ -44,6 +46,39 @@ contract MockDashboard is AccessControlEnumerable {
 
     function mock_setLocked(uint256 _locked) external {
         locked = _locked;
+    }
+
+    // Mock implementation for minting stETH
+    function mintShares(address to, uint256 amount) external {
+        // Mock implementation - just emit an event or do nothing
+    }
+
+    function burnShares(uint256 amount) external {
+        // Mock implementation
+    }
+
+    function remainingMintingCapacityShares(uint256 vaultId) external pure returns (uint256) {
+        return 1000 ether; // Mock large capacity
+    }
+
+    function totalMintingCapacityShares() external pure returns (uint256) {
+        return 1000 ether; // Mock large capacity
+    }
+
+    function requestValidatorExit(bytes calldata pubkeys) external {
+        // Mock implementation
+    }
+
+    function triggerValidatorWithdrawals(
+        bytes calldata pubkeys,
+        uint64[] calldata amounts,
+        address refundRecipient
+    ) external payable {
+        // Mock implementation
+    }
+
+    function voluntaryDisconnect() external {
+        // Mock implementation
     }
 
     receive() external payable {}

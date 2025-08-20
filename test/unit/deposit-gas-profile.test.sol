@@ -2,7 +2,7 @@
 pragma solidity >=0.8.25;
 
 import {Test, console} from "forge-std/Test.sol";
-import {Wrapper} from "src/Wrapper.sol";
+import {WrapperA} from "src/WrapperA.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
 
 // Mock contracts
@@ -38,8 +38,8 @@ contract MockStakingVault {
 }
 
 contract DepositGasProfileTest is Test {
-    Wrapper public wrapperWithWhitelist;
-    Wrapper public wrapperWithoutWhitelist;
+    WrapperA public wrapperWithWhitelist;
+    WrapperA public wrapperWithoutWhitelist;
     MockDashboard public dashboardWithWhitelist;
     MockDashboard public dashboardWithoutWhitelist;
     MockVaultHub public vaultHubWithWhitelist;
@@ -72,25 +72,21 @@ contract DepositGasProfileTest is Test {
         vm.deal(address(stakingVaultWithoutWhitelist), 1 ether);
 
         // Create wrapper with whitelist enabled
-        wrapperWithWhitelist = new Wrapper(
+        wrapperWithWhitelist = new WrapperA(
             address(dashboardWithWhitelist),
             owner,
             "Whitelisted Vault",
             "wstvETH",
-            true, // whitelist enabled
-            false, // minting disabled
-            address(0) // no strategy
+            true // whitelist enabled
         );
 
         // Create wrapper without whitelist
-        wrapperWithoutWhitelist = new Wrapper(
+        wrapperWithoutWhitelist = new WrapperA(
             address(dashboardWithoutWhitelist),
             owner,
             "Open Vault",
             "ostvETH",
-            false, // whitelist disabled
-            false, // minting disabled
-            address(0) // no strategy
+            false // whitelist disabled
         );
 
         // Grant FUND_ROLE to wrappers

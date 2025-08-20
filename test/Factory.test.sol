@@ -4,7 +4,9 @@ pragma solidity >=0.8.25;
 import {Test} from "forge-std/Test.sol";
 
 import {Factory} from "../src/Factory.sol";
-import {Wrapper} from "../src/Wrapper.sol";
+import {WrapperBase} from "../src/WrapperBase.sol";
+import {WrapperA} from "../src/WrapperA.sol";
+import {WrapperC} from "../src/WrapperC.sol";
 import {WithdrawalQueue} from "../src/WithdrawalQueue.sol";
 
 import {MockERC20} from "./mocks/MockERC20.sol";
@@ -54,19 +56,20 @@ contract FactoryTest is Test {
         (
             address vault,
             address dashboard,
-            Wrapper wrapper,
+            WrapperBase wrapper,
             WithdrawalQueue withdrawalQueue
         ) = WrapperFactory.createVaultWithWrapper{value: connectDeposit}(
                 nodeOperator,
                 nodeOperatorManager,
                 100, // 1% fee
                 3600, // 1 hour confirm expiry
+                Factory.WrapperConfiguration.NO_MINTING_NO_STRATEGY,
                 address(0) // no strategy for this test
             );
         assertEq(address(wrapper.STAKING_VAULT()), address(vault));
         assertEq(address(wrapper.DASHBOARD()), address(dashboard));
         assertEq(address(wrapper.withdrawalQueue()), address(withdrawalQueue));
-        assertEq(address(wrapper.STRATEGY()), address(0)); // no strategy set
+        // WrapperA doesn't have a STRATEGY field
 
         MockDashboard mockDashboard = MockDashboard(payable(dashboard));
 
@@ -93,6 +96,7 @@ contract FactoryTest is Test {
             nodeOperatorManager,
             100, // 1% fee
             3600, // 1 hour confirm expiry
+            Factory.WrapperConfiguration.NO_MINTING_NO_STRATEGY,
             address(0) // no strategy for this test
         );
     }
@@ -102,16 +106,19 @@ contract FactoryTest is Test {
         (
             address vault,
             address dashboard,
-            Wrapper wrapper,
+            WrapperBase wrapper,
             WithdrawalQueue withdrawalQueue
         ) = WrapperFactory.createVaultWithWrapper{value: connectDeposit}(
                 nodeOperator,
                 nodeOperatorManager,
                 100, // 1% fee
                 3600, // 1 hour confirm expiry
+                Factory.WrapperConfiguration.MINTING_AND_STRATEGY,
                 strategyAddress // strategy for this test
             );
-        assertEq(address(wrapper.STRATEGY()), strategyAddress);
+        // Cast to WrapperC to access STRATEGY
+        WrapperC wrapperC = WrapperC(payable(address(wrapper)));
+        assertEq(address(wrapperC.STRATEGY()), strategyAddress);
 
         MockDashboard mockDashboard = MockDashboard(payable(dashboard));
 

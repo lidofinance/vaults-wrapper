@@ -4,7 +4,8 @@ pragma solidity >=0.8.25;
 import {Script} from "forge-std/Script.sol";
 import {console} from "forge-std/console.sol";
 import {Distributor} from "../src/Distributor.sol";
-import {Wrapper} from "../src/Wrapper.sol";
+import {WrapperA} from "../src/WrapperA.sol";
+import {WrapperBase} from "../src/WrapperBase.sol";
 
 import {ILidoLocator} from "lido-core/contracts/common/interfaces/ILidoLocator.sol";
 
@@ -43,14 +44,12 @@ contract DeployWrapper is Script {
         MockVaultHub vaultHub = new MockVaultHub();
         MockDashboard dashboard = new MockDashboard(address(vaultHub), address(stakingVault), deployer);
 
-        Wrapper wrapper = new Wrapper(
+        WrapperA wrapper = new WrapperA(
             address(dashboard),
             deployer,
             "STV",
             "STV",
-            false, // whitelist disabled
-            false, // minting disabled
-            address(0) // no strategy
+            false // whitelist disabled
         );
 
         MockERC20 obolToken = new MockERC20("ObolToken", "ObolTest");
@@ -94,7 +93,7 @@ contract DeployWrapper is Script {
             );
     }
 
-    function performTestTransactions(Wrapper wrapper) internal {
+    function performTestTransactions(WrapperBase wrapper) internal {
         // Create test users
         uint256 user1PrivateKey = 0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d;
         uint256 user2PrivateKey = 0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a;

@@ -1,0 +1,467 @@
+// SPDX-License-Identifier: UNLICENSED
+pragma solidity >=0.8.25;
+
+import {Test, console} from "forge-std/Test.sol";
+
+import {CoreHarness} from "test/utils/CoreHarness.sol";
+import {IDashboard} from "src/interfaces/IDashboard.sol";
+import {IVaultHub} from "src/interfaces/IVaultHub.sol";
+import {IStakingVault} from "src/interfaces/IStakingVault.sol";
+import {ILido} from "src/interfaces/ILido.sol";
+
+import {WrapperA} from "src/WrapperA.sol";
+import {WrapperB} from "src/WrapperB.sol";
+import {WrapperC} from "src/WrapperC.sol";
+import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
+import {ExampleLoopStrategy, LenderMock} from "src/ExampleLoopStrategy.sol";
+import {IVaultFactory} from "src/interfaces/IVaultFactory.sol";
+
+/**
+ * @title ScenariosTest
+ * @notice Integration tests implementing all scenarios from src/scenarios.md
+ * Tests the three wrapper configurations (A/B/C) and specific use cases
+ */
+contract ScenariosTest is Test {
+    CoreHarness public core;
+    
+    // Wrapper configurations
+    WrapperA public wrapperA; // Config A: no minting, no strategy
+    WrapperB public wrapperB; // Config B: minting, no strategy 
+    WrapperC public wrapperC; // Config C: minting and strategy
+    
+    // Supporting infrastructure
+    IDashboard public dashboardA;
+    IDashboard public dashboardB;
+    IDashboard public dashboardC;
+    IStakingVault public vaultA;
+    IStakingVault public vaultB;
+    IStakingVault public vaultC;
+    WithdrawalQueue public queueA;
+    WithdrawalQueue public queueB;
+    WithdrawalQueue public queueC;
+    ExampleLoopStrategy public strategy;
+    
+    // Core contracts
+    ILido public steth;
+    IVaultHub public vaultHub;
+    
+    // Test users
+    address public constant USER1 = address(0x1001);
+    address public constant USER2 = address(0x1002);
+    address public constant USER3 = address(0x1003);
+    
+    // Test constants
+    uint256 public constant WEI_ROUNDING_TOLERANCE = 2;
+    uint256 public CONNECT_DEPOSIT;
+    uint256 public constant NODE_OPERATOR_FEE_RATE = 100; // 1%
+    uint256 public constant CONFIRM_EXPIRY = 1 hours;
+    
+    function setUp() public {
+        core = new CoreHarness("lido-core/deployed-local.json");
+        steth = core.steth();
+        vaultHub = core.vaultHub();
+        CONNECT_DEPOSIT = vaultHub.CONNECT_DEPOSIT();
+        
+        // Setup test users with ETH
+        vm.deal(USER1, 1000 ether);
+        vm.deal(USER2, 1000 ether); 
+        vm.deal(USER3, 1000 ether);
+        vm.deal(address(this), 10 ether);
+        
+        _deployWrapperConfigurations();
+    }
+    
+    function _deployWrapperConfigurations() internal {
+        IVaultFactory vaultFactory = IVaultFactory(core.locator().vaultFactory());
+        
+        // Deploy Configuration A: no minting, no strategy
+        (address vaultAAddr, address dashboardAAddr) = vaultFactory.createVaultWithDashboard{value: CONNECT_DEPOSIT}(
+            address(this), address(this), address(this), 0, CONFIRM_EXPIRY, new IVaultFactory.RoleAssignment[](0)
+        );
+        vaultA = IStakingVault(vaultAAddr);
+        dashboardA = IDashboard(payable(dashboardAAddr));
+        dashboardA.grantRole(dashboardA.DEFAULT_ADMIN_ROLE(), address(this));
+        core.applyVaultReport(address(vaultA), 0, 0, 0, true);
+        dashboardA.setNodeOperatorFeeRate(NODE_OPERATOR_FEE_RATE);
+        
+        wrapperA = new WrapperA(address(dashboardA), address(this), "Config A", "stvA", false);
+        queueA = new WithdrawalQueue(wrapperA);
+        queueA.initialize(address(this));
+        wrapperA.setWithdrawalQueue(address(queueA));
+        queueA.grantRole(queueA.FINALIZE_ROLE(), address(this));
+        queueA.resume();
+        dashboardA.grantRole(dashboardA.FUND_ROLE(), address(wrapperA));
+        dashboardA.grantRole(dashboardA.WITHDRAW_ROLE(), address(queueA));
+        
+        // Deploy Configuration B: minting, no strategy
+        (address vaultBAddr, address dashboardBAddr) = vaultFactory.createVaultWithDashboard{value: CONNECT_DEPOSIT}(
+            address(this), address(this), address(this), 0, CONFIRM_EXPIRY, new IVaultFactory.RoleAssignment[](0)
+        );
+        vaultB = IStakingVault(vaultBAddr);
+        dashboardB = IDashboard(payable(dashboardBAddr));
+        dashboardB.grantRole(dashboardB.DEFAULT_ADMIN_ROLE(), address(this));
+        core.applyVaultReport(address(vaultB), 0, 0, 0, true);
+        dashboardB.setNodeOperatorFeeRate(NODE_OPERATOR_FEE_RATE);
+        
+        wrapperB = new WrapperB(address(dashboardB), address(this), "Config B", "stvB", false);
+        queueB = new WithdrawalQueue(wrapperB);
+        queueB.initialize(address(this));
+        wrapperB.setWithdrawalQueue(address(queueB));
+        queueB.grantRole(queueB.FINALIZE_ROLE(), address(this));
+        queueB.resume();
+        dashboardB.grantRole(dashboardB.FUND_ROLE(), address(wrapperB));
+        dashboardB.grantRole(dashboardB.WITHDRAW_ROLE(), address(queueB));
+        
+        // Deploy Configuration C: minting and strategy
+        (address vaultCAddr, address dashboardCAddr) = vaultFactory.createVaultWithDashboard{value: CONNECT_DEPOSIT}(
+            address(this), address(this), address(this), 0, CONFIRM_EXPIRY, new IVaultFactory.RoleAssignment[](0)
+        );
+        vaultC = IStakingVault(vaultCAddr);
+        dashboardC = IDashboard(payable(dashboardCAddr));
+        dashboardC.grantRole(dashboardC.DEFAULT_ADMIN_ROLE(), address(this));
+        core.applyVaultReport(address(vaultC), 0, 0, 0, true);
+        dashboardC.setNodeOperatorFeeRate(NODE_OPERATOR_FEE_RATE);
+        
+        strategy = new ExampleLoopStrategy(address(steth), address(0), 2); // 2 loops
+        vm.deal(address(strategy.LENDER_MOCK()), 1000 ether);
+        
+        wrapperC = new WrapperC(address(dashboardC), address(this), "Config C", "stvC", false, address(strategy));
+        queueC = new WithdrawalQueue(wrapperC);
+        queueC.initialize(address(this));
+        wrapperC.setWithdrawalQueue(address(queueC));
+        queueC.grantRole(queueC.FINALIZE_ROLE(), address(this));
+        queueC.resume();
+        
+        // Update strategy with wrapper reference
+        strategy = new ExampleLoopStrategy(address(steth), address(wrapperC), 2);
+        vm.deal(address(strategy.LENDER_MOCK()), 1000 ether);
+        wrapperC.setStrategy(address(strategy));
+        
+        dashboardC.grantRole(dashboardC.FUND_ROLE(), address(wrapperC));
+        dashboardC.grantRole(dashboardC.WITHDRAW_ROLE(), address(queueC));
+    }
+    
+    // ========================================================================
+    // Case 1: Two users can mint up to the full vault capacity
+    // ========================================================================
+    
+    function test_case1_twoUsersCanMintUpToFullCapacity() public {
+        console.log("=== Case 1: Two users can mint up to the full vault capacity ===");
+        
+        uint256 user1Deposit = 10_000 wei;
+        uint256 user2Deposit = 15_000 wei;
+        
+        // Step 1: Both users deposit to Configuration B (minting, no strategy)
+        vm.deal(USER1, user1Deposit);
+        vm.deal(USER2, user2Deposit);
+        
+        vm.prank(USER1);
+        uint256 user1Shares = wrapperB.depositETH{value: user1Deposit}(USER1);
+        
+        vm.prank(USER2);
+        uint256 user2Shares = wrapperB.depositETH{value: user2Deposit}(USER2);
+        
+        console.log("User1 deposited:", user1Deposit, "received shares:", user1Shares);
+        console.log("User2 deposited:", user2Deposit, "received shares:", user2Shares);
+        
+        // Step 2: Verify users received stETH automatically
+        uint256 user1StETH = steth.balanceOf(USER1);
+        uint256 user2StETH = steth.balanceOf(USER2);
+        
+        console.log("User1 stETH balance:", user1StETH);
+        console.log("User2 stETH balance:", user2StETH);
+        
+        // Step 3: Check remaining minting capacity
+        uint256 remainingCapacity = dashboardB.remainingMintingCapacityShares(0);
+        uint256 totalCapacity = dashboardB.totalMintingCapacityShares();
+        
+        console.log("Remaining minting capacity:", remainingCapacity);
+        console.log("Total minting capacity:", totalCapacity);
+        
+        // Verify capacity is fully utilized (within rounding tolerance)
+        assertTrue(remainingCapacity <= WEI_ROUNDING_TOLERANCE, "Remaining capacity should be zero or minimal due to rounding");
+        
+        // Verify total stETH minted equals capacity used
+        uint256 totalStETHMinted = user1StETH + user2StETH;
+        uint256 capacityUsed = totalCapacity - remainingCapacity;
+        assertEq(totalStETHMinted, capacityUsed, "Total stETH minted should equal capacity used");
+        
+        console.log("PASS Case 1 passed: Full vault capacity utilized with minimal remaining");
+    }
+    
+    // ========================================================================
+    // Case 2: User3 deposits and fully mints after user1 and user2
+    // ========================================================================
+    
+    function test_case2_user3DepositsAfterFullCapacity() public {
+        console.log("=== Case 2: User3 deposits and fully mints after user1 and user2 ===");
+        
+        // First run Case 1 scenario
+        test_case1_twoUsersCanMintUpToFullCapacity();
+        
+        uint256 user3Deposit = 5_000 wei;
+        vm.deal(USER3, user3Deposit);
+        
+        // Step 1: User3 deposits more ETH
+        vm.prank(USER3);
+        uint256 user3Shares = wrapperB.depositETH{value: user3Deposit}(USER3);
+        
+        console.log("User3 deposited:", user3Deposit, "received shares:", user3Shares);
+        
+        // Step 2: User3 should get stETH based on their proportional share
+        uint256 user3StETH = steth.balanceOf(USER3);
+        console.log("User3 stETH balance:", user3StETH);
+        
+        // Step 3: Check final minting capacity
+        uint256 finalRemainingCapacity = dashboardB.remainingMintingCapacityShares(0);
+        uint256 finalTotalCapacity = dashboardB.totalMintingCapacityShares();
+        
+        console.log("Final remaining capacity:", finalRemainingCapacity);
+        console.log("Final total capacity:", finalTotalCapacity);
+        
+        // Verify capacity is still fully utilized
+        assertTrue(finalRemainingCapacity <= WEI_ROUNDING_TOLERANCE, "Remaining capacity should still be minimal");
+        
+        // Verify all three users together have stETH proportional to total vault value
+        uint256 totalStETHAllUsers = steth.balanceOf(USER1) + steth.balanceOf(USER2) + steth.balanceOf(USER3);
+        uint256 totalCapacityUsed = finalTotalCapacity - finalRemainingCapacity;
+        
+        assertTrue(
+            totalStETHAllUsers >= totalCapacityUsed - WEI_ROUNDING_TOLERANCE &&
+            totalStETHAllUsers <= totalCapacityUsed + WEI_ROUNDING_TOLERANCE,
+            "Total stETH should approximately equal total capacity used"
+        );
+        
+        console.log("PASS Case 2 passed: User3 deposit increased total capacity and minted proportionally");
+    }
+    
+    // ========================================================================
+    // Case 3: When remainingMintingCapacityShares != totalMintingCapacityShares
+    // ========================================================================
+    
+    function test_case3_mintingCapacityWithLiabilities() public {
+        console.log("=== Case 3: When remainingMintingCapacityShares != totalMintingCapacityShares ===");
+        
+        // Step 1: Create liabilities by having existing stETH in circulation
+        uint256 user1Deposit = 10_000 wei;
+        vm.deal(USER1, user1Deposit);
+        
+        // Use a separate wrapper to create initial liabilities
+        WrapperB tempWrapper = new WrapperB(address(dashboardB), address(this), "Temp", "TEMP", false);
+        dashboardB.grantRole(dashboardB.FUND_ROLE(), address(tempWrapper));
+        
+        vm.prank(USER1);
+        tempWrapper.depositETH{value: user1Deposit}(USER1);
+        
+        uint256 initialLiabilities = steth.balanceOf(USER1);
+        console.log("Initial liabilities (stETH in circulation):", initialLiabilities);
+        
+        // Step 2: Check that remaining != total due to liabilities
+        uint256 totalCapacity = dashboardB.totalMintingCapacityShares();
+        uint256 remainingCapacity = dashboardB.remainingMintingCapacityShares(0);
+        
+        console.log("Total minting capacity:", totalCapacity);
+        console.log("Remaining minting capacity:", remainingCapacity);
+        
+        // This is the core Case 3 condition
+        assertTrue(remainingCapacity < totalCapacity, "Case 3 condition: remaining < total due to liabilities");
+        
+        uint256 capacityDifference = totalCapacity - remainingCapacity;
+        console.log("Capacity difference (liabilities):", capacityDifference);
+        
+        // The difference should equal the outstanding stETH (liabilities)
+        assertEq(capacityDifference, initialLiabilities, "Capacity difference should equal outstanding stETH");
+        
+        // Step 3: Now run "Case 1" with this liability condition
+        uint256 user2Deposit = 8_000 wei;
+        vm.deal(USER2, user2Deposit);
+        
+        vm.prank(USER2);
+        uint256 user2Shares = wrapperB.depositETH{value: user2Deposit}(USER2);
+        
+        // Step 4: Verify final state
+        uint256 finalRemaining = dashboardB.remainingMintingCapacityShares(0);
+        uint256 finalTotal = dashboardB.totalMintingCapacityShares();
+        
+        console.log("Final remaining capacity:", finalRemaining);
+        console.log("Final total capacity:", finalTotal);
+        
+        // Should still have the liability difference
+        assertTrue(finalRemaining < finalTotal, "Liabilities should still create capacity difference");
+        
+        console.log("PASS Case 3 passed: Demonstrated remaining != total due to liabilities");
+    }
+    
+    // ========================================================================
+    // Case 4: Withdrawal simplest happy path (no stETH minted, no boost)
+    // ========================================================================
+    
+    function test_case4_withdrawalSimplestHappyPath() public {
+        console.log("=== Case 4: Withdrawal simplest happy path (no stETH minted, no boost) ===");
+        
+        uint256 userDeposit = 10_000 wei;
+        vm.deal(USER1, userDeposit);
+        
+        // Step 1: User deposits to Configuration A (no minting, no strategy)
+        vm.prank(USER1);
+        uint256 userShares = wrapperA.depositETH{value: userDeposit}(USER1);
+        
+        console.log("User deposited:", userDeposit, "received shares:", userShares);
+        assertEq(wrapperA.balanceOf(USER1), userShares, "User should have stvETH shares");
+        assertEq(steth.balanceOf(USER1), 0, "User should have no stETH (config A)");
+        
+        // Step 2: User requests withdrawal
+        vm.prank(USER1);
+        uint256 requestId = wrapperA.requestWithdrawal(userShares);
+        
+        console.log("Withdrawal requested, ID:", requestId);
+        assertEq(wrapperA.balanceOf(USER1), 0, "User shares should be burned");
+        
+        // Step 3: Simulate validator exit and finalization
+        _simulateValidatorExit(vaultA, queueA, userDeposit);
+        
+        vm.prank(address(this));
+        queueA.finalize(requestId);
+        
+        // Step 4: User claims withdrawal
+        uint256 userETHBefore = USER1.balance;
+        
+        vm.prank(USER1);
+        wrapperA.claimWithdrawal(requestId);
+        
+        uint256 userETHAfter = USER1.balance;
+        uint256 claimedAmount = userETHAfter - userETHBefore;
+        
+        console.log("User claimed ETH:", claimedAmount);
+        
+        // Step 5: Verify user gets back same amount
+        assertTrue(
+            claimedAmount >= userDeposit - WEI_ROUNDING_TOLERANCE &&
+            claimedAmount <= userDeposit + WEI_ROUNDING_TOLERANCE,
+            "User should receive approximately the same ETH deposited"
+        );
+        
+        console.log("PASS Case 4 passed: Simple withdrawal completed successfully");
+    }
+    
+    // ========================================================================
+    // Configuration-specific withdrawal tests
+    // ========================================================================
+    
+    function test_configurationA_withdrawal() public {
+        console.log("=== Configuration A: No minting, no strategy - withdrawal ===");
+        
+        uint256 userDeposit = 5_000 wei;
+        vm.deal(USER1, userDeposit);
+        
+        // Deposit and withdraw using Configuration A interface
+        vm.prank(USER1);
+        uint256 shares = wrapperA.depositETH{value: userDeposit}(USER1);
+        
+        vm.prank(USER1);
+        uint256 requestId = wrapperA.requestWithdrawal(shares);
+        
+        _simulateValidatorExit(vaultA, queueA, userDeposit);
+        
+        vm.prank(address(this));
+        queueA.finalize(requestId);
+        
+        uint256 ethBefore = USER1.balance;
+        vm.prank(USER1);
+        wrapperA.claimWithdrawal(requestId);
+        
+        uint256 ethReceived = USER1.balance - ethBefore;
+        assertTrue(ethReceived >= userDeposit - WEI_ROUNDING_TOLERANCE, "Config A withdrawal should work");
+        
+        console.log("PASS Configuration A withdrawal completed");
+    }
+    
+    function test_configurationB_withdrawal() public {
+        console.log("=== Configuration B: Minting, no strategy - withdrawal ===");
+        
+        uint256 userDeposit = 5_000 wei;
+        vm.deal(USER1, userDeposit);
+        
+        // Deposit (automatically mints stETH)
+        vm.prank(USER1);
+        uint256 shares = wrapperB.depositETH{value: userDeposit}(USER1);
+        
+        uint256 stETHBalance = steth.balanceOf(USER1);
+        console.log("User received stETH:", stETHBalance);
+        
+        // Withdraw using Configuration B interface (requires stETH shares)
+        vm.prank(USER1);
+        uint256 requestId = wrapperB.requestWithdrawal(shares, stETHBalance);
+        
+        _simulateValidatorExit(vaultB, queueB, userDeposit);
+        
+        vm.prank(address(this));
+        queueB.finalize(requestId);
+        
+        uint256 ethBefore = USER1.balance;
+        vm.prank(USER1);
+        wrapperB.claimWithdrawal(requestId);
+        
+        uint256 ethReceived = USER1.balance - ethBefore;
+        assertTrue(ethReceived >= userDeposit - WEI_ROUNDING_TOLERANCE, "Config B withdrawal should work");
+        
+        console.log("PASS Configuration B withdrawal completed");
+    }
+    
+    function test_configurationC_withdrawal() public {
+        console.log("=== Configuration C: Minting and strategy - withdrawal ===");
+        
+        uint256 userDeposit = 5_000 wei;
+        vm.deal(USER1, userDeposit);
+        
+        // Deposit (creates strategy position)
+        vm.prank(USER1);
+        uint256 shares = wrapperC.depositETH{value: userDeposit}(USER1);
+        
+        // Get user's positions
+        uint256[] memory positions = wrapperC.getUserPositions(USER1);
+        assertTrue(positions.length == 1, "User should have one position");
+        
+        uint256 positionId = positions[0];
+        console.log("User position ID:", positionId);
+        
+        // Withdraw using Configuration C interface (position-based)
+        vm.prank(USER1);
+        wrapperC.requestWithdrawal(positionId);
+        
+        // Strategy exit requires time for positions to unwind
+        // For testing, we'll directly call the claim function
+        vm.prank(USER1);
+        uint256 requestId = wrapperC.claimWithdrawal(positionId);
+        
+        _simulateValidatorExit(vaultC, queueC, userDeposit);
+        
+        vm.prank(address(this));
+        queueC.finalize(requestId);
+        
+        // Note: In Configuration C, final claim is through withdrawal queue
+        uint256 ethBefore = USER1.balance;
+        vm.prank(USER1);
+        queueC.claimWithdrawal(requestId);
+        
+        uint256 ethReceived = USER1.balance - ethBefore;
+        assertTrue(ethReceived > 0, "Config C withdrawal should return some ETH");
+        
+        console.log("PASS Configuration C withdrawal completed, received:", ethReceived);
+    }
+    
+    // ========================================================================
+    // Helper functions
+    // ========================================================================
+    
+    function _simulateValidatorExit(IStakingVault vault, WithdrawalQueue queue, uint256 ethNeeded) internal {
+        // Mock validator exit by sending ETH directly to the vault
+        uint256 currentBalance = address(vault).balance;
+        uint256 requiredETH = ethNeeded + currentBalance;
+        
+        // Use CoreHarness to simulate validator return
+        core.mockValidatorExitReturnETH(address(vault), ethNeeded);
+        
+        console.log("Simulated validator exit, returned ETH:", ethNeeded);
+    }
+}

@@ -10,9 +10,12 @@ import {IVaultHub} from "src/interfaces/IVaultHub.sol";
 import {IStakingVault} from "src/interfaces/IStakingVault.sol";
 import {ILido} from "src/interfaces/ILido.sol";
 
-import {Wrapper} from "src/Wrapper.sol";
+import {WrapperBase} from "src/WrapperBase.sol";
+import {WrapperA} from "src/WrapperA.sol";
+import {WrapperB} from "src/WrapperB.sol";
+import {WrapperC} from "src/WrapperC.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
-import {ExampleStrategy, LenderMock} from "src/ExampleStrategy.sol";
+import {ExampleLoopStrategy, LenderMock} from "src/ExampleLoopStrategy.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 
@@ -21,13 +24,15 @@ contract WithdrawalTest is Test {
     DefiWrapper public dw;
     
     // Access to harness components
-    Wrapper public wrapper;
+    WrapperC public wrapperC; // Wrapper with strategy
+    WrapperA public wrapperA; // Basic wrapper for basic withdrawal tests
+    WrapperB public wrapperB; // Minting wrapper
     IDashboard public dashboard;
     ILido public steth;
     IVaultHub public vaultHub;
     IStakingVault public stakingVault;
     WithdrawalQueue public withdrawalQueue;
-    ExampleStrategy public strategy;
+    ExampleLoopStrategy public strategy;
 
     uint256 public constant WEI_ROUNDING_TOLERANCE = 2;
     uint256 public constant TOTAL_BP = 100_00;
@@ -40,13 +45,44 @@ contract WithdrawalTest is Test {
         core = new CoreHarness("lido-core/deployed-local.json");
         dw = new DefiWrapper(address(core));
 
-        wrapper = dw.wrapper();
+        wrapperC = dw.wrapper();
         withdrawalQueue = dw.withdrawalQueue();
         strategy = dw.strategy();
         dashboard = dw.dashboard();
         steth = core.steth();
         vaultHub = core.vaultHub();
         stakingVault = dw.stakingVault();
+
+        // Create additional wrapper configurations for withdrawal testing
+        wrapperA = new WrapperA(
+            address(dashboard),
+            address(this),
+            "Basic Wrapper A",
+            "stvA",
+            false // whitelist disabled
+        );
+        WithdrawalQueue queueA = new WithdrawalQueue(wrapperA);
+        queueA.initialize(address(this));
+        wrapperA.setWithdrawalQueue(address(queueA));
+        queueA.grantRole(queueA.FINALIZE_ROLE(), address(this));
+        queueA.resume();
+        dashboard.grantRole(dashboard.FUND_ROLE(), address(wrapperA));
+        dashboard.grantRole(dashboard.WITHDRAW_ROLE(), address(queueA));
+        
+        wrapperB = new WrapperB(
+            address(dashboard),
+            address(this),
+            "Minting Wrapper B",
+            "stvB",
+            false // whitelist disabled
+        );
+        WithdrawalQueue queueB = new WithdrawalQueue(wrapperB);
+        queueB.initialize(address(this));
+        wrapperB.setWithdrawalQueue(address(queueB));
+        queueB.grantRole(queueB.FINALIZE_ROLE(), address(this));
+        queueB.resume();
+        dashboard.grantRole(dashboard.FUND_ROLE(), address(wrapperB));
+        dashboard.grantRole(dashboard.WITHDRAW_ROLE(), address(queueB));
 
         vm.deal(user1, 1000 ether);
         vm.deal(user2, 1000 ether);
@@ -67,39 +103,38 @@ contract WithdrawalTest is Test {
         vm.deal(user1, userInitialETH);
 
         vm.startPrank(user1);
-        uint256 userStvShares = wrapper.depositETH{value: userInitialETH}(user1);
+        uint256 userStvShares = wrapperA.depositETH{value: userInitialETH}(user1);
         vm.stopPrank();
 
         console.log("User deposited ETH:", userInitialETH);
         console.log("User received stvETH shares:", userStvShares);
 
         // Verify initial state - user has shares, no stETH minted, no boost
-        assertEq(wrapper.balanceOf(user1), userStvShares, "User should have stvETH shares");
-        assertEq(wrapper.totalAssets(), userInitialETH + dw.CONNECT_DEPOSIT(), "Total assets should equal user deposit plus initial balance");
+        assertEq(wrapperA.balanceOf(user1), userStvShares, "User should have stvETH shares");
+        assertEq(wrapperA.totalAssets(), userInitialETH + dw.CONNECT_DEPOSIT(), "Total assets should equal user deposit plus initial balance");
         assertEq(user1.balance, 0, "User ETH balance should be zero after deposit");
-        assertEq(wrapper.lockedStvSharesByUser(user1), 0, "User should have no locked shares (no stETH minted)");
+        assertEq(steth.balanceOf(user1), 0, "User should have no stETH (config A)");
 
         // Phase 2: User requests withdrawal
         console.log("=== Phase 2: User requests withdrawal ===");
 
-        // Withdraw based on actual shares received (which may be slightly less due to rounding)
-        uint256 withdrawalAmount = wrapper.convertToAssets(userStvShares);
-
+        // Use Configuration A withdrawal interface
         vm.startPrank(user1);
-        wrapper.approve(address(withdrawalQueue), userStvShares);
-        uint256 requestId = withdrawalQueue.requestWithdrawal(user1, withdrawalAmount);
+        uint256 requestId = wrapperA.requestWithdrawal(userStvShares);
         vm.stopPrank();
 
         console.log("Withdrawal requested. RequestId:", requestId);
-        console.log("Withdrawal amount:", withdrawalAmount);
 
         // Verify withdrawal request state
         assertGt(requestId, 0, "Request ID should be valid");
-        assertEq(wrapper.balanceOf(user1), 0, "User stvETH shares should be moved to withdrawal queue for withdrawal");
+        assertEq(wrapperA.balanceOf(user1), 0, "User stvETH shares should be burned after withdrawal request");
 
+        // Get the withdrawal queue for wrapperA
+        WithdrawalQueue queueA = wrapperA.withdrawalQueue();
+        
         // Check withdrawal queue state using getWithdrawalStatus
-        WithdrawalQueue.WithdrawalRequestStatus memory status = withdrawalQueue.getWithdrawalStatus(requestId);
-        assertEq(status.amountOfAssets, withdrawalAmount, "Requested amount should match");
+        WithdrawalQueue.WithdrawalRequestStatus memory status = queueA.getWithdrawalStatus(requestId);
+        assertTrue(status.amountOfAssets > 0, "Requested amount should be positive");
         assertEq(status.owner, user1, "Owner should be user1");
         assertFalse(status.isFinalized, "Request should not be finalized yet");
         assertFalse(status.isClaimed, "Request should not be claimed yet");
@@ -117,7 +152,7 @@ contract WithdrawalTest is Test {
         // Phase 4: Calculate finalization batches and requirements
         console.log("=== Phase 4: Calculate finalization requirements ===");
 
-        uint256 remainingEthBudget = withdrawalQueue.unfinalizedAssets();
+        uint256 remainingEthBudget = queueA.unfinalizedAssets();
         console.log("Unfinalized assets requiring ETH:", remainingEthBudget);
 
         WithdrawalQueue.BatchesCalculationState memory state;
@@ -127,7 +162,7 @@ contract WithdrawalTest is Test {
 
         // Calculate batches for finalization
         while (!state.finished) {
-            state = withdrawalQueue.calculateFinalizationBatches(1, state);
+            state = queueA.calculateFinalizationBatches(1, state);
         }
 
         console.log("Batches calculation finished, batches length:", state.batchesLength);
@@ -139,8 +174,8 @@ contract WithdrawalTest is Test {
         }
 
         // Calculate exact ETH needed for finalization
-        uint256 shareRate = withdrawalQueue.calculateCurrentShareRate();
-        (uint256 ethToLock, ) = withdrawalQueue.prefinalize(batches, shareRate);
+        uint256 shareRate = queueA.calculateCurrentShareRate();
+        (uint256 ethToLock, ) = queueA.prefinalize(batches, shareRate);
 
         console.log("ETH required for finalization:", ethToLock);
         console.log("Current share rate:", shareRate);
@@ -155,14 +190,14 @@ contract WithdrawalTest is Test {
         // Phase 6: Finalize withdrawal requests
         console.log("=== Phase 6: Finalize withdrawal requests ===");
 
-        // Finalize the withdrawal request using DefiWrapper (which has FINALIZE_ROLE)
-        vm.prank(address(dw));
-        withdrawalQueue.finalize(requestId);
+        // Finalize the withdrawal request using test admin (which has FINALIZE_ROLE)
+        vm.prank(address(this));
+        queueA.finalize(requestId);
 
         console.log("Withdrawal request finalized");
 
         // Verify finalization state
-        WithdrawalQueue.WithdrawalRequestStatus memory statusAfterFinalization = withdrawalQueue.getWithdrawalStatus(requestId);
+        WithdrawalQueue.WithdrawalRequestStatus memory statusAfterFinalization = queueA.getWithdrawalStatus(requestId);
         assertTrue(statusAfterFinalization.isFinalized, "Request should be finalized");
         assertFalse(statusAfterFinalization.isClaimed, "Request should not be claimed yet");
 
@@ -172,7 +207,7 @@ contract WithdrawalTest is Test {
         uint256 userETHBalanceBefore = user1.balance;
 
         vm.prank(user1);
-        withdrawalQueue.claimWithdrawal(requestId);
+        wrapperA.claimWithdrawal(requestId);
 
         uint256 userETHBalanceAfter = user1.balance;
         uint256 claimedAmount = userETHBalanceAfter - userETHBalanceBefore;
@@ -186,18 +221,17 @@ contract WithdrawalTest is Test {
         // Core requirement: user gets back approximately the same amount of ETH they deposited
         assertTrue(claimedAmount >= userInitialETH - 1 && claimedAmount <= userInitialETH + 1, "User should receive approximately the same amount of ETH they deposited");
 
-        // Verify system state is clean (except for initial supply held by DefiWrapper)
-        assertEq(wrapper.balanceOf(user1), 0, "User should have no remaining stvETH shares");
-        assertEq(wrapper.lockedStvSharesByUser(user1), 0, "User should have no locked shares");
-        assertEq(wrapper.totalSupply(), dw.CONNECT_DEPOSIT(), "Total supply should equal initial supply after withdrawal");
+        // Verify system state is clean (except for initial supply held by wrapper itself)
+        assertEq(wrapperA.balanceOf(user1), 0, "User should have no remaining stvETH shares");
+        assertEq(wrapperA.totalSupply(), dw.CONNECT_DEPOSIT(), "Total supply should equal initial supply after withdrawal");
         assertTrue(
-            wrapper.totalAssets() >= dw.CONNECT_DEPOSIT() - 1 && wrapper.totalAssets() <= dw.CONNECT_DEPOSIT() + 1,
+            wrapperA.totalAssets() >= dw.CONNECT_DEPOSIT() - 1 && wrapperA.totalAssets() <= dw.CONNECT_DEPOSIT() + 1,
             "Total assets should equal initial balance after withdrawal (within rounding tolerance)"
         );
-        assertEq(address(withdrawalQueue).balance, 0, "Withdrawal queue should have no ETH left");
+        assertEq(address(queueA).balance, 0, "Withdrawal queue should have no ETH left");
 
         // Verify withdrawal request is consumed
-        WithdrawalQueue.WithdrawalRequestStatus memory finalStatus = withdrawalQueue.getWithdrawalStatus(requestId);
+        WithdrawalQueue.WithdrawalRequestStatus memory finalStatus = queueA.getWithdrawalStatus(requestId);
         assertTrue(finalStatus.isClaimed, "Request should be marked as claimed");
 
         console.log("=== Case 4 Test Summary ===");

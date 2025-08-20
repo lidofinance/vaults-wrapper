@@ -103,15 +103,14 @@ contract CoreHarness is Test {
         string memory reportCid = "dummy-cid";
 
         uint256 reportTotalValue = _totalValue + (_totalValue * _totalValueIncreaseBP) / 10000;
-        // int256 reportInOutDelta = int256((_totalValue * _totalValueIncreaseBP) / 10000);
         uint256 reportCumulativeLidoFees = _cumulativeLidoFees;
         uint256 reportLiabilityShares = 0;
         uint256 reportSlashingReserve = 0;
 
         bool isFresh = vaultHub.isReportFresh(_stakingVault);
-        console.log("isFresh 1", isFresh);
+        console.log("isFresh before", isFresh);
 
-        vm.warp(block.timestamp + 12);
+        // Update report data with current timestamp to make it fresh
         vm.prank(locator.accountingOracle());
         lazyOracle.updateReportData(reportTimestamp, refSlot, treeRoot, reportCid);
 
@@ -119,16 +118,8 @@ contract CoreHarness is Test {
             lazyOracle.mock__updateVaultData(_stakingVault, reportTotalValue, reportCumulativeLidoFees, reportLiabilityShares, reportSlashingReserve);
         }
 
-        // vm.prank(address(lazyOracle));
-        // vaultHub.applyVaultReport(
-        //     stakingVault,
-        //     reportTimestamp,
-        //     reportTotalValue,
-        //     reportInOutDelta,
-        //     reportCumulativeLidoFees,
-        //     reportLiabilityShares,
-        //     reportSlashingReserve
-        // );
+        bool isFreshAfter = vaultHub.isReportFresh(_stakingVault);
+        console.log("isFresh after", isFreshAfter);
     }
 
     /**

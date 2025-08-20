@@ -4,7 +4,7 @@ pragma solidity >=0.8.25;
 import {AccessControlEnumerable} from "@openzeppelin/contracts/access/extensions/AccessControlEnumerable.sol";
 import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
-import {Wrapper} from "./Wrapper.sol";
+import {WrapperBase} from "./WrapperBase.sol";
 import {IDashboard} from "./interfaces/IDashboard.sol";
 import {IVaultHub} from "./interfaces/IVaultHub.sol";
 
@@ -71,7 +71,7 @@ contract WithdrawalQueue is AccessControlEnumerable, Pausable {
         bool isClaimed;
     }
 
-    Wrapper public immutable WRAPPER;
+    WrapperBase public immutable WRAPPER;
 
     /// @dev queue for withdrawal requests, indexes (requestId) start from 1
     mapping(uint256 => WithdrawalRequest) public requests;
@@ -142,7 +142,7 @@ contract WithdrawalQueue is AccessControlEnumerable, Pausable {
     error RequestIdsNotSorted();
     error InvalidEmergencyExitActivation();
 
-    constructor(Wrapper _wrapper) {
+    constructor(WrapperBase _wrapper) {
         WRAPPER = _wrapper;
     }
 
@@ -366,8 +366,9 @@ contract WithdrawalQueue is AccessControlEnumerable, Pausable {
         _requireNotPaused();
         _checkWithdrawalRequestAmount(_assets);
 
-        if (WRAPPER.maxWithdraw(_owner) < _assets) {
-            revert RequestAmountTooLarge(_assets);
+        // Only the wrapper can call this function
+        if (msg.sender != address(WRAPPER)) {
+            revert("Only wrapper can request withdrawals");
         }
 
         IDashboard dashboard = IDashboard(WRAPPER.DASHBOARD());
@@ -375,8 +376,6 @@ contract WithdrawalQueue is AccessControlEnumerable, Pausable {
         if (!vaultHub.isReportFresh(WRAPPER.STAKING_VAULT())) revert ReportStale();
 
         uint256 shares = WRAPPER.previewWithdraw(_assets);
-
-        WRAPPER.transferFrom(msg.sender, address(this), _assets);
 
         uint256 lastRequestId_ = getLastRequestId();
         WithdrawalRequest memory lastRequest = requests[lastRequestId_];
@@ -431,11 +430,7 @@ contract WithdrawalQueue is AccessControlEnumerable, Pausable {
         }
 
         uint256 _amountOfETH = totalAssetsToFinalize;
-        uint256 sharesToBurn = WRAPPER.previewRedeem(totalAssetsToFinalize);
-
         dashboard.withdraw(address(this), _amountOfETH);
-
-        WRAPPER.burnShares(sharesToBurn);
 
         // Finalize all requests in the range
         for (uint256 i = firstRequestIdToFinalize; i <= _lastRequestIdToFinalize; i++) {
@@ -468,7 +463,7 @@ contract WithdrawalQueue is AccessControlEnumerable, Pausable {
         return (totalEthInVault * E27_PRECISION_BASE) / totalStvToken;
     }
 
-    /// @notice Claim one`_requestId` request once finalized sending locked ether to the owner
+    /// @notice Claim one `_requestId` request once finalized sending locked ether to the owner
     /// @param _requestId request id to claim
     /// @dev use unbounded loop to find a hint, which can lead to OOG
     /// @dev
