@@ -72,7 +72,7 @@ contract Factory {
                 msg.sender,
                 NAME,
                 SYMBOL,
-                false // whitelist disabled by default
+                false // allowlist disabled by default
             );
         } else if (_configuration == WrapperConfiguration.MINTING_NO_STRATEGY) {
             wrapper = new WrapperB(
@@ -80,7 +80,7 @@ contract Factory {
                 msg.sender,
                 NAME,
                 SYMBOL,
-                false // whitelist disabled by default
+                false // allowlist disabled by default
             );
         } else if (_configuration == WrapperConfiguration.MINTING_AND_STRATEGY) {
             wrapper = new WrapperC(
@@ -88,7 +88,7 @@ contract Factory {
                 msg.sender,
                 NAME,
                 SYMBOL,
-                false, // whitelist disabled by default
+                false, // allowlist disabled by default
                 _strategy
             );
         } else {

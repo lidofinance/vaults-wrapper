@@ -59,7 +59,7 @@ contract DepositTest is Test {
             address(this),
             "Basic Wrapper A",
             "stvA",
-            false // whitelist disabled
+            false // allowlist disabled
         );
         dashboard.grantRole(dashboard.FUND_ROLE(), address(wrapperA));
         
@@ -68,7 +68,7 @@ contract DepositTest is Test {
             address(this),
             "Minting Wrapper B",
             "stvB",
-            false // whitelist disabled
+            false // allowlist disabled
         );
         dashboard.grantRole(dashboard.FUND_ROLE(), address(wrapperB));
 

@@ -58,7 +58,7 @@ contract MintStethTest is Test {
             address(this),
             "Minting Test Wrapper",
             "stvB",
-            false // whitelist disabled
+            false // allowlist disabled
         );
         dashboard.grantRole(dashboard.FUND_ROLE(), address(wrapperB));
 

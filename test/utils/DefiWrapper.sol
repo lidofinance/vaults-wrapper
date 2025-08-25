@@ -99,7 +99,7 @@ contract DefiWrapper is Test {
             address(this), // initial balance owner
             "Staked ETH Vault Wrapper",
             "stvETH",
-            false, // whitelist disabled
+            false, // allowlist disabled
             address(strategy)
         );
 

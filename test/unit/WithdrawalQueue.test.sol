@@ -58,7 +58,7 @@ contract WithdrawalQueueTest is Test {
             admin,
             "Staked ETH Vault Wrapper",
             "stvETH",
-            false // whitelist disabled
+            false // allowlist disabled
         );
 
         // Deploy withdrawal queue

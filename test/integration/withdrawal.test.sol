@@ -59,7 +59,7 @@ contract WithdrawalTest is Test {
             address(this),
             "Basic Wrapper A",
             "stvA",
-            false // whitelist disabled
+            false // allowlist disabled
         );
         WithdrawalQueue queueA = new WithdrawalQueue(wrapperA);
         queueA.initialize(address(this));
@@ -74,7 +74,7 @@ contract WithdrawalTest is Test {
             address(this),
             "Minting Wrapper B",
             "stvB",
-            false // whitelist disabled
+            false // allowlist disabled
         );
         WithdrawalQueue queueB = new WithdrawalQueue(wrapperB);
         queueB.initialize(address(this));

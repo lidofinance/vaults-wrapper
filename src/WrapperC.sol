@@ -71,9 +71,9 @@ contract WrapperC is WrapperBase {
         address _owner,
         string memory _name,
         string memory _symbol,
-        bool _whitelistEnabled,
+        bool _allowListEnabled,
         address _strategy
-    ) WrapperBase(_dashboard, _owner, _name, _symbol, _whitelistEnabled) {
+    ) WrapperBase(_dashboard, _owner, _name, _symbol, _allowListEnabled) {
         if (_strategy == address(0)) {
             revert InvalidConfiguration();
         }
@@ -92,8 +92,8 @@ contract WrapperC is WrapperBase {
         if (msg.value == 0) revert WrapperBase.ZeroDeposit();
         if (_receiver == address(0)) revert WrapperBase.InvalidReceiver();
 
-        // Check whitelist if enabled
-        _checkWhitelist();
+        // Check allowlist if enabled
+        _checkAllowList();
 
         uint256 totalAssetsBefore = totalAssets();
         uint256 totalSupplyBefore = totalSupply();

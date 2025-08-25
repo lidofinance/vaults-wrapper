@@ -11,10 +11,10 @@ import {IDashboard} from "./interfaces/IDashboard.sol";
 
 abstract contract WrapperBase is ERC20, AccessControlEnumerable {
     // Custom errors
-    error NotWhitelisted(address user);
-    error WhitelistFull();
-    error AlreadyWhitelisted(address user);
-    error NotInWhitelist(address user);
+    error NotAllowListed(address user);
+    error AllowListFull();
+    error AlreadyAllowListed(address user);
+    error NotInAllowList(address user);
     error ZeroDeposit();
     error InvalidReceiver();
     error NoMintingCapacityAvailable();
@@ -23,13 +23,13 @@ abstract contract WrapperBase is ERC20, AccessControlEnumerable {
     error InvalidWithdrawalType();
 
     uint256 public constant E27_PRECISION_BASE = 1e27;
-    uint256 public constant MAX_WHITELIST_SIZE = 1000;
+    uint256 public constant MAX_ALLOWLIST_SIZE = 1000;
 
     bytes32 public constant DEPOSIT_ROLE = keccak256("DEPOSIT_ROLE");
     bytes32 public constant REQUEST_VALIDATOR_EXIT_ROLE = keccak256("REQUEST_VALIDATOR_EXIT_ROLE");
     bytes32 public constant TRIGGER_VALIDATOR_WITHDRAWAL_ROLE = keccak256("TRIGGER_VALIDATOR_WITHDRAWAL_ROLE");
 
-    bool public immutable WHITELIST_ENABLED;
+    bool public immutable ALLOWLIST_ENABLED;
 
     IDashboard public immutable DASHBOARD;
     IVaultHub public immutable VAULT_HUB;
@@ -73,8 +73,8 @@ abstract contract WrapperBase is ERC20, AccessControlEnumerable {
         uint256 stvETHShares
     );
 
-    event WhitelistAdded(address indexed user);
-    event WhitelistRemoved(address indexed user);
+    event AllowListAdded(address indexed user);
+    event AllowListRemoved(address indexed user);
     event VaultDisconnected(address indexed initiator);
     event ConnectDepositClaimed(address indexed recipient, uint256 amount);
 
@@ -83,9 +83,9 @@ abstract contract WrapperBase is ERC20, AccessControlEnumerable {
         address _owner,
         string memory _name,
         string memory _symbol,
-        bool _whitelistEnabled
+        bool _allowListEnabled
     ) ERC20(_name, _symbol) {
-        WHITELIST_ENABLED = _whitelistEnabled;
+        ALLOWLIST_ENABLED = _allowListEnabled;
 
         DASHBOARD = IDashboard(payable(_dashboard));
         VAULT_HUB = IVaultHub(DASHBOARD.VAULT_HUB());
@@ -240,58 +240,58 @@ abstract contract WrapperBase is ERC20, AccessControlEnumerable {
     }
 
     // =================================================================================
-    // WHITELIST MANAGEMENT
+    // ALLOWLIST MANAGEMENT
     // =================================================================================
 
     /**
-     * @notice Add an address to the whitelist
-     * @param _user Address to whitelist
+     * @notice Add an address to the allowlist
+     * @param _user Address to add to allowlist
      */
-    function addToWhitelist(address _user) external {
+    function addToAllowList(address _user) external {
         _checkRole(DEFAULT_ADMIN_ROLE, msg.sender);
-        if (isWhitelisted(_user)) revert AlreadyWhitelisted(_user);
-        if (getRoleMemberCount(DEPOSIT_ROLE) >= MAX_WHITELIST_SIZE) revert WhitelistFull();
+        if (isAllowListed(_user)) revert AlreadyAllowListed(_user);
+        if (getRoleMemberCount(DEPOSIT_ROLE) >= MAX_ALLOWLIST_SIZE) revert AllowListFull();
 
         grantRole(DEPOSIT_ROLE, _user);
 
-        emit WhitelistAdded(_user);
+        emit AllowListAdded(_user);
     }
 
     /**
-     * @notice Remove an address from the whitelist
-     * @param _user Address to remove from whitelist
+     * @notice Remove an address from the allowlist
+     * @param _user Address to remove from allowlist
      */
-    function removeFromWhitelist(address _user) external {
+    function removeFromAllowList(address _user) external {
         _checkRole(DEFAULT_ADMIN_ROLE, msg.sender);
-        if (!isWhitelisted(_user)) revert NotInWhitelist(_user);
+        if (!isAllowListed(_user)) revert NotInAllowList(_user);
 
         revokeRole(DEPOSIT_ROLE, _user);
 
-        emit WhitelistRemoved(_user);
+        emit AllowListRemoved(_user);
     }
 
     /**
-     * @notice Check if an address is whitelisted
+     * @notice Check if an address is allowlisted
      * @param _user Address to check
-     * @return bool True if whitelisted
+     * @return bool True if allowlisted
      */
-    function isWhitelisted(address _user) public view returns (bool) {
+    function isAllowListed(address _user) public view returns (bool) {
         return hasRole(DEPOSIT_ROLE, _user);
     }
 
     /**
-     * @notice Get the current whitelist size
-     * @return uint256 Number of addresses in whitelist
+     * @notice Get the current allowlist size
+     * @return uint256 Number of addresses in allowlist
      */
-    function getWhitelistSize() external view returns (uint256) {
+    function getAllowListSize() external view returns (uint256) {
         return getRoleMemberCount(DEPOSIT_ROLE);
     }
 
     /**
-     * @notice Get all whitelisted addresses
-     * @return address[] Array of whitelisted addresses
+     * @notice Get all allowlisted addresses
+     * @return address[] Array of allowlisted addresses
      */
-    function getWhitelistAddresses() public view returns (address[] memory) {
+    function getAllowListAddresses() public view returns (address[] memory) {
         uint256 count = getRoleMemberCount(DEPOSIT_ROLE);
         address[] memory addresses = new address[](count);
         for (uint256 i = 0; i < count; i++) {
@@ -331,9 +331,9 @@ abstract contract WrapperBase is ERC20, AccessControlEnumerable {
     // INTERNAL HELPER FUNCTIONS FOR SUBCLASSES
     // =================================================================================
 
-    function _checkWhitelist() internal view {
-        if (WHITELIST_ENABLED && !hasRole(DEPOSIT_ROLE, msg.sender)) {
-            revert NotWhitelisted(msg.sender);
+    function _checkAllowList() internal view {
+        if (ALLOWLIST_ENABLED && !hasRole(DEPOSIT_ROLE, msg.sender)) {
+            revert NotAllowListed(msg.sender);
         }
     }
 

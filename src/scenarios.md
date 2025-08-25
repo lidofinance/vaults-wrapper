@@ -68,7 +68,7 @@ The common features include:
 - non-transferrable ERC-20
 - access control
 - assets(ETH) and shares(stvETH) calculations borrowed from ERC4626 Tokenized Vault standard
-- whitelisting
+- allowlisting
 - vault disconnection and connect deposit claiming
 
 Upon Wrapper construction (in ctor) the Vault must have balance of at least Dashboard.CONNECT_DEPOSIT ETH.

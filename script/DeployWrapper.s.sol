@@ -49,7 +49,7 @@ contract DeployWrapper is Script {
             deployer,
             "STV",
             "STV",
-            false // whitelist disabled
+            false // allowlist disabled
         );
 
         MockERC20 obolToken = new MockERC20("ObolToken", "ObolTest");
