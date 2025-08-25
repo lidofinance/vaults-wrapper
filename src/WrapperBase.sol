@@ -12,7 +12,6 @@ import {IDashboard} from "./interfaces/IDashboard.sol";
 abstract contract WrapperBase is ERC20, AccessControlEnumerable {
     // Custom errors
     error NotAllowListed(address user);
-    error AllowListFull();
     error AlreadyAllowListed(address user);
     error NotInAllowList(address user);
     error ZeroDeposit();
@@ -22,10 +21,8 @@ abstract contract WrapperBase is ERC20, AccessControlEnumerable {
     error TransferNotAllowed();
     error InvalidWithdrawalType();
 
-    uint256 public constant E27_PRECISION_BASE = 1e27;
-    uint256 public constant MAX_ALLOWLIST_SIZE = 1000;
-
     bytes32 public constant DEPOSIT_ROLE = keccak256("DEPOSIT_ROLE");
+    bytes32 public constant ALLOWLIST_MANAGER_ROLE = keccak256("ALLOWLIST_MANAGER_ROLE");
     bytes32 public constant REQUEST_VALIDATOR_EXIT_ROLE = keccak256("REQUEST_VALIDATOR_EXIT_ROLE");
     bytes32 public constant TRIGGER_VALIDATOR_WITHDRAWAL_ROLE = keccak256("TRIGGER_VALIDATOR_WITHDRAWAL_ROLE");
 
@@ -92,6 +89,9 @@ abstract contract WrapperBase is ERC20, AccessControlEnumerable {
         STAKING_VAULT = address(DASHBOARD.stakingVault());
 
         _grantRole(DEFAULT_ADMIN_ROLE, _owner);
+        _grantRole(ALLOWLIST_MANAGER_ROLE, _owner);
+        _setRoleAdmin(ALLOWLIST_MANAGER_ROLE, DEFAULT_ADMIN_ROLE);
+        _setRoleAdmin(DEPOSIT_ROLE, ALLOWLIST_MANAGER_ROLE);
 
         // Initial vault balance must include the connect deposit
         // Minting shares for it to have clear shares math
@@ -248,9 +248,8 @@ abstract contract WrapperBase is ERC20, AccessControlEnumerable {
      * @param _user Address to add to allowlist
      */
     function addToAllowList(address _user) external {
-        _checkRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        _checkRole(ALLOWLIST_MANAGER_ROLE, msg.sender);
         if (isAllowListed(_user)) revert AlreadyAllowListed(_user);
-        if (getRoleMemberCount(DEPOSIT_ROLE) >= MAX_ALLOWLIST_SIZE) revert AllowListFull();
 
         grantRole(DEPOSIT_ROLE, _user);
 
@@ -262,7 +261,7 @@ abstract contract WrapperBase is ERC20, AccessControlEnumerable {
      * @param _user Address to remove from allowlist
      */
     function removeFromAllowList(address _user) external {
-        _checkRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        _checkRole(ALLOWLIST_MANAGER_ROLE, msg.sender);
         if (!isAllowListed(_user)) revert NotInAllowList(_user);
 
         revokeRole(DEPOSIT_ROLE, _user);

@@ -28,6 +28,7 @@ contract MockDashboard {
 
 contract MockVaultHub {
     mapping(address => uint256) public totalValues;
+    uint256 public constant CONNECT_DEPOSIT = 1 ether;
 
     function totalValue(address vault) external view returns (uint256) {
         uint256 value = totalValues[vault];
@@ -219,40 +220,51 @@ contract AllowListTest is Test {
         vm.stopPrank();
     }
 
-    // Tests that only the wrapper owner can add/remove addresses from allowlist
-    // Verifies non-owner calls to allowlist management functions revert
-    function test_onlyOwnerCanManageAllowList() public {
+    // Tests that only accounts with ALLOWLIST_MANAGER_ROLE can manage allowlist
+    // Verifies unauthorized calls to allowlist management functions revert
+    function test_onlyAllowListManagerCanManageAllowList() public {
+        // User without role cannot manage allowlist
         vm.startPrank(user1);
-
         vm.expectRevert();
         wrapperWithAllowList.addToAllowList(user2);
-
         vm.expectRevert();
         wrapperWithAllowList.removeFromAllowList(user2);
-
+        vm.stopPrank();
+        
+        // Owner can manage (has role by default)
+        vm.startPrank(owner);
+        wrapperWithAllowList.addToAllowList(user2);
+        wrapperWithAllowList.removeFromAllowList(user2);
         vm.stopPrank();
     }
-
-    // Tests that allowlist enforces maximum size limit
-    // Verifies AllowListFull error when attempting to exceed MAX_ALLOWLIST_SIZE
-    function test_allowlistSizeLimit() public {
+    
+    // Tests that ALLOWLIST_MANAGER_ROLE can be delegated to other addresses
+    // Verifies role-based access control works correctly for allowlist management
+    function test_allowListManagerRoleCanBeDelegated() public {
+        bytes32 ALLOWLIST_MANAGER_ROLE = wrapperWithAllowList.ALLOWLIST_MANAGER_ROLE();
+        
+        // Grant role to user3
         vm.startPrank(owner);
-
-        uint256 maxSize = wrapperWithAllowList.MAX_ALLOWLIST_SIZE();
-
-        // Add maximum number of addresses
-        for (uint256 i = 0; i < maxSize; i++) {
-            address userAddr = address(uint160(i + 1));
-            wrapperWithAllowList.addToAllowList(userAddr);
-        }
-
-        assertEq(wrapperWithAllowList.getAllowListSize(), maxSize, "AllowList should be at max size");
-
-        // Try to add one more
-        address extraUser = address(uint160(maxSize + 1));
-        vm.expectRevert(AllowListFull.selector);
-        wrapperWithAllowList.addToAllowList(extraUser);
-
+        wrapperWithAllowList.grantRole(ALLOWLIST_MANAGER_ROLE, user3);
+        vm.stopPrank();
+        
+        // User3 can now manage allowlist
+        vm.startPrank(user3);
+        wrapperWithAllowList.addToAllowList(user1);
+        assertTrue(wrapperWithAllowList.isAllowListed(user1), "User1 should be allowlisted");
+        wrapperWithAllowList.removeFromAllowList(user1);
+        assertFalse(wrapperWithAllowList.isAllowListed(user1), "User1 should not be allowlisted");
+        vm.stopPrank();
+        
+        // Revoke role from user3
+        vm.startPrank(owner);
+        wrapperWithAllowList.revokeRole(ALLOWLIST_MANAGER_ROLE, user3);
+        vm.stopPrank();
+        
+        // User3 can no longer manage allowlist
+        vm.startPrank(user3);
+        vm.expectRevert();
+        wrapperWithAllowList.addToAllowList(user1);
         vm.stopPrank();
     }
 
@@ -486,6 +498,5 @@ contract AllowListTest is Test {
 
 // Import errors from Wrapper
 error NotAllowListed(address user);
-error AllowListFull();
 error AlreadyAllowListed(address user);
 error NotInAllowList(address user);
