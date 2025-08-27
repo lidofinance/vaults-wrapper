@@ -84,8 +84,8 @@ contract ScenariosTest is Test {
         core.applyVaultReport(address(vaultA), 0, 0, 0, true);
         dashboardA.setNodeOperatorFeeRate(NODE_OPERATOR_FEE_RATE);
         
-        wrapperA = new WrapperA(address(dashboardA), address(this), "Config A", "stvA", false);
-        queueA = new WithdrawalQueue(wrapperA);
+        wrapperA = new WrapperA(address(dashboardA), false);
+        queueA = new WithdrawalQueue(address(wrapperA));
         queueA.initialize(address(this));
         wrapperA.setWithdrawalQueue(address(queueA));
         queueA.grantRole(queueA.FINALIZE_ROLE(), address(this));
@@ -103,8 +103,8 @@ contract ScenariosTest is Test {
         core.applyVaultReport(address(vaultB), 0, 0, 0, true);
         dashboardB.setNodeOperatorFeeRate(NODE_OPERATOR_FEE_RATE);
         
-        wrapperB = new WrapperB(address(dashboardB), address(this), "Config B", "stvB", false);
-        queueB = new WithdrawalQueue(wrapperB);
+        wrapperB = new WrapperB(address(dashboardB), address(steth), false);
+        queueB = new WithdrawalQueue(address(wrapperB));
         queueB.initialize(address(this));
         wrapperB.setWithdrawalQueue(address(queueB));
         queueB.grantRole(queueB.FINALIZE_ROLE(), address(this));
@@ -125,8 +125,8 @@ contract ScenariosTest is Test {
         strategy = new ExampleLoopStrategy(address(steth), address(0), 2); // 2 loops
         vm.deal(address(strategy.LENDER_MOCK()), 1000 ether);
         
-        wrapperC = new WrapperC(address(dashboardC), address(this), "Config C", "stvC", false, address(strategy));
-        queueC = new WithdrawalQueue(wrapperC);
+        wrapperC = new WrapperC(address(dashboardC), false, address(strategy));
+        queueC = new WithdrawalQueue(address(wrapperC));
         queueC.initialize(address(this));
         wrapperC.setWithdrawalQueue(address(queueC));
         queueC.grantRole(queueC.FINALIZE_ROLE(), address(this));
@@ -247,7 +247,7 @@ contract ScenariosTest is Test {
         vm.deal(USER1, user1Deposit);
         
         // Use a separate wrapper to create initial liabilities
-        WrapperB tempWrapper = new WrapperB(address(dashboardB), address(this), "Temp", "TEMP", false);
+        WrapperB tempWrapper = new WrapperB(address(dashboardB), address(steth), false);
         dashboardB.grantRole(dashboardB.FUND_ROLE(), address(tempWrapper));
         
         vm.prank(USER1);
@@ -432,7 +432,7 @@ contract ScenariosTest is Test {
         // Strategy exit requires time for positions to unwind
         // For testing, we'll directly call the claim function
         vm.prank(USER1);
-        uint256 requestId = wrapperC.claimWithdrawal(positionId);
+        uint256 requestId = wrapperC.finalizePositionWithdrawal(positionId);
         
         _simulateValidatorExit(vaultC, queueC, userDeposit);
         

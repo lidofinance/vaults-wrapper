@@ -2,8 +2,10 @@
 pragma solidity >=0.8.25;
 
 import {Test} from "forge-std/Test.sol";
+import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
 import {WrapperA} from "src/WrapperA.sol";
+import {WrapperBase} from "src/WrapperBase.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
@@ -86,26 +88,32 @@ contract AllowListTest is Test {
         vm.deal(address(stakingVault), 1 ether);
 
         // Create wrapper with allowlist enabled
-        wrapperWithAllowList = new WrapperA(
+        WrapperA allowListImpl = new WrapperA(
             address(dashboard),
-            owner,
-            "AllowListed Staked ETH Vault",
-            "wstvETH",
             true // allowlist enabled
         );
+        bytes memory initDataAllowList = abi.encodeCall(
+            WrapperA.initialize,
+            (owner, "AllowListed Staked ETH Vault", "wstvETH")
+        );
+        ERC1967Proxy allowListProxy = new ERC1967Proxy(address(allowListImpl), initDataAllowList);
+        wrapperWithAllowList = WrapperA(payable(address(allowListProxy)));
 
         // Create wrapper without allowlist
-        wrapperWithoutAllowList = new WrapperA(
+        WrapperA openImpl = new WrapperA(
             address(dashboard),
-            owner,
-            "Open Staked ETH Vault",
-            "ostvETH",
             false // allowlist disabled
         );
+        bytes memory initDataOpen = abi.encodeCall(
+            WrapperA.initialize,
+            (owner, "Open Staked ETH Vault", "ostvETH")
+        );
+        ERC1967Proxy openProxy = new ERC1967Proxy(address(openImpl), initDataOpen);
+        wrapperWithoutAllowList = WrapperA(payable(address(openProxy)));
 
         // Setup withdrawal queue for allowlist wrapper
         vm.startPrank(owner);
-        withdrawalQueue = new WithdrawalQueue(wrapperWithAllowList);
+        withdrawalQueue = new WithdrawalQueue(address(wrapperWithAllowList));
         withdrawalQueue.initialize(owner);
         wrapperWithAllowList.setWithdrawalQueue(address(withdrawalQueue));
         withdrawalQueue.grantRole(withdrawalQueue.FINALIZE_ROLE(), owner);
@@ -125,8 +133,8 @@ contract AllowListTest is Test {
     // Tests that allowlist feature can be enabled/disabled during wrapper deployment
     // Verifies the allowlistEnabled flag is properly set for different wrapper instances
     function test_allowlistEnabled() public view {
-        assertEq(wrapperWithAllowList.ALLOWLIST_ENABLED(), true, "AllowList should be enabled");
-        assertEq(wrapperWithoutAllowList.ALLOWLIST_ENABLED(), false, "AllowList should be disabled");
+        assertEq(wrapperWithAllowList.ALLOW_LIST_ENABLED(), true, "AllowList should be enabled");
+        assertEq(wrapperWithoutAllowList.ALLOW_LIST_ENABLED(), false, "AllowList should be disabled");
     }
 
     // Tests that newly deployed wrapper with allowlist enabled starts with empty allowlist
@@ -230,24 +238,24 @@ contract AllowListTest is Test {
         vm.expectRevert();
         wrapperWithAllowList.removeFromAllowList(user2);
         vm.stopPrank();
-        
+
         // Owner can manage (has role by default)
         vm.startPrank(owner);
         wrapperWithAllowList.addToAllowList(user2);
         wrapperWithAllowList.removeFromAllowList(user2);
         vm.stopPrank();
     }
-    
+
     // Tests that ALLOWLIST_MANAGER_ROLE can be delegated to other addresses
     // Verifies role-based access control works correctly for allowlist management
     function test_allowListManagerRoleCanBeDelegated() public {
         bytes32 ALLOWLIST_MANAGER_ROLE = wrapperWithAllowList.ALLOWLIST_MANAGER_ROLE();
-        
+
         // Grant role to user3
         vm.startPrank(owner);
         wrapperWithAllowList.grantRole(ALLOWLIST_MANAGER_ROLE, user3);
         vm.stopPrank();
-        
+
         // User3 can now manage allowlist
         vm.startPrank(user3);
         wrapperWithAllowList.addToAllowList(user1);
@@ -255,12 +263,12 @@ contract AllowListTest is Test {
         wrapperWithAllowList.removeFromAllowList(user1);
         assertFalse(wrapperWithAllowList.isAllowListed(user1), "User1 should not be allowlisted");
         vm.stopPrank();
-        
+
         // Revoke role from user3
         vm.startPrank(owner);
         wrapperWithAllowList.revokeRole(ALLOWLIST_MANAGER_ROLE, user3);
         vm.stopPrank();
-        
+
         // User3 can no longer manage allowlist
         vm.startPrank(user3);
         vm.expectRevert();
@@ -411,7 +419,7 @@ contract AllowListTest is Test {
 
     // Tests that users can transfer shares even after being removed from allowlist
     // Verifies allowlist only affects deposits, not share transfers
-    function test_canTransferSharesAfterRemovalFromAllowList() public {
+    function test_cannotTransferShares() public {
         vm.startPrank(owner);
         wrapperWithAllowList.addToAllowList(user1);
         vm.stopPrank();
@@ -426,12 +434,14 @@ contract AllowListTest is Test {
         wrapperWithAllowList.removeFromAllowList(user1);
         vm.stopPrank();
 
-        // User1 can still transfer shares
+        // Verify that shares cannot be transferred (wrapper is non-transferable)
         vm.startPrank(user1);
+        vm.expectRevert(WrapperBase.TransferNotAllowed.selector);
         wrapperWithAllowList.transfer(user2, shares / 2);
 
-        assertEq(wrapperWithAllowList.balanceOf(user1), shares / 2, "User1 should have half shares");
-        assertEq(wrapperWithAllowList.balanceOf(user2), shares / 2, "User2 should have half shares");
+        // Verify balances remain unchanged
+        assertEq(wrapperWithAllowList.balanceOf(user1), shares, "User1 should still have all shares");
+        assertEq(wrapperWithAllowList.balanceOf(user2), 0, "User2 should have no shares");
 
         vm.stopPrank();
     }
@@ -453,11 +463,10 @@ contract AllowListTest is Test {
         wrapperWithAllowList.removeFromAllowList(user1);
         vm.stopPrank();
 
-        // User1 can still request withdrawal
+        // User1 can still request withdrawal (no approval needed as wrapper burns directly)
         vm.startPrank(user1);
-        wrapperWithAllowList.approve(address(withdrawalQueue), shares);
 
-        uint256 requestId = withdrawalQueue.requestWithdrawal(user1, shares);
+        uint256 requestId = wrapperWithAllowList.requestWithdrawal(shares);
         assertGt(requestId, 0, "Should have a valid withdrawal request ID");
 
         vm.stopPrank();

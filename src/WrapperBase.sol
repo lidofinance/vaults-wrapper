@@ -1,15 +1,16 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >=0.8.25;
 
-import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import {AccessControlEnumerable} from "@openzeppelin/contracts/access/extensions/AccessControlEnumerable.sol";
+import {ERC20Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
+import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import {AccessControlEnumerableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/extensions/AccessControlEnumerableUpgradeable.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
 import {WithdrawalQueue} from "./WithdrawalQueue.sol";
 import {IVaultHub} from "./interfaces/IVaultHub.sol";
 import {IDashboard} from "./interfaces/IDashboard.sol";
 
-abstract contract WrapperBase is ERC20, AccessControlEnumerable {
+abstract contract WrapperBase is Initializable, ERC20Upgradeable, AccessControlEnumerableUpgradeable {
     // Custom errors
     error NotAllowListed(address user);
     error AlreadyAllowListed(address user);
@@ -26,7 +27,7 @@ abstract contract WrapperBase is ERC20, AccessControlEnumerable {
     bytes32 public constant REQUEST_VALIDATOR_EXIT_ROLE = keccak256("REQUEST_VALIDATOR_EXIT_ROLE");
     bytes32 public constant TRIGGER_VALIDATOR_WITHDRAWAL_ROLE = keccak256("TRIGGER_VALIDATOR_WITHDRAWAL_ROLE");
 
-    bool public immutable ALLOWLIST_ENABLED;
+    bool public immutable ALLOW_LIST_ENABLED;
 
     IDashboard public immutable DASHBOARD;
     IVaultHub public immutable VAULT_HUB;
@@ -64,11 +65,6 @@ abstract contract WrapperBase is ERC20, AccessControlEnumerable {
         uint256 assets,
         uint256 stvETHShares
     );
-    event Withdraw(
-        address indexed user,
-        uint256 assets,
-        uint256 stvETHShares
-    );
 
     event AllowListAdded(address indexed user);
     event AllowListRemoved(address indexed user);
@@ -77,19 +73,28 @@ abstract contract WrapperBase is ERC20, AccessControlEnumerable {
 
     constructor(
         address _dashboard,
-        address _owner,
-        string memory _name,
-        string memory _symbol,
         bool _allowListEnabled
-    ) ERC20(_name, _symbol) {
-        ALLOWLIST_ENABLED = _allowListEnabled;
-
+    ) {
+        ALLOW_LIST_ENABLED = _allowListEnabled;
         DASHBOARD = IDashboard(payable(_dashboard));
         VAULT_HUB = IVaultHub(DASHBOARD.VAULT_HUB());
         STAKING_VAULT = address(DASHBOARD.stakingVault());
 
+        // Disable initializers since we only support proxy deployment
+        _disableInitializers();
+    }
+
+    function initialize(
+        address _owner,
+        string memory _name,
+        string memory _symbol
+    ) public virtual initializer {
+        __ERC20_init(_name, _symbol);
+        __AccessControlEnumerable_init();
+
         _grantRole(DEFAULT_ADMIN_ROLE, _owner);
         _grantRole(ALLOWLIST_MANAGER_ROLE, _owner);
+
         _setRoleAdmin(ALLOWLIST_MANAGER_ROLE, DEFAULT_ADMIN_ROLE);
         _setRoleAdmin(DEPOSIT_ROLE, ALLOWLIST_MANAGER_ROLE);
 
@@ -99,34 +104,32 @@ abstract contract WrapperBase is ERC20, AccessControlEnumerable {
         uint256 initialVaultBalance = address(STAKING_VAULT).balance;
         uint256 connectDeposit = VAULT_HUB.CONNECT_DEPOSIT();
         assert(initialVaultBalance >= connectDeposit);
-        _mint(address(this), _convertToShares(connectDeposit));
+        // _mint(address(this), _convertToShares(connectDeposit));
     }
 
-    // =================================================================================
-    // NON-TRANSFERRABLE TOKEN FUNCTIONALITY
-    // =================================================================================
+    // // =================================================================================
+    // // NON-TRANSFERRABLE TOKEN FUNCTIONALITY
+    // // =================================================================================
 
-    function transfer(address, uint256) public pure override returns (bool) {
-        revert TransferNotAllowed();
-    }
+    // function transfer(address, uint256) public pure override returns (bool) {
+    //     revert TransferNotAllowed();
+    // }
 
-    function transferFrom(address, address, uint256) public pure override returns (bool) {
-        revert TransferNotAllowed();
-    }
+    // function transferFrom(address, address, uint256) public pure override returns (bool) {
+    //     revert TransferNotAllowed();
+    // }
 
-    function approve(address, uint256) public pure override returns (bool) {
-        revert TransferNotAllowed();
-    }
+    // function approve(address, uint256) public pure override returns (bool) {
+    //     revert TransferNotAllowed();
+    // }
 
     // =================================================================================
     // CORE VAULT FUNCTIONS
     // =================================================================================
 
     function totalAssets() public view returns (uint256) {
-        return VAULT_HUB.totalValue(STAKING_VAULT);
+        return DASHBOARD.maxLockableValue();
     }
-
-    // totalSupply() and balanceOf() are inherited from ERC20
 
     function _convertToShares(uint256 _assets) internal view returns (uint256) {
         uint256 supply = totalSupply();
@@ -137,11 +140,16 @@ abstract contract WrapperBase is ERC20, AccessControlEnumerable {
     }
 
     function _convertToAssets(uint256 _shares) internal view returns (uint256) {
+        return _getCorrespondingShare(_shares, totalAssets());
+    }
+
+    function _getCorrespondingShare(uint256 _shares, uint256 _assets) internal view returns (uint256) {
+        // TODO: check supply
         uint256 supply = totalSupply();
         if (supply == 0) {
-            return _shares; // 1:1 for the first deposit
+            return _shares; // 1:1 for the first deposit. TODO: add stone
         }
-        return Math.mulDiv(_shares, totalAssets(), supply, Math.Rounding.Floor);
+        return Math.mulDiv(_shares, _assets, supply, Math.Rounding.Floor);
     }
 
     function previewDeposit(uint256 _assets) public view returns (uint256) {
@@ -179,10 +187,23 @@ abstract contract WrapperBase is ERC20, AccessControlEnumerable {
     // WITHDRAWAL SYSTEM
     // =================================================================================
 
+    /**
+     * @notice Claim finalized withdrawal request
+     * @param _requestId The withdrawal request ID to claim
+     */
+    function claimWithdrawal(uint256 _requestId) external virtual {
+        WithdrawalQueue wq = withdrawalQueue();
+        WithdrawalQueue.WithdrawalRequestStatus memory status = wq.getWithdrawalStatus(_requestId);
+
+        _burn(address(wq), status.amountOfShares);
+        wq.claimWithdrawal(_requestId);
+    }
+
     function burnShares(uint256 _shares) external {
         _burn(msg.sender, _shares);
     }
 
+    // TODO: remove this function
     function setWithdrawalQueue(address _withdrawalQueue) external {
         _getWrapperBaseStorage().withdrawalQueue = WithdrawalQueue(payable(_withdrawalQueue));
     }
@@ -331,21 +352,15 @@ abstract contract WrapperBase is ERC20, AccessControlEnumerable {
     // =================================================================================
 
     function _checkAllowList() internal view {
-        if (ALLOWLIST_ENABLED && !hasRole(DEPOSIT_ROLE, msg.sender)) {
+        if (ALLOW_LIST_ENABLED && !hasRole(DEPOSIT_ROLE, msg.sender)) {
             revert NotAllowListed(msg.sender);
         }
     }
 
     function _mintMaximumStETH(address _receiver, uint256 _stvShares) internal returns (uint256 stETHAmount) {
-        uint256 remainingMintingCapacity = DASHBOARD.remainingMintingCapacityShares(0);
         uint256 totalMintingCapacity = DASHBOARD.totalMintingCapacityShares();
-        assert(remainingMintingCapacity <= totalMintingCapacity);
-
-        uint256 userEthInPool = _convertToAssets(_stvShares);
-        uint256 totalVaultAssets = totalAssets();
-        uint256 userTotalMintingCapacity = (userEthInPool * totalMintingCapacity) / totalVaultAssets;
-
-        stETHAmount = Math.min(userTotalMintingCapacity, remainingMintingCapacity);
+        uint256 userTotalMintingCapacity = _getCorrespondingShare(_stvShares, totalMintingCapacity);
+        stETHAmount = Math.min(userTotalMintingCapacity, DASHBOARD.remainingMintingCapacityShares(0));
 
         if (stETHAmount == 0) revert NoMintingCapacityAvailable();
 

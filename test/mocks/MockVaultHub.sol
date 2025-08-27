@@ -147,4 +147,8 @@ contract MockVaultHub { // TODO: maybe inherit IVaultHub
     function isReportFresh(address _vault) external pure returns (bool) {
         return true;
     }
+
+    function mock_setVaultBalance(address _vault, uint256 _balance) external {
+        vaultBalances[_vault] = _balance;
+    }
 }

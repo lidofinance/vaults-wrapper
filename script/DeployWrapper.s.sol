@@ -46,9 +46,6 @@ contract DeployWrapper is Script {
 
         WrapperA wrapper = new WrapperA(
             address(dashboard),
-            deployer,
-            "STV",
-            "STV",
             false // allowlist disabled
         );
 

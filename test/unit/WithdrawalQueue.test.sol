@@ -2,6 +2,7 @@
 pragma solidity >=0.8.25;
 
 import {Test, console} from "forge-std/Test.sol";
+import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
@@ -52,23 +53,39 @@ contract WithdrawalQueueTest is Test {
 
         stakingVault.setNodeOperator(address(vaultHub));
 
+        // Fund the staking vault with the required CONNECT_DEPOSIT
+        vm.deal(address(stakingVault), 1 ether);
+        // Initialize vault hub to reflect the staking vault balance
+        vaultHub.mock_setVaultBalance(address(stakingVault), 1 ether);
+
         // Deploy wrapper
-        wrapper = new WrapperA(
+        WrapperA impl = new WrapperA(
             address(dashboard),
-            admin,
-            "Staked ETH Vault Wrapper",
-            "stvETH",
             false // allowlist disabled
         );
+        bytes memory initData = abi.encodeCall(
+            WrapperA.initialize,
+            (admin, "Staked ETH Vault Wrapper", "stvETH")
+        );
+        ERC1967Proxy proxy = new ERC1967Proxy(address(impl), initData);
+        wrapper = WrapperA(payable(address(proxy)));
 
         // Deploy withdrawal queue
-        withdrawalQueue = new WithdrawalQueue(wrapper);
+        withdrawalQueue = new WithdrawalQueue(address(wrapper));
         vm.label(address(withdrawalQueue), "WithdrawalQueue");
 
+        // Set withdrawal queue as admin (since admin was granted in initialize)
+        vm.prank(admin);
         wrapper.setWithdrawalQueue(address(withdrawalQueue));
 
         // Initialize withdrawal queue
         withdrawalQueue.initialize(admin);
+
+        // Grant necessary roles to wrapper for dashboard operations
+        vm.startPrank(admin);
+        dashboard.grantRole(dashboard.FUND_ROLE(), address(wrapper));
+        dashboard.grantRole(dashboard.WITHDRAW_ROLE(), address(withdrawalQueue));
+        vm.stopPrank();
 
         vm.startPrank(admin);
         // Grant roles
@@ -99,19 +116,11 @@ contract WithdrawalQueueTest is Test {
         assertEq(wrapper.balanceOf(user2), user2Shares);
 
         vm.startPrank(user1);
-        wrapper.approve(address(withdrawalQueue), USER1_DEPOSIT);
-        uint256 user1RequestId = withdrawalQueue.requestWithdrawal(
-            user1,
-            USER1_DEPOSIT
-        );
+        uint256 user1RequestId = wrapper.requestWithdrawal(user1Shares);
         vm.stopPrank();
 
         vm.startPrank(user2);
-        wrapper.approve(address(withdrawalQueue), USER2_DEPOSIT);
-        uint256 user2RequestId = withdrawalQueue.requestWithdrawal(
-            user2,
-            USER2_DEPOSIT
-        );
+        uint256 user2RequestId = wrapper.requestWithdrawal(user2Shares);
         vm.stopPrank();
 
         // Simulate operator run validators and send ETH to the BeaconChain
@@ -132,11 +141,7 @@ contract WithdrawalQueueTest is Test {
         assertEq(user1RequestId, 1);
         assertEq(user2RequestId, 2);
 
-        // Verify stvTokens were transferred to withdrawalQueue
-        assertEq(
-            wrapper.balanceOf(address(withdrawalQueue)),
-            USER1_DEPOSIT + USER2_DEPOSIT
-        );
+        // Verify stvTokens were burned by wrapper
         assertEq(wrapper.balanceOf(user1), 0);
         assertEq(wrapper.balanceOf(user2), 0);
 
@@ -294,13 +299,12 @@ contract WithdrawalQueueTest is Test {
         console.log("user2Shares", user2Shares);
 
         vm.startPrank(user1);
-        uint256 halfUser1Deposit = USER1_DEPOSIT/2;
-        wrapper.approve(address(withdrawalQueue), halfUser1Deposit);
-        uint256 user1RequestId = withdrawalQueue.requestWithdrawal(
-            user1,
-            halfUser1Deposit
-        );
+        uint256 halfUser1Shares = user1Shares / 2;
+        uint256 user1RequestId = wrapper.requestWithdrawal(halfUser1Shares);
         vm.stopPrank();
+
+        // Calculate expected assets from half of user1's shares (should be approximately half the deposit)
+        uint256 halfUser1Assets = USER1_DEPOSIT / 2; // Approximate expected assets
 
         console.log("user1RequestId", user1RequestId);
         console.log("--------------------------------");
@@ -309,7 +313,7 @@ contract WithdrawalQueueTest is Test {
         console.log("unfinalizedShares", withdrawalQueue.unfinalizedShares());
         console.log("lastRequestId", withdrawalQueue.getLastRequestId());
         console.log("lastFinalizedRequestId", withdrawalQueue.getLastFinalizedRequestId());
-        console.log("halfUser1Deposit", halfUser1Deposit);
+        console.log("halfUser1Assets", halfUser1Assets);
 
 
         console.log("--- calculateFinalizationBatches ---");
@@ -356,14 +360,14 @@ contract WithdrawalQueueTest is Test {
         vm.prank(user1);
         withdrawalQueue.finalize(1);
 
-        assertEq(address(withdrawalQueue).balance, halfUser1Deposit);
+        assertEq(address(withdrawalQueue).balance, halfUser1Assets);
         assertEq(address(user1).balance, user1BalanceBefore);
 
         vm.prank(user1);
         withdrawalQueue.claimWithdrawal(user1RequestId);
 
         assertEq(address(withdrawalQueue).balance, 0);
-        assertEq(address(user1).balance, user1BalanceBefore + halfUser1Deposit);
+        assertEq(address(user1).balance, user1BalanceBefore + halfUser1Assets);
     }
 
     // Tests withdrawal handling when vault experiences staking rewards/rebases

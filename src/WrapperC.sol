@@ -3,6 +3,8 @@ pragma solidity >=0.8.25;
 
 import {WrapperBase} from "./WrapperBase.sol";
 import {IStrategy} from "./interfaces/IStrategy.sol";
+import {WithdrawalQueue} from "./WithdrawalQueue.sol";
+import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 
 error InvalidConfiguration();
 error PositionNotFound(uint256 positionId);
@@ -68,16 +70,21 @@ contract WrapperC is WrapperBase {
 
     constructor(
         address _dashboard,
-        address _owner,
-        string memory _name,
-        string memory _symbol,
         bool _allowListEnabled,
         address _strategy
-    ) WrapperBase(_dashboard, _owner, _name, _symbol, _allowListEnabled) {
+    ) WrapperBase(_dashboard, _allowListEnabled) {
         if (_strategy == address(0)) {
             revert InvalidConfiguration();
         }
         STRATEGY = IStrategy(_strategy);
+    }
+
+    function initialize(
+        address _owner,
+        string memory _name,
+        string memory _symbol
+    ) public override initializer {
+        WrapperBase.initialize(_owner, _name, _symbol);
 
         // Note: MINT_ROLE and BURN_ROLE should be granted by dashboard admin after deployment
     }
@@ -160,7 +167,7 @@ contract WrapperC is WrapperBase {
      * @param _positionId Position ID to finalize and claim
      * @return requestId The withdrawal request ID for final claim
      */
-    function claimWithdrawal(uint256 _positionId) external returns (uint256 requestId) {
+    function finalizePositionWithdrawal(uint256 _positionId) external returns (uint256 requestId) {
         Position storage position = _getWrapperCStorage().positions[_positionId];
         if (position.user != msg.sender) revert PositionNotFound(_positionId);
         if (!position.isActive) revert PositionNotActive(_positionId);
@@ -177,13 +184,13 @@ contract WrapperC is WrapperBase {
         position.isActive = false;
 
         emit PositionClosed(msg.sender, _positionId, position.stvETHShares);
-        emit Withdraw(msg.sender, _convertToAssets(position.stvETHShares), position.stvETHShares);
     }
 
     /**
      * @notice Set the strategy address after construction
      * @dev This is needed to resolve circular dependency
      */
+    // TODO: remove this function, set in initializer
     function setStrategy(address _strategy) external {
         _checkRole(DEFAULT_ADMIN_ROLE, msg.sender);
         // Can only be set once if not set in constructor

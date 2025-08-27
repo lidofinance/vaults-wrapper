@@ -56,16 +56,21 @@ contract FactoryTest is Test {
         (
             address vault,
             address dashboard,
-            WrapperBase wrapper,
-            WithdrawalQueue withdrawalQueue
+            address payable wrapperProxy,
+            address withdrawalQueueProxy
         ) = WrapperFactory.createVaultWithWrapper{value: connectDeposit}(
                 nodeOperator,
                 nodeOperatorManager,
                 100, // 1% fee
                 3600, // 1 hour confirm expiry
                 Factory.WrapperConfiguration.NO_MINTING_NO_STRATEGY,
-                address(0) // no strategy for this test
+                address(0), // no strategy for this test
+                false // allowlist disabled
             );
+
+        WrapperBase wrapper = WrapperBase(wrapperProxy);
+        WithdrawalQueue withdrawalQueue = WithdrawalQueue(payable(withdrawalQueueProxy));
+
         assertEq(address(wrapper.STAKING_VAULT()), address(vault));
         assertEq(address(wrapper.DASHBOARD()), address(dashboard));
         assertEq(address(wrapper.withdrawalQueue()), address(withdrawalQueue));
@@ -76,7 +81,7 @@ contract FactoryTest is Test {
         assertTrue(
             mockDashboard.hasRole(
                 mockDashboard.DEFAULT_ADMIN_ROLE(),
-                address(wrapper)
+                admin // admin is now the owner, not the wrapper
             )
         );
 
@@ -97,7 +102,8 @@ contract FactoryTest is Test {
             100, // 1% fee
             3600, // 1 hour confirm expiry
             Factory.WrapperConfiguration.NO_MINTING_NO_STRATEGY,
-            address(0) // no strategy for this test
+            address(0), // no strategy for this test
+            false // allowlist disabled
         );
     }
 
@@ -106,16 +112,21 @@ contract FactoryTest is Test {
         (
             address vault,
             address dashboard,
-            WrapperBase wrapper,
-            WithdrawalQueue withdrawalQueue
+            address payable wrapperProxy,
+            address withdrawalQueueProxy
         ) = WrapperFactory.createVaultWithWrapper{value: connectDeposit}(
                 nodeOperator,
                 nodeOperatorManager,
                 100, // 1% fee
                 3600, // 1 hour confirm expiry
                 Factory.WrapperConfiguration.MINTING_AND_STRATEGY,
-                strategyAddress // strategy for this test
+                strategyAddress, // strategy for this test
+                false // allowlist disabled
             );
+
+        WrapperBase wrapper = WrapperBase(wrapperProxy);
+        WithdrawalQueue withdrawalQueue = WithdrawalQueue(payable(withdrawalQueueProxy));
+
         // Cast to WrapperC to access STRATEGY
         WrapperC wrapperC = WrapperC(payable(address(wrapper)));
         assertEq(address(wrapperC.STRATEGY()), strategyAddress);
@@ -130,4 +141,26 @@ contract FactoryTest is Test {
             mockDashboard.hasRole(mockDashboard.BURN_ROLE(), address(wrapper))
         );
     }
+
+    function test_allowlistEnabled() public {
+        vm.startPrank(admin);
+        (
+            ,
+            ,
+            address payable wrapperProxy,
+
+        ) = WrapperFactory.createVaultWithWrapper{value: connectDeposit}(
+                nodeOperator,
+                nodeOperatorManager,
+                100, // 1% fee
+                3600, // 1 hour confirm expiry
+                Factory.WrapperConfiguration.NO_MINTING_NO_STRATEGY,
+                address(0), // no strategy
+                true // allowlist enabled
+            );
+
+        WrapperBase wrapper = WrapperBase(wrapperProxy);
+        assertTrue(wrapper.ALLOW_LIST_ENABLED());
+    }
+
 }

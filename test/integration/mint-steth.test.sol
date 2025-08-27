@@ -55,9 +55,7 @@ contract MintStethTest is Test {
         // Create WrapperB for minting tests
         wrapperB = new WrapperB(
             address(dashboard),
-            address(this),
-            "Minting Test Wrapper",
-            "stvB",
+            address(steth),
             false // allowlist disabled
         );
         dashboard.grantRole(dashboard.FUND_ROLE(), address(wrapperB));

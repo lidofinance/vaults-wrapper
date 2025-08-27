@@ -56,12 +56,9 @@ contract WithdrawalTest is Test {
         // Create additional wrapper configurations for withdrawal testing
         wrapperA = new WrapperA(
             address(dashboard),
-            address(this),
-            "Basic Wrapper A",
-            "stvA",
             false // allowlist disabled
         );
-        WithdrawalQueue queueA = new WithdrawalQueue(wrapperA);
+        WithdrawalQueue queueA = new WithdrawalQueue(address(wrapperA));
         queueA.initialize(address(this));
         wrapperA.setWithdrawalQueue(address(queueA));
         queueA.grantRole(queueA.FINALIZE_ROLE(), address(this));
@@ -71,12 +68,10 @@ contract WithdrawalTest is Test {
         
         wrapperB = new WrapperB(
             address(dashboard),
-            address(this),
-            "Minting Wrapper B",
-            "stvB",
+            address(steth),
             false // allowlist disabled
         );
-        WithdrawalQueue queueB = new WithdrawalQueue(wrapperB);
+        WithdrawalQueue queueB = new WithdrawalQueue(address(wrapperB));
         queueB.initialize(address(this));
         wrapperB.setWithdrawalQueue(address(queueB));
         queueB.grantRole(queueB.FINALIZE_ROLE(), address(this));

@@ -1,8 +1,8 @@
 diff --git a/contracts/0.8.25/vaults/LazyOracle.sol b/contracts/0.8.25/vaults/LazyOracle.sol
-index 0f33f00..37fa630 100644
+index 01da492..29eff22 100644
 --- a/contracts/0.8.25/vaults/LazyOracle.sol
 +++ b/contracts/0.8.25/vaults/LazyOracle.sol
-@@ -312,6 +312,29 @@ contract LazyOracle is ILazyOracle, AccessControlEnumerableUpgradeable {
+@@ -325,6 +325,28 @@ contract LazyOracle is ILazyOracle, AccessControlEnumerableUpgradeable {
          );
      }
  
@@ -15,12 +15,11 @@ index 0f33f00..37fa630 100644
 +    ) external {
 +        uint256 vaultsDataTimestamp = _storage().vaultsDataTimestamp;
 +        int256 inOutDelta;
-+        (_totalValue, inOutDelta) = _handleSanityChecks(
-+            _vault, _totalValue, _storage().vaultsDataRefSlot, vaultsDataTimestamp);
++        (_totalValue, inOutDelta) = _handleSanityChecks(_vault, _totalValue, _storage().vaultsDataRefSlot, vaultsDataTimestamp, _cumulativeLidoFees);
 +
 +        _vaultHub().applyVaultReport(
 +            _vault,
-+            _storage().vaultsDataTimestamp,
++            vaultsDataTimestamp,
 +            _totalValue,
 +            inOutDelta,
 +            _cumulativeLidoFees,

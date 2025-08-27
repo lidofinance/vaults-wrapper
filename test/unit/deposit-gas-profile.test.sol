@@ -2,6 +2,7 @@
 pragma solidity >=0.8.25;
 
 import {Test, console} from "forge-std/Test.sol";
+import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {WrapperA} from "src/WrapperA.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
 
@@ -30,6 +31,10 @@ contract MockVaultHub {
     
     function isReportFresh(address) external pure returns (bool, bool) {
         return (true, false);
+    }
+    
+    function CONNECT_DEPOSIT() external pure returns (uint256) {
+        return 1 ether;
     }
 }
 
@@ -72,22 +77,28 @@ contract DepositGasProfileTest is Test {
         vm.deal(address(stakingVaultWithoutAllowList), 1 ether);
 
         // Create wrapper with allowlist enabled
-        wrapperWithAllowList = new WrapperA(
+        WrapperA allowListImpl = new WrapperA(
             address(dashboardWithAllowList),
-            owner,
-            "AllowListed Vault",
-            "wstvETH",
             true // allowlist enabled
         );
+        bytes memory initDataAllowList = abi.encodeCall(
+            WrapperA.initialize,
+            (owner, "AllowListed Vault", "wstvETH")
+        );
+        ERC1967Proxy allowListProxy = new ERC1967Proxy(address(allowListImpl), initDataAllowList);
+        wrapperWithAllowList = WrapperA(payable(address(allowListProxy)));
 
         // Create wrapper without allowlist
-        wrapperWithoutAllowList = new WrapperA(
+        WrapperA openImpl = new WrapperA(
             address(dashboardWithoutAllowList),
-            owner,
-            "Open Vault",
-            "ostvETH",
             false // allowlist disabled
         );
+        bytes memory initDataOpen = abi.encodeCall(
+            WrapperA.initialize,
+            (owner, "Open Vault", "ostvETH")
+        );
+        ERC1967Proxy openProxy = new ERC1967Proxy(address(openImpl), initDataOpen);
+        wrapperWithoutAllowList = WrapperA(payable(address(openProxy)));
 
         // Grant FUND_ROLE to wrappers
         dashboardWithAllowList.grantRole(dashboardWithAllowList.FUND_ROLE(), address(wrapperWithAllowList));

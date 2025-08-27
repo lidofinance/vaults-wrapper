@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >=0.8.25;
 
-import {AccessControlEnumerable} from "@openzeppelin/contracts/access/extensions/AccessControlEnumerable.sol";
-import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
+import {AccessControlEnumerableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/extensions/AccessControlEnumerableUpgradeable.sol";
+import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
+import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import {WrapperBase} from "./WrapperBase.sol";
 import {IDashboard} from "./interfaces/IDashboard.sol";
@@ -10,7 +11,7 @@ import {IVaultHub} from "./interfaces/IVaultHub.sol";
 
 /// @title Withdrawal Queue V3 for Staking Vault Wrapper
 /// @notice Handles withdrawal requests for stvToken holders
-contract WithdrawalQueue is AccessControlEnumerable, Pausable {
+contract WithdrawalQueue is Initializable, AccessControlEnumerableUpgradeable, PausableUpgradeable {
     using EnumerableSet for EnumerableSet.UintSet;
 
     /// @dev maximal length of the batch array provided for prefinalization. See `prefinalize()`
@@ -142,16 +143,21 @@ contract WithdrawalQueue is AccessControlEnumerable, Pausable {
     error RequestIdsNotSorted();
     error InvalidEmergencyExitActivation();
 
-    constructor(WrapperBase _wrapper) {
-        WRAPPER = _wrapper;
+    constructor(address _wrapper) {
+        WRAPPER = WrapperBase(payable(_wrapper));
+
+        _disableInitializers();
     }
 
     /// @notice Initialize the contract storage explicitly.
     /// @param _admin admin address that can change every role.
     /// @dev Reverts if `_admin` equals to `address(0)`
     /// @dev NB! It's initialized in paused state by default and should be resumed explicitly to start
-    function initialize(address _admin) external {
+    function initialize(address _admin) external initializer {
         if (_admin == address(0)) revert AdminZeroAddress();
+
+        __AccessControlEnumerable_init();
+        __Pausable_init();
 
         _grantRole(DEFAULT_ADMIN_ROLE, _admin);
         _pause();

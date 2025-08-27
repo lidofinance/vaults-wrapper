@@ -56,18 +56,13 @@ contract DepositTest is Test {
         // Create additional wrapper configurations for testing
         wrapperA = new WrapperA(
             address(dashboard),
-            address(this),
-            "Basic Wrapper A",
-            "stvA",
             false // allowlist disabled
         );
         dashboard.grantRole(dashboard.FUND_ROLE(), address(wrapperA));
         
         wrapperB = new WrapperB(
             address(dashboard),
-            address(this),
-            "Minting Wrapper B",
-            "stvB",
+            address(steth),
             false // allowlist disabled
         );
         dashboard.grantRole(dashboard.FUND_ROLE(), address(wrapperB));

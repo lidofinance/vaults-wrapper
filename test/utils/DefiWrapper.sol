@@ -96,14 +96,11 @@ contract DefiWrapper is Test {
 
         wrapper = new WrapperC(
             address(dashboard),
-            address(this), // initial balance owner
-            "Staked ETH Vault Wrapper",
-            "stvETH",
             false, // allowlist disabled
             address(strategy)
         );
 
-        withdrawalQueue = new WithdrawalQueue(wrapper);
+        withdrawalQueue = new WithdrawalQueue(address(wrapper));
         withdrawalQueue.initialize(address(this));
         wrapper.setWithdrawalQueue(address(withdrawalQueue));
         withdrawalQueue.grantRole(withdrawalQueue.FINALIZE_ROLE(), address(this));
