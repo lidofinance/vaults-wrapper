@@ -18,4 +18,8 @@ interface ILido is IStETH {
 
     function STAKING_CONTROL_ROLE() external view returns (bytes32);
 
+
+    function mintShares(address _recipient, uint256 _amountOfShares) external;
+    function burnShares(uint256 _amountOfShares) external;
+
 }

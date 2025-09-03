@@ -11,6 +11,10 @@ import {WithdrawalQueue} from "./WithdrawalQueue.sol";
 import {IVaultFactory} from "./interfaces/IVaultFactory.sol";
 import {IDashboard} from "./interfaces/IDashboard.sol";
 
+contract DummyContractStub {
+
+}
+
 contract Factory {
     IVaultFactory public immutable VAULT_FACTORY;
     address public immutable STETH;
@@ -95,11 +99,12 @@ contract Factory {
         } else if (_configuration == WrapperConfiguration.MINTING_AND_STRATEGY) {
             wrapperImpl = new WrapperC(
                 dashboard,      // correct dashboard
+                STETH,
                 _allowlistEnabled,
                 _strategy != address(0) ? _strategy : address(1) // avoid zero strategy
             );
             proxyInitData = abi.encodeCall(
-                WrapperC.initialize,
+                WrapperB.initialize,
                 (address(this), NAME, SYMBOL) // Factory gets admin role temporarily
             );
         } else {
@@ -121,7 +126,9 @@ contract Factory {
 
         // Configure the system
         _dashboard.grantRole(_dashboard.FUND_ROLE(), wrapperProxy);
-        _dashboard.grantRole(_dashboard.WITHDRAW_ROLE(), wrapperProxy);
+
+        // TODO: who must be granted WITHDRAW_ROLE?
+        _dashboard.grantRole(_dashboard.WITHDRAW_ROLE(), withdrawalQueueProxy);
 
         // For WrapperB and WrapperC, grant mint/burn roles
         if (_configuration != WrapperConfiguration.NO_MINTING_NO_STRATEGY) {

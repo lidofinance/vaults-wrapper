@@ -86,8 +86,8 @@ contract DefiWrapper is Test {
         core.setDashboard(address(dashboard));
 
         // Apply initial vault report and set fee rate
-        core.applyVaultReport(address(vault), 0, 0, 0, true);
-        
+        core.applyVaultReport(address(vault), 0, 0, 0, 0, true);
+
         // Grant admin role to the caller (test contract) as well
         dashboard.grantRole(dashboard.DEFAULT_ADMIN_ROLE(), msg.sender);
         dashboard.setNodeOperatorFeeRate(NODE_OPERATOR_FEE_RATE);
@@ -96,6 +96,7 @@ contract DefiWrapper is Test {
 
         wrapper = new WrapperC(
             address(dashboard),
+            address(core.steth()),
             false, // allowlist disabled
             address(strategy)
         );

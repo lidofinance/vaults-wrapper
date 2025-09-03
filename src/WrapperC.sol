@@ -2,6 +2,7 @@
 pragma solidity >=0.8.25;
 
 import {WrapperBase} from "./WrapperBase.sol";
+import {WrapperB} from "./WrapperB.sol";
 import {IStrategy} from "./interfaces/IStrategy.sol";
 import {WithdrawalQueue} from "./WithdrawalQueue.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
@@ -16,7 +17,7 @@ error InsufficientShares(uint256 required, uint256 available);
  * @title WrapperC
  * @notice Configuration C: Minting and strategy - stvETH shares + strategy positions with stETH
  */
-contract WrapperC is WrapperBase {
+contract WrapperC is WrapperB {
 
     IStrategy public STRATEGY;
 
@@ -70,24 +71,25 @@ contract WrapperC is WrapperBase {
 
     constructor(
         address _dashboard,
+        address _stETH,
         bool _allowListEnabled,
         address _strategy
-    ) WrapperBase(_dashboard, _allowListEnabled) {
+    ) WrapperB(_dashboard, _stETH, _allowListEnabled) {
         if (_strategy == address(0)) {
             revert InvalidConfiguration();
         }
         STRATEGY = IStrategy(_strategy);
     }
 
-    function initialize(
-        address _owner,
-        string memory _name,
-        string memory _symbol
-    ) public override initializer {
-        WrapperBase.initialize(_owner, _name, _symbol);
+    // function initialize(
+    //     address _owner,
+    //     string memory _name,
+    //     string memory _symbol
+    // ) public override initializer {
+    //     WrapperB.initialize(_owner, _name, _symbol);
 
-        // Note: MINT_ROLE and BURN_ROLE should be granted by dashboard admin after deployment
-    }
+    //     // Note: MINT_ROLE and BURN_ROLE should be granted by dashboard admin after deployment
+    // }
 
     /**
      * @notice Deposit native ETH and receive stvETH shares
@@ -95,7 +97,7 @@ contract WrapperC is WrapperBase {
      * @param _receiver Address to receive the minted shares
      * @return shares Number of stvETH shares minted
      */
-    function depositETH(address _receiver) public payable override returns (uint256 shares) {
+    function depositETHToStrategy(address _receiver) public payable returns (uint256 shares) {
         if (msg.value == 0) revert WrapperBase.ZeroDeposit();
         if (_receiver == address(0)) revert WrapperBase.InvalidReceiver();
 
@@ -115,7 +117,7 @@ contract WrapperC is WrapperBase {
         _mint(_receiver, shares);
 
         // Create strategy position
-        uint256 positionId = _createStrategyPosition(_receiver, shares);
+        _createStrategyPosition(_receiver, shares);
 
         emit Deposit(msg.sender, _receiver, msg.value, shares);
 
@@ -148,7 +150,7 @@ contract WrapperC is WrapperBase {
      * @notice Request withdrawal for Configuration C (minting and strategy)
      * @param _positionId Position ID to withdraw/close
      */
-    function requestWithdrawal(uint256 _positionId) external {
+    function requestWithdrawal(uint256 _positionId) external override returns (uint256 requestId) {
         Position storage position = _getWrapperCStorage().positions[_positionId];
         if (position.user != msg.sender) revert PositionNotFound(_positionId);
         if (!position.isActive) revert PositionNotActive(_positionId);
@@ -174,7 +176,7 @@ contract WrapperC is WrapperBase {
         if (!position.isExiting) revert PositionNotActive(_positionId);
 
         // Finalize exit with strategy
-        uint256 returnedAssets = STRATEGY.finalizeExit(msg.sender);
+        STRATEGY.finalizeExit(msg.sender);
 
         // Now proceed with normal withdrawal flow
         requestId = withdrawalQueue().requestWithdrawal(msg.sender, _convertToAssets(position.stvETHShares));

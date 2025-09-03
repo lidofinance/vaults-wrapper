@@ -498,7 +498,7 @@ contract WithdrawalQueue is Initializable, AccessControlEnumerableUpgradeable, P
     }
 
     /// @notice Finds the list of hints for the given `_requestIds` searching among the checkpoints with indices
-    ///  in the range  `[_firstIndex, _lastIndex]`.
+    ///  in the range `[_firstIndex, _lastIndex]`.
     ///  NB! Array of request ids should be sorted
     ///  NB! `_firstIndex` should be greater than 0, because checkpoint list is 1-based array
     ///  Usage: findCheckpointHints(_requestIds, 1, getLastCheckpointIndex())

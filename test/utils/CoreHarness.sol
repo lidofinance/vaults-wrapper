@@ -3,6 +3,8 @@ pragma solidity >=0.8.25;
 
 import {Test, console} from "forge-std/Test.sol";
 
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+
 import {ILidoLocator} from "src/interfaces/ILidoLocator.sol";
 import {ILido} from "src/interfaces/ILido.sol";
 import {ILazyOracle} from "src/interfaces/ILazyOracle.sol";
@@ -96,30 +98,35 @@ contract CoreHarness is Test {
     }
 
 
-    function applyVaultReport(address _stakingVault, uint256 _totalValue, uint256 _totalValueIncreaseBP, uint256 _cumulativeLidoFees, bool _onlyUpdateReportData) public {
+    function applyVaultReport(address _stakingVault, uint256 _totalValue, uint256 _cumulativeLidoFees, uint256 _liabilityShares, uint256 _slashingReserve, bool _onlyUpdateReportData) public {
         uint256 reportTimestamp = block.timestamp;
-        uint256 refSlot = 0;
+        uint256 refSlot = block.timestamp / 12; // Simulate a slot number based on timestamp (12 second slots)
         bytes32 treeRoot = bytes32(0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef);
         string memory reportCid = "dummy-cid";
 
-        uint256 reportTotalValue = _totalValue + (_totalValue * _totalValueIncreaseBP) / 10000;
-        uint256 reportCumulativeLidoFees = _cumulativeLidoFees;
-        uint256 reportLiabilityShares = 0;
-        uint256 reportSlashingReserve = 0;
+        // uint256 reportCumulativeLidoFees = _cumulativeLidoFees;
+        // uint256 reportLiabilityShares = 0;
+        // uint256 reportSlashingReserve = 0;
 
-        bool isFresh = vaultHub.isReportFresh(_stakingVault);
-        console.log("isFresh before", isFresh);
+        // bool isFresh = vaultHub.isReportFresh(_stakingVault);
+        // console.log("isFresh before", isFresh);
+
+        vm.warp(block.timestamp + 1 minutes);
 
         // Update report data with current timestamp to make it fresh
         vm.prank(locator.accountingOracle());
         lazyOracle.updateReportData(reportTimestamp, refSlot, treeRoot, reportCid);
 
+        // TODO: remove _onlyUpdateReportData flag
         if (!_onlyUpdateReportData) {
-            lazyOracle.mock__updateVaultData(_stakingVault, reportTotalValue, reportCumulativeLidoFees, reportLiabilityShares, reportSlashingReserve);
+            console.log("Calling mock__updateVaultData with totalValue:", _totalValue);
+            lazyOracle.mock__updateVaultData(_stakingVault, _totalValue, _cumulativeLidoFees, _liabilityShares, _slashingReserve);
+            console.log("After mock__updateVaultData, totalValue from vaultHub:", vaultHub.totalValue(_stakingVault));
         }
 
         bool isFreshAfter = vaultHub.isReportFresh(_stakingVault);
-        console.log("isFresh after", isFreshAfter);
+        assert(isFreshAfter);
+        // console.log("isFresh after", isFreshAfter);
     }
 
     /**
@@ -144,5 +151,26 @@ contract CoreHarness is Test {
         vm.prank(BEACON_CHAIN);
         (bool success, ) = _stakingVault.call{value: _ethAmount}("");
         require(success, "ETH return from beacon chain failed");
+    }
+
+    function setStethShareRatio(uint256 _shareRatioE18) external {
+        uint256 totalSupply = steth.totalSupply();
+        uint256 totalShares = steth.getTotalShares();
+
+        uint256 a = Math.mulDiv(totalSupply, 1 ether, _shareRatioE18, Math.Rounding.Floor);
+        int128 sharesDiff = int128(uint128(a)) - int128(uint128(totalShares));
+
+        if (sharesDiff > 0) {
+            vm.prank(locator.accounting());
+            steth.mintShares(address(this), uint256(uint128(sharesDiff)));
+        } else if (sharesDiff < 0) {
+            uint256 sharesToBurn = uint256(uint128(-sharesDiff));
+            steth.transferShares(locator.burner(), sharesToBurn);
+            vm.prank(locator.burner());
+            steth.burnShares(sharesToBurn);
+        }
+
+        require(steth.getPooledEthByShares(1 ether) == _shareRatioE18, "Failed to mock steth share ratio");
+
     }
 }

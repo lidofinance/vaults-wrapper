@@ -59,7 +59,7 @@ contract DepositTest is Test {
             false // allowlist disabled
         );
         dashboard.grantRole(dashboard.FUND_ROLE(), address(wrapperA));
-        
+
         wrapperB = new WrapperB(
             address(dashboard),
             address(steth),
@@ -201,20 +201,20 @@ contract DepositTest is Test {
     function test_depositConfigurationB() public {
         uint256 userDeposit = 10_000 wei;
         vm.deal(user1, userDeposit);
-        
+
         uint256 initialVaultBalance = address(stakingVault).balance;
-        
+
         vm.prank(user1);
         uint256 userShares = wrapperB.depositETH{value: userDeposit}(user1);
-        
+
         // User should receive stvETH shares
         assertEq(wrapperB.balanceOf(user1), userShares, "user should have stvETH shares");
         assertTrue(userShares >= userDeposit - 1 && userShares <= userDeposit, "shares should approximately equal deposit");
-        
+
         // User should automatically receive stETH (Configuration B)
         uint256 userStETH = steth.balanceOf(user1);
         assertTrue(userStETH > 0, "user should have received stETH automatically in config B");
-        
+
         console.log("User deposited:", userDeposit);
         console.log("Received shares:", userShares);
         console.log("Received stETH:", userStETH);
@@ -224,22 +224,22 @@ contract DepositTest is Test {
     function test_depositConfigurationC() public {
         uint256 userDeposit = 10_000 wei;
         vm.deal(user1, userDeposit);
-        
+
         vm.prank(user1);
         uint256 userShares = wrapperC.depositETH{value: userDeposit}(user1);
-        
+
         // User should receive stvETH shares
         assertEq(wrapperC.balanceOf(user1), userShares, "user should have stvETH shares");
-        
+
         // User should have a strategy position created
         uint256[] memory positions = wrapperC.getUserPositions(user1);
         assertEq(positions.length, 1, "user should have one strategy position");
-        
+
         WrapperC.Position memory position = wrapperC.getPosition(positions[0]);
         assertEq(position.user, user1, "position should belong to user");
         assertTrue(position.isActive, "position should be active");
         assertFalse(position.isExiting, "position should not be exiting");
-        
+
         console.log("User deposited:", userDeposit);
         console.log("Received shares:", userShares);
         console.log("Position ID:", positions[0]);
@@ -250,24 +250,24 @@ contract DepositTest is Test {
         // Test zero deposit reverts for all configurations
         vm.expectRevert(abi.encodeWithSignature("ZeroDeposit()"));
         wrapperA.depositETH{value: 0}(user1);
-        
+
         vm.expectRevert(abi.encodeWithSignature("ZeroDeposit()"));
         wrapperB.depositETH{value: 0}(user1);
-        
+
         vm.expectRevert(abi.encodeWithSignature("ZeroDeposit()"));
         wrapperC.depositETH{value: 0}(user1);
-        
+
         // Test invalid receiver reverts for all configurations
         vm.deal(user1, 1000 wei);
-        
+
         vm.prank(user1);
         vm.expectRevert(abi.encodeWithSignature("InvalidReceiver()"));
         wrapperA.depositETH{value: 1000}(address(0));
-        
+
         vm.prank(user1);
         vm.expectRevert(abi.encodeWithSignature("InvalidReceiver()"));
         wrapperB.depositETH{value: 1000}(address(0));
-        
+
         vm.prank(user1);
         vm.expectRevert(abi.encodeWithSignature("InvalidReceiver()"));
         wrapperC.depositETH{value: 1000}(address(0));

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >=0.8.25;
 
+import {console} from "forge-std/Test.sol";
+
 import {ERC20Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {AccessControlEnumerableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/extensions/AccessControlEnumerableUpgradeable.sol";
@@ -26,6 +28,11 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AccessControlE
     bytes32 public constant ALLOWLIST_MANAGER_ROLE = keccak256("ALLOWLIST_MANAGER_ROLE");
     bytes32 public constant REQUEST_VALIDATOR_EXIT_ROLE = keccak256("REQUEST_VALIDATOR_EXIT_ROLE");
     bytes32 public constant TRIGGER_VALIDATOR_WITHDRAWAL_ROLE = keccak256("TRIGGER_VALIDATOR_WITHDRAWAL_ROLE");
+
+    uint256 public immutable DECIMALS = 27;
+    uint256 public immutable ASSET_DECIMALS = 18;
+    uint256 public immutable EXTRA_DECIMALS_BASE = 10 ** (DECIMALS - ASSET_DECIMALS);
+    uint256 public immutable TOTAL_BASIS_POINTS = 100_00;
 
     bool public immutable ALLOW_LIST_ENABLED;
 
@@ -80,6 +87,7 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AccessControlE
         VAULT_HUB = IVaultHub(DASHBOARD.VAULT_HUB());
         STAKING_VAULT = address(DASHBOARD.stakingVault());
 
+
         // Disable initializers since we only support proxy deployment
         _disableInitializers();
     }
@@ -104,52 +112,45 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AccessControlE
         uint256 initialVaultBalance = address(STAKING_VAULT).balance;
         uint256 connectDeposit = VAULT_HUB.CONNECT_DEPOSIT();
         assert(initialVaultBalance >= connectDeposit);
-        // _mint(address(this), _convertToShares(connectDeposit));
+
+        // TODO: need to mint because NO must be able to withdraw CONNECT_DEPOSIT and rewards accumulated on it
+        _mint(address(this), _convertToShares(connectDeposit));
     }
-
-    // // =================================================================================
-    // // NON-TRANSFERRABLE TOKEN FUNCTIONALITY
-    // // =================================================================================
-
-    // function transfer(address, uint256) public pure override returns (bool) {
-    //     revert TransferNotAllowed();
-    // }
-
-    // function transferFrom(address, address, uint256) public pure override returns (bool) {
-    //     revert TransferNotAllowed();
-    // }
-
-    // function approve(address, uint256) public pure override returns (bool) {
-    //     revert TransferNotAllowed();
-    // }
 
     // =================================================================================
     // CORE VAULT FUNCTIONS
     // =================================================================================
 
     function totalAssets() public view returns (uint256) {
+        // return DASHBOARD.maxLockableValue() - VAULT_HUB.CONNECT_DEPOSIT();
         return DASHBOARD.maxLockableValue();
     }
 
-    function _convertToShares(uint256 _assets) internal view returns (uint256) {
-        uint256 supply = totalSupply();
-        if (supply == 0) {
-            return _assets; // 1:1 for the first deposit
+    function decimals() public pure override returns (uint8) {
+        return uint8(DECIMALS);
+    }
+
+    function _convertToShares(uint256 _assetsE18) internal view returns (uint256) {
+        uint256 supplyE27 = totalSupply();
+        if (supplyE27 == 0) {
+            return _assetsE18 * EXTRA_DECIMALS_BASE; // 1:1 for the first deposit
         }
-        return Math.mulDiv(_assets, supply, totalAssets(), Math.Rounding.Floor);
+        return Math.mulDiv(_assetsE18, supplyE27, totalAssets(), Math.Rounding.Floor);
     }
 
     function _convertToAssets(uint256 _shares) internal view returns (uint256) {
-        return _getCorrespondingShare(_shares, totalAssets());
+        return _getAssetsShare(_shares, totalAssets());
     }
 
-    function _getCorrespondingShare(uint256 _shares, uint256 _assets) internal view returns (uint256) {
+    function _getAssetsShare(uint256 _shares, uint256 _assets) internal view returns (uint256) {
         // TODO: check supply
         uint256 supply = totalSupply();
         if (supply == 0) {
-            return _shares; // 1:1 for the first deposit. TODO: add stone
+            return 0;
         }
-        return Math.mulDiv(_shares, _assets, supply, Math.Rounding.Floor);
+        // TODO: review this Math.Rounding.Ceil
+        uint256 assetsShare = Math.mulDiv(_shares * EXTRA_DECIMALS_BASE, _assets, supply, Math.Rounding.Ceil);
+        return assetsShare / EXTRA_DECIMALS_BASE;
     }
 
     function previewDeposit(uint256 _assets) public view returns (uint256) {
@@ -159,9 +160,9 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AccessControlE
     function previewWithdraw(uint256 _assets) public view returns (uint256) {
         uint256 supply = totalSupply();
         if (supply == 0) {
-            return _assets;
+            return 0;
         }
-        return Math.mulDiv(_assets, supply, totalAssets(), Math.Rounding.Ceil);
+        return Math.mulDiv(_assets, totalAssets(), supply, Math.Rounding.Ceil);
     }
 
     function previewRedeem(uint256 _shares) public view returns (uint256) {
@@ -357,13 +358,4 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AccessControlE
         }
     }
 
-    function _mintMaximumStETH(address _receiver, uint256 _stvShares) internal returns (uint256 stETHAmount) {
-        uint256 totalMintingCapacity = DASHBOARD.totalMintingCapacityShares();
-        uint256 userTotalMintingCapacity = _getCorrespondingShare(_stvShares, totalMintingCapacity);
-        stETHAmount = Math.min(userTotalMintingCapacity, DASHBOARD.remainingMintingCapacityShares(0));
-
-        if (stETHAmount == 0) revert NoMintingCapacityAvailable();
-
-        DASHBOARD.mintShares(_receiver, stETHAmount);
-    }
 }
