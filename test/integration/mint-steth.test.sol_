@@ -16,6 +16,7 @@ import {WrapperB} from "src/WrapperB.sol";
 import {WrapperC} from "src/WrapperC.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
 import {ExampleLoopStrategy, LenderMock} from "src/ExampleLoopStrategy.sol";
+import {IStrategy} from "src/interfaces/IStrategy.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 
@@ -31,7 +32,7 @@ contract MintStethTest is Test {
     IVaultHub public vaultHub;
     IStakingVault public stakingVault;
     WithdrawalQueue public withdrawalQueue;
-    ExampleLoopStrategy public strategy;
+    IStrategy public strategy;
 
     uint256 public constant WEI_ROUNDING_TOLERANCE = 2;
     uint256 public constant TOTAL_BP = 100_00;
@@ -42,7 +43,7 @@ contract MintStethTest is Test {
 
     function setUp() public {
         core = new CoreHarness("lido-core/deployed-local.json");
-        dw = new DefiWrapper(address(core));
+        dw = new DefiWrapper(address(core), address(0));
 
         wrapperC = dw.wrapper();
         withdrawalQueue = dw.withdrawalQueue();
@@ -99,7 +100,7 @@ contract MintStethTest is Test {
         vm.startPrank(user1);
         uint256 user1StvSharesFirst = wrapperB.depositETH{value: user1InitialETH}(user1);
         vm.stopPrank();
-        
+
         // Check how much stETH the user received
         uint256 user1MintedStethShares = steth.balanceOf(user1);
         console.log("User1 automatic stETH balance:", user1MintedStethShares);
@@ -134,12 +135,12 @@ contract MintStethTest is Test {
         // Now User2 deposits and should automatically get stETH minted
         uint256 remainingCapacityAfterUser1 = core.dashboard().remainingMintingCapacityShares(0);
         console.log("Remaining capacity after User1:", remainingCapacityAfterUser1);
-        
+
         vm.deal(user2, user2InitialETH);
         vm.startPrank(user2);
         uint256 user2StvShares2 = wrapperB.depositETH{value: user2InitialETH}(user2);
         vm.stopPrank();
-        
+
         // Check how much stETH user2 received
         uint256 user2MintedStethShares = steth.balanceOf(user2);
 
@@ -220,12 +221,12 @@ contract MintStethTest is Test {
         // Phase 2: User1 mints stETH to create liabilities
         console.log("=== Phase 2: User1 mints stETH (creates liabilities) ===");
 
-        // Use existing wrapperB to create liabilities 
+        // Use existing wrapperB to create liabilities
         vm.deal(user1, user1InitialETH);
         vm.startPrank(user1);
         uint256 user1StvShares2 = wrapperB.depositETH{value: user1InitialETH}(user1);
         vm.stopPrank();
-        
+
         uint256 user1MintedShares = steth.balanceOf(user1);
 
         console.log("User1 minted stETH shares:", user1MintedShares);
@@ -264,7 +265,7 @@ contract MintStethTest is Test {
         vm.startPrank(user2);
         uint256 user2StvShares2 = wrapperB.depositETH{value: user2InitialETH}(user2);
         vm.stopPrank();
-        
+
         uint256 user2MintedShares = steth.balanceOf(user2) - user1MintedShares; // Only user2's portion
 
         console.log("User2 minted stETH shares:", user2MintedShares);
@@ -311,7 +312,7 @@ contract MintStethTest is Test {
     // Verifies that attempting to deposit to zero address reverts
     function test_depositETHAddressValidation() public {
         uint256 depositAmount = 1000 wei;
-        
+
         // Test Case: User tries to deposit to zero address
         vm.deal(user1, depositAmount);
         vm.startPrank(user1);

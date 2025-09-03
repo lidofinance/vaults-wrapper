@@ -179,7 +179,7 @@ contract WrapperC is WrapperB {
         STRATEGY.finalizeExit(msg.sender);
 
         // Now proceed with normal withdrawal flow
-        requestId = withdrawalQueue().requestWithdrawal(msg.sender, previewRedeem(position.stvETHShares));
+        requestId = withdrawalQueue().requestWithdrawal(previewRedeem(position.stvETHShares), msg.sender);
         _burn(msg.sender, position.stvETHShares);
 
         // Mark position as closed

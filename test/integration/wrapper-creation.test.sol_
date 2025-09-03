@@ -14,7 +14,7 @@ contract WrapperCreationTest is Test {
 
     function setUp() public {
         core = new CoreHarness("lido-core/deployed-local.json");
-        dw = new DefiWrapper(address(core));
+        dw = new DefiWrapper(address(core), address(0));
     }
 
     // Tests the initial state of the wrapper system after deployment

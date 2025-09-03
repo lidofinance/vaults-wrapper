@@ -116,7 +116,8 @@ contract Factory {
         WrapperBase wrapper = WrapperBase(payable(wrapperProxy));
 
         // Create withdrawal queue implementation with correct wrapper
-        WithdrawalQueue wqImpl = new WithdrawalQueue(wrapperProxy);
+        uint256 maxFinalizationTime = 30 days; // Default max finalization time
+        WithdrawalQueue wqImpl = new WithdrawalQueue(WrapperBase(wrapperProxy), maxFinalizationTime);
 
         // Deploy withdrawal queue proxy
         withdrawalQueueProxy = address(new ERC1967Proxy(

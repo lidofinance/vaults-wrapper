@@ -113,7 +113,8 @@ contract AllowListTest is Test {
 
         // Setup withdrawal queue for allowlist wrapper
         vm.startPrank(owner);
-        withdrawalQueue = new WithdrawalQueue(address(wrapperWithAllowList));
+        uint256 maxFinalizationTime = 30 days; // Default max finalization time
+        withdrawalQueue = new WithdrawalQueue(WrapperBase(payable(address(wrapperWithAllowList))), maxFinalizationTime);
         withdrawalQueue.initialize(owner);
         wrapperWithAllowList.setWithdrawalQueue(address(withdrawalQueue));
         withdrawalQueue.grantRole(withdrawalQueue.FINALIZE_ROLE(), owner);

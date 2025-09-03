@@ -140,7 +140,7 @@ contract WrapperB is WrapperBase {
         $.userBalances[msg.sender].stShares -= stShares;
         $.userBalances[msg.sender].stvShares -= _stvShares;
 
-        requestId = withdrawalQueue.requestWithdrawal(msg.sender, _convertToAssets(_stvShares));
+        requestId = withdrawalQueue.requestWithdrawal(_convertToAssets(_stvShares), msg.sender);
     }
 
     function _calcMaxMintableStShares(uint256 _eth) public view returns (uint256 stShares) {

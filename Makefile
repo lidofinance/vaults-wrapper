@@ -3,6 +3,10 @@ CORE_BRANCH ?= feat/testnet-2
 CORE_SUBDIR ?= lido-core
 VERBOSITY ?= vv
 DEBUG_TEST ?= test_debug
+PRIVATE_KEY ?= 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
+
+VAULT_FACTORY ?= 0x86A2EE8FAf9A840F7a2c64CA3d51209F9A02081D
+STETH ?= 0xf2A08B9C303496f7FF99Ce2d4A6b6efb65E0e752
 
 test-integration:
 	FOUNDRY_PROFILE=test forge test test/integration/**/*.test.sol -$(VERBOSITY) --fork-url http://localhost:$(CORE_RPC_PORT)
@@ -52,7 +56,13 @@ core-save-patch:
 	git diff > ../test/core-mocking.patch
 
 mock-deploy:
-	PRIVATE_KEY=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 \
-	VAULT_FACTORY=0x86A2EE8FAf9A840F7a2c64CA3d51209F9A02081D \
-	STETH=0xf2A08B9C303496f7FF99Ce2d4A6b6efb65E0e752 \
+	PRIVATE_KEY=$(PRIVATE_KEY) \
+	VAULT_FACTORY=$(VAULT_FACTORY) \
+	STETH=$(STETH) \
 	forge script script/DeployWrapper.s.sol --rpc-url localhost:9123 --broadcast
+
+mock-strategy:
+	PRIVATE_KEY=$(PRIVATE_KEY) \
+	VAULT_FACTORY=$(VAULT_FACTORY) \
+	STETH=$(STETH) \
+	forge script script/DeployStrategy.s.sol --rpc-url localhost:9123 --broadcast

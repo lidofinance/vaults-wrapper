@@ -17,7 +17,8 @@ import {WrapperBase} from "src/WrapperBase.sol";
 import {WrapperA} from "src/WrapperA.sol";
 import {WrapperC} from "src/WrapperC.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
-import {ExampleLoopStrategy, LenderMock} from "src/ExampleLoopStrategy.sol";
+import {ExampleLoopStrategy} from "src/ExampleLoopStrategy.sol";
+import {LenderMock} from "src/mock/LenderMock.sol";
 
 interface IHashConsensus {
     function updateInitialEpoch(uint256 initialEpoch) external;
@@ -49,7 +50,7 @@ contract DefiWrapper is Test {
     uint256 public constant NODE_OPERATOR_FEE_RATE = 1_00; // 1% in basis points
     uint256 public constant CONFIRM_EXPIRY = 1 hours;
 
-    constructor(address _coreHarnessAddress) {
+    constructor(address _coreHarnessAddress, address _strategyAddress) {
         core = CoreHarness(_coreHarnessAddress);
 
         CONNECT_DEPOSIT = core.vaultHub().CONNECT_DEPOSIT();
@@ -101,8 +102,10 @@ contract DefiWrapper is Test {
             address(strategy)
         );
 
-        withdrawalQueue = new WithdrawalQueue(address(wrapper));
+        uint256 maxFinalizationTime = 30 days; // Default max finalization time
+        withdrawalQueue = new WithdrawalQueue(WrapperBase(payable(address(wrapper))), maxFinalizationTime);
         withdrawalQueue.initialize(address(this));
+
         wrapper.setWithdrawalQueue(address(withdrawalQueue));
         withdrawalQueue.grantRole(withdrawalQueue.FINALIZE_ROLE(), address(this));
         withdrawalQueue.grantRole(withdrawalQueue.RESUME_ROLE(), address(this));
@@ -116,7 +119,7 @@ contract DefiWrapper is Test {
         wrapper.setStrategy(address(strategy));
 
         // Fund the LenderMock contract with ETH so it can lend
-        vm.deal(address(strategy.LENDER_MOCK()), 1234 ether);
+        // vm.deal(address(strategy.LENDER_MOCK()), 1234 ether);
 
         dashboard.grantRole(dashboard.FUND_ROLE(), address(wrapper));
         dashboard.grantRole(dashboard.WITHDRAW_ROLE(), address(wrapper));

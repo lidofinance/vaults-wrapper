@@ -197,7 +197,7 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AccessControlE
         WithdrawalQueue.WithdrawalRequestStatus memory status = wq.getWithdrawalStatus(_requestId);
 
         _burn(address(wq), status.amountOfShares);
-        wq.claimWithdrawal(_requestId);
+        wq.claimWithdrawal(_requestId, msg.sender);
     }
 
     function burnShares(uint256 _shares) external {

@@ -55,6 +55,6 @@ contract WrapperA is WrapperBase {
 
         // TODO: maybe redo WQ to accept shares
         uint256 assets = _convertToAssets(_stvETHShares);
-        requestId = withdrawalQueue().requestWithdrawal(msg.sender, assets);
+        requestId = withdrawalQueue().requestWithdrawal(assets, msg.sender);
     }
 }

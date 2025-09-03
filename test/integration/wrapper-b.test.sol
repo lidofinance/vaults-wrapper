@@ -423,7 +423,7 @@ contract WrapperBTest is Test {
         uint256 requestId = wrapper.requestWithdrawal(user1StSharesToWithdraw);
 
         vm.expectRevert("RequestNotFoundOrNotFinalized(1)");
-        withdrawalQueue.claimWithdrawal(requestId);
+        withdrawalQueue.claimWithdrawal(requestId, USER1);
 
         vm.stopPrank();
 
@@ -439,7 +439,7 @@ contract WrapperBTest is Test {
         // TODO: check status.amountOfShares
 
         uint256 user1EthBalanceBeforeClaim = USER1.balance;
-        vm.prank(USER1); withdrawalQueue.claimWithdrawal(requestId);
+        vm.prank(USER1); withdrawalQueue.claimWithdrawal(requestId, USER1);
         // TODO: make this check pass
         // assertEq(USER1.balance, user1EthBalanceBeforeClaim + user1ExpectedEthWithdrawn, "USER1 ETH balance should increase by the withdrawn amount after claim");
 

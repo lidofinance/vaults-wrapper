@@ -15,14 +15,14 @@ import {WrapperA} from "src/WrapperA.sol";
 import {WrapperB} from "src/WrapperB.sol";
 import {WrapperC} from "src/WrapperC.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
-import {ExampleLoopStrategy, LenderMock} from "src/ExampleLoopStrategy.sol";
+import {IStrategy} from "src/interfaces/IStrategy.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 
 contract WithdrawalTest is Test {
     CoreHarness public core;
     DefiWrapper public dw;
-    
+
     // Access to harness components
     WrapperC public wrapperC; // Wrapper with strategy
     WrapperA public wrapperA; // Basic wrapper for basic withdrawal tests
@@ -32,7 +32,7 @@ contract WithdrawalTest is Test {
     IVaultHub public vaultHub;
     IStakingVault public stakingVault;
     WithdrawalQueue public withdrawalQueue;
-    ExampleLoopStrategy public strategy;
+    IStrategy public strategy;
 
     uint256 public constant WEI_ROUNDING_TOLERANCE = 2;
     uint256 public constant TOTAL_BP = 100_00;
@@ -43,7 +43,7 @@ contract WithdrawalTest is Test {
 
     function setUp() public {
         core = new CoreHarness("lido-core/deployed-local.json");
-        dw = new DefiWrapper(address(core));
+        dw = new DefiWrapper(address(core), address(0));
 
         wrapperC = dw.wrapper();
         withdrawalQueue = dw.withdrawalQueue();
@@ -65,7 +65,7 @@ contract WithdrawalTest is Test {
         queueA.resume();
         dashboard.grantRole(dashboard.FUND_ROLE(), address(wrapperA));
         dashboard.grantRole(dashboard.WITHDRAW_ROLE(), address(queueA));
-        
+
         wrapperB = new WrapperB(
             address(dashboard),
             address(steth),
@@ -113,6 +113,7 @@ contract WithdrawalTest is Test {
         // Phase 2: User requests withdrawal
         console.log("=== Phase 2: User requests withdrawal ===");
 
+<<<<<<< HEAD:test/integration/withdrawal.test.sol_
         // Use Configuration A withdrawal interface
         vm.startPrank(user1);
         uint256 requestId = wrapperA.requestWithdrawal(userStvShares);
@@ -123,13 +124,35 @@ contract WithdrawalTest is Test {
         // Verify withdrawal request state
         assertGt(requestId, 0, "Request ID should be valid");
         assertEq(wrapperA.balanceOf(user1), 0, "User stvETH shares should be burned after withdrawal request");
+=======
+        // Withdraw based on actual shares received (which may be slightly less due to rounding)
+        uint256[] memory withdrawalAmounts = new uint256[](1);
+        withdrawalAmounts[0] = wrapper.convertToAssets(userStvShares);
+
+        vm.startPrank(user1);
+        wrapper.approve(address(withdrawalQueue), userStvShares);
+        uint256[] memory requestIds = withdrawalQueue.requestWithdrawals(withdrawalAmounts, user1);
+        vm.stopPrank();
+
+        console.log("Withdrawal requested. RequestIds:", requestIds.length);
+        console.log("Withdrawal amount:", withdrawalAmounts[0]);
+
+        // Verify withdrawal request state
+        assertGt(requestIds.length, 0, "Request ID should be valid");
+        assertEq(wrapper.balanceOf(user1), 0, "User stvETH shares should be moved to withdrawal queue for withdrawal");
+>>>>>>> develop:test/integration/withdrawal.test.sol
 
         // Get the withdrawal queue for wrapperA
         WithdrawalQueue queueA = wrapperA.withdrawalQueue();
-        
+
         // Check withdrawal queue state using getWithdrawalStatus
+<<<<<<< HEAD:test/integration/withdrawal.test.sol_
         WithdrawalQueue.WithdrawalRequestStatus memory status = queueA.getWithdrawalStatus(requestId);
         assertTrue(status.amountOfAssets > 0, "Requested amount should be positive");
+=======
+        WithdrawalQueue.WithdrawalRequestStatus memory status = withdrawalQueue.getWithdrawalStatus(requestIds[0]);
+        assertEq(status.amountOfAssets, withdrawalAmounts[0], "Requested amount should match");
+>>>>>>> develop:test/integration/withdrawal.test.sol
         assertEq(status.owner, user1, "Owner should be user1");
         assertFalse(status.isFinalized, "Request should not be finalized yet");
         assertFalse(status.isClaimed, "Request should not be claimed yet");
@@ -150,6 +173,7 @@ contract WithdrawalTest is Test {
         uint256 remainingEthBudget = queueA.unfinalizedAssets();
         console.log("Unfinalized assets requiring ETH:", remainingEthBudget);
 
+<<<<<<< HEAD:test/integration/withdrawal.test.sol_
         WithdrawalQueue.BatchesCalculationState memory state;
         state.remainingEthBudget = remainingEthBudget;
         state.finished = false;
@@ -171,6 +195,12 @@ contract WithdrawalTest is Test {
         // Calculate exact ETH needed for finalization
         uint256 shareRate = queueA.calculateCurrentShareRate();
         (uint256 ethToLock, ) = queueA.prefinalize(batches, shareRate);
+=======
+        // Calculate exact ETH needed for finalization
+        uint256 shareRate = withdrawalQueue.calculateCurrentShareRate();
+
+        uint256 ethToLock = 100 ether;
+>>>>>>> develop:test/integration/withdrawal.test.sol
 
         console.log("ETH required for finalization:", ethToLock);
         console.log("Current share rate:", shareRate);
@@ -185,14 +215,24 @@ contract WithdrawalTest is Test {
         // Phase 6: Finalize withdrawal requests
         console.log("=== Phase 6: Finalize withdrawal requests ===");
 
+<<<<<<< HEAD:test/integration/withdrawal.test.sol_
         // Finalize the withdrawal request using test admin (which has FINALIZE_ROLE)
         vm.prank(address(this));
         queueA.finalize(requestId);
+=======
+        // Finalize the withdrawal request using DefiWrapper (which has FINALIZE_ROLE)
+        vm.prank(address(dw));
+        withdrawalQueue.finalize(requestIds.length);
+>>>>>>> develop:test/integration/withdrawal.test.sol
 
         console.log("Withdrawal request finalized");
 
         // Verify finalization state
+<<<<<<< HEAD:test/integration/withdrawal.test.sol_
         WithdrawalQueue.WithdrawalRequestStatus memory statusAfterFinalization = queueA.getWithdrawalStatus(requestId);
+=======
+        WithdrawalQueue.WithdrawalRequestStatus memory statusAfterFinalization = withdrawalQueue.getWithdrawalStatus(requestIds[0]);
+>>>>>>> develop:test/integration/withdrawal.test.sol
         assertTrue(statusAfterFinalization.isFinalized, "Request should be finalized");
         assertFalse(statusAfterFinalization.isClaimed, "Request should not be claimed yet");
 
@@ -202,7 +242,11 @@ contract WithdrawalTest is Test {
         uint256 userETHBalanceBefore = user1.balance;
 
         vm.prank(user1);
+<<<<<<< HEAD:test/integration/withdrawal.test.sol_
         wrapperA.claimWithdrawal(requestId);
+=======
+        withdrawalQueue.claimWithdrawal(requestIds[0], address(0));
+>>>>>>> develop:test/integration/withdrawal.test.sol
 
         uint256 userETHBalanceAfter = user1.balance;
         uint256 claimedAmount = userETHBalanceAfter - userETHBalanceBefore;
@@ -226,7 +270,11 @@ contract WithdrawalTest is Test {
         assertEq(address(queueA).balance, 0, "Withdrawal queue should have no ETH left");
 
         // Verify withdrawal request is consumed
+<<<<<<< HEAD:test/integration/withdrawal.test.sol_
         WithdrawalQueue.WithdrawalRequestStatus memory finalStatus = queueA.getWithdrawalStatus(requestId);
+=======
+        WithdrawalQueue.WithdrawalRequestStatus memory finalStatus = withdrawalQueue.getWithdrawalStatus(requestIds[0]);
+>>>>>>> develop:test/integration/withdrawal.test.sol
         assertTrue(finalStatus.isClaimed, "Request should be marked as claimed");
 
         console.log("=== Case 4 Test Summary ===");
