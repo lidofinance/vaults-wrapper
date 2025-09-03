@@ -18,6 +18,8 @@ import {IStETH} from "./interfaces/IStETH.sol";
 contract WrapperB is WrapperBase {
 
     error InsufficientSharesLocked(address user);
+    error InsufficientMintableStShares();
+    error ZeroArgument();
 
     IStETH public immutable STETH;
     uint256 public immutable RESERVE_RATIO_BP;
@@ -33,7 +35,7 @@ contract WrapperB is WrapperBase {
     }
 
     // keccak256(abi.encode(uint256(keccak256("wrapper.b.storage")) - 1)) & ~bytes32(uint256(0xff))
-    bytes32 private constant WRAPPER_B_STORAGE_LOCATION = 0x8b02b285f37f4c4e7363a6c05f1d4e1c643f738200b8c0d4094f8c34b67b3b00; // TODO: check the hash
+    bytes32 private constant WRAPPER_B_STORAGE_LOCATION = 0x68280b7606a1a98bf19dd7ad4cb88029b355c2c81a554f53b998c73f934e4400;
 
     function _getWrapperBStorage() private pure returns (WrapperBStorage storage $) {
         assembly {
@@ -57,9 +59,6 @@ contract WrapperB is WrapperBase {
         string memory _symbol
     ) public override initializer {
         WrapperBase.initialize(_owner, _name, _symbol);
-
-        // DASHBOARD.grantRole(DASHBOARD.MINT_ROLE(), address(this));
-        // DASHBOARD.grantRole(DASHBOARD.BURN_ROLE(), address(this));
     }
 
     /**
@@ -77,16 +76,9 @@ contract WrapperB is WrapperBase {
 
         stvShares = previewDeposit(msg.value);
         _mint(_receiver, stvShares);
+        _getWrapperBStorage().userBalances[_receiver].stvShares += stvShares;
 
-        uint256 stShares = _mintMaximumStETH(_receiver, stvShares);
-
-        WrapperBStorage storage $ = _getWrapperBStorage();
-        UserBalance memory userBalance = $.userBalances[_receiver];
-        userBalance = UserBalance({
-            stvShares: stvShares + userBalance.stvShares,
-            stShares: stShares + userBalance.stShares
-        });
-        $.userBalances[_receiver] = userBalance;
+        _mintMaximumStShares(_receiver, stvShares);
 
         emit Deposit(msg.sender, _receiver, msg.value, stvShares);
     }
@@ -108,11 +100,26 @@ contract WrapperB is WrapperBase {
         stShares = Math.mulDiv(_stvShares, userStShares, userStvShares, Math.Rounding.Ceil); // TODO: Ceil or Floor?
     }
 
-    function stSharesToReturn() public view returns (uint256 stShares) {
+    function stSharesToReturn(address _address) public view returns (uint256 stShares) {
         WrapperBStorage storage $ = _getWrapperBStorage();
-        stShares = $.userBalances[msg.sender].stShares;
+        stShares = $.userBalances[_address].stShares;
     }
 
+    function mintableStShares(address _address) public view returns (uint256 stShares) {
+        uint256 usersEth = previewRedeem(balanceOf(_address));
+        uint256 maxMintable = _calcMaxMintableStShares(usersEth);
+        uint256 alreadyMinted = stSharesToReturn(_address);
+
+        if (alreadyMinted >= maxMintable) return 0;
+
+        stShares = maxMintable - alreadyMinted;
+    }
+
+    function mintStShares(uint256 _stShares) external {
+        uint256 mintableStShares_ = mintableStShares(msg.sender);
+        if (mintableStShares_ < _stShares) revert InsufficientMintableStShares();
+        _mintStShares(msg.sender, _stShares);
+    }
 
     // TODO: add request as ether as arg (not stvShares)
     function requestWithdrawal(uint256 _stvShares) external virtual returns (uint256 requestId) {
@@ -136,19 +143,26 @@ contract WrapperB is WrapperBase {
         requestId = withdrawalQueue.requestWithdrawal(msg.sender, _convertToAssets(_stvShares));
     }
 
-    function _calcMaxMintableStETHSharesForDeposit(uint256 _ethDeposited) public view returns (uint256 stShares) {
-        uint256 a = Math.mulDiv(_ethDeposited, RESERVE_RATIO_BP, TOTAL_BASIS_POINTS, Math.Rounding.Floor);
-        return STETH.getSharesByPooledEth(_ethDeposited - a);
+    function _calcMaxMintableStShares(uint256 _eth) public view returns (uint256 stShares) {
+        uint256 intermediateValue = Math.mulDiv(_eth, RESERVE_RATIO_BP, TOTAL_BASIS_POINTS, Math.Rounding.Floor);
+        stShares = Math.min(
+            STETH.getSharesByPooledEth(_eth - intermediateValue),
+            DASHBOARD.remainingMintingCapacityShares(0)
+        );
     }
 
-    function _mintMaximumStETH(address _receiver, uint256 _stvShares) internal returns (uint256 stShares) {
-        uint256 usersEth = _convertToAssets(_stvShares);
+    function _mintStShares(address _receiver, uint256 _stShares) internal returns (uint256 stShares) {
+        if (_stShares == 0) revert ZeroArgument();
 
-        stShares = Math.min(_calcMaxMintableStETHSharesForDeposit(usersEth), DASHBOARD.remainingMintingCapacityShares(0));
-
-        if (stShares == 0) revert NoMintingCapacityAvailable();
-
+        stShares = _stShares;
         DASHBOARD.mintShares(_receiver, stShares);
+
+        _getWrapperBStorage().userBalances[_receiver].stShares += stShares;
+    }
+
+    function _mintMaximumStShares(address _receiver, uint256 _stvShares) internal returns (uint256 stShares) {
+        stShares = _calcMaxMintableStShares(_convertToAssets(_stvShares));
+        _mintStShares(_receiver, stShares);
     }
 
 }

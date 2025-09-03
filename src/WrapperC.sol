@@ -128,7 +128,7 @@ contract WrapperC is WrapperB {
     }
 
     function _createStrategyPosition(address _user, uint256 _stvShares) internal returns (uint256 positionId) {
-        uint256 stETHAmount = _mintMaximumStETH(address(STRATEGY), _stvShares);
+        uint256 stETHAmount = _mintMaximumStShares(address(STRATEGY), _stvShares);
 
         WrapperCStorage storage $ = _getWrapperCStorage();
         positionId = $.nextPositionId++;
@@ -179,7 +179,7 @@ contract WrapperC is WrapperB {
         STRATEGY.finalizeExit(msg.sender);
 
         // Now proceed with normal withdrawal flow
-        requestId = withdrawalQueue().requestWithdrawal(msg.sender, _convertToAssets(position.stvETHShares));
+        requestId = withdrawalQueue().requestWithdrawal(msg.sender, previewRedeem(position.stvETHShares));
         _burn(msg.sender, position.stvETHShares);
 
         // Mark position as closed

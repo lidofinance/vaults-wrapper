@@ -47,7 +47,7 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AccessControlE
     }
 
     // keccak256(abi.encode(uint256(keccak256("wrapper.base.storage")) - 1)) & ~bytes32(uint256(0xff))
-    bytes32 private constant WRAPPER_BASE_STORAGE_LOCATION = 0xa66cc928b5edb82af9bd49922954155ab7b0942694bea4ce44661d9a8736c600;
+    bytes32 private constant WRAPPER_BASE_STORAGE_LOCATION = 0x8405b42399982e28cdd42aed39df9522715c70c841209124c7b936e15fd30300;
 
     function _getWrapperBaseStorage() private pure returns (WrapperBaseStorage storage $) {
         assembly {
