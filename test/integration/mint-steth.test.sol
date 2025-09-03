@@ -12,7 +12,7 @@ import {ILido} from "src/interfaces/ILido.sol";
 
 import {Wrapper} from "src/Wrapper.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
-import {ExampleStrategy, LenderMock} from "src/ExampleStrategy.sol";
+import {IStrategy} from "src/interfaces/IStrategy.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 
@@ -27,7 +27,7 @@ contract MintStethTest is Test {
     IVaultHub public vaultHub;
     IStakingVault public stakingVault;
     WithdrawalQueue public withdrawalQueue;
-    ExampleStrategy public strategy;
+    IStrategy public strategy;
 
     uint256 public constant WEI_ROUNDING_TOLERANCE = 2;
     uint256 public constant TOTAL_BP = 100_00;
@@ -38,7 +38,7 @@ contract MintStethTest is Test {
 
     function setUp() public {
         core = new CoreHarness("lido-core/deployed-local.json");
-        dw = new DefiWrapper(address(core));
+        dw = new DefiWrapper(address(core), address(0));
 
         wrapper = dw.wrapper();
         withdrawalQueue = dw.withdrawalQueue();

@@ -66,7 +66,8 @@ contract Factory {
             _strategy
         );
 
-        withdrawalQueue = new WithdrawalQueue(wrapper);
+        uint256 maxAcceptableWQFinalizationTimeInSeconds = 60 days;
+        withdrawalQueue = new WithdrawalQueue(wrapper, maxAcceptableWQFinalizationTimeInSeconds);
         withdrawalQueue.initialize(msg.sender);
 
         // Grant mint/burn roles to wrapper if strategy is provided

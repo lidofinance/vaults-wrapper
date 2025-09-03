@@ -1,26 +1,27 @@
 // SPDX-License-Identifier: GPL-3.0
 pragma solidity >=0.8.25;
 
-import {AccessControlEnumerable} from "@openzeppelin/contracts/access/extensions/AccessControlEnumerable.sol";
-import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
+import {AccessControlEnumerableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/extensions/AccessControlEnumerableUpgradeable.sol";
+import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
+import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {Wrapper} from "./Wrapper.sol";
 import {IDashboard} from "./interfaces/IDashboard.sol";
 import {IVaultHub} from "./interfaces/IVaultHub.sol";
+import {console} from "forge-std/console.sol";
 
 /// @title Withdrawal Queue V3 for Staking Vault Wrapper
 /// @notice Handles withdrawal requests for stvToken holders
-contract WithdrawalQueue is AccessControlEnumerable, Pausable {
+contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradeable {
     using EnumerableSet for EnumerableSet.UintSet;
 
-    /// @dev maximal length of the batch array provided for prefinalization. See `prefinalize()`
-    uint256 public constant MAX_BATCHES_LENGTH = 36;
+    /// @notice max time for finalization of the withdrawal request
+    uint256 public immutable MAX_ACCEPTABLE_WQ_FINALIZATION_TIME_IN_SECONDS;
 
     // ACL
     bytes32 public constant PAUSE_ROLE = keccak256("PAUSE_ROLE");
     bytes32 public constant RESUME_ROLE = keccak256("RESUME_ROLE");
     bytes32 public constant FINALIZE_ROLE = keccak256("FINALIZE_ROLE");
-    bytes32 public constant WITHDRAW_ROLE = keccak256("WITHDRAW_ROLE");
 
     /// @notice precision base for share rate
     uint256 public constant E27_PRECISION_BASE = 1e27;
@@ -31,9 +32,6 @@ contract WithdrawalQueue is AccessControlEnumerable, Pausable {
 
     /// @dev return value for the `find...` methods in case of no result
     uint256 internal constant NOT_FOUND = 0;
-
-    /// @notice max time for finalization of the withdrawal request
-    uint256 public constant MAX_ACCEPTABLE_WQ_FINALIZATION_TIME_IN_SECONDS = 60 days;
 
     /// @notice structure representing a request for withdrawal
     struct WithdrawalRequest {
@@ -73,22 +71,28 @@ contract WithdrawalQueue is AccessControlEnumerable, Pausable {
 
     Wrapper public immutable WRAPPER;
 
-    /// @dev queue for withdrawal requests, indexes (requestId) start from 1
-    mapping(uint256 => WithdrawalRequest) public requests;
-    /// @dev last index in request queue
-    uint256 public lastRequestId;
-    /// @dev last index of finalized request in the queue
-    uint256 public lastFinalizedRequestId;
-    /// @dev finalization rate history, indexes start from 1
-    mapping(uint256 => Checkpoint) public checkpoints;
-    /// @dev last index in checkpoints array
-    uint256 public lastCheckpointIndex;
-    /// @dev amount of ETH locked on contract for further claiming
-    uint256 public totalLockedAssets;
-    /// @dev withdrawal requests mapped to the owners
-    mapping(address => EnumerableSet.UintSet) private requestsByOwner;
-    /// @dev timestamp of emergency exit activation
-    uint256 public emergencyExitActivationTimestamp;
+    /// @custom:storage-location erc7201:wrapper.storage.WithdrawalQueue
+    struct WithdrawalQueueStorage {
+        /// @dev queue for withdrawal requests, indexes (requestId) start from 1
+        mapping(uint256 => WithdrawalRequest) requests;
+        /// @dev last index in request queue
+        uint256 lastRequestId;
+        /// @dev last index of finalized request in the queue
+        uint256 lastFinalizedRequestId;
+        /// @dev finalization rate history, indexes start from 1
+        mapping(uint256 => Checkpoint) checkpoints;
+        /// @dev last index in checkpoints array
+        uint256 lastCheckpointIndex;
+        /// @dev amount of ETH locked on contract for further claiming
+        uint256 totalLockedAssets;
+        /// @dev withdrawal requests mapped to the owners
+        mapping(address => EnumerableSet.UintSet) requestsByOwner;
+        /// @dev timestamp of emergency exit activation
+        uint256 emergencyExitActivationTimestamp;
+    }
+
+    // keccak256(abi.encode(uint256(keccak256("wrapper.storage.WithdrawalQueue")) - 1)) & ~bytes32(uint256(0xff))
+    bytes32 private constant WithdrawalQueueStorageLocation = 0xff0bcb2d6a043ff95a84af574799a6cec022695552f02c53d70e4e5aa1e06100;
 
     event Initialized(address indexed admin);
     event WithdrawalRequested(
@@ -141,21 +145,49 @@ contract WithdrawalQueue is AccessControlEnumerable, Pausable {
     error BatchesAreNotSorted();
     error RequestIdsNotSorted();
     error InvalidEmergencyExitActivation();
+    error ZeroAddress();
 
-    constructor(Wrapper _wrapper) {
+    /// @notice Modifier to check role or Emergency Exit
+    modifier onlyRoleOrEmergencyExit(bytes32 role) {
+        if (!isEmergencyExitActivated()) {
+            _checkRole(role, msg.sender);
+        }
+        _;
+    }
+
+    constructor(Wrapper _wrapper, uint256 _maxAcceptableWQFinalizationTimeInSeconds) {
         WRAPPER = _wrapper;
+        MAX_ACCEPTABLE_WQ_FINALIZATION_TIME_IN_SECONDS = _maxAcceptableWQFinalizationTimeInSeconds;
+
+        _disableInitializers();
     }
 
     /// @notice Initialize the contract storage explicitly.
     /// @param _admin admin address that can change every role.
     /// @dev Reverts if `_admin` equals to `address(0)`
     /// @dev NB! It's initialized in paused state by default and should be resumed explicitly to start
-    function initialize(address _admin) external {
+    function initialize(address _admin) external initializer {
         if (_admin == address(0)) revert AdminZeroAddress();
 
         _grantRole(DEFAULT_ADMIN_ROLE, _admin);
         _pause();
+
+        
+
+        _getWithdrawalQueueStorage().requests[0] = WithdrawalRequest({
+            cumulativeAssets: 0,
+            cumulativeShares: 0,
+            owner: address(this),
+            timestamp: uint40(block.timestamp),
+            claimed: true
+        });
+
         emit Initialized(_admin);
+    }
+
+    function test() external view {
+        console.logBytes32(DEFAULT_ADMIN_ROLE);
+        console.log(hasRole(DEFAULT_ADMIN_ROLE, msg.sender));
     }
 
     /// @notice Resume withdrawal requests placement and finalization
@@ -163,16 +195,6 @@ contract WithdrawalQueue is AccessControlEnumerable, Pausable {
     function resume() external {
         _checkRole(RESUME_ROLE, msg.sender);
         _unpause();
-    }
-
-    /// @notice Pause withdrawal requests placement and finalization. Claiming finalized requests will still be available
-    /// @param _duration pause duration in seconds (use `type(uint256).max` for unlimited)
-    /// @dev Reverts if contract is already paused
-    /// @dev Reverts reason if sender has no `PAUSE_ROLE`
-    function pauseFor(uint256 _duration) external onlyRole(PAUSE_ROLE) {
-        _pause();
-        _duration = _duration;
-        require(false, "NOT IMPLEMENTED");
     }
 
     //
@@ -204,190 +226,57 @@ contract WithdrawalQueue is AccessControlEnumerable, Pausable {
     //  set's the discount checkpoint for these request's if required that will be applied on claim for each request's
     // individually depending on request's share rate.
 
-    /// @notice transient state that is used to pass intermediate results between several `calculateFinalizationBatches`
-    //   invocations
-    struct BatchesCalculationState {
-        /// @notice amount of ether available in the protocol that can be used to finalize withdrawal requests
-        ///  Will decrease on each call and will be equal to the remainder when calculation is finished
-        ///  Should be set before the first call
-        uint256 remainingEthBudget;
-        /// @notice flag that is set to `true` if returned state is final and `false` if more calls are required
-        bool finished;
-        /// @notice static array to store last request id in each batch
-        uint256[MAX_BATCHES_LENGTH] batches;
-        /// @notice length of the filled part of `batches` array
-        uint256 batchesLength;
-    }
-
-    /// @notice Offchain view for the oracle daemon that calculates how many requests can be finalized within
-    /// the given budget, time period and share rate limits. Returned requests are split into batches.
-    /// Each batch consist of the requests that all have the share rate below the `_maxShareRate` or above it.
-    /// Below you can see an example how 14 requests with different share rates will be split into 5 batches by
-    /// this method
-    ///
-    /// ^ share rate
-    /// |
-    /// |         • •
-    /// |       •    •   • • •
-    /// |----------------------•------ _maxShareRate
-    /// |   •          •        • • •
-    /// | •
-    /// +-------------------------------> requestId
-    ///  | 1st|  2nd  |3| 4th | 5th  |
-    ///
-    /// @param _maxRequestsPerCall max request number that can be processed per call.
-    /// @param _state structure that accumulates the state across multiple invocations to overcome gas limits.
-    ///  To start calculation you should pass `state.remainingEthBudget` and `state.finished == false` and then invoke
-    ///  the function with returned `state` until it returns a state with `finished` flag set
-    /// @return state that is changing on each call and should be passed to the next call until `state.finished` is true
-
-    ///TODO: removed _maxTimestamp
-    function calculateFinalizationBatches(
-        uint256 _maxRequestsPerCall,
-        BatchesCalculationState memory _state
-    ) external view returns (BatchesCalculationState memory) {
-        if (_state.finished || _state.remainingEthBudget == 0)
-            revert InvalidState();
-        uint256 _maxShareRate = calculateCurrentShareRate();
-
-        uint256 currentId;
-        WithdrawalRequest memory prevRequest;
-        uint256 prevRequestShareRate;
-
-        if (_state.batchesLength == 0) {
-            currentId = getLastFinalizedRequestId() + 1;
-
-            prevRequest = requests[currentId - 1];
-        } else {
-            uint256 lastHandledRequestId = _state.batches[_state.batchesLength - 1];
-            currentId = lastHandledRequestId + 1;
-
-            prevRequest = requests[lastHandledRequestId];
-            (prevRequestShareRate,,) = _calcBatch(requests[lastHandledRequestId - 1], prevRequest);
-        }
-
-        uint256 nextCallRequestId = currentId + _maxRequestsPerCall;
-        uint256 queueLength = getLastRequestId() + 1;
-
-        while (currentId < queueLength && currentId < nextCallRequestId) {
-            WithdrawalRequest memory request = requests[currentId];
-
-            (uint256 requestShareRate, uint256 ethToFinalize, uint256 shares) = _calcBatch(prevRequest, request);
-
-            if (requestShareRate > _maxShareRate) {
-                // discounted
-                ethToFinalize = (shares * _maxShareRate) / E27_PRECISION_BASE;
-            }
-
-            if (ethToFinalize > _state.remainingEthBudget) break; // budget break
-            _state.remainingEthBudget -= ethToFinalize;
-
-            if (_state.batchesLength != 0 && (
-                // share rate of requests in the same batch can differ by 1-2 wei because of the rounding error
-                // (issue: https://github.com/lidofinance/lido-dao/issues/442 )
-                // so we're taking requests that are placed during the same report
-                // as equal even if their actual share rate are different
-
-                // both requests are below the line
-                prevRequestShareRate <= _maxShareRate && requestShareRate <= _maxShareRate ||
-                // both requests are above the line
-                prevRequestShareRate > _maxShareRate && requestShareRate > _maxShareRate
-            )) {
-                _state.batches[_state.batchesLength - 1] = currentId; // extend the last batch
-            } else {
-                // to be able to check batches on-chain we need array to have limited length
-                if (_state.batchesLength == MAX_BATCHES_LENGTH) break;
-
-                // create a new batch
-                _state.batches[_state.batchesLength] = currentId;
-                ++_state.batchesLength;
-            }
-
-            prevRequestShareRate = requestShareRate;
-            prevRequest = request;
-            unchecked{ ++currentId; }
-        }
-
-        _state.finished = currentId == queueLength || currentId < nextCallRequestId;
-
-        return _state;
-    }
-
-    /// @notice Checks finalization batches, calculates required ether and the amount of shares to burn
-    /// @param _batches finalization batches calculated offchain using `calculateFinalizationBatches()`
-    /// @param _maxShareRate max share rate that will be used for request finalization (1e27 precision)
-    /// @return ethToLock amount of ether that should be sent with `finalize()` method
-    /// @return sharesToBurn amount of shares that belongs to requests that will be finalized
-    function prefinalize(uint256[] calldata _batches, uint256 _maxShareRate)
-        external
-        view
-        returns (uint256 ethToLock, uint256 sharesToBurn)
-    {
-        if (_maxShareRate == 0) revert ZeroShareRate();
-        if (_batches.length == 0) revert EmptyBatches();
-
-        if (_batches[0] <= getLastFinalizedRequestId()) revert InvalidRequestId(_batches[0]);
-        if (_batches[_batches.length - 1] > getLastRequestId()) revert InvalidRequestId(_batches[_batches.length - 1]);
-
-        uint256 currentBatchIndex;
-        uint256 prevBatchEndRequestId = getLastFinalizedRequestId();
-        WithdrawalRequest memory prevBatchEnd = requests[prevBatchEndRequestId];
-        while (currentBatchIndex < _batches.length) {
-            uint256 batchEndRequestId = _batches[currentBatchIndex];
-            if (batchEndRequestId <= prevBatchEndRequestId) revert BatchesAreNotSorted();
-
-            WithdrawalRequest memory batchEnd = requests[batchEndRequestId];
-
-            (uint256 batchShareRate, uint256 stETH, uint256 shares) = _calcBatch(prevBatchEnd, batchEnd);
-
-            if (batchShareRate > _maxShareRate) {
-                // discounted
-                ethToLock += (shares * _maxShareRate) / E27_PRECISION_BASE;
-            } else {
-                // nominal
-                ethToLock += stETH;
-            }
-            sharesToBurn += shares;
-
-            prevBatchEndRequestId = batchEndRequestId;
-            prevBatchEnd = batchEnd;
-            unchecked{ ++currentBatchIndex; }
-        }
-    }
-
-    /// @notice Request withdrawal for a user
+    /// @notice Request multiple withdrawals for a user
+    /// @param _assets amount of ETH to withdraw
     /// @param _owner address that will be able to claim the created request
-    /// @param _assets amount of assets to withdraw
-    /// @return requestId the created withdrawal request id
-    function requestWithdrawal(address _owner, uint256 _assets)
+    /// @return requestIds the created withdrawal request ids
+    function requestWithdrawals(uint256[] calldata _assets, address _owner) 
         external
-        returns (uint256 requestId)
+        returns (uint256[] memory requestIds)
     {
         _requireNotPaused();
-        _checkWithdrawalRequestAmount(_assets);
-
-        if (WRAPPER.maxWithdraw(_owner) < _assets) {
-            revert RequestAmountTooLarge(_assets);
-        }
 
         IDashboard dashboard = IDashboard(WRAPPER.DASHBOARD());
         IVaultHub vaultHub = IVaultHub(dashboard.VAULT_HUB());
         if (!vaultHub.isReportFresh(WRAPPER.STAKING_VAULT())) revert ReportStale();
 
+        if (_owner == address(0)) _owner = msg.sender;
+
+        requestIds = new uint256[](_assets.length);
+        for (uint256 i = 0; i < _assets.length; ++i) {
+            requestIds[i] = _requestWithdrawal(_assets[i], _owner);
+        }
+    }
+
+    function _requestWithdrawal(uint256 _assets, address _owner)
+        public
+        returns (uint256 requestId)
+    {
+        _requireNotPaused();
+        
+        if (_assets < MIN_WITHDRAWAL_AMOUNT) revert RequestAmountTooSmall(_assets);
+        if (_assets > MAX_WITHDRAWAL_AMOUNT) revert RequestAmountTooLarge(_assets);
+
+        if (WRAPPER.maxWithdraw(msg.sender) < _assets) {
+            revert RequestAmountTooLarge(_assets);
+        }
+
+        WithdrawalQueueStorage storage wqStorage = _getWithdrawalQueueStorage();
+
         uint256 shares = WRAPPER.previewWithdraw(_assets);
 
-        WRAPPER.transferFrom(msg.sender, address(this), _assets);
+        WRAPPER.transferFrom(msg.sender, address(this), shares);
 
-        uint256 lastRequestId_ = getLastRequestId();
-        WithdrawalRequest memory lastRequest = requests[lastRequestId_];
+        uint256 lastRequestId = wqStorage.lastRequestId;
+        WithdrawalRequest memory lastRequest = wqStorage.requests[lastRequestId];
 
-        requestId = lastRequestId_ + 1;
-        lastRequestId = requestId;
+        requestId = lastRequestId + 1;
+        wqStorage.lastRequestId = requestId;
 
         uint256 cumulativeAssets = lastRequest.cumulativeAssets + _assets;
         uint256 cumulativeShares = lastRequest.cumulativeShares + shares;
 
-        requests[requestId] = WithdrawalRequest({
+        wqStorage.requests[requestId] = WithdrawalRequest({
             cumulativeAssets: uint128(cumulativeAssets),
             cumulativeShares: uint128(cumulativeShares),
             owner: _owner,
@@ -395,64 +284,82 @@ contract WithdrawalQueue is AccessControlEnumerable, Pausable {
             claimed: false
         });
 
-        assert(requestsByOwner[_owner].add(requestId));
+        assert(wqStorage.requestsByOwner[_owner].add(requestId));
 
         emit WithdrawalRequested(requestId, _owner, _assets, shares);
     }
 
     /// @notice Finalize withdrawal requests up to the specified request ID
-    /// @param _lastRequestIdToFinalize the last request ID to finalize
-    function finalize(uint256 _lastRequestIdToFinalize)
+    /// @param _maxRequests the last request ID to finalize
+    function finalize(uint256 _maxRequests)
         external
         onlyRoleOrEmergencyExit(FINALIZE_ROLE)
+        returns (uint256 finalizedRequests)
     {
-        require(_lastRequestIdToFinalize > getLastFinalizedRequestId(), "Invalid request ID");
-        require(_lastRequestIdToFinalize <= getLastRequestId(), "Request not found");
-
         // check report freshness
         IDashboard dashboard = IDashboard(WRAPPER.DASHBOARD());
         IVaultHub vaultHub = IVaultHub(dashboard.VAULT_HUB());
         if (!vaultHub.isReportFresh(WRAPPER.STAKING_VAULT())) revert ReportStale();
 
-        uint256 lastFinalizedRequestId_ = getLastFinalizedRequestId();
-        uint256 firstRequestIdToFinalize = lastFinalizedRequestId_ + 1;
-        uint256 currentShareRate = calculateCurrentShareRate();
+        WithdrawalQueueStorage storage wqStorage = _getWithdrawalQueueStorage();
 
-        // Calculate total amount for finalization
-        WithdrawalRequest memory lastFinalized = requests[lastFinalizedRequestId_];
-        WithdrawalRequest memory toFinalize = requests[_lastRequestIdToFinalize];
+        uint256 lastFinalizedRequestId = wqStorage.lastFinalizedRequestId;
+        uint256 firstRequestIdToFinalize = lastFinalizedRequestId + 1;
+        uint256 lastRequestIdToFinalize = lastFinalizedRequestId + _maxRequests;
 
-        uint256 totalAssetsToFinalize = toFinalize.cumulativeAssets - lastFinalized.cumulativeAssets;
-        uint256 totalSharesToFinalize = toFinalize.cumulativeShares - lastFinalized.cumulativeShares;
-
-        uint256 withdrawableValue = dashboard.withdrawableValue();
-        if (withdrawableValue < totalAssetsToFinalize) {
-            revert NotEnoughETH(withdrawableValue, totalAssetsToFinalize);
+        // Validate that _maxRequests is within valid range
+        if (lastRequestIdToFinalize > wqStorage.lastRequestId) {
+            revert InvalidRequestIdRange(lastFinalizedRequestId, _maxRequests);
         }
 
-        uint256 _amountOfETH = totalAssetsToFinalize;
-        uint256 sharesToBurn = WRAPPER.previewRedeem(totalAssetsToFinalize);
+        uint256 currentShareRate = calculateCurrentShareRate();
+        uint256 withdrawableValue = dashboard.withdrawableValue();
 
-        dashboard.withdraw(address(this), _amountOfETH);
-
-        WRAPPER.burnShares(sharesToBurn);
+        uint256 totalEthToFinalize;
 
         // Finalize all requests in the range
-        for (uint256 i = firstRequestIdToFinalize; i <= _lastRequestIdToFinalize; i++) {
-            requests[i].claimed = false; // Reset claimed flag for finalization
+        for (uint256 i = firstRequestIdToFinalize; i <= lastRequestIdToFinalize; i++) {
+            WithdrawalRequest memory request = wqStorage.requests[i];
+            WithdrawalRequest memory prevRequest = wqStorage.requests[i - 1];
+            (uint256 requestShareRate, uint256 eth, uint256 shares) = _calcStats(prevRequest, request);
+
+            // Apply discount if the request share rate is above the current share rate
+            if (requestShareRate > currentShareRate) {
+                eth = (shares * currentShareRate) / E27_PRECISION_BASE;
+            }
+
+            // Stop if insufficient ETH to cover this request
+            if (eth > withdrawableValue) {
+                break;
+            }
+
+            withdrawableValue -= eth;
+            totalEthToFinalize += eth;
+            finalizedRequests++;
         }
 
+        if (finalizedRequests == 0) {
+            return 0;
+        }
+
+        lastFinalizedRequestId = lastFinalizedRequestId + finalizedRequests;
+
+        uint256 sharesToBurn = WRAPPER.previewRedeem(totalEthToFinalize);
+        dashboard.withdraw(address(this), totalEthToFinalize);
+        WRAPPER.burnShares(sharesToBurn);
+
         // Create checkpoint with ShareRate
-        lastCheckpointIndex++;
-        checkpoints[lastCheckpointIndex] = Checkpoint({
+        uint256 lastCheckpointIndex = wqStorage.lastCheckpointIndex + 1;
+        wqStorage.checkpoints[lastCheckpointIndex] = Checkpoint({
             fromRequestId: firstRequestIdToFinalize,
             shareRate: currentShareRate
         });
+        
+        wqStorage.lastCheckpointIndex = lastCheckpointIndex;
+        wqStorage.lastFinalizedRequestId = lastFinalizedRequestId;
+        wqStorage.totalLockedAssets += totalEthToFinalize;
 
-        lastFinalizedRequestId = _lastRequestIdToFinalize;
-        totalLockedAssets += _amountOfETH;
-
-        emit WithdrawalsFinalized(firstRequestIdToFinalize, _lastRequestIdToFinalize, _amountOfETH, totalSharesToFinalize, block.timestamp);
+        emit WithdrawalsFinalized(firstRequestIdToFinalize, lastFinalizedRequestId, totalEthToFinalize, sharesToBurn, block.timestamp);
     }
 
     /// @notice Calculate current share rate of the vault
@@ -475,9 +382,10 @@ contract WithdrawalQueue is AccessControlEnumerable, Pausable {
     ///  Reverts if requestId or hint are not valid
     ///  Reverts if request is not finalized or already claimed
     ///  Reverts if msg sender is not an owner of request
-    function claimWithdrawal(uint256 _requestId) external {
+    function claimWithdrawal(uint256 _requestId, address _recipient) external {
         uint256 checkpoint = _findCheckpointHint(_requestId, 1, getLastCheckpointIndex());
-        _claim(_requestId, checkpoint, msg.sender);
+        address recipient = _recipient == address(0) ? msg.sender : _recipient;
+        _claim(_requestId, checkpoint, recipient);
     }
 
     /// @notice Claim a batch of withdrawal requests
@@ -488,12 +396,11 @@ contract WithdrawalQueue is AccessControlEnumerable, Pausable {
         if (_requestIds.length != _hints.length) {
             revert ArraysLengthMismatch(_requestIds.length, _hints.length);
         }
-
+        
+        address recipient = _recipient == address(0) ? msg.sender : _recipient;
         for (uint256 i = 0; i < _requestIds.length; ++i) {
-            _claim(_requestIds[i], _hints[i], msg.sender);
+            _claim(_requestIds[i], _hints[i], recipient);
         }
-
-        _recipient = _recipient; // TODO
     }
 
     /// @notice Finds the list of hints for the given `_requestIds` searching among the checkpoints with indices
@@ -530,24 +437,25 @@ contract WithdrawalQueue is AccessControlEnumerable, Pausable {
     ///
     /// @return hint for later use in other methods or 0 if hint not found in the range
     function _findCheckpointHint(uint256 _requestId, uint256 _start, uint256 _end) internal view returns (uint256) {
-        if (_requestId == 0 || _requestId > getLastRequestId()) revert InvalidRequestId(_requestId);
+        WithdrawalQueueStorage storage wqStorage = _getWithdrawalQueueStorage();
+        if (_requestId == 0 || _requestId > wqStorage.lastRequestId) revert InvalidRequestId(_requestId);
 
-        uint256 lastCheckpointIndex_ = getLastCheckpointIndex();
+        uint256 lastCheckpointIndex_ = wqStorage.lastCheckpointIndex;
         if (_start == 0 || _end > lastCheckpointIndex_) revert InvalidRequestIdRange(_start, _end);
 
-        if (lastCheckpointIndex_ == 0 || _requestId > getLastFinalizedRequestId() || _start > _end) return NOT_FOUND;
+        if (lastCheckpointIndex_ == 0 || _requestId > wqStorage.lastFinalizedRequestId || _start > _end) return NOT_FOUND;
 
         // Right boundary
-        if (_requestId >= _getCheckpoints()[_end].fromRequestId) {
+        if (_requestId >= wqStorage.checkpoints[_end].fromRequestId) {
             // it's the last checkpoint, so it's valid
             if (_end == lastCheckpointIndex_) return _end;
             // it fits right before the next checkpoint
-            if (_requestId < _getCheckpoints()[_end + 1].fromRequestId) return _end;
+            if (_requestId < wqStorage.checkpoints[_end + 1].fromRequestId) return _end;
 
             return NOT_FOUND;
         }
         // Left boundary
-        if (_requestId < _getCheckpoints()[_start].fromRequestId) {
+        if (_requestId < wqStorage.checkpoints[_start].fromRequestId) {
             return NOT_FOUND;
         }
 
@@ -557,7 +465,7 @@ contract WithdrawalQueue is AccessControlEnumerable, Pausable {
 
         while (max > min) {
             uint256 mid = (max + min + 1) / 2;
-            if (_getCheckpoints()[mid].fromRequestId <= _requestId) {
+            if (wqStorage.checkpoints[mid].fromRequestId <= _requestId) {
                 min = mid;
             } else {
                 max = mid - 1;
@@ -566,27 +474,25 @@ contract WithdrawalQueue is AccessControlEnumerable, Pausable {
         return min;
     }
 
-    function _getCheckpoints() internal view returns (mapping(uint256 => Checkpoint) storage) {
-        return checkpoints;
-    }
-
     function _claim(uint256 _requestId, uint256 _hint, address _recipient) internal {
         if (_requestId == 0) revert InvalidRequestId(_requestId);
-        if (_requestId > getLastFinalizedRequestId()) revert RequestNotFoundOrNotFinalized(_requestId);
 
-        WithdrawalRequest storage request = requests[_requestId];
+        WithdrawalQueueStorage storage wqStorage = _getWithdrawalQueueStorage();
+        if (_requestId > wqStorage.lastFinalizedRequestId) revert RequestNotFoundOrNotFinalized(_requestId);
+
+        WithdrawalRequest storage request = wqStorage.requests[_requestId];
 
         if (request.claimed) revert RequestAlreadyClaimed(_requestId);
         if (request.owner != msg.sender) revert NotOwner(msg.sender, request.owner);
 
         request.claimed = true;
-        assert(requestsByOwner[request.owner].remove(_requestId));
+        assert(wqStorage.requestsByOwner[request.owner].remove(_requestId));
 
         uint256 ethWithDiscount = _calculateClaimableEther(request, _requestId, _hint);
         // because of the stETH rounding issue
         // (issue: https://github.com/lidofinance/lido-dao/issues/442 )
         // some dust (1-2 wei per request) will be accumulated upon claiming
-        totalLockedAssets -= ethWithDiscount;
+        wqStorage.totalLockedAssets -= ethWithDiscount;
         (bool success, ) = _recipient.call{value: ethWithDiscount}("");
         if (!success) revert CantSendValueRecipientMayHaveReverted();
 
@@ -597,7 +503,7 @@ contract WithdrawalQueue is AccessControlEnumerable, Pausable {
     /// @param _owner address to get requests for
     /// @return requestIds array of request ids
     function getWithdrawalRequests(address _owner) external view returns (uint256[] memory requestIds) {
-        return requestsByOwner[_owner].values();
+        return _getWithdrawalQueueStorage().requestsByOwner[_owner].values();
     }
 
     /// @notice Returns status for requests with provided ids
@@ -614,6 +520,9 @@ contract WithdrawalQueue is AccessControlEnumerable, Pausable {
         }
     }
 
+    /// @notice Returns status for a single request
+    /// @param _requestId request id
+    /// @return status withdrawal request status
     function getWithdrawalStatus(uint256 _requestId) external view returns (WithdrawalRequestStatus memory status) {
         return _getStatus(_requestId);
     }
@@ -640,35 +549,74 @@ contract WithdrawalQueue is AccessControlEnumerable, Pausable {
 
     /// @notice return the number of unfinalized requests in the queue
     function unfinalizedRequestNumber() external view returns (uint256) {
-        return getLastRequestId() - getLastFinalizedRequestId();
+        WithdrawalQueueStorage storage wqStorage = _getWithdrawalQueueStorage();
+        return wqStorage.lastRequestId - wqStorage.lastFinalizedRequestId;
     }
 
     /// @notice Returns the amount of assets in the queue yet to be finalized
     function unfinalizedAssets() external view returns (uint256) {
-        return requests[getLastRequestId()].cumulativeAssets - requests[getLastFinalizedRequestId()].cumulativeAssets;
+        WithdrawalQueueStorage storage wqStorage = _getWithdrawalQueueStorage();
+        return wqStorage.requests[wqStorage.lastRequestId].cumulativeAssets - wqStorage.requests[wqStorage.lastFinalizedRequestId].cumulativeAssets;
     }
 
+    /// @notice Returns the amount of shares in the queue yet to be finalized
     function unfinalizedShares() external view returns (uint256) {
-        return requests[getLastRequestId()].cumulativeShares - requests[getLastFinalizedRequestId()].cumulativeShares;
+        WithdrawalQueueStorage storage wqStorage = _getWithdrawalQueueStorage();
+        return wqStorage.requests[wqStorage.lastRequestId].cumulativeShares - wqStorage.requests[wqStorage.lastFinalizedRequestId].cumulativeShares;
     }
 
+    /// @notice Returns the last request id
     function getLastRequestId() public view returns (uint256) {
-        return lastRequestId;
+        return _getWithdrawalQueueStorage().lastRequestId;
     }
 
+    /// @notice Returns the last finalized request id
     function getLastFinalizedRequestId() public view returns (uint256) {
-        return lastFinalizedRequestId;
+        return _getWithdrawalQueueStorage().lastFinalizedRequestId;
     }
 
+    /// @notice Returns the last checkpoint index
     function getLastCheckpointIndex() public view returns (uint256) {
-        return lastCheckpointIndex;
+        return _getWithdrawalQueueStorage().lastCheckpointIndex;
     }
 
-    /// @notice Check withdrawal request amount limits
-    /// @param _amount amount to check
-    function _checkWithdrawalRequestAmount(uint256 _amount) internal pure {
-        if (_amount < MIN_WITHDRAWAL_AMOUNT) revert RequestAmountTooSmall(_amount);
-        if (_amount > MAX_WITHDRAWAL_AMOUNT) revert RequestAmountTooLarge(_amount);
+    /// @notice Receive ETH
+    receive() external payable {}
+
+    /// @notice Returns true if Emergency Exit is activated
+    function isEmergencyExitActivated() public view returns (bool) {
+        return _getWithdrawalQueueStorage().emergencyExitActivationTimestamp > 0;
+    }
+
+    /// @notice Returns true if requests have not been finalized for a long time
+    function isWithdrawalQueueStuck() public view returns (bool) {
+        WithdrawalQueueStorage storage wqStorage = _getWithdrawalQueueStorage();
+        if (wqStorage.lastFinalizedRequestId >= wqStorage.lastRequestId) {
+            return false;
+        }
+
+        uint256 firstPendingRequest = wqStorage.lastFinalizedRequestId + 1;
+
+        uint256 firstPendingRequestTimestamp = wqStorage.requests[firstPendingRequest].timestamp;
+        uint256 maxAcceptableTime = firstPendingRequestTimestamp + MAX_ACCEPTABLE_WQ_FINALIZATION_TIME_IN_SECONDS;
+
+        return maxAcceptableTime < block.timestamp;
+    }
+
+    /// @notice Permissionless method to activate Emergency Exit
+    /// @dev can only be called if Withdrawal Queue is stuck
+    function activateEmergencyExit() external {
+        WithdrawalQueueStorage storage wqStorage = _getWithdrawalQueueStorage();
+        if (wqStorage.emergencyExitActivationTimestamp > 0 || !isWithdrawalQueueStuck()) revert InvalidEmergencyExitActivation();
+
+        wqStorage.emergencyExitActivationTimestamp = block.timestamp;
+
+        emit EmergencyExitActivated(wqStorage.emergencyExitActivationTimestamp);
+    }
+
+    /// @notice Get the queue
+    function _getQueue() internal view returns (mapping(uint256 => WithdrawalRequest) storage queue) {
+        return _getWithdrawalQueueStorage().requests;
     }
 
     /// @notice Calculate claimable ether for a request
@@ -676,10 +624,11 @@ contract WithdrawalQueue is AccessControlEnumerable, Pausable {
     /// @param _hint checkpoint hint
     /// @return amount of claimable ether
     function _getClaimableEther(uint256 _requestId, uint256 _hint) internal view returns (uint256) {
-        if (_requestId == 0 || _requestId > getLastRequestId()) return 0;
-        if (_requestId > getLastFinalizedRequestId()) return 0;
+        WithdrawalQueueStorage storage wqStorage = _getWithdrawalQueueStorage();
+        if (_requestId == 0 || _requestId > wqStorage.lastRequestId) return 0;
+        if (_requestId > wqStorage.lastFinalizedRequestId) return 0;
 
-        WithdrawalRequest storage request = requests[_requestId];
+        WithdrawalRequest storage request = wqStorage.requests[_requestId];
         if (request.claimed) return 0;
 
         return _calculateClaimableEther(request, _requestId, _hint);
@@ -693,10 +642,12 @@ contract WithdrawalQueue is AccessControlEnumerable, Pausable {
     function _calculateClaimableEther(WithdrawalRequest storage _request, uint256 _requestId, uint256 _hint) internal view returns (uint256) {
         if (_hint == 0) revert InvalidHint(_hint);
 
-        uint256 lastCheckpointIndex_ = getLastCheckpointIndex();
+        WithdrawalQueueStorage storage wqStorage = _getWithdrawalQueueStorage();
+
+        uint256 lastCheckpointIndex_ = wqStorage.lastCheckpointIndex;
         if (_hint > lastCheckpointIndex_) revert InvalidHint(_hint);
 
-        Checkpoint memory checkpoint = _getCheckpoints()[_hint];
+        Checkpoint memory checkpoint = wqStorage.checkpoints[_hint];
         // Reverts if requestId is not in range [checkpoint[hint], checkpoint[hint+1])
         // ______(>______
         //    ^  hint
@@ -704,12 +655,17 @@ contract WithdrawalQueue is AccessControlEnumerable, Pausable {
         if (_hint < lastCheckpointIndex_) {
             // ______(>______(>________
             //       hint    hint+1  ^
-            Checkpoint memory nextCheckpoint = _getCheckpoints()[_hint + 1];
+            Checkpoint memory nextCheckpoint = wqStorage.checkpoints[_hint + 1];
             if (nextCheckpoint.fromRequestId <= _requestId) revert InvalidHint(_hint);
         }
 
-        WithdrawalRequest memory prevRequest = requests[_requestId - 1];
-        (uint256 batchShareRate, uint256 eth, uint256 shares) = _calcBatch(prevRequest, _request);
+        WithdrawalRequest memory prevRequest = wqStorage.requests[_requestId - 1];
+        (uint256 batchShareRate, uint256 eth, uint256 shares) = _calcStats(prevRequest, _request);
+
+        console.log("batchShareRate", batchShareRate);
+        console.log("checkpoint.shareRate", checkpoint.shareRate);
+        console.log("shares", shares);
+        console.log("eth", eth);
 
         if (batchShareRate > checkpoint.shareRate) {
             eth = (shares * checkpoint.shareRate) / E27_PRECISION_BASE;
@@ -718,8 +674,8 @@ contract WithdrawalQueue is AccessControlEnumerable, Pausable {
         return eth;
     }
 
-    /// @dev calculate batch stats (shareRate, assets and shares) for the range of `(_preStartRequest, _endRequest]`
-    function _calcBatch(WithdrawalRequest memory _preStartRequest, WithdrawalRequest memory _endRequest)
+    /// @dev calculate request stats (shareRate, assets and shares) for the range of `(_preStartRequest, _endRequest]`
+    function _calcStats(WithdrawalRequest memory _preStartRequest, WithdrawalRequest memory _endRequest)
         internal
         pure
         returns (uint256 shareRate, uint256 assets, uint256 shares)
@@ -734,62 +690,25 @@ contract WithdrawalQueue is AccessControlEnumerable, Pausable {
     /// @param _requestId request id
     /// @return status withdrawal request status
     function _getStatus(uint256 _requestId) internal view returns (WithdrawalRequestStatus memory) {
-        if (_requestId == 0 || _requestId > getLastRequestId()) revert InvalidRequestId(_requestId);
+        WithdrawalQueueStorage storage wqStorage = _getWithdrawalQueueStorage();
+        if (_requestId == 0 || _requestId > wqStorage.lastRequestId) revert InvalidRequestId(_requestId);
 
-        WithdrawalRequest storage request = requests[_requestId];
-        WithdrawalRequest storage previousRequest = requests[_requestId - 1];
+        WithdrawalRequest storage request = wqStorage.requests[_requestId];
+        WithdrawalRequest storage previousRequest = wqStorage.requests[_requestId - 1];
 
         return WithdrawalRequestStatus({
             amountOfAssets: request.cumulativeAssets - previousRequest.cumulativeAssets,
             amountOfShares: request.cumulativeShares - previousRequest.cumulativeShares,
             owner: request.owner,
             timestamp: request.timestamp,
-            isFinalized: _requestId <= lastFinalizedRequestId,
+            isFinalized: _requestId <= wqStorage.lastFinalizedRequestId,
             isClaimed: request.claimed
         });
     }
 
-    /// @notice Receive ETH
-    receive() external payable {}
-
-    /// @notice Returns true if Emergency Exit is activated
-    function isEmergencyExitActivated() public view returns (bool) {
-        return emergencyExitActivationTimestamp > 0;
-    }
-
-    /// @notice Returns true if requests have not been finalized for a long time
-    function isWithdrawalQueueStuck() public view returns (bool) {
-        if (lastFinalizedRequestId >= lastRequestId) {
-            return false;
+    function _getWithdrawalQueueStorage() private pure returns (WithdrawalQueueStorage storage $) {
+        assembly {
+            $.slot := WithdrawalQueueStorageLocation
         }
-
-        uint256 firstPendingRequest = lastFinalizedRequestId + 1;
-
-        if (firstPendingRequest > lastRequestId) {
-            return false;
-        }
-
-        uint256 firstPendingRequestTimestamp = requests[firstPendingRequest].timestamp;
-        uint256 maxAcceptableTime = firstPendingRequestTimestamp + MAX_ACCEPTABLE_WQ_FINALIZATION_TIME_IN_SECONDS;
-
-        return maxAcceptableTime <= block.timestamp;
-    }
-
-    /// @notice Permissionless method to activate Emergency Exit
-    /// @dev can only be called if Withdrawal Queue is stuck
-    function activateEmergencyExit() external {
-        if (!isWithdrawalQueueStuck()) revert InvalidEmergencyExitActivation();
-
-        emergencyExitActivationTimestamp = block.timestamp;
-
-        emit EmergencyExitActivated(emergencyExitActivationTimestamp);
-    }
-
-    /// @notice Modifier to check role or Emergency Exit
-    modifier onlyRoleOrEmergencyExit(bytes32 role) {
-        if (!isEmergencyExitActivated()) {
-            _checkRole(role, msg.sender);
-        }
-        _;
     }
 }

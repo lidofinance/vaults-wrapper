@@ -108,7 +108,8 @@ contract WhitelistTest is Test {
 
         // Setup withdrawal queue for whitelist wrapper
         vm.startPrank(owner);
-        withdrawalQueue = new WithdrawalQueue(wrapperWithWhitelist);
+        uint256 maxAcceptableWQFinalizationTimeInSeconds = 60 days;
+        withdrawalQueue = new WithdrawalQueue(wrapperWithWhitelist, maxAcceptableWQFinalizationTimeInSeconds);
         withdrawalQueue.initialize(owner);
         wrapperWithWhitelist.setWithdrawalQueue(address(withdrawalQueue));
         withdrawalQueue.grantRole(withdrawalQueue.FINALIZE_ROLE(), owner);
@@ -449,8 +450,10 @@ contract WhitelistTest is Test {
         vm.startPrank(user1);
         wrapperWithWhitelist.approve(address(withdrawalQueue), shares);
 
-        uint256 requestId = withdrawalQueue.requestWithdrawal(user1, shares);
-        assertGt(requestId, 0, "Should have a valid withdrawal request ID");
+        uint256[] memory amounts = new uint256[](1);
+        amounts[0] = shares;
+        uint256[] memory requestIds = withdrawalQueue.requestWithdrawals(amounts, user1);
+        assertGt(requestIds[0], 0, "Should have a valid withdrawal request ID");
 
         vm.stopPrank();
     }

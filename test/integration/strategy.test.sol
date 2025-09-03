@@ -13,6 +13,7 @@ import {ILido} from "src/interfaces/ILido.sol";
 import {Wrapper} from "src/Wrapper.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
 import {ExampleStrategy, LenderMock} from "src/ExampleStrategy.sol";
+import {IStrategy} from "src/interfaces/IStrategy.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 
@@ -27,7 +28,7 @@ contract StrategyTest is Test {
     IVaultHub public vaultHub;
     IStakingVault public stakingVault;
     WithdrawalQueue public withdrawalQueue;
-    ExampleStrategy public strategy;
+    IStrategy public strategy;
 
     uint256 public constant WEI_ROUNDING_TOLERANCE = 2;
     uint256 public constant TOTAL_BP = 100_00;
@@ -38,7 +39,7 @@ contract StrategyTest is Test {
 
     function setUp() public {
         core = new CoreHarness("lido-core/deployed-local.json");
-        dw = new DefiWrapper(address(core));
+        dw = new DefiWrapper(address(core), address(0));
 
         wrapper = dw.wrapper();
         withdrawalQueue = dw.withdrawalQueue();
@@ -59,7 +60,7 @@ contract StrategyTest is Test {
     // Verifies deposit → escrow position opening → stETH minting → strategy leverage loop execution
     function test_openClosePositionSingleUser() public {
         uint256 initialETH = 10_000 wei;
-        LenderMock lenderMock = strategy.LENDER_MOCK();
+        // LenderMock lenderMock = strategy.LENDER_MOCK();
         uint256 initialVaultBalance = address(stakingVault).balance;
 
         // Setup: User deposits ETH and gets stvToken shares
@@ -81,8 +82,8 @@ contract StrategyTest is Test {
         uint256 reserveRatioBP = dashboard.reserveRatioBP();
         console.log("reserveRatioBP", reserveRatioBP);
 
-        uint256 borrowRatio = lenderMock.BORROW_RATIO();
-        console.log("borrowRatio", borrowRatio);
+        // uint256 borrowRatio = lenderMock.BORROW_RATIO();
+        // console.log("borrowRatio", borrowRatio);
 
         vm.startPrank(user1);
         wrapper.openPosition(user1StvShares);
@@ -91,16 +92,16 @@ contract StrategyTest is Test {
         dw.logAllBalances("test_openClosePositionSingleUser", user1, user2);
 
         // Assert all logged balances
-        uint256 totalBasisPoints = strategy.LENDER_MOCK().TOTAL_BASIS_POINTS(); // 10000
+        // uint256 totalBasisPoints = strategy.LENDER_MOCK().TOTAL_BASIS_POINTS(); // 10000
 
-        uint256 mintedStETHShares0 = user1StvShares * (core.LIDO_TOTAL_BASIS_POINTS() - reserveRatioBP) / core.LIDO_TOTAL_BASIS_POINTS();
-        uint256 borrowedEth0 = (mintedStETHShares0 * borrowRatio) / totalBasisPoints;
-        console.log("borrowedEth0", borrowedEth0);
+        // uint256 mintedStETHShares0 = user1StvShares * (core.LIDO_TOTAL_BASIS_POINTS() - reserveRatioBP) / core.LIDO_TOTAL_BASIS_POINTS();
+        // uint256 borrowedEth0 = (mintedStETHShares0 * borrowRatio) / totalBasisPoints;
+        // console.log("borrowedEth0", borrowedEth0);
 
-        uint256 user1StvShares1 = borrowedEth0;
-        uint256 mintedStETHShares1 = user1StvShares1 * (core.LIDO_TOTAL_BASIS_POINTS() - reserveRatioBP) / core.LIDO_TOTAL_BASIS_POINTS();
-        uint256 borrowedEth1 = (mintedStETHShares1 * borrowRatio) / totalBasisPoints;
-        console.log("borrowedEth1", borrowedEth1);
+        // uint256 user1StvShares1 = borrowedEth0;
+        // uint256 mintedStETHShares1 = user1StvShares1 * (core.LIDO_TOTAL_BASIS_POINTS() - reserveRatioBP) / core.LIDO_TOTAL_BASIS_POINTS();
+        // uint256 borrowedEth1 = (mintedStETHShares1 * borrowRatio) / totalBasisPoints;
+        // console.log("borrowedEth1", borrowedEth1);
     }
 
 }

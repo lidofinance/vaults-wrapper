@@ -9,11 +9,9 @@ import {AccessControlEnumerable} from "@openzeppelin/contracts/access/extensions
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
 import {WithdrawalQueue} from "./WithdrawalQueue.sol";
-import {ExampleStrategy} from "./ExampleStrategy.sol";
 import {IStrategy} from "./interfaces/IStrategy.sol";
 import {IVaultHub} from "./interfaces/IVaultHub.sol";
 import {IDashboard} from "./interfaces/IDashboard.sol";
-
 
 // Custom errors
 error NotWhitelisted(address user);
@@ -53,18 +51,6 @@ contract Wrapper is ERC4626, AccessControlEnumerable {
     mapping(address => uint256) public lockedStvSharesByUser;
     mapping(address => bool) public authorizedStrategies;
 
-    struct Position {
-        address user;
-        uint256 stvTokenShares;
-        uint256 borrowedAssets;
-        uint256 positionId;
-        uint256 withdrawalRequestId;
-        bool isActive;
-        bool isExiting;
-        uint256 timestamp;
-        uint256 totalStvTokenShares;
-    }
-
     event VaultFunded(uint256 amount);
     event AutoLeverageExecuted(address indexed user, uint256 shares);
     event DefaultStrategyUpdated(address indexed strategy);
@@ -76,25 +62,11 @@ contract Wrapper is ERC4626, AccessControlEnumerable {
         uint256 shares,
         uint256 assets
     );
-    event PositionOpened(
-        address indexed user,
-        uint256 indexed positionId,
-        uint256 stvTokenShares,
-        uint256 borrowedAssets
-    );
-    event PositionClosing(
-        address indexed user,
-        uint256 indexed positionId,
-        uint256 withdrawalRequestId
-    );
-    event PositionClaimed(
-        address indexed user,
-        uint256 indexed positionId,
-        uint256 assets
-    );
 
     event WhitelistAdded(address indexed user);
     event WhitelistRemoved(address indexed user);
+
+    error NoStrategySet();
 
     constructor(
         address _dashboard,
@@ -212,14 +184,52 @@ contract Wrapper is ERC4626, AccessControlEnumerable {
 
         _mint(_receiver, shares);
 
-        // // Auto-leverage
-        // // if (autoLeverageEnabled && address(defaultStrategy) != address(0) && address(escrow) != address(0)) {
-        // //     _autoExecuteLeverage(receiver, shares);
-        // // }
         emit Deposit(msg.sender, _receiver, msg.value, shares);
         assert(totalAssets() == totalAssetsBefore + msg.value);
         assert(totalSupply() == totalSupplyBefore + shares);
         return shares;
+    }
+
+    function depositStrategy() external payable returns (uint256 shares, uint256 stETHAmount) {
+        if (address(STRATEGY) == address(0)) revert NoStrategySet();
+        if (WHITELIST_ENABLED && !hasRole(DEPOSIT_ROLE, msg.sender)) {
+            revert NotWhitelisted(msg.sender);
+        }
+
+        uint256 totalAssetsBefore = totalAssets();
+        uint256 totalSupplyBefore = totalSupply();
+
+        // Calculate shares to be minted based on the assets value BEFORE this deposit
+        shares = previewDeposit(msg.value);
+
+        // Fund vault through Dashboard. This increases the totalAssets value.
+        DASHBOARD.fund{value: msg.value}();
+
+        // Mint stvToken shares to the user (not the strategy)
+        _mint(msg.sender, shares);
+
+        if (shares == 0) revert ZeroStvShares();
+
+        // Lock stvToken shares and mint stETH to strategy
+        _transfer(msg.sender, address(this), shares);
+        lockedStvSharesByUser[msg.sender] += shares;
+
+        uint256 remainingMintingCapacity = DASHBOARD.remainingMintingCapacityShares(0);
+        uint256 totalMintingCapacity = DASHBOARD.totalMintingCapacityShares();
+        assert(remainingMintingCapacity <= totalMintingCapacity);
+
+        uint256 userEthInPool = convertToAssets(shares);
+        uint256 totalVaultAssets = totalAssets();
+        uint256 userTotalMintingCapacity = (userEthInPool * totalMintingCapacity) / totalVaultAssets;
+
+        // User can mint up to their fair share, limited by remaining capacity
+        stETHAmount = userTotalMintingCapacity < remainingMintingCapacity ? userTotalMintingCapacity : remainingMintingCapacity;
+        if (stETHAmount == 0) revert NoMintingCapacityAvailable();
+
+        DASHBOARD.mintShares(address(STRATEGY), stETHAmount);
+        STRATEGY.execute(msg.sender, stETHAmount);
+
+        emit Deposit(msg.sender, address(STRATEGY), msg.value, shares);
     }
 
     /**

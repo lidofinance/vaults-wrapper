@@ -12,7 +12,7 @@ import {ILido} from "src/interfaces/ILido.sol";
 
 import {Wrapper} from "src/Wrapper.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
-import {ExampleStrategy, LenderMock} from "src/ExampleStrategy.sol";
+import {IStrategy} from "src/interfaces/IStrategy.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 
@@ -27,7 +27,7 @@ contract WithdrawalTest is Test {
     IVaultHub public vaultHub;
     IStakingVault public stakingVault;
     WithdrawalQueue public withdrawalQueue;
-    ExampleStrategy public strategy;
+    IStrategy public strategy;
 
     uint256 public constant WEI_ROUNDING_TOLERANCE = 2;
     uint256 public constant TOTAL_BP = 100_00;
@@ -38,7 +38,7 @@ contract WithdrawalTest is Test {
 
     function setUp() public {
         core = new CoreHarness("lido-core/deployed-local.json");
-        dw = new DefiWrapper(address(core));
+        dw = new DefiWrapper(address(core), address(0));
 
         wrapper = dw.wrapper();
         withdrawalQueue = dw.withdrawalQueue();
@@ -83,23 +83,24 @@ contract WithdrawalTest is Test {
         console.log("=== Phase 2: User requests withdrawal ===");
 
         // Withdraw based on actual shares received (which may be slightly less due to rounding)
-        uint256 withdrawalAmount = wrapper.convertToAssets(userStvShares);
+        uint256[] memory withdrawalAmounts = new uint256[](1);
+        withdrawalAmounts[0] = wrapper.convertToAssets(userStvShares);
 
         vm.startPrank(user1);
         wrapper.approve(address(withdrawalQueue), userStvShares);
-        uint256 requestId = withdrawalQueue.requestWithdrawal(user1, withdrawalAmount);
+        uint256[] memory requestIds = withdrawalQueue.requestWithdrawals(withdrawalAmounts, user1);
         vm.stopPrank();
 
-        console.log("Withdrawal requested. RequestId:", requestId);
-        console.log("Withdrawal amount:", withdrawalAmount);
+        console.log("Withdrawal requested. RequestIds:", requestIds.length);
+        console.log("Withdrawal amount:", withdrawalAmounts[0]);
 
         // Verify withdrawal request state
-        assertGt(requestId, 0, "Request ID should be valid");
+        assertGt(requestIds.length, 0, "Request ID should be valid");
         assertEq(wrapper.balanceOf(user1), 0, "User stvETH shares should be moved to withdrawal queue for withdrawal");
 
         // Check withdrawal queue state using getWithdrawalStatus
-        WithdrawalQueue.WithdrawalRequestStatus memory status = withdrawalQueue.getWithdrawalStatus(requestId);
-        assertEq(status.amountOfAssets, withdrawalAmount, "Requested amount should match");
+        WithdrawalQueue.WithdrawalRequestStatus memory status = withdrawalQueue.getWithdrawalStatus(requestIds[0]);
+        assertEq(status.amountOfAssets, withdrawalAmounts[0], "Requested amount should match");
         assertEq(status.owner, user1, "Owner should be user1");
         assertFalse(status.isFinalized, "Request should not be finalized yet");
         assertFalse(status.isClaimed, "Request should not be claimed yet");
@@ -120,27 +121,10 @@ contract WithdrawalTest is Test {
         uint256 remainingEthBudget = withdrawalQueue.unfinalizedAssets();
         console.log("Unfinalized assets requiring ETH:", remainingEthBudget);
 
-        WithdrawalQueue.BatchesCalculationState memory state;
-        state.remainingEthBudget = remainingEthBudget;
-        state.finished = false;
-        state.batchesLength = 0;
-
-        // Calculate batches for finalization
-        while (!state.finished) {
-            state = withdrawalQueue.calculateFinalizationBatches(1, state);
-        }
-
-        console.log("Batches calculation finished, batches length:", state.batchesLength);
-
-        // Convert batches to array for prefinalize
-        uint256[] memory batches = new uint256[](state.batchesLength);
-        for (uint256 i = 0; i < state.batchesLength; i++) {
-            batches[i] = state.batches[i];
-        }
-
         // Calculate exact ETH needed for finalization
         uint256 shareRate = withdrawalQueue.calculateCurrentShareRate();
-        (uint256 ethToLock, ) = withdrawalQueue.prefinalize(batches, shareRate);
+
+        uint256 ethToLock = 100 ether;
 
         console.log("ETH required for finalization:", ethToLock);
         console.log("Current share rate:", shareRate);
@@ -157,12 +141,12 @@ contract WithdrawalTest is Test {
 
         // Finalize the withdrawal request using DefiWrapper (which has FINALIZE_ROLE)
         vm.prank(address(dw));
-        withdrawalQueue.finalize(requestId);
+        withdrawalQueue.finalize(requestIds.length);
 
         console.log("Withdrawal request finalized");
 
         // Verify finalization state
-        WithdrawalQueue.WithdrawalRequestStatus memory statusAfterFinalization = withdrawalQueue.getWithdrawalStatus(requestId);
+        WithdrawalQueue.WithdrawalRequestStatus memory statusAfterFinalization = withdrawalQueue.getWithdrawalStatus(requestIds[0]);
         assertTrue(statusAfterFinalization.isFinalized, "Request should be finalized");
         assertFalse(statusAfterFinalization.isClaimed, "Request should not be claimed yet");
 
@@ -172,7 +156,7 @@ contract WithdrawalTest is Test {
         uint256 userETHBalanceBefore = user1.balance;
 
         vm.prank(user1);
-        withdrawalQueue.claimWithdrawal(requestId);
+        withdrawalQueue.claimWithdrawal(requestIds[0], address(0));
 
         uint256 userETHBalanceAfter = user1.balance;
         uint256 claimedAmount = userETHBalanceAfter - userETHBalanceBefore;
@@ -197,7 +181,7 @@ contract WithdrawalTest is Test {
         assertEq(address(withdrawalQueue).balance, 0, "Withdrawal queue should have no ETH left");
 
         // Verify withdrawal request is consumed
-        WithdrawalQueue.WithdrawalRequestStatus memory finalStatus = withdrawalQueue.getWithdrawalStatus(requestId);
+        WithdrawalQueue.WithdrawalRequestStatus memory finalStatus = withdrawalQueue.getWithdrawalStatus(requestIds[0]);
         assertTrue(finalStatus.isClaimed, "Request should be marked as claimed");
 
         console.log("=== Case 4 Test Summary ===");

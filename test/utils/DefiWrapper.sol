@@ -15,7 +15,9 @@ import {IStakingVault} from "src/interfaces/IStakingVault.sol";
 import {CoreHarness} from "test/utils/CoreHarness.sol";
 import {Wrapper} from "src/Wrapper.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
-import {ExampleStrategy, LenderMock} from "src/ExampleStrategy.sol";
+import {IStrategy} from "src/interfaces/IStrategy.sol";
+import {GGVStrategy} from "src/strategy/GGVStrategy.sol";
+import {ExampleStrategy} from "src/ExampleStrategy.sol";
 
 interface IHashConsensus {
     function updateInitialEpoch(uint256 initialEpoch) external;
@@ -37,7 +39,7 @@ interface IVaultHub is IVaultHubIntact {
 contract DefiWrapper is Test {
     Wrapper public wrapper;
     WithdrawalQueue public withdrawalQueue;
-    ExampleStrategy public strategy;
+    IStrategy public strategy;
     IStakingVault public vault;
     IDashboard public dashboard;
     CoreHarness public core;
@@ -47,7 +49,7 @@ contract DefiWrapper is Test {
     uint256 public constant NODE_OPERATOR_FEE_RATE = 1_00; // 1% in basis points
     uint256 public constant CONFIRM_EXPIRY = 1 hours;
 
-    constructor(address _coreHarnessAddress) {
+    constructor(address _coreHarnessAddress, address _strategyAddress) {
         core = CoreHarness(_coreHarnessAddress);
 
         CONNECT_DEPOSIT = core.vaultHub().CONNECT_DEPOSIT();
@@ -80,8 +82,6 @@ contract DefiWrapper is Test {
         core.applyVaultReport(address(vault), 0, 0, 0, true);
         dashboard.setNodeOperatorFeeRate(NODE_OPERATOR_FEE_RATE);
 
-        strategy = new ExampleStrategy(address(core.steth()), address(0), STRATEGY_LOOPS);
-
         wrapper = new Wrapper(
             address(dashboard),
             address(this), // initial balance owner
@@ -89,11 +89,13 @@ contract DefiWrapper is Test {
             "stvETH",
             false, // whitelist disabled
             true, // minting allowed
-            address(strategy)
+            address(0)
         );
 
-        withdrawalQueue = new WithdrawalQueue(wrapper);
+        uint256 maxAcceptableWQFinalizationTimeInSeconds = 60 days;
+        withdrawalQueue = new WithdrawalQueue(wrapper, maxAcceptableWQFinalizationTimeInSeconds);
         withdrawalQueue.initialize(address(this));
+        
         wrapper.setWithdrawalQueue(address(withdrawalQueue));
         withdrawalQueue.grantRole(withdrawalQueue.FINALIZE_ROLE(), address(this));
         withdrawalQueue.grantRole(withdrawalQueue.RESUME_ROLE(), address(this));
@@ -103,11 +105,12 @@ contract DefiWrapper is Test {
         console.log("vaultOwner", vaultOwner);
 
         // Update strategy's wrapper reference now that wrapper is deployed
-        strategy = new ExampleStrategy(address(core.steth()), address(wrapper), STRATEGY_LOOPS);
-        wrapper.setStrategy(address(strategy));
+        // strategy = new ExampleStrategy(address(core.steth()), address(wrapper), STRATEGY_LOOPS);
+        strategy = IStrategy(_strategyAddress);
+        wrapper.setStrategy(_strategyAddress);
 
         // Fund the LenderMock contract with ETH so it can lend
-        vm.deal(address(strategy.LENDER_MOCK()), 1234 ether);
+        // vm.deal(address(strategy.LENDER_MOCK()), 1234 ether);
 
         dashboard.grantRole(dashboard.FUND_ROLE(), address(wrapper));
         dashboard.grantRole(dashboard.WITHDRAW_ROLE(), address(wrapper));
@@ -122,7 +125,7 @@ contract DefiWrapper is Test {
 
     function logAllBalances(string memory _context, address _user1, address _user2) external view {
         address stETH = address(core.steth());
-        address lenderMock = address(strategy.LENDER_MOCK());
+        // address lenderMock = address(strategy.LENDER_MOCK());
         address user1 = _user1;
         address user2 = _user2;
 
@@ -173,14 +176,14 @@ contract DefiWrapper is Test {
                 " lockedStv=", vm.toString(wrapper.lockedStvSharesByUser(address(vault)))
             )
         );
-        console.log(
-            string.concat(
-                "LenderMock: ETH=", vm.toString(lenderMock.balance),
-                " stvETH=", vm.toString(wrapper.balanceOf(lenderMock)),
-                " stETH=", vm.toString(IERC20(stETH).balanceOf(lenderMock)),
-                " lockedStv=", vm.toString(wrapper.lockedStvSharesByUser(lenderMock))
-            )
-        );
+        // console.log(
+        //     string.concat(
+        //         // "LenderMock: ETH=", vm.toString(lenderMock.balance),
+        //         " stvETH=", vm.toString(wrapper.balanceOf(lenderMock)),
+        //         " stETH=", vm.toString(IERC20(stETH).balanceOf(lenderMock)),
+        //         " lockedStv=", vm.toString(wrapper.lockedStvSharesByUser(lenderMock))
+        //     )
+        // );
 
         // Wrapper totals (previously Escrow totals)
         console.log(

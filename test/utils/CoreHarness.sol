@@ -103,7 +103,7 @@ contract CoreHarness is Test {
         string memory reportCid = "dummy-cid";
 
         uint256 reportTotalValue = _totalValue + (_totalValue * _totalValueIncreaseBP) / 10000;
-        // int256 reportInOutDelta = int256((_totalValue * _totalValueIncreaseBP) / 10000);
+        int256 reportInOutDelta = int256((_totalValue * _totalValueIncreaseBP) / 10000);
         uint256 reportCumulativeLidoFees = _cumulativeLidoFees;
         uint256 reportLiabilityShares = 0;
         uint256 reportSlashingReserve = 0;
@@ -119,16 +119,16 @@ contract CoreHarness is Test {
             lazyOracle.mock__updateVaultData(_stakingVault, reportTotalValue, reportCumulativeLidoFees, reportLiabilityShares, reportSlashingReserve);
         }
 
-        // vm.prank(address(lazyOracle));
-        // vaultHub.applyVaultReport(
-        //     stakingVault,
-        //     reportTimestamp,
-        //     reportTotalValue,
-        //     reportInOutDelta,
-        //     reportCumulativeLidoFees,
-        //     reportLiabilityShares,
-        //     reportSlashingReserve
-        // );
+        vm.prank(address(lazyOracle));
+        vaultHub.applyVaultReport(
+            _stakingVault,
+            reportTimestamp,
+            reportTotalValue,
+            reportInOutDelta,
+            reportCumulativeLidoFees,
+            reportLiabilityShares,
+            reportSlashingReserve
+        );
     }
 
     /**
