@@ -160,6 +160,12 @@ contract WrapperBTest is Test {
     }
 
 
+    // TODO: add after report invariants
+    // TODO: add after deposit invariants
+    // TODO: add after requestWithdrawal invariants
+    // TODO: add after finalizeWithdrawal invariants
+    // TODO: add after claimWithdrawal invariants
+
     function _assertUniversalInvariants(string memory _context) internal {
 
         assertEq(
@@ -349,7 +355,7 @@ contract WrapperBTest is Test {
         assertEq(wrapper.totalAssets(), vaultValue2Pct, "Wrapper total assets should reflect vault's 2% increase");
 
         // User1 should now be able to mint more stETH since vault outperformed
-        uint256 user1MintableAfterOutperformance = wrapper.mintableStShares(USER1);
+        uint256 expectedUser1MintableStSharesAfterOutperformance = 72;
 
         // Calculate expected mintable shares based on vault outperformance
         // Vault increased 2% total (103/100), Core increased 1% total (102/100)
@@ -362,7 +368,7 @@ contract WrapperBTest is Test {
         // Max additional mintable = 200 * 80% / 1.122 = ~142 shares (accounting for reserve ratio and stETH price)
         // But actual calculation is: total max mintable (7344) - already minted (7272) = 72 shares
 
-        assertEq(user1MintableAfterOutperformance, 72, "User1 should be able to mint exactly 72 additional stETH shares after vault outperformed");
+        assertEq(wrapper.mintableStShares(USER1), expectedUser1MintableStSharesAfterOutperformance, "User1 should be able to mint exactly 72 additional stETH shares after vault outperformed");
 
         // Preview redeem should show increased value due to vault outperformance
         uint256 user1RedeemValue = wrapper.previewRedeem(wrapper.balanceOf(USER1));
@@ -391,6 +397,8 @@ contract WrapperBTest is Test {
         assertEq(wrapper.totalSupply(), wrapperConnectDepositStvShares + expectedUser1StvShares + expectedUser2StvShares, "Wrapper total supply should be equal to user deposit plus CONNECT_DEPOSIT");
         assertEq(wrapper.previewRedeem(wrapper.totalSupply()), vaultValue2Pct + user2Deposit, "Preview redeem should be equal to vault value after 2% increase plus user2Deposit");
 
+        assertEq(wrapper.mintableStShares(USER1), expectedUser1MintableStSharesAfterOutperformance, "User1 should be able to mint exactly 72 additional stETH shares after vault outperformed");
+
         //
         // Step 5: User1 withdraws half of his stvShares
         //
@@ -409,7 +417,7 @@ contract WrapperBTest is Test {
         vm.startPrank(USER1);
 
         uint256 user1StSharesToReturn = wrapper.stSharesForWithdrawal(user1StSharesToWithdraw);
-        uint256 user1StethToApprove = 1000 * steth.getPooledEthByShares(user1StSharesToReturn) + 1;
+        uint256 user1StethToApprove = steth.getPooledEthByShares(user1StSharesToReturn);
         // NB: allowance is nominated in stETH not its shares
         steth.approve(address(wrapper), user1StethToApprove);
         uint256 requestId = wrapper.requestWithdrawal(user1StSharesToWithdraw);
@@ -418,6 +426,9 @@ contract WrapperBTest is Test {
         withdrawalQueue.claimWithdrawal(requestId);
 
         vm.stopPrank();
+
+        assertEq(wrapper.balanceOf(address(withdrawalQueue)), user1StSharesToWithdraw, "Wrapper balance of withdrawalQueue should be equal to user1StSharesToWithdraw");
+        assertEq(wrapper.balanceOf(USER1), user1StvShares - user1StSharesToWithdraw, "Wrapper balance of USER1 should be equal to user1StvShares minus user1StSharesToWithdraw");
 
         vm.prank(NODE_OPERATOR);
         withdrawalQueue.finalize(requestId);
@@ -429,20 +440,25 @@ contract WrapperBTest is Test {
 
         uint256 user1EthBalanceBeforeClaim = USER1.balance;
         vm.prank(USER1); withdrawalQueue.claimWithdrawal(requestId);
+        // TODO: make this check pass
+        // assertEq(USER1.balance, user1EthBalanceBeforeClaim + user1ExpectedEthWithdrawn, "USER1 ETH balance should increase by the withdrawn amount after claim");
+
+        _assertUniversalInvariants("Step 5.2");
 
         status = withdrawalQueue.getWithdrawalStatus(requestId);
         assertTrue(status.isClaimed, "Withdrawal request should be claimed after claimWithdrawal");
-
-        // TODO: make this check pass
-        // _assertUniversalInvariants("Step 5.2");
 
         //
         // Step 6: User1 deposits the same amount of ETH as deposited initially
         //
 
+        uint256 user1PreviewRedeemBefore = wrapper.previewRedeem(wrapper.balanceOf(USER1));
+
         wrapper.depositETH{value: user1Deposit}(USER1);
 
         _assertUniversalInvariants("Step 6");
+        assertEq(wrapper.previewRedeem(wrapper.balanceOf(USER1)), user1PreviewRedeemBefore + user1Deposit, "Wrapper preview redeem should be equal to user1PreviewRedeemBefore plus user1Deposit");
+
     }
 
     // ========================================================================
