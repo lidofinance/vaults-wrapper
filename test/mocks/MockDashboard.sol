@@ -31,6 +31,10 @@ contract MockDashboard is AccessControlEnumerable {
     function withdrawableValue() external view returns (uint256) {
         return address(STAKING_VAULT).balance - locked;
     }
+    
+    function maxLockableValue() external view returns (uint256) {
+        return VAULT_HUB.totalValue(STAKING_VAULT);
+    }
 
     function withdraw(address recipient, uint256 etherAmount) external {
         VAULT_HUB.withdraw(STAKING_VAULT, recipient, etherAmount);
@@ -63,6 +67,10 @@ contract MockDashboard is AccessControlEnumerable {
 
     function totalMintingCapacityShares() external pure returns (uint256) {
         return 1000 ether; // Mock large capacity
+    }
+    
+    function reserveRatioBP() external pure returns (uint256) {
+        return 500; // 5% reserve ratio for testing
     }
 
     function requestValidatorExit(bytes calldata pubkeys) external {

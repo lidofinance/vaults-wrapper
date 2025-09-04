@@ -93,8 +93,10 @@ contract DefiWrapper is Test {
         dashboard.grantRole(dashboard.DEFAULT_ADMIN_ROLE(), msg.sender);
         dashboard.setNodeOperatorFeeRate(NODE_OPERATOR_FEE_RATE);
 
+        // Create a placeholder strategy first (will point to wrong wrapper but that's ok for testing)
         strategy = new ExampleLoopStrategy(address(core.steth()), address(0), STRATEGY_LOOPS);
-
+        
+        // Create the wrapper with the strategy
         wrapper = new WrapperC(
             address(dashboard),
             address(core.steth()),
@@ -113,10 +115,6 @@ contract DefiWrapper is Test {
 
         address vaultOwner = core.vaultHub().vaultConnection(address(vault)).owner;
         console.log("vaultOwner", vaultOwner);
-
-        // Update strategy's wrapper reference now that wrapper is deployed
-        strategy = new ExampleLoopStrategy(address(core.steth()), address(wrapper), STRATEGY_LOOPS);
-        wrapper.setStrategy(address(strategy));
 
         // Fund the LenderMock contract with ETH so it can lend
         // vm.deal(address(strategy.LENDER_MOCK()), 1234 ether);

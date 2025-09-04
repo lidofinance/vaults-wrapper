@@ -149,10 +149,9 @@
 
         function test_depositStrategy() public {
             vm.prank(user1);
-            uint256 user1StvShares = WrapperC(payable(address(wrapper))).depositETHToStrategy{value: 1 ether}(user1);
+            WrapperC(payable(address(wrapper))).depositETH{value: 1 ether}(user1);
             uint256 user1StETHAmount = 0; // Would need to calculate separately
 
-            console.log("user1StvShares", user1StvShares);
             console.log("user1StETHAmount", user1StETHAmount);
             dw.logAllBalances("after deposit", user1, address(wrapper));
         }
@@ -171,7 +170,7 @@
             console.log("user1 address", user1);
 
             vm.prank(user1);
-            uint256 user1StvShares = WrapperC(payable(address(wrapper))).depositETHToStrategy{value: 1 ether}(user1);
+            WrapperC(payable(address(wrapper))).depositETH{value: 1 ether}(user1);
             uint256 user1StETHAmount = 0; // Would need to calculate separately
 
             address strategyProxy = ggvStrategy.getStrategyProxyAddress(user1);
@@ -179,7 +178,6 @@
             console.log("steth balance strategy proxy after", core.steth().balanceOf(strategyProxy));
             console.log("steth balance strategy", core.steth().balanceOf(address(strategy)));
 
-            console.log("\nuser1StvShares", user1StvShares);
             console.log("user1StETHAmount", user1StETHAmount);
 
             uint256 ggvShares = boringVault.balanceOf(strategyProxy);

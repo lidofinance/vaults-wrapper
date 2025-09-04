@@ -22,6 +22,10 @@ contract MockDashboard {
     }
     
     function grantRole(bytes32, address) external {}
+    
+    function maxLockableValue() external view returns (uint256) {
+        return stakingVault.balance;
+    }
 }
 
 contract MockVaultHub {

@@ -17,16 +17,16 @@ contract GGVStrategy is Strategy {
     event Execute(address indexed user, uint256 stETHAmount);
     event RequestWithdraw(address indexed user, uint256 shares);
     event Claim(address indexed user, address indexed asset, uint256 shares);
-    
+
     error InvalidStETHAmount();
     error InvalidGGVShares();
 
     constructor (
-        address _strategyProxyImplmentation,
-        address _stETH, 
-        address _teller, 
+        address _strategyProxyImplementation,
+        address _stETH,
+        address _teller,
         address _boringQueue
-    ) Strategy(_stETH, _strategyProxyImplmentation) {
+    ) Strategy(_stETH, _strategyProxyImplementation) {
         TELLER = ITellerWithMultiAssetSupport(_teller);
         BORING_QUEUE = IBoringOnChainQueue(_boringQueue);
     }
@@ -55,7 +55,7 @@ contract GGVStrategy is Strategy {
             abi.encodeWithSelector(STETH.approve.selector, address(TELLER.vault()), stETHAmount)
         );
         IStrategyProxy(proxy).call(
-            address(TELLER), 
+            address(TELLER),
             abi.encodeWithSelector(TELLER.deposit.selector, address(STETH), stETHAmount, 0)
         );
 
@@ -96,38 +96,4 @@ contract GGVStrategy is Strategy {
         emit Claim(msg.sender, asset, shares);
     }
 
-    /// @notice Initiates an exit from the strategy
-    /// @param user The user to initiate the exit for
-    /// @param assets The amount of assets to exit with
-    function initiateExit(address user, uint256 assets) external override {
-        // GGV strategy uses requestWithdraw mechanism
-        // This could trigger the requestWithdraw flow for the specified assets
-        revert("Not implemented - use requestWithdraw");
-    }
-
-    /// @notice Finalizes an exit from the strategy
-    /// @param user The user to finalize the exit for
-    /// @return assets The amount of assets returned
-    function finalizeExit(address user) external override returns (uint256 assets) {
-        // GGV strategy uses claim mechanism
-        // This could trigger the claim flow and return the claimed amount
-        revert("Not implemented - use claim");
-    }
-
-    /// @notice Returns borrow details for the strategy
-    /// @return borrowAssets The amount of borrowed assets
-    /// @return userAssets The amount of user assets
-    /// @return totalAssets The total amount of assets
-    function getBorrowDetails() external view override returns (uint256 borrowAssets, uint256 userAssets, uint256 totalAssets) {
-        // GGV strategy doesn't involve borrowing in the traditional sense
-        // Return zeros for now
-        return (0, 0, 0);
-    }
-
-    /// @notice Returns whether the strategy is in an exiting state
-    /// @return Whether the strategy is exiting
-    function isExiting() external view override returns (bool) {
-        // GGV strategy doesn't have a global exiting state
-        return false;
-    }
 }

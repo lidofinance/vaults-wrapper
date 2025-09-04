@@ -12,6 +12,8 @@ import {WithdrawalQueue} from "./WithdrawalQueue.sol";
 import {IVaultHub} from "./interfaces/IVaultHub.sol";
 import {IDashboard} from "./interfaces/IDashboard.sol";
 
+// TODO: move whitelist to a separate contract
+// TODO: likely we can get rid of the base and move all to WrapperA
 abstract contract WrapperBase is Initializable, ERC20Upgradeable, AccessControlEnumerableUpgradeable {
     // Custom errors
     error NotAllowListed(address user);
@@ -69,6 +71,7 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AccessControlE
     event Deposit(
         address indexed sender,
         address indexed receiver,
+        address indexed referral,
         uint256 assets,
         uint256 stvETHShares
     );
@@ -122,8 +125,7 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AccessControlE
     // =================================================================================
 
     function totalAssets() public view returns (uint256) {
-        // return DASHBOARD.maxLockableValue() - VAULT_HUB.CONNECT_DEPOSIT();
-        return DASHBOARD.maxLockableValue();
+        return DASHBOARD.maxLockableValue(); // don't subtract CONNECT_DEPOSIT because we mint stShares for it
     }
 
     function decimals() public pure override returns (uint8) {
@@ -171,18 +173,39 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AccessControlE
 
     /**
      * @notice Convenience function to deposit ETH to msg.sender
+     * @return stvShares Amount of stvETH shares minted
      */
-    function depositETH() public payable returns (uint256) {
-        return depositETH(msg.sender);
+    function depositETH(address _referral) public payable returns (uint256 stvShares) {
+        return depositETH(msg.sender, _referral);
+    }
+
+    /**
+     * @notice Convenience function to deposit ETH to msg.sender without referral
+     * @return stvShares Amount of stvETH shares minted
+     */
+    function depositETH() public payable returns (uint256 stvShares) {
+        return depositETH(msg.sender, address(0));
+    }
+
+    function _deposit(address _receiver, address _referral) internal returns (uint256 stvShares) {
+        if (msg.value == 0) revert WrapperBase.ZeroDeposit();
+        if (_receiver == address(0)) revert WrapperBase.InvalidReceiver();
+        _checkAllowList();
+
+        stvShares = previewDeposit(msg.value);
+        _mint(_receiver, stvShares);
+        DASHBOARD.fund{value: msg.value}();
+
+        emit Deposit(msg.sender, _receiver, _referral, msg.value, stvShares);
     }
 
     /**
      * @notice Deposit native ETH and receive stvETH shares
      * @dev Implementation depends on specific wrapper configuration
      * @param _receiver Address to receive the minted shares
-     * @return shares Number of stvETH shares minted
+     * @return stvShares Amount of stvETH shares minted
      */
-    function depositETH(address _receiver) public payable virtual returns (uint256 shares);
+    function depositETH(address _receiver, address _referral) public payable virtual returns (uint256 stvShares);
 
     // =================================================================================
     // WITHDRAWAL SYSTEM
@@ -258,7 +281,7 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AccessControlE
 
     receive() external payable {
         // Auto-deposit ETH sent directly to the contract
-        depositETH(msg.sender);
+        depositETH(msg.sender, address(0));
     }
 
     // =================================================================================

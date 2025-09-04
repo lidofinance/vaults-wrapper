@@ -107,11 +107,13 @@ contract WithdrawalQueueTest is Test {
     // Verifies: user deposits → withdrawal requests → validator operations → finalization → claiming
     function test_CompleteWithdrawalFlow() public {
         vm.startPrank(user1);
-        uint256 user1Shares = wrapper.depositETH{value: USER1_DEPOSIT}(user1);
+        wrapper.depositETH{value: USER1_DEPOSIT}(user1);
+        uint256 user1Shares = wrapper.balanceOf(user1);
         vm.stopPrank();
 
         vm.startPrank(user2);
-        uint256 user2Shares = wrapper.depositETH{value: USER2_DEPOSIT}(user2);
+        wrapper.depositETH{value: USER2_DEPOSIT}(user2);
+        uint256 user2Shares = wrapper.balanceOf(user2);
         vm.stopPrank();
 
         console.log("user1Shares", user1Shares);

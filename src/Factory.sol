@@ -11,6 +11,8 @@ import {WithdrawalQueue} from "./WithdrawalQueue.sol";
 import {IVaultFactory} from "./interfaces/IVaultFactory.sol";
 import {IDashboard} from "./interfaces/IDashboard.sol";
 
+error InvalidConfiguration();
+
 contract DummyContractStub {
 
 }
@@ -97,11 +99,14 @@ contract Factory {
                 (address(this), NAME, SYMBOL) // Factory gets admin role temporarily
             );
         } else if (_configuration == WrapperConfiguration.MINTING_AND_STRATEGY) {
+            if (_strategy == address(0)) {
+                revert InvalidConfiguration();
+            }
             wrapperImpl = new WrapperC(
                 dashboard,      // correct dashboard
                 STETH,
                 _allowlistEnabled,
-                _strategy != address(0) ? _strategy : address(1) // avoid zero strategy
+                _strategy
             );
             proxyInitData = abi.encodeCall(
                 WrapperB.initialize,
@@ -139,10 +144,6 @@ contract Factory {
 
         wrapper.setWithdrawalQueue(withdrawalQueueProxy);
 
-        // For WrapperC, set the strategy
-        if (_configuration == WrapperConfiguration.MINTING_AND_STRATEGY && _strategy != address(0)) {
-            WrapperC(wrapperProxy).setStrategy(_strategy);
-        }
 
         // Transfer admin role to the user (for wrapper)
         wrapper.grantRole(wrapper.DEFAULT_ADMIN_ROLE(), msg.sender);

@@ -65,22 +65,14 @@ contract WrapperB is WrapperBase {
      * @notice Deposit native ETH and receive stvETH shares
      * @dev Deposits and mints maximum stETH to user
      * @param _receiver Address to receive the minted shares
-     * @return stvShares Number of stvETH shares minted
+     * @return stvShares Amount of stvETH shares minted
      */
-    function depositETH(address _receiver) public payable override returns (uint256 stvShares) {
-        if (msg.value == 0) revert WrapperBase.ZeroDeposit();
-        if (_receiver == address(0)) revert WrapperBase.InvalidReceiver();
-        _checkAllowList();
+    function depositETH(address _receiver, address _referral) public payable virtual override returns (uint256 stvShares) {
+        stvShares = _deposit(_receiver, _referral);
 
-        DASHBOARD.fund{value: msg.value}();
-
-        stvShares = previewDeposit(msg.value);
-        _mint(_receiver, stvShares);
         _getWrapperBStorage().userBalances[_receiver].stvShares += stvShares;
 
         _mintMaximumStShares(_receiver, stvShares);
-
-        emit Deposit(msg.sender, _receiver, msg.value, stvShares);
     }
 
     /**
@@ -115,10 +107,26 @@ contract WrapperB is WrapperBase {
         stShares = maxMintable - alreadyMinted;
     }
 
-    function mintStShares(uint256 _stShares) external {
+    // TODO: I think it should be included in the token transfer
+    function changePositionOwner(address _newOwner) external {
+        WrapperBStorage storage $ = _getWrapperBStorage();
+
+        UserBalance storage senderBalances = $.userBalances[msg.sender];
+        UserBalance storage newOwnerBalances = $.userBalances[_newOwner];
+
+        newOwnerBalances.stvShares += senderBalances.stvShares;
+        newOwnerBalances.stShares += senderBalances.stShares;
+
+        senderBalances.stvShares = 0;
+        senderBalances.stShares = 0;
+
+        // TODO: add events and handle zero balances
+    }
+
+    function mintStShares(uint256 _stShares) external returns (uint256 stShares) {
         uint256 mintableStShares_ = mintableStShares(msg.sender);
         if (mintableStShares_ < _stShares) revert InsufficientMintableStShares();
-        _mintStShares(msg.sender, _stShares);
+        stShares = _mintStShares(msg.sender, _stShares);
     }
 
     // TODO: add request as ether as arg (not stvShares)

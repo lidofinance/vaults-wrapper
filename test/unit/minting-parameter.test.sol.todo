@@ -113,23 +113,6 @@ contract MockStrategy {
     address public lastUser;
     uint256 public lastAmount;
 
-    function execute(address user, uint256 amount) external {
-        executeCalled = true;
-        lastUser = user;
-        lastAmount = amount;
-    }
-
-    function finalizeExit(address) external pure returns (uint256) {
-        return 0;
-    }
-
-    function getBorrowDetails() external pure returns (uint256, uint256, uint256) {
-        return (0, 0, 0);
-    }
-
-    function isExiting() external pure returns (bool) {
-        return false;
-    }
 }
 
 contract MintingParameterTest is Test {

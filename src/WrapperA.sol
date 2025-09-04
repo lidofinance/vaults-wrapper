@@ -29,18 +29,11 @@ contract WrapperA is WrapperBase {
      * @notice Deposit native ETH and receive stvETH shares
      * @dev Simple deposit with stvETH shares only
      * @param _receiver Address to receive the minted shares
-     * @return stvShares Number of stvETH shares minted
+     * @param _referral Address to credit for referral (optional)
+     * @return stvShares Amount of stvETH shares minted
      */
-    function depositETH(address _receiver) public payable override returns (uint256 stvShares) {
-        if (msg.value == 0) revert WrapperBase.ZeroDeposit();
-        if (_receiver == address(0)) revert WrapperBase.InvalidReceiver();
-        _checkAllowList();
-
-        stvShares = previewDeposit(msg.value);
-        _mint(_receiver, stvShares);
-        DASHBOARD.fund{value: msg.value}();
-
-        emit Deposit(msg.sender, _receiver, msg.value, stvShares);
+    function depositETH(address _receiver, address _referral) public payable override returns (uint256 stvShares) {
+        stvShares = _deposit(_receiver, _referral);
     }
 
     /**
