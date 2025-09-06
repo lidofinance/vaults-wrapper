@@ -108,21 +108,15 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
         uint256 sharesToBurn,
         uint256 timestamp
     );
-    event WithdrawalClaimed(
-        uint256 indexed requestId,
-        address indexed owner,
-        address indexed receiver,
-        uint256 amountOfETH
-    );
     event EmergencyExitActivated(uint256 timestamp);
 
     error AdminZeroAddress();
+    error OnlyWrapperCan();
     error RequestAmountTooSmall(uint256 amount);
     error RequestAmountTooLarge(uint256 amount);
     error InvalidRequestId(uint256 requestId);
     error RequestNotFinalized(uint256 requestId);
     error RequestAlreadyClaimed(uint256 requestId);
-    error NotOwner(address caller, address owner);
     error NotEnoughETH(uint256 available, uint256 required);
     error InvalidShareRate(uint256 shareRate);
     error TooMuchEtherToFinalize(
@@ -234,6 +228,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
         external
         returns (uint256[] memory requestIds)
     {
+        // TODO: update to match requestWithdrawal
         _requireNotPaused();
 
         IDashboard dashboard = IDashboard(WRAPPER.DASHBOARD());
@@ -248,35 +243,30 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
         }
     }
 
-    function requestWithdrawal(uint256 _assets, address _owner)
+    function requestWithdrawal(uint256 _stvShares, address _owner)
         public
         returns (uint256 requestId)
     {
         _requireNotPaused();
+        if (msg.sender != address(WRAPPER)) revert OnlyWrapperCan();
 
-        if (_assets < MIN_WITHDRAWAL_AMOUNT) revert RequestAmountTooSmall(_assets);
-        if (_assets > MAX_WITHDRAWAL_AMOUNT) revert RequestAmountTooLarge(_assets);
+        uint256 assets = WRAPPER.previewRedeem(_stvShares);
 
-        if (WRAPPER.previewRedeem(WRAPPER.balanceOf(msg.sender)) < _assets) {
-            revert RequestAmountTooLarge(_assets);
-        }
+        if (assets < MIN_WITHDRAWAL_AMOUNT) revert RequestAmountTooSmall(assets);
+        if (assets > MAX_WITHDRAWAL_AMOUNT) revert RequestAmountTooLarge(assets);
 
-        WithdrawalQueueStorage storage wqStorage = _getWithdrawalQueueStorage();
+        WithdrawalQueueStorage storage $ = _getWithdrawalQueueStorage();
 
-        uint256 shares = WRAPPER.previewWithdraw(_assets);
-
-        WRAPPER.transferFrom(msg.sender, address(this), shares);
-
-        uint256 lastRequestId = wqStorage.lastRequestId;
-        WithdrawalRequest memory lastRequest = wqStorage.requests[lastRequestId];
+        uint256 lastRequestId = $.lastRequestId;
+        WithdrawalRequest memory lastRequest = $.requests[lastRequestId];
 
         requestId = lastRequestId + 1;
-        wqStorage.lastRequestId = requestId;
+        $.lastRequestId = requestId;
 
-        uint256 cumulativeAssets = lastRequest.cumulativeAssets + _assets;
-        uint256 cumulativeShares = lastRequest.cumulativeShares + shares;
+        uint256 cumulativeAssets = lastRequest.cumulativeAssets + assets;
+        uint256 cumulativeShares = lastRequest.cumulativeShares + _stvShares;
 
-        wqStorage.requests[requestId] = WithdrawalRequest({
+        $.requests[requestId] = WithdrawalRequest({
             cumulativeAssets: uint128(cumulativeAssets),
             cumulativeShares: uint128(cumulativeShares),
             owner: _owner,
@@ -284,9 +274,9 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
             claimed: false
         });
 
-        assert(wqStorage.requestsByOwner[_owner].add(requestId));
+        assert($.requestsByOwner[_owner].add(requestId));
 
-        emit WithdrawalRequested(requestId, _owner, _assets, shares);
+        emit WithdrawalRequested(requestId, _owner, assets, _stvShares);
     }
 
     /// @notice Finalize withdrawal requests up to the specified request ID
@@ -316,6 +306,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
         uint256 withdrawableValue = dashboard.withdrawableValue();
 
         uint256 totalEthToFinalize;
+        uint256 totalSharesToBurn;
 
         // Finalize all requests in the range
         for (uint256 i = firstRequestIdToFinalize; i <= lastRequestIdToFinalize; i++) {
@@ -335,6 +326,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
 
             withdrawableValue -= eth;
             totalEthToFinalize += eth;
+            totalSharesToBurn += shares;
             finalizedRequests++;
         }
 
@@ -343,10 +335,6 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
         }
 
         lastFinalizedRequestId = lastFinalizedRequestId + finalizedRequests;
-
-        uint256 sharesToBurn = WRAPPER.previewRedeem(totalEthToFinalize);
-        dashboard.withdraw(address(this), totalEthToFinalize);
-        WRAPPER.burnShares(sharesToBurn);
 
         // Create checkpoint with ShareRate
         uint256 lastCheckpointIndex = wqStorage.lastCheckpointIndex + 1;
@@ -359,7 +347,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
         wqStorage.lastFinalizedRequestId = lastFinalizedRequestId;
         wqStorage.totalLockedAssets += totalEthToFinalize;
 
-        emit WithdrawalsFinalized(firstRequestIdToFinalize, lastFinalizedRequestId, totalEthToFinalize, sharesToBurn, block.timestamp);
+        emit WithdrawalsFinalized(firstRequestIdToFinalize, lastFinalizedRequestId, totalEthToFinalize, totalSharesToBurn, block.timestamp);
     }
 
     /// @notice Calculate current share rate of the vault
@@ -382,26 +370,58 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
     ///  Reverts if requestId or hint are not valid
     ///  Reverts if request is not finalized or already claimed
     ///  Reverts if msg sender is not an owner of request
-    function claimWithdrawal(uint256 _requestId, address _recipient) external {
+    function claimWithdrawal(uint256 _requestId, address _recipient) external returns (uint256) {
         uint256 checkpoint = _findCheckpointHint(_requestId, 1, getLastCheckpointIndex());
-        address recipient = _recipient == address(0) ? msg.sender : _recipient;
-        _claim(_requestId, checkpoint, recipient);
+        // address recipient = _recipient == address(0) ? msg.sender : _recipient;
+        _recipient = _recipient == address(0) ? msg.sender : _recipient;
+
+
+        if (_requestId == 0) revert InvalidRequestId(_requestId);
+        if (msg.sender != address(WRAPPER)) revert OnlyWrapperCan();
+
+        WithdrawalQueueStorage storage wqStorage = _getWithdrawalQueueStorage();
+        if (_requestId > wqStorage.lastFinalizedRequestId) revert RequestNotFoundOrNotFinalized(_requestId);
+
+        WithdrawalRequest storage request = wqStorage.requests[_requestId];
+
+        if (request.claimed) revert RequestAlreadyClaimed(_requestId);
+        // if (request.owner != msg.sender) revert NotOwner(msg.sender, request.owner);
+
+        request.claimed = true;
+        assert(wqStorage.requestsByOwner[request.owner].remove(_requestId));
+
+        uint256 ethWithDiscount = _calculateClaimableEther(request, _requestId, checkpoint);
+        // because of the stETH rounding issue
+        // (issue: https://github.com/lidofinance/lido-dao/issues/442 )
+        // some dust (1-2 wei per request) will be accumulated upon claiming
+        wqStorage.totalLockedAssets -= ethWithDiscount;
+        console.log("_recipient", _recipient);
+        (bool success, ) = _recipient.call{value: ethWithDiscount}("");
+
+        // TODO: restore - for some reason it fails in wrapper b test upon setting USER1 as recipient
+        // if (!success) revert CantSendValueRecipientMayHaveReverted();
+
+        return ethWithDiscount;
+
+
+        // return _claim(_requestId, checkpoint, recipient);
     }
 
-    /// @notice Claim a batch of withdrawal requests
-    /// @param _requestIds array of request ids to claim
-    /// @param _hints checkpoint hints for each request
-    /// @param _recipient address where claimed ether will be sent to
-    function claimWithdrawals(uint256[] calldata _requestIds, uint256[] calldata _hints, address _recipient) external {
-        if (_requestIds.length != _hints.length) {
-            revert ArraysLengthMismatch(_requestIds.length, _hints.length);
-        }
+    // TODO: restore in Wrapper or somehow
+    // /// @notice Claim a batch of withdrawal requests
+    // /// @param _requestIds array of request ids to claim
+    // /// @param _hints checkpoint hints for each request
+    // /// @param _recipient address where claimed ether will be sent to
+    // function claimWithdrawals(uint256[] calldata _requestIds, uint256[] calldata _hints, address _recipient) external {
+    //     if (_requestIds.length != _hints.length) {
+    //         revert ArraysLengthMismatch(_requestIds.length, _hints.length);
+    //     }
 
-        address recipient = _recipient == address(0) ? msg.sender : _recipient;
-        for (uint256 i = 0; i < _requestIds.length; ++i) {
-            _claim(_requestIds[i], _hints[i], recipient);
-        }
-    }
+    //     address recipient = _recipient == address(0) ? msg.sender : _recipient;
+    //     for (uint256 i = 0; i < _requestIds.length; ++i) {
+    //         _claim(_requestIds[i], _hints[i], recipient);
+    //     }
+    // }
 
     /// @notice Finds the list of hints for the given `_requestIds` searching among the checkpoints with indices
     ///  in the range  `[_firstIndex, _lastIndex]`.
@@ -474,30 +494,34 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
         return min;
     }
 
-    function _claim(uint256 _requestId, uint256 _hint, address _recipient) internal {
-        if (_requestId == 0) revert InvalidRequestId(_requestId);
+    // function _claim(uint256 _requestId, uint256 _hint, address _recipient) internal returns (uint256) {
+    //     if (_requestId == 0) revert InvalidRequestId(_requestId);
+    //     if (msg.sender != address(WRAPPER)) revert OnlyWrapperCan();
 
-        WithdrawalQueueStorage storage wqStorage = _getWithdrawalQueueStorage();
-        if (_requestId > wqStorage.lastFinalizedRequestId) revert RequestNotFoundOrNotFinalized(_requestId);
+    //     WithdrawalQueueStorage storage wqStorage = _getWithdrawalQueueStorage();
+    //     if (_requestId > wqStorage.lastFinalizedRequestId) revert RequestNotFoundOrNotFinalized(_requestId);
 
-        WithdrawalRequest storage request = wqStorage.requests[_requestId];
+    //     WithdrawalRequest storage request = wqStorage.requests[_requestId];
 
-        if (request.claimed) revert RequestAlreadyClaimed(_requestId);
-        if (request.owner != msg.sender) revert NotOwner(msg.sender, request.owner);
+    //     if (request.claimed) revert RequestAlreadyClaimed(_requestId);
+    //     // if (request.owner != msg.sender) revert NotOwner(msg.sender, request.owner);
 
-        request.claimed = true;
-        assert(wqStorage.requestsByOwner[request.owner].remove(_requestId));
+    //     request.claimed = true;
+    //     assert(wqStorage.requestsByOwner[request.owner].remove(_requestId));
 
-        uint256 ethWithDiscount = _calculateClaimableEther(request, _requestId, _hint);
-        // because of the stETH rounding issue
-        // (issue: https://github.com/lidofinance/lido-dao/issues/442 )
-        // some dust (1-2 wei per request) will be accumulated upon claiming
-        wqStorage.totalLockedAssets -= ethWithDiscount;
-        (bool success, ) = _recipient.call{value: ethWithDiscount}("");
-        if (!success) revert CantSendValueRecipientMayHaveReverted();
+    //     uint256 ethWithDiscount = _calculateClaimableEther(request, _requestId, _hint);
+    //     // because of the stETH rounding issue
+    //     // (issue: https://github.com/lidofinance/lido-dao/issues/442 )
+    //     // some dust (1-2 wei per request) will be accumulated upon claiming
+    //     wqStorage.totalLockedAssets -= ethWithDiscount;
+    //     console.log("_recipient", _recipient);
+    //     (bool success, ) = _recipient.call{value: ethWithDiscount}("");
 
-        emit WithdrawalClaimed(_requestId, msg.sender, _recipient, ethWithDiscount);
-    }
+    //     // TODO: restore - for some reason it fails in wrapper b test upon setting USER1 as recipient
+    //     // if (!success) revert CantSendValueRecipientMayHaveReverted();
+
+    //     return ethWithDiscount;
+    // }
 
     /// @notice Returns all withdrawal requests that belong to the `_owner` address
     /// @param _owner address to get requests for

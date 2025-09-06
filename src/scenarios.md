@@ -1,15 +1,15 @@
 
 # Cases
 
-## Case 0: connection of wrapper to already created vault
+## Case 0. Connection of wrapper to already created vault
 - q: what's about connect deposit?
 
-## Case 1: two users can mint up to the full vault capacity
+## Case 1. Two users can mint up to the full vault capacity
 - user1 and user2 deposit
 - user1 mints stETH for all stvETH it has. user2 does the same
 - remaining minting capacity of the vault is zero or 1-2 wei due to stETH rounding errors
 
-## Case 2: user3 deposits and fully mints after user1 and user2
+## Case 2. User3 deposits and fully mints after user1 and user2
 - two users mint up to the full vault capacity
 - remaining minting capacity of the vault is zero or 1-2 wei due to stETH rounding errors
 - user3 deposits more ETH
@@ -17,13 +17,24 @@
 - remaining minting capacity of the vault is zero or 1-2 wei due to stETH rounding errors
 - assets value corresponding to the stvETH locked on Escrow is 1-2-wei-equal to the all three users total stETH value
 
-## Case 3: when remainingMintingCapacityShares != totalMintingCapacityShares
+## Case 3. When remainingMintingCapacityShares != totalMintingCapacityShares
 - condition: Vault's remainingMintingCapacityShares(0) != totalMintingCapacityShares due to liabilities
 - do "case 1"
 
-## Case 4: withdrawal simplest happy path (not stETH minted, no boost)
+## Case 4. Withdrawal simplest happy path (not stETH minted, no boost)
 - user deposits
 - user requests withdrawal waits till it is available and withdraws getting the same amount of ETH it had
+
+## Case 5. Strategy (loop) deposits the last without stShares minting
+
+## Case 6. Strategy mints stShares for the eth it earned beyond the vault
+
+## Case 7. Strategy mints stShares for the vault rewards accumulated
+
+## Cast 8. Strategy fails to return enough stShares for the vault to withdraw
+
+## Cast 9. Withdraw eth without burning stShares due to rewards
+
 
 
 ## building bricks for test scenarios
@@ -81,9 +92,9 @@ In (C) user gets record in Wrapper which represents the position. The record con
 
 ### Withdrawals
 
-There are different withdraw functions for (A), (B) and (C). For calling each of them user must have "enough" stvETH shares.
+There are different withdraw functions for (A), (B) and (C). For calling each of them user must have "enough" stvShares.
 
-In (A) and (B) user may withdraw part of his Vault share by specifying stvETH shares amount (must own at least that shares).
+In (A) and (B) user may withdraw part of his Vault share by specifying stvShares amount (must own at least that shares).
 In (C) user may with withdraw only his Vault share corresponding to an entire strategy position
 
 - (A) withdraw(stvETHShares)

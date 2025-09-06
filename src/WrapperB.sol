@@ -24,14 +24,9 @@ contract WrapperB is WrapperBase {
     IStETH public immutable STETH;
     uint256 public immutable RESERVE_RATIO_BP;
 
-    struct UserBalance {
-        uint256 stvShares;
-        uint256 stShares;
-    }
-
     /// @custom:storage-location erc7201:wrapper.b.storage
     struct WrapperBStorage {
-        mapping(address => UserBalance) userBalances;
+        mapping(address => uint256) stShares;
     }
 
     // keccak256(abi.encode(uint256(keccak256("wrapper.b.storage")) - 1)) & ~bytes32(uint256(0xff))
@@ -61,6 +56,10 @@ contract WrapperB is WrapperBase {
         WrapperBase.initialize(_owner, _name, _symbol);
     }
 
+    //
+    // Deposit and mint functions
+    //
+
     /**
      * @notice Deposit native ETH and receive stvETH shares
      * @dev Deposits and mints maximum stETH to user
@@ -69,10 +68,20 @@ contract WrapperB is WrapperBase {
      */
     function depositETH(address _receiver, address _referral) public payable virtual override returns (uint256 stvShares) {
         stvShares = _deposit(_receiver, _referral);
-
-        _getWrapperBStorage().userBalances[_receiver].stvShares += stvShares;
-
         _mintMaximumStShares(_receiver, stvShares);
+    }
+
+    //
+    // Withdrawal functions
+    //
+
+    function withdrawableEth(address _address, uint256 _stvShares, uint256 _stSharesToBurn) public view returns (uint256 ethAmount) {
+        // TODO
+        // Math.mulDiv(_stvShares, balanceOf(_address), totalSupply(), Math.Rounding.Floor);
+    }
+
+    function stSharesToBurnToWithdraw(address _address, uint256 _stvShares) public view returns (uint256 stSharesToBurn) {
+        // TODO
     }
 
     /**
@@ -80,48 +89,27 @@ contract WrapperB is WrapperBase {
      * @param _stvShares The amount of stvETH shares to withdraw
      * @return stShares The corresponding amount of stETH shares needed for withdrawal
      */
-    function stSharesForWithdrawal(uint256 _stvShares) public view returns (uint256 stShares) {
+    function stSharesForWithdrawal(address _address, uint256 _stvShares) public view returns (uint256 stShares) {
         if (_stvShares == 0) return 0;
 
-        WrapperBStorage storage $ = _getWrapperBStorage();
-        uint256 userStvShares = $.userBalances[msg.sender].stvShares;
-        if (userStvShares == 0) return 0;
+        uint256 balance = balanceOf(_address);
+        if (balance == 0) return 0;
 
-        uint256 userStShares = $.userBalances[msg.sender].stShares;
-
-        stShares = Math.mulDiv(_stvShares, userStShares, userStvShares, Math.Rounding.Ceil); // TODO: Ceil or Floor?
-    }
-
-    function stSharesToReturn(address _address) public view returns (uint256 stShares) {
-        WrapperBStorage storage $ = _getWrapperBStorage();
-        stShares = $.userBalances[_address].stShares;
+        // TODO: Ceil or Floor?
+        stShares = Math.mulDiv(_stvShares, _getStShares(_address), balance, Math.Rounding.Ceil);
     }
 
     function mintableStShares(address _address) public view returns (uint256 stShares) {
-        uint256 usersEth = previewRedeem(balanceOf(_address));
+        uint256 stvShares = balanceOf(_address);
+        uint256 usersEth = previewRedeem(stvShares);
         uint256 maxMintable = _calcMaxMintableStShares(usersEth);
-        uint256 alreadyMinted = stSharesToReturn(_address);
+        uint256 alreadyMinted = stSharesForWithdrawal(_address, stvShares);
 
         if (alreadyMinted >= maxMintable) return 0;
 
         stShares = maxMintable - alreadyMinted;
     }
 
-    // TODO: I think it should be included in the token transfer
-    function changePositionOwner(address _newOwner) external {
-        WrapperBStorage storage $ = _getWrapperBStorage();
-
-        UserBalance storage senderBalances = $.userBalances[msg.sender];
-        UserBalance storage newOwnerBalances = $.userBalances[_newOwner];
-
-        newOwnerBalances.stvShares += senderBalances.stvShares;
-        newOwnerBalances.stShares += senderBalances.stShares;
-
-        senderBalances.stvShares = 0;
-        senderBalances.stShares = 0;
-
-        // TODO: add events and handle zero balances
-    }
 
     function mintStShares(uint256 _stShares) external returns (uint256 stShares) {
         uint256 mintableStShares_ = mintableStShares(msg.sender);
@@ -135,21 +123,77 @@ contract WrapperB is WrapperBase {
 
         WithdrawalQueue withdrawalQueue = withdrawalQueue();
 
-        uint256 stShares = stSharesForWithdrawal(_stvShares);
+        uint256 stShares = stSharesForWithdrawal(msg.sender, _stvShares);
+
+        _transfer(msg.sender, address(this), _stvShares);
 
         STETH.transferSharesFrom(msg.sender, address(this), stShares);
+        _burnStShares(stShares);
 
-        _transfer(msg.sender, address(withdrawalQueue), _stvShares);
+        // NB: need to transfer to Wrapper first to do the math correctly
+        _transfer(address(this), address(withdrawalQueue), _stvShares);
 
-        STETH.approve(address(DASHBOARD), STETH.getPooledEthByShares(stShares));
-        DASHBOARD.burnShares(stShares);
+        requestId = withdrawalQueue.requestWithdrawal(_stvShares, msg.sender);
+    }
+
+    //
+    // Calculation helpers
+    //
+
+    function _calcStShares(uint256 _stvShares, address _address) internal view returns (uint256 stShares) {
+        uint256 balance = balanceOf(_address);
+        if (balance == 0) return 0;
+
+        // TODO: replace by assert
+        if (balance < _stvShares) revert InsufficientSharesLocked(_address);
+
+        // TODO: how to round here?
+        stShares = Math.mulDiv(_stvShares, _getStShares(_address), balance, Math.Rounding.Ceil);
+    }
+
+    function _getStShares(address _address) internal view returns (uint256 stShares) {
+        WrapperBStorage storage $ = _getWrapperBStorage();
+        stShares = $.stShares[_address];
+    }
+
+    //
+    // ERC20 overrides
+    //
+
+    function _update(address _from, address _to, uint256 _value) internal override {
+        // TODO: maybe add workaround for _from == address(0) because ERC20 minting is _update from address(0)
+        _updateStShares(_from, _to, _value);
+        super._update(_from, _to, _value);
+    }
+
+    //
+    //
+    //
+
+    function _updateStShares(address _from, address _to, uint256 _stvSharesToMove) internal {
+        // if (_from == address(0) || _to == address(0) || _stvSharesMoved == 0) revert ZeroArgument();
+
+        uint256 stSharesToMove = _calcStShares(_stvSharesToMove, _from);
+
+        // Don't update stShares if the sender has no stShares to move
+        WrapperBStorage storage $ = _getWrapperBStorage();
+        // if ($.stShares[_from] == 0) return;
+
+        if (stSharesToMove == 0) return;
+
+        $.stShares[_from] -= stSharesToMove;
+        $.stShares[_to] += stSharesToMove;
+    }
+
+    function _burnStShares(uint256 _stShares) internal {
+        if (_stShares == 0) revert ZeroArgument();
 
         WrapperBStorage storage $ = _getWrapperBStorage();
-        $.userBalances[msg.sender].stShares -= stShares;
-        $.userBalances[msg.sender].stvShares -= _stvShares;
-
-        requestId = withdrawalQueue.requestWithdrawal(_convertToAssets(_stvShares), msg.sender);
+        $.stShares[address(this)] -= _stShares;
+        STETH.approve(address(DASHBOARD), STETH.getPooledEthByShares(_stShares));
+        DASHBOARD.burnShares(_stShares);
     }
+
 
     function _calcMaxMintableStShares(uint256 _eth) public view returns (uint256 stShares) {
         uint256 intermediateValue = Math.mulDiv(_eth, RESERVE_RATIO_BP, TOTAL_BASIS_POINTS, Math.Rounding.Floor);
@@ -161,11 +205,12 @@ contract WrapperB is WrapperBase {
 
     function _mintStShares(address _receiver, uint256 _stShares) internal returns (uint256 stShares) {
         if (_stShares == 0) revert ZeroArgument();
+        if (_receiver == address(0)) revert ZeroArgument();
 
         stShares = _stShares;
         DASHBOARD.mintShares(_receiver, stShares);
 
-        _getWrapperBStorage().userBalances[_receiver].stShares += stShares;
+        _getWrapperBStorage().stShares[_receiver] += stShares;
     }
 
     function _mintMaximumStShares(address _receiver, uint256 _stvShares) internal returns (uint256 stShares) {

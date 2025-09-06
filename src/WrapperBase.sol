@@ -22,6 +22,7 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList {
     error ZeroStvShares();
     error TransferNotAllowed();
     error InvalidWithdrawalType();
+    error NotOwner(address caller, address owner);
 
     bytes32 public constant REQUEST_VALIDATOR_EXIT_ROLE = keccak256("REQUEST_VALIDATOR_EXIT_ROLE");
     bytes32 public constant TRIGGER_VALIDATOR_WITHDRAWAL_ROLE = keccak256("TRIGGER_VALIDATOR_WITHDRAWAL_ROLE");
@@ -72,6 +73,12 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList {
 
     event VaultDisconnected(address indexed initiator);
     event ConnectDepositClaimed(address indexed recipient, uint256 amount);
+    event WithdrawalClaimed(
+        uint256 indexed requestId,
+        address indexed owner,
+        address indexed receiver,
+        uint256 amountOfETH
+    );
 
     constructor(
         address _dashboard,
@@ -146,13 +153,14 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList {
         return _convertToShares(_assets);
     }
 
-    function previewWithdraw(uint256 _assets) public view returns (uint256) {
-        uint256 supply = totalSupply();
-        if (supply == 0) {
-            return 0;
-        }
-        return Math.mulDiv(_assets, totalAssets(), supply, Math.Rounding.Ceil);
-    }
+    // TODO: get rid of this in favor of previewRedeem?
+    // function previewWithdraw(uint256 _assets) public view returns (uint256) {
+    //     uint256 supply = totalSupply();
+    //     if (supply == 0) {
+    //         return 0;
+    //     }
+    //     return Math.mulDiv(_assets, totalAssets(), supply, Math.Rounding.Ceil);
+    // }
 
     function previewRedeem(uint256 _shares) public view returns (uint256) {
         return _convertToAssets(_shares);
@@ -174,18 +182,6 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList {
         return depositETH(msg.sender, address(0));
     }
 
-    function _deposit(address _receiver, address _referral) internal returns (uint256 stvShares) {
-        if (msg.value == 0) revert WrapperBase.ZeroDeposit();
-        if (_receiver == address(0)) revert WrapperBase.InvalidReceiver();
-        _checkAllowList();
-
-        stvShares = previewDeposit(msg.value);
-        _mint(_receiver, stvShares);
-        DASHBOARD.fund{value: msg.value}();
-
-        emit Deposit(msg.sender, _receiver, _referral, msg.value, stvShares);
-    }
-
     /**
      * @notice Deposit native ETH and receive stvETH shares
      * @dev Implementation depends on specific wrapper configuration
@@ -194,6 +190,19 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList {
      */
     function depositETH(address _receiver, address _referral) public payable virtual returns (uint256 stvShares);
 
+    function _deposit(address _receiver, address _referral) internal returns (uint256 stvShares) {
+        if (msg.value == 0) revert WrapperBase.ZeroDeposit();
+        if (_receiver == address(0)) revert WrapperBase.InvalidReceiver();
+        _checkAllowList();
+
+        stvShares = previewDeposit(msg.value);
+        console.log("_deposit stvShares", stvShares);
+        _mint(_receiver, stvShares);
+        DASHBOARD.fund{value: msg.value}();
+
+        emit Deposit(msg.sender, _receiver, _referral, msg.value, stvShares);
+    }
+
     // =================================================================================
     // WITHDRAWAL SYSTEM
     // =================================================================================
@@ -201,18 +210,23 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList {
     /**
      * @notice Claim finalized withdrawal request
      * @param _requestId The withdrawal request ID to claim
+     * @param _recipient The address to receive the claimed ether
      */
-    function claimWithdrawal(uint256 _requestId) external virtual {
+    function claimWithdrawal(uint256 _requestId, address _recipient) external virtual {
         WithdrawalQueue wq = withdrawalQueue();
         WithdrawalQueue.WithdrawalRequestStatus memory status = wq.getWithdrawalStatus(_requestId);
 
+        if (msg.sender != status.owner) revert NotOwner(msg.sender, status.owner);
+
         _burn(address(wq), status.amountOfShares);
-        wq.claimWithdrawal(_requestId, msg.sender);
+        uint256 ethClaimed = wq.claimWithdrawal(_requestId, _recipient);
+
+        emit WithdrawalClaimed(_requestId, msg.sender, _recipient, ethClaimed);
     }
 
-    function burnShares(uint256 _shares) external {
-        _burn(msg.sender, _shares);
-    }
+    // function burnShares(uint256 _shares) external {
+    //     _burn(msg.sender, _shares);
+    // }
 
     // TODO: remove this function
     function setWithdrawalQueue(address _withdrawalQueue) external {
@@ -271,10 +285,10 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList {
         depositETH(msg.sender, address(0));
     }
 
-
     function requestValidatorExit(
         bytes calldata _pubkeys
-    ) external onlyRoleOrEmergencyExit(REQUEST_VALIDATOR_EXIT_ROLE) {
+    ) external {
+        _checkOnlyRoleOrEmergencyExit(REQUEST_VALIDATOR_EXIT_ROLE);
         DASHBOARD.requestValidatorExit(_pubkeys);
     }
 
@@ -287,16 +301,16 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList {
         bytes calldata _pubkeys,
         uint64[] calldata _amounts,
         address _refundRecipient
-    ) external payable onlyRoleOrEmergencyExit(TRIGGER_VALIDATOR_WITHDRAWAL_ROLE) {
+    ) external payable {
+        _checkOnlyRoleOrEmergencyExit(TRIGGER_VALIDATOR_WITHDRAWAL_ROLE);
         DASHBOARD.triggerValidatorWithdrawals{value: msg.value}(_pubkeys, _amounts, _refundRecipient);
     }
 
     /// @notice Modifier to check role or Emergency Exit
-    modifier onlyRoleOrEmergencyExit(bytes32 role) {
+    function _checkOnlyRoleOrEmergencyExit(bytes32 _role) internal view {
         if (!_getWrapperBaseStorage().withdrawalQueue.isEmergencyExitActivated()) {
-            _checkRole(role, msg.sender);
+            _checkRole(_role, msg.sender);
         }
-        _;
     }
 
 
