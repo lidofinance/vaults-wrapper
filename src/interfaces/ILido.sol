@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: 2025 Lido <info@lido.fi>
-// SPDX-License-Identifier: GPL-3.0
+// SPDX-License-Identifier: MIT
 
 pragma solidity >=0.8.0;
 
@@ -17,5 +17,9 @@ interface ILido is IStETH {
     function setMaxExternalRatioBP(uint256 _maxExternalRatioBP) external;
 
     function STAKING_CONTROL_ROLE() external view returns (bytes32);
+
+
+    function mintShares(address _recipient, uint256 _amountOfShares) external;
+    function burnShares(uint256 _amountOfShares) external;
 
 }

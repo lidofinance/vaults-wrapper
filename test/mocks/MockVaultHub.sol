@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0
+// SPDX-License-Identifier: MIT
 pragma solidity >=0.8.25;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -146,5 +146,9 @@ contract MockVaultHub { // TODO: maybe inherit IVaultHub
 
     function isReportFresh(address _vault) external pure returns (bool) {
         return true;
+    }
+
+    function mock_setVaultBalance(address _vault, uint256 _balance) external {
+        vaultBalances[_vault] = _balance;
     }
 }

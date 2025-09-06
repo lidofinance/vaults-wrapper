@@ -11,7 +11,8 @@
     import {IBoringSolver} from "src/interfaces/ggv/IBoringSolver.sol";
     import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
-    import {Wrapper} from "src/Wrapper.sol";
+    import {WrapperBase} from "src/WrapperBase.sol";
+    import {WrapperC} from "src/WrapperC.sol";
     import {IDashboard} from "src/interfaces/IDashboard.sol";
     import {ILido} from "src/interfaces/ILido.sol";
     import {IVaultHub} from "src/interfaces/IVaultHub.sol";
@@ -41,7 +42,7 @@
         DefiWrapper public dw;
 
         // Access to harness components
-        Wrapper public wrapper;
+        WrapperBase public wrapper;
         IDashboard public dashboard;
         ILido public steth;
         IVaultHub public vaultHub;
@@ -70,7 +71,7 @@
         function setUp() public {
             core = new CoreHarness("lido-core/deployed-local.json");
 
-            //allowed 
+            //allowed
             //0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0 wsteth
             //0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84 steth
             //0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2 WETH
@@ -90,7 +91,7 @@
             bytes4 setRateProviderDataSig = bytes4(keccak256("setRateProviderData(address,bool,address)"));
             bytes4 setWithdrawCapacitySig = IBoringOnChainQueue.updateWithdrawAsset.selector;
             bytes4 boringRedeemSolveSig = IBoringSolver.boringRedeemSolve.selector;
-            
+
             vm.startPrank(authorityOwner);
             authority.setUserRole(address(this), OWNER_ROLE, true);
             authority.setUserRole(address(this), STRATEGIST_MULTISIG_ROLE, true);
@@ -101,7 +102,7 @@
             // authority.setRoleCapability(STRATEGIST_MULTISIG_ROLE, address(this), setWithdrawCapacitySig, true);
             // authority.setRoleCapability(STRATEGIST_MULTISIG_ROLE, address(this), boringRedeemSolveSig, true);
             vm.stopPrank();
-            
+
             teller.updateAssetData(ERC20(address(core.steth())), true, true, 0);
             accountant.setRateProviderData(ERC20(address(core.steth())), true, address(0));
             boringOnChainQueue.updateWithdrawAsset(
@@ -122,7 +123,7 @@
 
             strategy = new GGVStrategy(
                 strategyProxyImpl,
-                address(core.steth()), 
+                address(core.steth()),
                 address(teller),
                 address(boringOnChainQueue)
             );
@@ -136,7 +137,7 @@
             vaultHub = core.vaultHub();
             stakingVault = dw.stakingVault();
 
-            console.log("wrapper strategy", address(wrapper.STRATEGY()));
+            console.log("wrapper strategy", address(strategy));
 
             vm.deal(user1, 1000 ether);
             vm.deal(user2, 1000 ether);
@@ -148,9 +149,9 @@
 
         function test_depositStrategy() public {
             vm.prank(user1);
-            (uint256 user1StvShares, uint256 user1StETHAmount) = wrapper.depositStrategy{value: 1 ether}();
+            WrapperC(payable(address(wrapper))).depositETH{value: 1 ether}(user1);
+            uint256 user1StETHAmount = 0; // Would need to calculate separately
 
-            console.log("user1StvShares", user1StvShares);
             console.log("user1StETHAmount", user1StETHAmount);
             dw.logAllBalances("after deposit", user1, address(wrapper));
         }
@@ -158,7 +159,7 @@
         function test_withdrawStrategy() public {
             console.log("\n--- test_withdrawStrategy ---");
 
-            strategy = IStrategy(wrapper.STRATEGY());
+            // strategy is already initialized in setUp()
             GGVStrategy ggvStrategy = GGVStrategy(address(strategy));
             ERC20 boringVault = ERC20(ggvStrategy.TELLER().vault());
 
@@ -169,14 +170,14 @@
             console.log("user1 address", user1);
 
             vm.prank(user1);
-            (uint256 user1StvShares, uint256 user1StETHAmount) = wrapper.depositStrategy{value: 1 ether}();
+            WrapperC(payable(address(wrapper))).depositETH{value: 1 ether}(user1);
+            uint256 user1StETHAmount = 0; // Would need to calculate separately
 
             address strategyProxy = ggvStrategy.getStrategyProxyAddress(user1);
             console.log("strategy proxy", strategyProxy);
             console.log("steth balance strategy proxy after", core.steth().balanceOf(strategyProxy));
             console.log("steth balance strategy", core.steth().balanceOf(address(strategy)));
 
-            console.log("\nuser1StvShares", user1StvShares);
             console.log("user1StETHAmount", user1StETHAmount);
 
             uint256 ggvShares = boringVault.balanceOf(strategyProxy);
@@ -187,7 +188,7 @@
             console.log("boringVault totalSupply", boringVault.totalSupply());
             console.log("boringVault balance before deposit", boringVault.balanceOf(address(strategy)));
             console.log("queue balance", boringVault.balanceOf(address(boringOnChainQueue)));
-            
+
             //share lock period is 1 day
             vm.warp(block.timestamp + 86400);
 

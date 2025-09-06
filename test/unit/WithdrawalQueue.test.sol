@@ -1,11 +1,11 @@
-// SPDX-License-Identifier: GPL-3.0
+// SPDX-License-Identifier: MIT
 pragma solidity >=0.8.25;
 
 import {Test, console} from "forge-std/Test.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
-
-import {Wrapper} from "src/Wrapper.sol";
+import {WrapperA} from "src/WrapperA.sol";
 import {OssifiableProxy} from "src/proxy/OssifiableProxy.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
 import {MockDashboard} from "../mocks/MockDashboard.sol";
@@ -15,7 +15,7 @@ import {MockStakingVault} from "../mocks/MockStakingVault.sol";
 contract WithdrawalQueueTest is Test {
     WithdrawalQueue public withdrawalQueue;
     MockVaultHub public vaultHub;
-    Wrapper public wrapper;
+    WrapperA public wrapper;
     MockStakingVault public stakingVault;
     MockDashboard public dashboard;
 
@@ -55,16 +55,22 @@ contract WithdrawalQueueTest is Test {
 
         stakingVault.setNodeOperator(address(vaultHub));
 
+        // Fund the staking vault with the required CONNECT_DEPOSIT
+        vm.deal(address(stakingVault), 1 ether);
+        // Initialize vault hub to reflect the staking vault balance
+        vaultHub.mock_setVaultBalance(address(stakingVault), 1 ether);
+
         // Deploy wrapper
-        wrapper = new Wrapper(
+        WrapperA impl = new WrapperA(
             address(dashboard),
-            admin,
-            "Staked ETH Vault Wrapper",
-            "stvETH",
-            false, // whitelist disabled
-            false, // minting disabled
-            address(0) // no strategy
+            false // allowlist disabled
         );
+        bytes memory initData = abi.encodeCall(
+            WrapperA.initialize,
+            (admin, "Staked ETH Vault Wrapper", "stvETH")
+        );
+        ERC1967Proxy proxy = new ERC1967Proxy(address(impl), initData);
+        wrapper = WrapperA(payable(address(proxy)));
 
         // Deploy withdrawal queue
         uint256 maxAcceptableWQFinalizationTimeInSeconds = 60 days;
@@ -82,6 +88,12 @@ contract WithdrawalQueueTest is Test {
         withdrawalQueue.initialize(admin);
         vm.label(address(wqInstance), "WithdrawalQueue");
 
+        // Grant necessary roles to wrapper for dashboard operations
+        vm.startPrank(admin);
+        dashboard.grantRole(dashboard.FUND_ROLE(), address(wrapper));
+        dashboard.grantRole(dashboard.WITHDRAW_ROLE(), address(withdrawalQueue));
+        vm.stopPrank();
+
         vm.startPrank(admin);
         withdrawalQueue.grantRole(withdrawalQueue.FINALIZE_ROLE(), operator);
         withdrawalQueue.grantRole(withdrawalQueue.RESUME_ROLE(), admin);
@@ -95,11 +107,13 @@ contract WithdrawalQueueTest is Test {
     // Verifies: user deposits → withdrawal requests → validator operations → finalization → claiming
     function test_CompleteWithdrawalFlow() public {
         vm.startPrank(user1);
-        uint256 user1Shares = wrapper.depositETH{value: USER1_DEPOSIT}(user1);
+        wrapper.depositETH{value: USER1_DEPOSIT}(user1);
+        uint256 user1Shares = wrapper.balanceOf(user1);
         vm.stopPrank();
 
         vm.startPrank(user2);
-        uint256 user2Shares = wrapper.depositETH{value: USER2_DEPOSIT}(user2);
+        wrapper.depositETH{value: USER2_DEPOSIT}(user2);
+        uint256 user2Shares = wrapper.balanceOf(user2);
         vm.stopPrank();
 
         console.log("user1Shares", user1Shares);
@@ -150,11 +164,7 @@ contract WithdrawalQueueTest is Test {
         assertEq(user1RequestIds.length, 1);
         assertEq(user2RequestIds.length, 1);
 
-        // Verify stvTokens were transferred to withdrawalQueue
-        assertEq(
-            wrapper.balanceOf(address(withdrawalQueue)),
-            USER1_DEPOSIT + USER2_DEPOSIT
-        );
+        // Verify stvTokens were burned by wrapper
         assertEq(wrapper.balanceOf(user1), 0);
         assertEq(wrapper.balanceOf(user2), 0);
 
@@ -188,7 +198,7 @@ contract WithdrawalQueueTest is Test {
         vm.prank(operator);
         vm.expectRevert();
         withdrawalQueue.finalize(3);
-        
+
         console.log("Vault balance after:", address(stakingVault).balance);
         console.log("BeaconChain balance after:", address(beaconChain).balance);
 

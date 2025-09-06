@@ -5,7 +5,7 @@ import {AccessControlEnumerableUpgradeable} from "@openzeppelin/contracts-upgrad
 import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
-import {Wrapper} from "./Wrapper.sol";
+import {WrapperBase} from "./WrapperBase.sol";
 import {IDashboard} from "./interfaces/IDashboard.sol";
 import {IVaultHub} from "./interfaces/IVaultHub.sol";
 import {console} from "forge-std/console.sol";
@@ -69,7 +69,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
         bool isClaimed;
     }
 
-    Wrapper public immutable WRAPPER;
+    WrapperBase public immutable WRAPPER;
 
     /// @custom:storage-location erc7201:wrapper.storage.WithdrawalQueue
     struct WithdrawalQueueStorage {
@@ -155,7 +155,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
         _;
     }
 
-    constructor(Wrapper _wrapper, uint256 _maxAcceptableWQFinalizationTimeInSeconds) {
+    constructor(WrapperBase _wrapper, uint256 _maxAcceptableWQFinalizationTimeInSeconds) {
         WRAPPER = _wrapper;
         MAX_ACCEPTABLE_WQ_FINALIZATION_TIME_IN_SECONDS = _maxAcceptableWQFinalizationTimeInSeconds;
 
@@ -172,7 +172,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
         _grantRole(DEFAULT_ADMIN_ROLE, _admin);
         _pause();
 
-        
+
 
         _getWithdrawalQueueStorage().requests[0] = WithdrawalRequest({
             cumulativeAssets: 0,
@@ -230,7 +230,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
     /// @param _assets amount of ETH to withdraw
     /// @param _owner address that will be able to claim the created request
     /// @return requestIds the created withdrawal request ids
-    function requestWithdrawals(uint256[] calldata _assets, address _owner) 
+    function requestWithdrawals(uint256[] calldata _assets, address _owner)
         external
         returns (uint256[] memory requestIds)
     {
@@ -244,20 +244,20 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
 
         requestIds = new uint256[](_assets.length);
         for (uint256 i = 0; i < _assets.length; ++i) {
-            requestIds[i] = _requestWithdrawal(_assets[i], _owner);
+            requestIds[i] = requestWithdrawal(_assets[i], _owner);
         }
     }
 
-    function _requestWithdrawal(uint256 _assets, address _owner)
+    function requestWithdrawal(uint256 _assets, address _owner)
         public
         returns (uint256 requestId)
     {
         _requireNotPaused();
-        
+
         if (_assets < MIN_WITHDRAWAL_AMOUNT) revert RequestAmountTooSmall(_assets);
         if (_assets > MAX_WITHDRAWAL_AMOUNT) revert RequestAmountTooLarge(_assets);
 
-        if (WRAPPER.maxWithdraw(msg.sender) < _assets) {
+        if (WRAPPER.previewRedeem(WRAPPER.balanceOf(msg.sender)) < _assets) {
             revert RequestAmountTooLarge(_assets);
         }
 
@@ -354,7 +354,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
             fromRequestId: firstRequestIdToFinalize,
             shareRate: currentShareRate
         });
-        
+
         wqStorage.lastCheckpointIndex = lastCheckpointIndex;
         wqStorage.lastFinalizedRequestId = lastFinalizedRequestId;
         wqStorage.totalLockedAssets += totalEthToFinalize;
@@ -396,7 +396,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
         if (_requestIds.length != _hints.length) {
             revert ArraysLengthMismatch(_requestIds.length, _hints.length);
         }
-        
+
         address recipient = _recipient == address(0) ? msg.sender : _recipient;
         for (uint256 i = 0; i < _requestIds.length; ++i) {
             _claim(_requestIds[i], _hints[i], recipient);

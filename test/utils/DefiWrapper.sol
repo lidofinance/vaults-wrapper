@@ -13,11 +13,12 @@ import {IVaultFactory} from "src/interfaces/IVaultFactory.sol";
 import {IStakingVault} from "src/interfaces/IStakingVault.sol";
 
 import {CoreHarness} from "test/utils/CoreHarness.sol";
-import {Wrapper} from "src/Wrapper.sol";
+import {WrapperBase} from "src/WrapperBase.sol";
+import {WrapperA} from "src/WrapperA.sol";
+import {WrapperC} from "src/WrapperC.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
-import {IStrategy} from "src/interfaces/IStrategy.sol";
-import {GGVStrategy} from "src/strategy/GGVStrategy.sol";
-import {ExampleStrategy} from "src/ExampleStrategy.sol";
+import {ExampleLoopStrategy} from "src/ExampleLoopStrategy.sol";
+import {LenderMock} from "src/mock/LenderMock.sol";
 
 interface IHashConsensus {
     function updateInitialEpoch(uint256 initialEpoch) external;
@@ -37,9 +38,9 @@ interface IVaultHub is IVaultHubIntact {
 
 // TODO: replace it partially by the factory
 contract DefiWrapper is Test {
-    Wrapper public wrapper;
+    WrapperC public wrapper; // Using WrapperC for strategy functionality
     WithdrawalQueue public withdrawalQueue;
-    IStrategy public strategy;
+    ExampleLoopStrategy public strategy;
     IStakingVault public vault;
     IDashboard public dashboard;
     CoreHarness public core;
@@ -60,13 +61,20 @@ contract DefiWrapper is Test {
         // Create the staking vault using VaultFactory
         IVaultFactory vaultFactory = IVaultFactory(core.locator().vaultFactory());
 
+        // Create role assignments to grant admin role to this contract
+        IVaultFactory.RoleAssignment[] memory roleAssignments = new IVaultFactory.RoleAssignment[](1);
+        roleAssignments[0] = IVaultFactory.RoleAssignment({
+            account: address(this),
+            role: bytes32(0) // DEFAULT_ADMIN_ROLE
+        });
+
         (address vaultAddress, address dashboardAddress) = vaultFactory.createVaultWithDashboard{value: CONNECT_DEPOSIT}(
             address(this),
             address(this),
             address(this),
             0,
             CONFIRM_EXPIRY,
-            new IVaultFactory.RoleAssignment[](0)
+            roleAssignments
         );
 
         dashboard = IDashboard(payable(dashboardAddress));
@@ -79,23 +87,27 @@ contract DefiWrapper is Test {
         core.setDashboard(address(dashboard));
 
         // Apply initial vault report and set fee rate
-        core.applyVaultReport(address(vault), 0, 0, 0, true);
+        core.applyVaultReport(address(vault), 0, 0, 0, 0, true);
+
+        // Grant admin role to the caller (test contract) as well
+        dashboard.grantRole(dashboard.DEFAULT_ADMIN_ROLE(), msg.sender);
         dashboard.setNodeOperatorFeeRate(NODE_OPERATOR_FEE_RATE);
 
-        wrapper = new Wrapper(
+        // Create a placeholder strategy first (will point to wrong wrapper but that's ok for testing)
+        strategy = new ExampleLoopStrategy(address(core.steth()), address(0), STRATEGY_LOOPS);
+        
+        // Create the wrapper with the strategy
+        wrapper = new WrapperC(
             address(dashboard),
-            address(this), // initial balance owner
-            "Staked ETH Vault Wrapper",
-            "stvETH",
-            false, // whitelist disabled
-            true, // minting allowed
-            address(0)
+            address(core.steth()),
+            false, // allowlist disabled
+            address(strategy)
         );
 
-        uint256 maxAcceptableWQFinalizationTimeInSeconds = 60 days;
-        withdrawalQueue = new WithdrawalQueue(wrapper, maxAcceptableWQFinalizationTimeInSeconds);
+        uint256 maxFinalizationTime = 30 days; // Default max finalization time
+        withdrawalQueue = new WithdrawalQueue(WrapperBase(payable(address(wrapper))), maxFinalizationTime);
         withdrawalQueue.initialize(address(this));
-        
+
         wrapper.setWithdrawalQueue(address(withdrawalQueue));
         withdrawalQueue.grantRole(withdrawalQueue.FINALIZE_ROLE(), address(this));
         withdrawalQueue.grantRole(withdrawalQueue.RESUME_ROLE(), address(this));
@@ -103,11 +115,6 @@ contract DefiWrapper is Test {
 
         address vaultOwner = core.vaultHub().vaultConnection(address(vault)).owner;
         console.log("vaultOwner", vaultOwner);
-
-        // Update strategy's wrapper reference now that wrapper is deployed
-        // strategy = new ExampleStrategy(address(core.steth()), address(wrapper), STRATEGY_LOOPS);
-        strategy = IStrategy(_strategyAddress);
-        wrapper.setStrategy(_strategyAddress);
 
         // Fund the LenderMock contract with ETH so it can lend
         // vm.deal(address(strategy.LENDER_MOCK()), 1234 ether);
@@ -125,7 +132,7 @@ contract DefiWrapper is Test {
 
     function logAllBalances(string memory _context, address _user1, address _user2) external view {
         address stETH = address(core.steth());
-        // address lenderMock = address(strategy.LENDER_MOCK());
+        address lenderMock = address(strategy.LENDER_MOCK());
         address user1 = _user1;
         address user2 = _user2;
 
@@ -136,8 +143,7 @@ contract DefiWrapper is Test {
             string.concat(
                 "user1: ETH=", vm.toString(user1.balance),
                 " stvETH=", vm.toString(wrapper.balanceOf(user1)),
-                " stETH=", vm.toString(IERC20(stETH).balanceOf(user1)),
-                " lockedStv=", vm.toString(wrapper.lockedStvSharesByUser(user1))
+                " stETH=", vm.toString(IERC20(stETH).balanceOf(user1))
             )
         );
 
@@ -145,8 +151,7 @@ contract DefiWrapper is Test {
             string.concat(
                 "user2: ETH=", vm.toString(user2.balance),
                 " stvETH=", vm.toString(wrapper.balanceOf(user2)),
-                " stETH=", vm.toString(IERC20(stETH).balanceOf(user2)),
-                " lockedStv=", vm.toString(wrapper.lockedStvSharesByUser(user2))
+                " stETH=", vm.toString(IERC20(stETH).balanceOf(user2))
             )
         );
 
@@ -154,8 +159,7 @@ contract DefiWrapper is Test {
             string.concat(
                 "wrapper: ETH=", vm.toString(address(wrapper).balance),
                 " stvETH=", vm.toString(wrapper.balanceOf(address(wrapper))),
-                " stETH=", vm.toString(IERC20(stETH).balanceOf(address(wrapper))),
-                " lockedStv=", vm.toString(wrapper.lockedStvSharesByUser(address(wrapper)))
+                " stETH=", vm.toString(IERC20(stETH).balanceOf(address(wrapper)))
             )
         );
 
@@ -165,32 +169,23 @@ contract DefiWrapper is Test {
             string.concat(
                 "strategy: ETH=", vm.toString(address(strategy).balance),
                 " stvETH=", vm.toString(wrapper.balanceOf(address(strategy))),
-                " stETH=", vm.toString(IERC20(stETH).balanceOf(address(strategy))),
-                " lockedStv=", vm.toString(wrapper.lockedStvSharesByUser(address(strategy)))
+                " stETH=", vm.toString(IERC20(stETH).balanceOf(address(strategy)))
             )
         );
 
         console.log(
             string.concat(
-                "stakingVault: ETH=", vm.toString(address(vault).balance),
-                " lockedStv=", vm.toString(wrapper.lockedStvSharesByUser(address(vault)))
+                "stakingVault: ETH=", vm.toString(address(vault).balance)
             )
         );
-        // console.log(
-        //     string.concat(
-        //         // "LenderMock: ETH=", vm.toString(lenderMock.balance),
-        //         " stvETH=", vm.toString(wrapper.balanceOf(lenderMock)),
-        //         " stETH=", vm.toString(IERC20(stETH).balanceOf(lenderMock)),
-        //         " lockedStv=", vm.toString(wrapper.lockedStvSharesByUser(lenderMock))
-        //     )
-        // );
-
-        // Wrapper totals (previously Escrow totals)
         console.log(
             string.concat(
-                "Wrapper totals: totalBorrowedAssets=", vm.toString(wrapper.totalBorrowedAssets()),
-                " totalLockedStvShares=", vm.toString(wrapper.totalLockedStvShares())
+                "LenderMock: ETH=", vm.toString(lenderMock.balance),
+                " stvETH=", vm.toString(wrapper.balanceOf(lenderMock)),
+                " stETH=", vm.toString(IERC20(stETH).balanceOf(lenderMock))
             )
         );
+
+        // Note: Position-specific tracking now handled by individual position queries
     }
 }

@@ -10,7 +10,7 @@ contract LeverageStrategy is Strategy {
     receive() external payable {}
 
     function execute(address user, uint256 stETHAmount) external {
-        
+
     }
 
     function strategyId() public pure override returns (bytes32) {
@@ -20,4 +20,5 @@ contract LeverageStrategy is Strategy {
     function requestWithdraw(uint256 shares) external {}
 
     function claim(address asset, uint256 shares) external {}
+
 }

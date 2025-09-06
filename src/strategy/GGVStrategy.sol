@@ -17,16 +17,16 @@ contract GGVStrategy is Strategy {
     event Execute(address indexed user, uint256 stETHAmount);
     event RequestWithdraw(address indexed user, uint256 shares);
     event Claim(address indexed user, address indexed asset, uint256 shares);
-    
+
     error InvalidStETHAmount();
     error InvalidGGVShares();
 
     constructor (
-        address _strategyProxyImplmentation,
-        address _stETH, 
-        address _teller, 
+        address _strategyProxyImplementation,
+        address _stETH,
+        address _teller,
         address _boringQueue
-    ) Strategy(_stETH, _strategyProxyImplmentation) {
+    ) Strategy(_stETH, _strategyProxyImplementation) {
         TELLER = ITellerWithMultiAssetSupport(_teller);
         BORING_QUEUE = IBoringOnChainQueue(_boringQueue);
     }
@@ -55,7 +55,7 @@ contract GGVStrategy is Strategy {
             abi.encodeWithSelector(STETH.approve.selector, address(TELLER.vault()), stETHAmount)
         );
         IStrategyProxy(proxy).call(
-            address(TELLER), 
+            address(TELLER),
             abi.encodeWithSelector(TELLER.deposit.selector, address(STETH), stETHAmount, 0)
         );
 
@@ -95,4 +95,5 @@ contract GGVStrategy is Strategy {
 
         emit Claim(msg.sender, asset, shares);
     }
+
 }
