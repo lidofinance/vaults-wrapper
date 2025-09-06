@@ -5,20 +5,17 @@ import {console} from "forge-std/Test.sol";
 
 import {ERC20Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
-import {AccessControlEnumerableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/extensions/AccessControlEnumerableUpgradeable.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
 import {WithdrawalQueue} from "./WithdrawalQueue.sol";
 import {IVaultHub} from "./interfaces/IVaultHub.sol";
 import {IDashboard} from "./interfaces/IDashboard.sol";
+import {AllowList} from "./AllowList.sol";
 
 // TODO: move whitelist to a separate contract
 // TODO: likely we can get rid of the base and move all to WrapperA
-abstract contract WrapperBase is Initializable, ERC20Upgradeable, AccessControlEnumerableUpgradeable {
+abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList {
     // Custom errors
-    error NotAllowListed(address user);
-    error AlreadyAllowListed(address user);
-    error NotInAllowList(address user);
     error ZeroDeposit();
     error InvalidReceiver();
     error NoMintingCapacityAvailable();
@@ -26,8 +23,6 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AccessControlE
     error TransferNotAllowed();
     error InvalidWithdrawalType();
 
-    bytes32 public constant DEPOSIT_ROLE = keccak256("DEPOSIT_ROLE");
-    bytes32 public constant ALLOWLIST_MANAGER_ROLE = keccak256("ALLOWLIST_MANAGER_ROLE");
     bytes32 public constant REQUEST_VALIDATOR_EXIT_ROLE = keccak256("REQUEST_VALIDATOR_EXIT_ROLE");
     bytes32 public constant TRIGGER_VALIDATOR_WITHDRAWAL_ROLE = keccak256("TRIGGER_VALIDATOR_WITHDRAWAL_ROLE");
 
@@ -36,7 +31,6 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AccessControlE
     uint256 public immutable EXTRA_DECIMALS_BASE = 10 ** (DECIMALS - ASSET_DECIMALS);
     uint256 public immutable TOTAL_BASIS_POINTS = 100_00;
 
-    bool public immutable ALLOW_LIST_ENABLED;
 
     IDashboard public immutable DASHBOARD;
     IVaultHub public immutable VAULT_HUB;
@@ -76,20 +70,16 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AccessControlE
         uint256 stvETHShares
     );
 
-    event AllowListAdded(address indexed user);
-    event AllowListRemoved(address indexed user);
     event VaultDisconnected(address indexed initiator);
     event ConnectDepositClaimed(address indexed recipient, uint256 amount);
 
     constructor(
         address _dashboard,
         bool _allowListEnabled
-    ) {
-        ALLOW_LIST_ENABLED = _allowListEnabled;
+    ) AllowList(_allowListEnabled) {
         DASHBOARD = IDashboard(payable(_dashboard));
         VAULT_HUB = IVaultHub(DASHBOARD.VAULT_HUB());
         STAKING_VAULT = address(DASHBOARD.stakingVault());
-
 
         // Disable initializers since we only support proxy deployment
         _disableInitializers();
@@ -104,10 +94,7 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AccessControlE
         __AccessControlEnumerable_init();
 
         _grantRole(DEFAULT_ADMIN_ROLE, _owner);
-        _grantRole(ALLOWLIST_MANAGER_ROLE, _owner);
-
-        _setRoleAdmin(ALLOWLIST_MANAGER_ROLE, DEFAULT_ADMIN_ROLE);
-        _setRoleAdmin(DEPOSIT_ROLE, ALLOWLIST_MANAGER_ROLE);
+        _initializeAllowList(_owner);
 
         // Initial vault balance must include the connect deposit
         // Minting shares for it to have clear shares math
@@ -284,65 +271,6 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AccessControlE
         depositETH(msg.sender, address(0));
     }
 
-    // =================================================================================
-    // ALLOWLIST MANAGEMENT
-    // =================================================================================
-
-    /**
-     * @notice Add an address to the allowlist
-     * @param _user Address to add to allowlist
-     */
-    function addToAllowList(address _user) external {
-        _checkRole(ALLOWLIST_MANAGER_ROLE, msg.sender);
-        if (isAllowListed(_user)) revert AlreadyAllowListed(_user);
-
-        grantRole(DEPOSIT_ROLE, _user);
-
-        emit AllowListAdded(_user);
-    }
-
-    /**
-     * @notice Remove an address from the allowlist
-     * @param _user Address to remove from allowlist
-     */
-    function removeFromAllowList(address _user) external {
-        _checkRole(ALLOWLIST_MANAGER_ROLE, msg.sender);
-        if (!isAllowListed(_user)) revert NotInAllowList(_user);
-
-        revokeRole(DEPOSIT_ROLE, _user);
-
-        emit AllowListRemoved(_user);
-    }
-
-    /**
-     * @notice Check if an address is allowlisted
-     * @param _user Address to check
-     * @return bool True if allowlisted
-     */
-    function isAllowListed(address _user) public view returns (bool) {
-        return hasRole(DEPOSIT_ROLE, _user);
-    }
-
-    /**
-     * @notice Get the current allowlist size
-     * @return uint256 Number of addresses in allowlist
-     */
-    function getAllowListSize() external view returns (uint256) {
-        return getRoleMemberCount(DEPOSIT_ROLE);
-    }
-
-    /**
-     * @notice Get all allowlisted addresses
-     * @return address[] Array of allowlisted addresses
-     */
-    function getAllowListAddresses() public view returns (address[] memory) {
-        uint256 count = getRoleMemberCount(DEPOSIT_ROLE);
-        address[] memory addresses = new address[](count);
-        for (uint256 i = 0; i < count; i++) {
-            addresses[i] = getRoleMember(DEPOSIT_ROLE, i);
-        }
-        return addresses;
-    }
 
     function requestValidatorExit(
         bytes calldata _pubkeys
@@ -371,14 +299,5 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AccessControlE
         _;
     }
 
-    // =================================================================================
-    // INTERNAL HELPER FUNCTIONS FOR SUBCLASSES
-    // =================================================================================
-
-    function _checkAllowList() internal view {
-        if (ALLOW_LIST_ENABLED && !hasRole(DEPOSIT_ROLE, msg.sender)) {
-            revert NotAllowListed(msg.sender);
-        }
-    }
 
 }
