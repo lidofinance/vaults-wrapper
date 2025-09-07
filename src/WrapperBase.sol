@@ -23,6 +23,7 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList {
     error TransferNotAllowed();
     error InvalidWithdrawalType();
     error NotOwner(address caller, address owner);
+    error NotWithdrawalQueue();
 
     bytes32 public constant REQUEST_VALIDATOR_EXIT_ROLE = keccak256("REQUEST_VALIDATOR_EXIT_ROLE");
     bytes32 public constant TRIGGER_VALIDATOR_WITHDRAWAL_ROLE = keccak256("TRIGGER_VALIDATOR_WITHDRAWAL_ROLE");
@@ -218,15 +219,15 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList {
 
         if (msg.sender != status.owner) revert NotOwner(msg.sender, status.owner);
 
-        _burn(address(wq), status.amountOfShares);
         uint256 ethClaimed = wq.claimWithdrawal(_requestId, _recipient);
 
         emit WithdrawalClaimed(_requestId, msg.sender, _recipient, ethClaimed);
     }
 
-    // function burnShares(uint256 _shares) external {
-    //     _burn(msg.sender, _shares);
-    // }
+    function burnSharesForWithdrawalQueue(uint256 _shares) external {
+        if (msg.sender != address(withdrawalQueue())) revert NotWithdrawalQueue();
+        _burn(msg.sender, _shares);
+    }
 
     // TODO: remove this function
     function setWithdrawalQueue(address _withdrawalQueue) external {

@@ -103,7 +103,7 @@ contract WrapperBTest is Test {
     // Case 1: Two users can mint up to the full vault capacity
     // ========================================================================
 
-    function xtest_initial_state() public {
+    function test_initial_state() public {
 
         console.log("=== Initial State ===");
         assertEq(dashboard.reserveRatioBP(), RESERVE_RATIO_BP, "Reserve ratio should match RESERVE_RATIO_BP constant");
@@ -260,6 +260,19 @@ contract WrapperBTest is Test {
 
     }
 
+    /**
+     * @notice Test the complete happy path scenario for WrapperB (minting, no strategy)
+     *
+     * Scenario Overview:
+     * 1. Initial state: Vault is created with CONNECT_DEPOSIT, no user deposits yet
+     * 2. User1 deposits ETH → receives stvETH shares, gets stETH minted based on reserve ratio
+     * 3. Vault report updates to reflect deposits and 1% stETH price increase
+     * 4. Vault outperforms (2% increase vs 1% stETH increase) → User1 gains additional minting capacity
+     * 5. User2 deposits ETH → receives stvETH shares at new exchange rate after vault outperformance
+     * 6. User1 withdraws half their stvETH → requests withdrawal, approves stETH transfer,
+     *    withdrawal gets finalized by node operator, User1 claims ETH
+     * 7. User1 deposits again → receives stvETH shares, system continues operating normally
+     */
     function test_happy_path() public {
         console.log("=== Scenario 1 (all fees are zero) ===");
 
@@ -435,23 +448,25 @@ contract WrapperBTest is Test {
 
         uint256 wqBalanceAfter = wrapper.balanceOf(address(withdrawalQueue));
         // TODO: restore the check (there is a problem in the contracts)
-        // assertEq(
-        //     wqBalanceBefore - wqBalanceAfter,
-        //     user1StSharesToWithdraw,
-        //     "Wrapper balance of withdrawalQueue should decrease by shares of the finalized request"
-        // );
+        assertEq(
+            wqBalanceBefore - wqBalanceAfter,
+            user1StSharesToWithdraw,
+            "Wrapper balance of withdrawalQueue should decrease by shares of the finalized request"
+        );
 
         WithdrawalQueue.WithdrawalRequestStatus memory status = withdrawalQueue.getWithdrawalStatus(requestId);
         assertTrue(status.isFinalized, "Withdrawal request should be finalized");
         assertEq(status.amountOfAssets, user1ExpectedEthWithdrawn, "Withdrawal request amount should match previewRedeem");
-        // TODO: check status.amountOfShares
+        assertEq(status.amountOfShares, user1StSharesToWithdraw, "Withdrawal request shares should match user1StSharesToWithdraw");
+
+        // TODO: remove this vm.deal when WQ / setup is fixed
+        vm.deal(address(withdrawalQueue), address(withdrawalQueue).balance + user1ExpectedEthWithdrawn);
 
         uint256 user1EthBalanceBeforeClaim = USER1.balance;
         vm.prank(USER1);
         wrapper.claimWithdrawal(requestId, USER1);
 
-        // TODO: make this check pass
-        // assertEq(USER1.balance, user1EthBalanceBeforeClaim + user1ExpectedEthWithdrawn, "USER1 ETH balance should increase by the withdrawn amount after claim");
+        assertEq(USER1.balance, user1EthBalanceBeforeClaim + user1ExpectedEthWithdrawn, "USER1 ETH balance should increase by the withdrawn amount after claim");
 
         _assertUniversalInvariants("Step 5.2");
 

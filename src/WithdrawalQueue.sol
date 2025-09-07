@@ -330,6 +330,8 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
             finalizedRequests++;
         }
 
+        WRAPPER.burnSharesForWithdrawalQueue(totalSharesToBurn);
+
         if (finalizedRequests == 0) {
             return 0;
         }
@@ -395,11 +397,9 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
         // (issue: https://github.com/lidofinance/lido-dao/issues/442 )
         // some dust (1-2 wei per request) will be accumulated upon claiming
         wqStorage.totalLockedAssets -= ethWithDiscount;
-        console.log("_recipient", _recipient);
-        (bool success, ) = _recipient.call{value: ethWithDiscount}("");
 
-        // TODO: restore - for some reason it fails in wrapper b test upon setting USER1 as recipient
-        // if (!success) revert CantSendValueRecipientMayHaveReverted();
+        (bool success, ) = _recipient.call{value: ethWithDiscount}("");
+        if (!success) revert CantSendValueRecipientMayHaveReverted();
 
         return ethWithDiscount;
 
