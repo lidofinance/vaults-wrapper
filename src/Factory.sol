@@ -127,7 +127,7 @@ contract Factory {
         // Deploy withdrawal queue proxy
         withdrawalQueueProxy = address(new ERC1967Proxy(
             address(wqImpl),
-            abi.encodeCall(WithdrawalQueue.initialize, (msg.sender))
+            abi.encodeCall(WithdrawalQueue.initialize, (_nodeOperator, _nodeOperator))
         ));
 
         // Configure the system

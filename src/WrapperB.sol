@@ -68,7 +68,17 @@ contract WrapperB is WrapperBase {
      */
     function depositETH(address _receiver, address _referral) public payable virtual override returns (uint256 stvShares) {
         stvShares = _deposit(_receiver, _referral);
-        _mintMaximumStShares(_receiver, stvShares);
+        uint256 stShares = _calcMaxMintableStShares(_convertToAssets(stvShares));
+        _mintStShares(_receiver, stShares);
+    }
+
+    function depositETH(address _receiver, address _referral, uint256 _stSharesToMint) public payable returns (uint256 stvShares) {
+        stvShares = _deposit(_receiver, _referral);
+
+        uint256 maxStShares = _calcMaxMintableStShares(_convertToAssets(stvShares));
+        if (_stSharesToMint > maxStShares) revert InsufficientMintableStShares();
+
+        _mintStShares(_receiver, _stSharesToMint);
     }
 
     //
@@ -211,11 +221,6 @@ contract WrapperB is WrapperBase {
         DASHBOARD.mintShares(_receiver, stShares);
 
         _getWrapperBStorage().stShares[_receiver] += stShares;
-    }
-
-    function _mintMaximumStShares(address _receiver, uint256 _stvShares) internal returns (uint256 stShares) {
-        stShares = _calcMaxMintableStShares(_convertToAssets(_stvShares));
-        _mintStShares(_receiver, stShares);
     }
 
 }

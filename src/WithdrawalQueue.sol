@@ -160,13 +160,11 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
     /// @param _admin admin address that can change every role.
     /// @dev Reverts if `_admin` equals to `address(0)`
     /// @dev NB! It's initialized in paused state by default and should be resumed explicitly to start
-    function initialize(address _admin) external initializer {
+    function initialize(address _admin, address _finalizeRoleHolder) external initializer {
         if (_admin == address(0)) revert AdminZeroAddress();
 
         _grantRole(DEFAULT_ADMIN_ROLE, _admin);
-        _pause();
-
-
+        _grantRole(FINALIZE_ROLE, _finalizeRoleHolder);
 
         _getWithdrawalQueueStorage().requests[0] = WithdrawalRequest({
             cumulativeAssets: 0,

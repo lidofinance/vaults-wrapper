@@ -85,19 +85,13 @@ contract WithdrawalQueueTest is Test {
             })
         );
         withdrawalQueue = WithdrawalQueue(payable(wqInstance));
-        withdrawalQueue.initialize(admin);
+        withdrawalQueue.initialize(admin, operator);
         vm.label(address(wqInstance), "WithdrawalQueue");
 
         // Grant necessary roles to wrapper for dashboard operations
         vm.startPrank(admin);
         dashboard.grantRole(dashboard.FUND_ROLE(), address(wrapper));
         dashboard.grantRole(dashboard.WITHDRAW_ROLE(), address(withdrawalQueue));
-        vm.stopPrank();
-
-        vm.startPrank(admin);
-        withdrawalQueue.grantRole(withdrawalQueue.FINALIZE_ROLE(), operator);
-        withdrawalQueue.grantRole(withdrawalQueue.RESUME_ROLE(), admin);
-        withdrawalQueue.resume();
         vm.stopPrank();
 
         wrapper.setWithdrawalQueue(address(withdrawalQueue));
