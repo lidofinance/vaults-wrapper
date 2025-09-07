@@ -163,7 +163,7 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList {
     //     return Math.mulDiv(_assets, totalAssets(), supply, Math.Rounding.Ceil);
     // }
 
-    function previewRedeem(uint256 _shares) public view returns (uint256) {
+    function previewRedeem(uint256 _shares) external view returns (uint256) {
         return _convertToAssets(_shares);
     }
 

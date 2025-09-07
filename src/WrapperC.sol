@@ -16,7 +16,7 @@ error InvalidConfiguration();
  */
 contract WrapperC is WrapperB {
 
-    IStrategy public immutable STRATEGY;
+    IStrategy public STRATEGY;
 
     constructor(
         address _dashboard,
@@ -24,9 +24,7 @@ contract WrapperC is WrapperB {
         bool _allowListEnabled,
         address _strategy
     ) WrapperB(_dashboard, _stETH, _allowListEnabled) {
-        if (_strategy == address(0)) {
-            revert InvalidConfiguration();
-        }
+        // Strategy can be set to zero initially and set later via setStrategy
         STRATEGY = IStrategy(_strategy);
     }
 
@@ -38,9 +36,21 @@ contract WrapperC is WrapperB {
      * @return stvShares Amount of stvETH shares minted
      */
     function depositETH(address _receiver, address _referral) public payable override returns (uint256 stvShares) {
+        uint256 mintableStSharesBefore = DASHBOARD.remainingMintingCapacityShares(0);
         stvShares = _deposit(address(STRATEGY), _referral);
+        uint256 mintableStSharesAfter = DASHBOARD.remainingMintingCapacityShares(0);
 
-        // Then execute strategy with the minted shares
+        // TODO: add assert
+        // assert(mintableStShares(address(STRATEGY), stvShares) == mintableStSharesAfter - mintableStSharesBefore);
         STRATEGY.execute(_receiver, stvShares);
+    }
+
+    // TODO: get rid of this and make STRATEGY immutable
+    function setStrategy(address _strategy) external {
+        _checkRole(DEFAULT_ADMIN_ROLE);
+        if (_strategy == address(0)) {
+            revert InvalidConfiguration();
+        }
+        STRATEGY = IStrategy(_strategy);
     }
 }

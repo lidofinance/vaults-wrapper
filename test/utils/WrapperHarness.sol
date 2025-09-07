@@ -21,7 +21,7 @@ import {Factory} from "src/Factory.sol";
 contract WrapperHarness is Test {
     CoreHarness public core;
 
-    WrapperB public wrapper;
+    WrapperB public wrapper_;
     WithdrawalQueue public withdrawalQueue;
 
     IDashboard public dashboard;
@@ -48,7 +48,11 @@ contract WrapperHarness is Test {
     uint256 public constant RESERVE_RATIO_BP = 20_00; // not configurable
     uint256 public immutable EXTRA_BASE = 10 ** (27 - 18); // not configurable
 
-    function setUp() public virtual {
+    function _setUp(
+        Factory.WrapperConfiguration configuration,
+        address strategy,
+        bool enableAllowlist
+    ) internal {
         core = new CoreHarness("lido-core/deployed-local.json");
         steth = core.steth();
         vaultHub = core.vaultHub();
@@ -61,12 +65,12 @@ contract WrapperHarness is Test {
         Factory factory = new Factory(vaultFactory, address(steth));
 
         vm.startPrank(NODE_OPERATOR);
-        (address vault_, address dashboard_, address payable wrapper_, address withdrawalQueue_) = factory.createVaultWithWrapper{value: CONNECT_DEPOSIT}(
-            NODE_OPERATOR, NODE_OPERATOR, NODE_OPERATOR_FEE_RATE, CONFIRM_EXPIRY, Factory.WrapperConfiguration.MINTING_NO_STRATEGY, address(0), false
+        (address vault_, address dashboard_, address payable wrapper, address withdrawalQueue_) = factory.createVaultWithWrapper{value: CONNECT_DEPOSIT}(
+            NODE_OPERATOR, NODE_OPERATOR, NODE_OPERATOR_FEE_RATE, CONFIRM_EXPIRY, configuration, strategy, enableAllowlist
         );
         vm.stopPrank();
 
-        wrapper = WrapperB(payable(wrapper_));
+        wrapper_ = WrapperB(payable(wrapper));
         withdrawalQueue = WithdrawalQueue(payable(withdrawalQueue_));
 
         vault = IStakingVault(vault_);
@@ -87,12 +91,12 @@ contract WrapperHarness is Test {
     function _checkInitialState() internal {
         console.log("=== Initial State ===");
         assertEq(dashboard.reserveRatioBP(), RESERVE_RATIO_BP, "Reserve ratio should match RESERVE_RATIO_BP constant");
-        assertEq(wrapper.EXTRA_DECIMALS_BASE(), EXTRA_BASE, "EXTRA_DECIMALS_BASE should match EXTRA_DECIMALS_BASE constant");
+        assertEq(wrapper_.EXTRA_DECIMALS_BASE(), EXTRA_BASE, "EXTRA_DECIMALS_BASE should match EXTRA_DECIMALS_BASE constant");
 
-        assertEq(wrapper.totalSupply(), CONNECT_DEPOSIT * EXTRA_BASE, "Total stvETH supply should be equal to CONNECT_DEPOSIT");
-        assertEq(wrapper.balanceOf(address(wrapper)), CONNECT_DEPOSIT * EXTRA_BASE, "Wrapper stvETH balance should be equal to CONNECT_DEPOSIT");
+        assertEq(wrapper_.totalSupply(), CONNECT_DEPOSIT * EXTRA_BASE, "Total stvETH supply should be equal to CONNECT_DEPOSIT");
+        assertEq(wrapper_.balanceOf(address(wrapper_)), CONNECT_DEPOSIT * EXTRA_BASE, "Wrapper stvETH balance should be equal to CONNECT_DEPOSIT");
 
-        assertEq(wrapper.balanceOf(NODE_OPERATOR), 0, "stvETH balance of NODE_OPERATOR should be zero");
+        assertEq(wrapper_.balanceOf(NODE_OPERATOR), 0, "stvETH balance of NODE_OPERATOR should be zero");
         assertEq(steth.balanceOf(NODE_OPERATOR), 0, "stETH balance of node operator should be zero");
 
         assertEq(dashboard.locked(), CONNECT_DEPOSIT, "Vault's locked should be zero");
@@ -108,7 +112,7 @@ contract WrapperHarness is Test {
         console.log("ETH for 1e18 stETH shares: ", steth.getPooledEthByShares(1 ether));
 
         // Initially, the vault has no minting capacity, so _calcMaxMintableStShares should return 0
-        assertEq(wrapper._calcMaxMintableStShares(10_000 wei), 0, "Max mintable stETH shares should be 0 when vault has no minting capacity");
+        assertEq(wrapper_._calcYetMintableStShares(USER1), 0, "Yet mintable stETH shares should be 0 when vault has no minting capacity");
 
         // The calculation itself would return 7272 shares if there was capacity
         // (10000 - 2000 reserve) * shares ratio = 8000 / 1.1 = 7272 shares
@@ -119,8 +123,8 @@ contract WrapperHarness is Test {
     function _assertUniversalInvariants(string memory _context) internal {
 
         assertEq(
-            wrapper.previewRedeem(wrapper.totalSupply()),
-            wrapper.totalAssets(),
+            wrapper_.previewRedeem(wrapper_.totalSupply()),
+            wrapper_.totalAssets(),
             _contextMsg(_context, "previewRedeem(totalSupply) should equal totalAssets")
         );
 
@@ -128,17 +132,17 @@ contract WrapperHarness is Test {
         holders[0] = USER1;
         holders[1] = USER2;
         holders[2] = USER3;
-        holders[3] = address(wrapper);
+        holders[3] = address(wrapper_);
         holders[4] = address(withdrawalQueue);
 
         {
             uint256 totalBalance = 0;
             for (uint256 i = 0; i < holders.length; i++) {
-                totalBalance += wrapper.balanceOf(holders[i]);
+                totalBalance += wrapper_.balanceOf(holders[i]);
             }
             assertEq(
                 totalBalance,
-                wrapper.totalSupply(),
+                wrapper_.totalSupply(),
                 _contextMsg(_context, "Sum of all holders' balances should equal totalSupply")
             );
         }
@@ -146,9 +150,9 @@ contract WrapperHarness is Test {
         {   // TODO: what's about 1 wei accuracy?
             uint256 totalPreviewRedeem = 0;
             for (uint256 i = 0; i < holders.length; i++) {
-                totalPreviewRedeem += wrapper.previewRedeem(wrapper.balanceOf(holders[i]));
+                totalPreviewRedeem += wrapper_.previewRedeem(wrapper_.balanceOf(holders[i]));
             }
-            uint256 totalAssets = wrapper.totalAssets();
+            uint256 totalAssets = wrapper_.totalAssets();
             uint256 diff = totalPreviewRedeem > totalAssets
                 ? totalPreviewRedeem - totalAssets
                 : totalAssets - totalPreviewRedeem;
@@ -177,10 +181,10 @@ contract WrapperHarness is Test {
         {   // Check none can mint beyond mintableStShares
             for (uint256 i = 0; i < holders.length; i++) {
                 address holder = holders[i];
-                uint256 mintableStShares = wrapper.mintableStShares(holder);
+                uint256 mintableStShares = wrapper_.mintableStShares(holder);
                 vm.startPrank(holder);
                 vm.expectRevert("InsufficientMintableStShares()");
-                wrapper.mintStShares(mintableStShares + 1);
+                wrapper_.mintStShares(mintableStShares + 1);
                 vm.stopPrank();
             }
         }

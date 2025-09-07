@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >=0.8.25;
 
-import {IStrategy} from "./interfaces/IStrategy.sol";
+import {IStrategy} from "../interfaces/IStrategy.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {IStETH} from "./interfaces/IStETH.sol";
-import {WrapperB} from "./WrapperB.sol";
-import {IVaultHub} from "./interfaces/IVaultHub.sol";
-import {IDashboard} from "./interfaces/IDashboard.sol";
+import {IStETH} from "../interfaces/IStETH.sol";
+import {WrapperB} from "../WrapperB.sol";
+import {IVaultHub} from "../interfaces/IVaultHub.sol";
+import {IDashboard} from "../interfaces/IDashboard.sol";
 import {LenderMock} from 'src/mock/LenderMock.sol';
 
 error NoStETHAvailableForLeverage();
@@ -55,7 +55,9 @@ contract ExampleLoopStrategy is IStrategy {
         uint256 totalBorrowedEth = 0;
         uint256 totalUserStvTokenShares = 0;
         uint256 _stETHAmount = 0;
-        uint256 stShares = WRAPPER.mintStShares(_stvShares);
+        // uint256 stShares = WRAPPER.mintStShares(_stvShares);
+        uint256 stShares = WRAPPER.mintableStShares(_user);
+        WRAPPER.mintStShares(stShares);
         uint256 currentStETHAmount = STETH.getPooledEthByShares(stShares);
 
         // Strategy uses the stETH minted to it to start the leverage loop

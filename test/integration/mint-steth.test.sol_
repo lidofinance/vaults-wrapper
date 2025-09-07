@@ -15,7 +15,7 @@ import {WrapperA} from "src/WrapperA.sol";
 import {WrapperB} from "src/WrapperB.sol";
 import {WrapperC} from "src/WrapperC.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
-import {ExampleLoopStrategy, LenderMock} from "src/ExampleLoopStrategy.sol";
+import {ExampleLoopStrategy, LenderMock} from "src/strategy/ExampleLoopStrategy.sol";
 import {IStrategy} from "src/interfaces/IStrategy.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 

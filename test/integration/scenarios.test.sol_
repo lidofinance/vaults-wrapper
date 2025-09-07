@@ -13,7 +13,7 @@ import {WrapperA} from "src/WrapperA.sol";
 import {WrapperB} from "src/WrapperB.sol";
 import {WrapperC} from "src/WrapperC.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
-import {ExampleLoopStrategy, LenderMock} from "src/ExampleLoopStrategy.sol";
+import {ExampleLoopStrategy, LenderMock} from "src/strategy/ExampleLoopStrategy.sol";
 import {IVaultFactory} from "src/interfaces/IVaultFactory.sol";
 
 /**

@@ -7,15 +7,12 @@ import {WrapperA} from "./WrapperA.sol";
 import {WrapperB} from "./WrapperB.sol";
 import {WrapperC} from "./WrapperC.sol";
 import {WithdrawalQueue} from "./WithdrawalQueue.sol";
+import {ExampleLoopStrategy} from "./strategy/ExampleLoopStrategy.sol";
 
 import {IVaultFactory} from "./interfaces/IVaultFactory.sol";
 import {IDashboard} from "./interfaces/IDashboard.sol";
 
 error InvalidConfiguration();
-
-contract DummyContractStub {
-
-}
 
 contract Factory {
     IVaultFactory public immutable VAULT_FACTORY;
@@ -75,65 +72,33 @@ contract Factory {
 
         IDashboard _dashboard = IDashboard(payable(dashboard));
 
-        // Create wrapper implementation with proper constructor params
-        WrapperBase wrapperImpl;
-        bytes memory proxyInitData;
-
         if (_configuration == WrapperConfiguration.NO_MINTING_NO_STRATEGY) {
-            wrapperImpl = new WrapperA(
-                dashboard,      // correct dashboard
-                _allowlistEnabled
-            );
-            proxyInitData = abi.encodeCall(
-                WrapperA.initialize,
-                (address(this), NAME, SYMBOL) // Factory gets admin role temporarily
+            (wrapperProxy, withdrawalQueueProxy) = _deployWrapperA(
+                dashboard,
+                _allowlistEnabled,
+                _nodeOperator
             );
         } else if (_configuration == WrapperConfiguration.MINTING_NO_STRATEGY) {
-            wrapperImpl = new WrapperB(
-                dashboard,      // correct dashboard
-                STETH,          // stETH address
-                _allowlistEnabled
-            );
-            proxyInitData = abi.encodeCall(
-                WrapperB.initialize,
-                (address(this), NAME, SYMBOL) // Factory gets admin role temporarily
+            (wrapperProxy, withdrawalQueueProxy) = _deployWrapperB(
+                dashboard,
+                _allowlistEnabled,
+                _nodeOperator
             );
         } else if (_configuration == WrapperConfiguration.MINTING_AND_STRATEGY) {
-            if (_strategy == address(0)) {
-                revert InvalidConfiguration();
-            }
-            wrapperImpl = new WrapperC(
-                dashboard,      // correct dashboard
-                STETH,
+            (wrapperProxy, withdrawalQueueProxy) = _deployWrapperC(
+                dashboard,
                 _allowlistEnabled,
+                _nodeOperator,
                 _strategy
-            );
-            proxyInitData = abi.encodeCall(
-                WrapperB.initialize,
-                (address(this), NAME, SYMBOL) // Factory gets admin role temporarily
             );
         } else {
             revert("Invalid configuration");
         }
 
-        // Deploy wrapper proxy
-        wrapperProxy = payable(address(new ERC1967Proxy(address(wrapperImpl), proxyInitData)));
         WrapperBase wrapper = WrapperBase(payable(wrapperProxy));
-
-        // Create withdrawal queue implementation with correct wrapper
-        uint256 maxFinalizationTime = 30 days; // Default max finalization time
-        WithdrawalQueue wqImpl = new WithdrawalQueue(WrapperBase(wrapperProxy), maxFinalizationTime);
-
-        // Deploy withdrawal queue proxy
-        withdrawalQueueProxy = address(new ERC1967Proxy(
-            address(wqImpl),
-            abi.encodeCall(WithdrawalQueue.initialize, (_nodeOperator, _nodeOperator))
-        ));
 
         // Configure the system
         _dashboard.grantRole(_dashboard.FUND_ROLE(), wrapperProxy);
-
-        // TODO: who must be granted WITHDRAW_ROLE?
         _dashboard.grantRole(_dashboard.WITHDRAW_ROLE(), withdrawalQueueProxy);
 
         // For WrapperB and WrapperC, grant mint/burn roles
@@ -143,7 +108,6 @@ contract Factory {
         }
 
         wrapper.setWithdrawalQueue(withdrawalQueueProxy);
-
 
         // Transfer admin role to the user (for wrapper)
         wrapper.grantRole(wrapper.DEFAULT_ADMIN_ROLE(), msg.sender);
@@ -162,5 +126,92 @@ contract Factory {
         );
 
         return (vault, dashboard, wrapperProxy, withdrawalQueueProxy);
+    }
+
+    function _deployWrapperA(
+        address dashboard,
+        bool _allowlistEnabled,
+        address _nodeOperator
+    ) internal returns (address payable wrapperProxy, address withdrawalQueueProxy) {
+        // Step 1: Create wrapper implementation
+        WrapperA wrapperImpl = new WrapperA(dashboard, _allowlistEnabled);
+
+        // Step 2: Deploy wrapper proxy
+        wrapperProxy = payable(address(new ERC1967Proxy(
+            address(wrapperImpl),
+            abi.encodeCall(WrapperA.initialize, (address(this), NAME, SYMBOL))
+        )));
+
+        // Step 3: Deploy withdrawal queue implementation with known wrapper address
+        uint256 maxFinalizationTime = 30 days;
+        WithdrawalQueue wqImpl = new WithdrawalQueue(WrapperBase(wrapperProxy), maxFinalizationTime);
+
+        // Step 4: Deploy withdrawal queue proxy
+        withdrawalQueueProxy = address(new ERC1967Proxy(
+            address(wqImpl),
+            abi.encodeCall(WithdrawalQueue.initialize, (_nodeOperator, _nodeOperator))
+        ));
+    }
+
+    function _deployWrapperB(
+        address dashboard,
+        bool _allowlistEnabled,
+        address _nodeOperator
+    ) internal returns (address payable wrapperProxy, address withdrawalQueueProxy) {
+        // Step 1: Create wrapper implementation
+        WrapperB wrapperImpl = new WrapperB(dashboard, STETH, _allowlistEnabled);
+
+        // Step 2: Deploy wrapper proxy
+        wrapperProxy = payable(address(new ERC1967Proxy(
+            address(wrapperImpl),
+            abi.encodeCall(WrapperB.initialize, (address(this), NAME, SYMBOL))
+        )));
+
+        // Step 3: Deploy withdrawal queue implementation with known wrapper address
+        uint256 maxFinalizationTime = 30 days;
+        WithdrawalQueue wqImpl = new WithdrawalQueue(WrapperBase(wrapperProxy), maxFinalizationTime);
+
+        // Step 4: Deploy withdrawal queue proxy
+        withdrawalQueueProxy = address(new ERC1967Proxy(
+            address(wqImpl),
+            abi.encodeCall(WithdrawalQueue.initialize, (_nodeOperator, _nodeOperator))
+        ));
+    }
+
+    function _deployWrapperC(
+        address dashboard,
+        bool _allowlistEnabled,
+        address _nodeOperator,
+        address _strategy
+    ) internal returns (address payable wrapperProxy, address withdrawalQueueProxy) {
+        // Step 1: Create wrapper implementation with zero strategy initially
+        WrapperC wrapperImpl = new WrapperC(dashboard, STETH, _allowlistEnabled, address(0));
+
+        // Step 2: Deploy wrapper proxy
+        wrapperProxy = payable(address(new ERC1967Proxy(
+            address(wrapperImpl),
+            abi.encodeCall(WrapperB.initialize, (address(this), NAME, SYMBOL))
+        )));
+
+        // Step 3: Deploy withdrawal queue implementation with known wrapper address
+        uint256 maxFinalizationTime = 30 days;
+        WithdrawalQueue wqImpl = new WithdrawalQueue(WrapperBase(wrapperProxy), maxFinalizationTime);
+
+        // Step 4: Deploy withdrawal queue proxy
+        withdrawalQueueProxy = address(new ERC1967Proxy(
+            address(wqImpl),
+            abi.encodeCall(WithdrawalQueue.initialize, (_nodeOperator, _nodeOperator))
+        ));
+
+        // Step 5: Set the strategy on the wrapper
+        if (_strategy == address(0)) {
+            // If no strategy provided, create a default ExampleLoopStrategy
+            uint256 loops = 3; // Default number of loops
+            ExampleLoopStrategy strategyImpl = new ExampleLoopStrategy(STETH, wrapperProxy, loops);
+            WrapperC(wrapperProxy).setStrategy(address(strategyImpl));
+        } else {
+            // Use the provided strategy
+            WrapperC(wrapperProxy).setStrategy(_strategy);
+        }
     }
 }
