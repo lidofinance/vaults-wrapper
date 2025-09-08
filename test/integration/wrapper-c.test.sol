@@ -3,8 +3,7 @@ pragma solidity >=0.8.25;
 
 import {Test, console} from "forge-std/Test.sol";
 
-import {WrapperHarness} from "test/utils/WrapperHarness.sol";
-import {CoreHarness} from "test/utils/CoreHarness.sol";
+import {WrapperCHarness} from "test/utils/WrapperCHarness.sol";
 import {WrapperC} from "src/WrapperC.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
 import {ExampleLoopStrategy} from "src/strategy/ExampleLoopStrategy.sol";
@@ -14,19 +13,11 @@ import {Factory} from "src/Factory.sol";
  * @title WrapperCTest
  * @notice Integration tests for WrapperC (minting with strategy)
  */
-contract WrapperCTest is WrapperHarness {
-
-    ExampleLoopStrategy public strategy;
-
-    WrapperC public wrapper;
+contract WrapperCTest is WrapperCHarness {
 
     function setUp() public {
-
         // Let the Factory create the strategy internally by passing address(0)
         _setUp(Factory.WrapperConfiguration.MINTING_AND_STRATEGY, address(0), false);
-
-        wrapper = WrapperC(payable(address(wrapper_)));
-
     }
 
     // TODO: add after report invariants

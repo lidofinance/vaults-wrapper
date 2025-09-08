@@ -9,19 +9,20 @@ import {IVaultHub} from "src/interfaces/IVaultHub.sol";
 import {IStakingVault} from "src/interfaces/IStakingVault.sol";
 import {ILido} from "src/interfaces/ILido.sol";
 
-import {WrapperB} from "src/WrapperB.sol";
+import {WrapperA} from "src/WrapperA.sol";
+import {WrapperBase} from "src/WrapperBase.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
 import {IVaultFactory} from "src/interfaces/IVaultFactory.sol";
 import {Factory} from "src/Factory.sol";
 
 /**
- * @title WrapperHarness
- * @notice Helper contract for integration tests that provides common setup for wrapper system
+ * @title WrapperAHarness
+ * @notice Helper contract for integration tests that provides common setup for WrapperA (no minting, no strategy)
  */
-contract WrapperHarness is Test {
+contract WrapperAHarness is Test {
     CoreHarness public core;
 
-    WrapperB public wrapper_;
+    WrapperA public wrapper;
     WithdrawalQueue public withdrawalQueue;
 
     IDashboard public dashboard;
@@ -52,7 +53,7 @@ contract WrapperHarness is Test {
         Factory.WrapperConfiguration configuration,
         address strategy,
         bool enableAllowlist
-    ) internal {
+    ) internal virtual {
         core = new CoreHarness("lido-core/deployed-local.json");
         steth = core.steth();
         vaultHub = core.vaultHub();
@@ -65,12 +66,12 @@ contract WrapperHarness is Test {
         Factory factory = new Factory(vaultFactory, address(steth));
 
         vm.startPrank(NODE_OPERATOR);
-        (address vault_, address dashboard_, address payable wrapper, address withdrawalQueue_) = factory.createVaultWithWrapper{value: CONNECT_DEPOSIT}(
+        (address vault_, address dashboard_, address payable wrapperAddress, address withdrawalQueue_) = factory.createVaultWithWrapper{value: CONNECT_DEPOSIT}(
             NODE_OPERATOR, NODE_OPERATOR, NODE_OPERATOR_FEE_RATE, CONFIRM_EXPIRY, configuration, strategy, enableAllowlist
         );
         vm.stopPrank();
 
-        wrapper_ = WrapperB(payable(wrapper));
+        wrapper = WrapperA(payable(wrapperAddress));
         withdrawalQueue = WithdrawalQueue(payable(withdrawalQueue_));
 
         vault = IStakingVault(vault_);
@@ -84,25 +85,27 @@ contract WrapperHarness is Test {
         vm.deal(USER2, 100_000 ether);
         vm.deal(USER3, 100_000 ether);
 
-        // Perform initial state checks that were previously in test_initial_state
+        // Perform initial state checks
         _checkInitialState();
     }
 
-    function _checkInitialState() internal {
-        console.log("=== Initial State ===");
+    function _checkInitialState() internal virtual {
+        // Basic checks common to all wrappers
         assertEq(dashboard.reserveRatioBP(), RESERVE_RATIO_BP, "Reserve ratio should match RESERVE_RATIO_BP constant");
-        assertEq(wrapper_.EXTRA_DECIMALS_BASE(), EXTRA_BASE, "EXTRA_DECIMALS_BASE should match EXTRA_DECIMALS_BASE constant");
+        assertEq(wrapper.EXTRA_DECIMALS_BASE(), EXTRA_BASE, "EXTRA_DECIMALS_BASE should match EXTRA_BASE constant");
 
-        assertEq(wrapper_.totalSupply(), CONNECT_DEPOSIT * EXTRA_BASE, "Total stvETH supply should be equal to CONNECT_DEPOSIT");
-        assertEq(wrapper_.balanceOf(address(wrapper_)), CONNECT_DEPOSIT * EXTRA_BASE, "Wrapper stvETH balance should be equal to CONNECT_DEPOSIT");
+        assertEq(wrapper.totalSupply(), CONNECT_DEPOSIT * EXTRA_BASE, "Total stvETH supply should be equal to CONNECT_DEPOSIT");
+        assertEq(wrapper.balanceOf(address(wrapper)), CONNECT_DEPOSIT * EXTRA_BASE, "Wrapper stvETH balance should be equal to CONNECT_DEPOSIT");
 
-        assertEq(wrapper_.balanceOf(NODE_OPERATOR), 0, "stvETH balance of NODE_OPERATOR should be zero");
+        assertEq(wrapper.balanceOf(NODE_OPERATOR), 0, "stvETH balance of NODE_OPERATOR should be zero");
         assertEq(steth.balanceOf(NODE_OPERATOR), 0, "stETH balance of node operator should be zero");
 
-        assertEq(dashboard.locked(), CONNECT_DEPOSIT, "Vault's locked should be zero");
+        assertEq(dashboard.locked(), CONNECT_DEPOSIT, "Vault's locked should be CONNECT_DEPOSIT");
         assertEq(dashboard.maxLockableValue(), CONNECT_DEPOSIT, "Vault's total value should be CONNECT_DEPOSIT");
         assertEq(dashboard.withdrawableValue(), 0, "Vault's withdrawable value should be zero");
         assertEq(dashboard.liabilityShares(), 0, "Vault's liability shares should be zero");
+
+        // WrapperA specific: no minting capacity
         assertEq(dashboard.remainingMintingCapacityShares(0), 0, "Remaining minting capacity should be zero");
         assertEq(dashboard.totalMintingCapacityShares(), 0, "Total minting capacity should be zero");
 
@@ -111,20 +114,20 @@ contract WrapperHarness is Test {
         console.log("Reserve ratio:", dashboard.reserveRatioBP());
         console.log("ETH for 1e18 stETH shares: ", steth.getPooledEthByShares(1 ether));
 
-        // Initially, the vault has no minting capacity, so _calcMaxMintableStShares should return 0
-        assertEq(wrapper_._calcYetMintableStShares(USER1), 0, "Yet mintable stETH shares should be 0 when vault has no minting capacity");
-
-        // The calculation itself would return 7272 shares if there was capacity
-        // (10000 - 2000 reserve) * shares ratio = 8000 / 1.1 = 7272 shares
-
         _assertUniversalInvariants("Initial state");
     }
 
-    function _assertUniversalInvariants(string memory _context) internal {
+    // TODO: add after report invariants
+    // TODO: add after deposit invariants
+    // TODO: add after requestWithdrawal invariants
+    // TODO: add after finalizeWithdrawal invariants
+    // TODO: add after claimWithdrawal invariants
+
+    function _assertUniversalInvariants(string memory _context) internal virtual {
 
         assertEq(
-            wrapper_.previewRedeem(wrapper_.totalSupply()),
-            wrapper_.totalAssets(),
+            wrapper.previewRedeem(wrapper.totalSupply()),
+            wrapper.totalAssets(),
             _contextMsg(_context, "previewRedeem(totalSupply) should equal totalAssets")
         );
 
@@ -132,27 +135,27 @@ contract WrapperHarness is Test {
         holders[0] = USER1;
         holders[1] = USER2;
         holders[2] = USER3;
-        holders[3] = address(wrapper_);
+        holders[3] = address(wrapper);
         holders[4] = address(withdrawalQueue);
 
         {
             uint256 totalBalance = 0;
             for (uint256 i = 0; i < holders.length; i++) {
-                totalBalance += wrapper_.balanceOf(holders[i]);
+                totalBalance += wrapper.balanceOf(holders[i]);
             }
             assertEq(
                 totalBalance,
-                wrapper_.totalSupply(),
+                wrapper.totalSupply(),
                 _contextMsg(_context, "Sum of all holders' balances should equal totalSupply")
             );
         }
 
-        {   // TODO: what's about 1 wei accuracy?
+        {
             uint256 totalPreviewRedeem = 0;
             for (uint256 i = 0; i < holders.length; i++) {
-                totalPreviewRedeem += wrapper_.previewRedeem(wrapper_.balanceOf(holders[i]));
+                totalPreviewRedeem += wrapper.previewRedeem(wrapper.balanceOf(holders[i]));
             }
-            uint256 totalAssets = wrapper_.totalAssets();
+            uint256 totalAssets = wrapper.totalAssets();
             uint256 diff = totalPreviewRedeem > totalAssets
                 ? totalPreviewRedeem - totalAssets
                 : totalAssets - totalPreviewRedeem;
@@ -173,27 +176,18 @@ contract WrapperHarness is Test {
             assertApproxEqAbs(
                 totalStethBalance,
                 totalMintedSteth,
-                holders.length * WEI_ROUNDING_TOLERANCE, // TODO: think about proper rounding error tolerance
+                holders.length * WEI_ROUNDING_TOLERANCE,
                 _contextMsg(_context, "Sum of all stETH balances (users + wrapper) should approximately equal stETH minted for liability shares")
             );
         }
-
-        {   // Check none can mint beyond mintableStShares
-            for (uint256 i = 0; i < holders.length; i++) {
-                address holder = holders[i];
-                uint256 mintableStShares = wrapper_.mintableStShares(holder);
-                vm.startPrank(holder);
-                vm.expectRevert("InsufficientMintableStShares()");
-                wrapper_.mintStShares(mintableStShares + 1);
-                vm.stopPrank();
-            }
-        }
-
-        // TODO: Check that the reserve ratio is maintained
-
     }
 
     function _contextMsg(string memory _context, string memory _msg) internal pure returns (string memory) {
         return string(abi.encodePacked(_context, ": ", _msg));
+    }
+
+    // Helper function to get wrapper as WrapperA
+    function wrapperA() internal view returns (WrapperA) {
+        return WrapperA(payable(address(wrapper)));
     }
 }

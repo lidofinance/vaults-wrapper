@@ -38,16 +38,14 @@ contract WrapperA is WrapperBase {
 
     /**
      * @notice Request withdrawal for Configuration A (no minting, no strategy)
-     * @param _stvETHShares Amount of stvETH shares to withdraw
+     * @param _stvShares Amount of stvETH shares to withdraw
      * @return requestId The withdrawal request ID
      */
-    function requestWithdrawal(uint256 _stvETHShares) external returns (uint256 requestId) {
-        if (_stvETHShares == 0) revert WrapperBase.ZeroStvShares();
+    function requestWithdrawal(uint256 _stvShares) external returns (uint256 requestId) {
+        if (_stvShares == 0) revert WrapperBase.ZeroStvShares();
 
-        _burn(msg.sender, _stvETHShares); // balance is checked in _burn
+        _transfer(msg.sender, address(withdrawalQueue()), _stvShares);
 
-        // TODO: maybe redo WQ to accept shares
-        uint256 assets = _convertToAssets(_stvETHShares);
-        requestId = withdrawalQueue().requestWithdrawal(assets, msg.sender);
+        requestId = withdrawalQueue().requestWithdrawal(_stvShares, msg.sender);
     }
 }

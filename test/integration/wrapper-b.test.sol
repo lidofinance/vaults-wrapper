@@ -3,7 +3,7 @@ pragma solidity >=0.8.25;
 
 import {Test, console} from "forge-std/Test.sol";
 
-import {WrapperHarness} from "test/utils/WrapperHarness.sol";
+import {WrapperBHarness} from "test/utils/WrapperBHarness.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
 import {Factory} from "src/Factory.sol";
 import {WrapperB} from "src/WrapperB.sol";
@@ -12,22 +12,11 @@ import {WrapperB} from "src/WrapperB.sol";
  * @title WrapperBTest
  * @notice Integration tests for WrapperB (minting, no strategy)
  */
-contract WrapperBTest is WrapperHarness {
-
-    WrapperB public wrapper;
+contract WrapperBTest is WrapperBHarness {
 
     function setUp() public {
         _setUp(Factory.WrapperConfiguration.MINTING_NO_STRATEGY, address(0), false);
-
-        wrapper = WrapperB(payable(address(wrapper_)));
     }
-
-
-    // TODO: add after report invariants
-    // TODO: add after deposit invariants
-    // TODO: add after requestWithdrawal invariants
-    // TODO: add after finalizeWithdrawal invariants
-    // TODO: add after claimWithdrawal invariants
 
     function test_single_user_mints_full_in_one_step() public {
         //
@@ -38,13 +27,13 @@ contract WrapperBTest is WrapperHarness {
         uint256 user1ExpectedMintableStShares = steth.getSharesByPooledEth(user1Deposit * (TOTAL_BASIS_POINTS - RESERVE_RATIO_BP) / TOTAL_BASIS_POINTS);
 
         vm.prank(USER1);
-        wrapper.depositETH{value: user1Deposit}(USER1, address(0), 0);
+        wrapperB().depositETH{value: user1Deposit}(USER1, address(0), 0);
 
         _assertUniversalInvariants("Step 1");
 
         assertEq(steth.sharesOf(USER1), 0, "stETH shares balance of USER1 should be equal to 0");
-        assertEq(wrapper.mintableStShares(USER1), user1ExpectedMintableStShares, "Mintable stETH shares should be equal to user1ExpectedMintableStShares");
-        assertEq(wrapper.stSharesForWithdrawal(USER1, wrapper.balanceOf(USER1)), 0, "stETH shares for withdrawal should be equal to 0");
+        assertEq(wrapperB().mintableStShares(USER1), user1ExpectedMintableStShares, "Mintable stETH shares should be equal to user1ExpectedMintableStShares");
+        assertEq(wrapperB().stSharesForWithdrawal(USER1, wrapper.balanceOf(USER1)), 0, "stETH shares for withdrawal should be equal to 0");
         assertEq(dashboard.liabilityShares(), 0, "Vault's liability shares should be equal to 0");
 
         // Due to CONNECT_DEPOSIT counted by vault as eth for reserve vaults minting capacity is higher than for the user
@@ -55,16 +44,16 @@ contract WrapperBTest is WrapperHarness {
         //
 
         vm.prank(USER1);
-        wrapper.mintStShares(user1ExpectedMintableStShares);
+        wrapperB().mintStShares(user1ExpectedMintableStShares);
 
         _assertUniversalInvariants("Step 2");
 
         assertEq(steth.sharesOf(USER1), user1ExpectedMintableStShares, "stETH shares balance of USER1 should be equal to user1ExpectedMintableStShares");
-        assertEq(wrapper.stSharesForWithdrawal(USER1, wrapper.balanceOf(USER1)), user1ExpectedMintableStShares, "stETH shares for withdrawal should be equal to user1ExpectedMintableStShares");
+        assertEq(wrapperB().stSharesForWithdrawal(USER1, wrapper.balanceOf(USER1)), user1ExpectedMintableStShares, "stETH shares for withdrawal should be equal to user1ExpectedMintableStShares");
         assertEq(dashboard.liabilityShares(), user1ExpectedMintableStShares, "Vault's liability shares should be equal to user1ExpectedMintableStShares");
         // Still remaining capacity is higher due to CONNECT_DEPOSIT
         assertGt(dashboard.remainingMintingCapacityShares(0), 0, "Remaining minting capacity should be greater than 0");
-        assertEq(wrapper.mintableStShares(USER1), 0, "Mintable stETH shares should be equal to 0");
+        assertEq(wrapperB().mintableStShares(USER1), 0, "Mintable stETH shares should be equal to 0");
     }
 
     function test_single_user_mints_full_in_two_steps() public {
@@ -76,13 +65,13 @@ contract WrapperBTest is WrapperHarness {
         uint256 user1ExpectedMintableStShares = steth.getSharesByPooledEth(user1Deposit * (TOTAL_BASIS_POINTS - RESERVE_RATIO_BP) / TOTAL_BASIS_POINTS);
 
         vm.prank(USER1);
-        wrapper.depositETH{value: user1Deposit}(USER1, address(0), 0);
+        wrapperB().depositETH{value: user1Deposit}(USER1, address(0), 0);
 
         // _assertUniversalInvariants("Step 1");
 
         assertEq(steth.sharesOf(USER1), 0, "stETH shares balance of USER1 should be equal to 0");
-        assertEq(wrapper.mintableStShares(USER1), user1ExpectedMintableStShares, "Mintable stETH shares should be equal to 0");
-        assertEq(wrapper.stSharesForWithdrawal(USER1, wrapper.balanceOf(USER1)), 0, "stETH shares for withdrawal should be equal to 0");
+        assertEq(wrapperB().mintableStShares(USER1), user1ExpectedMintableStShares, "Mintable stETH shares should be equal to 0");
+        assertEq(wrapperB().stSharesForWithdrawal(USER1, wrapper.balanceOf(USER1)), 0, "stETH shares for withdrawal should be equal to 0");
         assertEq(dashboard.liabilityShares(), 0, "Vault's liability shares should be equal to 0");
 
         // Due to CONNECT_DEPOSIT counted by vault as eth for reserve vaults minting capacity is higher than for the user
@@ -97,16 +86,16 @@ contract WrapperBTest is WrapperHarness {
         uint256 user1StSharesPart1 = user1ExpectedMintableStShares / 3;
 
         vm.prank(USER1);
-        wrapper.mintStShares(user1StSharesPart1);
+        wrapperB().mintStShares(user1StSharesPart1);
 
         _assertUniversalInvariants("Step 2");
 
         assertEq(steth.sharesOf(USER1), user1StSharesPart1, "stETH shares balance of USER1 should be equal to user1StSharesToMint");
-        assertEq(wrapper.stSharesForWithdrawal(USER1, wrapper.balanceOf(USER1)), user1StSharesPart1, "stETH shares for withdrawal should be equal to user1StSharesToMint");
+        assertEq(wrapperB().stSharesForWithdrawal(USER1, wrapper.balanceOf(USER1)), user1StSharesPart1, "stETH shares for withdrawal should be equal to user1StSharesToMint");
         assertEq(dashboard.liabilityShares(), user1StSharesPart1, "Vault's liability shares should be equal to user1StSharesToMint");
         // Still remaining capacity is higher due to CONNECT_DEPOSIT
         assertGt(dashboard.remainingMintingCapacityShares(0), user1ExpectedMintableStShares - user1StSharesPart1, "Remaining minting capacity should be equal to user1ExpectedMintableStShares - user1StSharesToMint");
-        assertEq(wrapper.mintableStShares(USER1), user1ExpectedMintableStShares - user1StSharesPart1, "Mintable stETH shares should be equal to user1ExpectedMintableStShares - user1StSharesToMint");
+        assertEq(wrapperB().mintableStShares(USER1), user1ExpectedMintableStShares - user1StSharesPart1, "Mintable stETH shares should be equal to user1ExpectedMintableStShares - user1StSharesToMint");
 
         uint256 user1StSharesPart2 = user1ExpectedMintableStShares - user1StSharesPart1;
 
@@ -115,16 +104,16 @@ contract WrapperBTest is WrapperHarness {
         //
 
         vm.prank(USER1);
-        wrapper.mintStShares(user1StSharesPart2);
+        wrapperB().mintStShares(user1StSharesPart2);
 
         _assertUniversalInvariants("Step 3");
 
         assertEq(steth.sharesOf(USER1), user1ExpectedMintableStShares, "stETH shares balance of USER1 should be equal to user1StSharesToMint");
-        assertEq(wrapper.stSharesForWithdrawal(USER1, wrapper.balanceOf(USER1)), user1ExpectedMintableStShares, "stETH shares for withdrawal should be equal to user1StSharesToMint");
+        assertEq(wrapperB().stSharesForWithdrawal(USER1, wrapper.balanceOf(USER1)), user1ExpectedMintableStShares, "stETH shares for withdrawal should be equal to user1StSharesToMint");
         assertEq(dashboard.liabilityShares(), user1ExpectedMintableStShares, "Vault's liability shares should be equal to user1StSharesToMint");
         // Still remaining capacity is higher due to CONNECT_DEPOSIT
         assertGt(dashboard.remainingMintingCapacityShares(0), 0, "Remaining minting capacity should be equal to 0");
-        assertEq(wrapper.mintableStShares(USER1), 0, "Mintable stETH shares should be equal to 0");
+        assertEq(wrapperB().mintableStShares(USER1), 0, "Mintable stETH shares should be equal to 0");
 
     }
 
@@ -137,10 +126,10 @@ contract WrapperBTest is WrapperHarness {
         uint256 user1ExpectedMintableStShares = steth.getSharesByPooledEth(user1Deposit * (TOTAL_BASIS_POINTS - RESERVE_RATIO_BP) / TOTAL_BASIS_POINTS);
 
         vm.prank(USER1);
-        wrapper.depositETH{value: user1Deposit}(USER1, address(0), 0);
+        wrapperB().depositETH{value: user1Deposit}(USER1, address(0), 0);
 
         assertEq(steth.sharesOf(USER1), 0, "stETH shares balance of USER1 should be equal to 0");
-        assertEq(wrapper.mintableStShares(USER1), user1ExpectedMintableStShares, "Mintable stETH shares for USER1 should equal expected");
+        assertEq(wrapperB().mintableStShares(USER1), user1ExpectedMintableStShares, "Mintable stETH shares for USER1 should equal expected");
         assertEq(dashboard.liabilityShares(), 0, "Vault's liability shares should be equal to 0");
 
         //
@@ -151,10 +140,10 @@ contract WrapperBTest is WrapperHarness {
         uint256 user2ExpectedMintableStShares = steth.getSharesByPooledEth(user2Deposit * (TOTAL_BASIS_POINTS - RESERVE_RATIO_BP) / TOTAL_BASIS_POINTS);
 
         vm.prank(USER2);
-        wrapper.depositETH{value: user2Deposit}(USER2, address(0), 0);
+        wrapperB().depositETH{value: user2Deposit}(USER2, address(0), 0);
 
         assertEq(steth.sharesOf(USER2), 0, "stETH shares balance of USER2 should be equal to 0");
-        assertEq(wrapper.mintableStShares(USER2), user2ExpectedMintableStShares, "Mintable stETH shares for USER2 should equal expected");
+        assertEq(wrapperB().mintableStShares(USER2), user2ExpectedMintableStShares, "Mintable stETH shares for USER2 should equal expected");
         assertEq(dashboard.liabilityShares(), 0, "Vault's liability shares should be equal to 0 after deposits only");
         // Due to CONNECT_DEPOSIT capacity should comfortably allow minting
         assertGt(dashboard.remainingMintingCapacityShares(0), user1ExpectedMintableStShares, "Remaining capacity should exceed USER1 expected");
@@ -167,13 +156,13 @@ contract WrapperBTest is WrapperHarness {
         uint256 user1StSharesPart1 = user1ExpectedMintableStShares / 3;
 
         vm.prank(USER1);
-        wrapper.mintStShares(user1StSharesPart1);
+        wrapperB().mintStShares(user1StSharesPart1);
 
         _assertUniversalInvariants("Step 3");
 
         assertEq(steth.sharesOf(USER1), user1StSharesPart1, "USER1 stETH shares should equal part1 minted");
-        assertEq(wrapper.stSharesForWithdrawal(USER1, wrapper.balanceOf(USER1)), user1StSharesPart1, "USER1 stSharesForWithdrawal should equal part1 minted");
-        assertEq(wrapper.mintableStShares(USER1), user1ExpectedMintableStShares - user1StSharesPart1, "USER1 remaining mintable should decrease by part1");
+        assertEq(wrapperB().stSharesForWithdrawal(USER1, wrapper.balanceOf(USER1)), user1StSharesPart1, "USER1 stSharesForWithdrawal should equal part1 minted");
+        assertEq(wrapperB().mintableStShares(USER1), user1ExpectedMintableStShares - user1StSharesPart1, "USER1 remaining mintable should decrease by part1");
         assertEq(dashboard.liabilityShares(), user1StSharesPart1, "Liability shares should equal USER1 minted so far");
 
         //
@@ -183,13 +172,13 @@ contract WrapperBTest is WrapperHarness {
         uint256 user2StSharesPart1 = user2ExpectedMintableStShares / 3;
 
         vm.prank(USER2);
-        wrapper.mintStShares(user2StSharesPart1);
+        wrapperB().mintStShares(user2StSharesPart1);
 
         _assertUniversalInvariants("Step 4");
 
         assertEq(steth.sharesOf(USER2), user2StSharesPart1, "USER2 stETH shares should equal part1 minted");
-        assertEq(wrapper.stSharesForWithdrawal(USER2, wrapper.balanceOf(USER2)), user2StSharesPart1, "USER2 stSharesForWithdrawal should equal part1 minted");
-        assertEq(wrapper.mintableStShares(USER2), user2ExpectedMintableStShares - user2StSharesPart1, "USER2 remaining mintable should decrease by part1");
+        assertEq(wrapperB().stSharesForWithdrawal(USER2, wrapper.balanceOf(USER2)), user2StSharesPart1, "USER2 stSharesForWithdrawal should equal part1 minted");
+        assertEq(wrapperB().mintableStShares(USER2), user2ExpectedMintableStShares - user2StSharesPart1, "USER2 remaining mintable should decrease by part1");
         assertEq(dashboard.liabilityShares(), user1StSharesPart1 + user2StSharesPart1, "Liability shares should equal sum of minted parts");
 
         //
@@ -199,13 +188,13 @@ contract WrapperBTest is WrapperHarness {
         uint256 user1StSharesPart2 = user1ExpectedMintableStShares - user1StSharesPart1;
 
         vm.prank(USER1);
-        wrapper.mintStShares(user1StSharesPart2);
+        wrapperB().mintStShares(user1StSharesPart2);
 
         _assertUniversalInvariants("Step 5");
 
         assertEq(steth.sharesOf(USER1), user1ExpectedMintableStShares, "USER1 stETH shares should equal full expected after second mint");
-        assertEq(wrapper.stSharesForWithdrawal(USER1, wrapper.balanceOf(USER1)), user1ExpectedMintableStShares, "USER1 stSharesForWithdrawal should equal full expected");
-        assertEq(wrapper.mintableStShares(USER1), 0, "USER1 remaining mintable should be zero");
+        assertEq(wrapperB().stSharesForWithdrawal(USER1, wrapper.balanceOf(USER1)), user1ExpectedMintableStShares, "USER1 stSharesForWithdrawal should equal full expected");
+        assertEq(wrapperB().mintableStShares(USER1), 0, "USER1 remaining mintable should be zero");
         assertEq(dashboard.liabilityShares(), user1ExpectedMintableStShares + user2StSharesPart1, "Liability shares should reflect USER1 full + USER2 part1");
 
         //
@@ -215,13 +204,13 @@ contract WrapperBTest is WrapperHarness {
         uint256 user2StSharesPart2 = user2ExpectedMintableStShares - user2StSharesPart1;
 
         vm.prank(USER2);
-        wrapper.mintStShares(user2StSharesPart2);
+        wrapperB().mintStShares(user2StSharesPart2);
 
         _assertUniversalInvariants("Step 6");
 
         assertEq(steth.sharesOf(USER2), user2ExpectedMintableStShares, "USER2 stETH shares should equal full expected after second mint");
-        assertEq(wrapper.stSharesForWithdrawal(USER2, wrapper.balanceOf(USER2)), user2ExpectedMintableStShares, "USER2 stSharesForWithdrawal should equal full expected");
-        assertEq(wrapper.mintableStShares(USER2), 0, "USER2 remaining mintable should be zero");
+        assertEq(wrapperB().stSharesForWithdrawal(USER2, wrapper.balanceOf(USER2)), user2ExpectedMintableStShares, "USER2 stSharesForWithdrawal should equal full expected");
+        assertEq(wrapperB().mintableStShares(USER2), 0, "USER2 remaining mintable should be zero");
         // Still remaining capacity is higher due to CONNECT_DEPOSIT
         assertGt(dashboard.remainingMintingCapacityShares(0), 0, "Remaining minting capacity should be greater than 0");
         assertEq(dashboard.liabilityShares(), user1ExpectedMintableStShares + user2ExpectedMintableStShares, "Liability shares should equal sum of both users' full mints");
@@ -249,7 +238,7 @@ contract WrapperBTest is WrapperHarness {
 
         uint256 user1Deposit = 10_000 wei;
         vm.prank(USER1);
-        wrapper.depositETH{value: user1Deposit}(USER1);
+        wrapperB().depositETH{value: user1Deposit}(USER1, address(0));
 
         _assertUniversalInvariants("Step 1");
 
@@ -266,7 +255,7 @@ contract WrapperBTest is WrapperHarness {
         assertEq(steth.sharesOf(USER1), expectedUser1StethShares, "stETH shares balance of USER1 should be equal to user deposit");
         assertEq(steth.balanceOf(USER1), expectedUser1Steth, "stETH balance of USER1 should be equal to user deposit");
         assertEq(wrapper.previewRedeem(wrapper.balanceOf(USER1)), user1Deposit, "Preview redeem should be equal to user deposit");
-        assertEq(wrapper.mintableStShares(USER1), 0, "Mintable stETH shares should be equal to 0");
+        assertEq(wrapperB().mintableStShares(USER1), 0, "Mintable stETH shares should be equal to 0");
 
         assertEq(address(vault).balance, CONNECT_DEPOSIT + user1Deposit, "Vault's balance should be equal to CONNECT_DEPOSIT + user1Deposit");
         assertEq(dashboard.totalValue(), address(vault).balance, "Vault's total value should be equal to its balance");
@@ -285,7 +274,7 @@ contract WrapperBTest is WrapperHarness {
         vm.warp(block.timestamp + 1 days);
         core.applyVaultReport(address(vault), address(vault).balance, 0, 0, 0, false);
         assertEq(dashboard.totalValue(), address(vault).balance, "Vault's total value should be equal to its balance");
-        assertEq(wrapper.mintableStShares(USER1), 0, "Mintable stETH shares should be equal to 0");
+        assertEq(wrapperB().mintableStShares(USER1), 0, "Mintable stETH shares should be equal to 0");
 
         _assertUniversalInvariants("Step 2");
 
@@ -309,7 +298,7 @@ contract WrapperBTest is WrapperHarness {
 
         assertEq(wrapper.balanceOf(USER1), user1Deposit * EXTRA_BASE, "Wrapper balance of USER1 should be equal to user deposit");
         assertEq(wrapper.previewRedeem(wrapper.balanceOf(USER1)), newUser1Steth, "Preview redeem should be equal to user deposit * 101 / 100");
-        assertEq(wrapper.mintableStShares(USER1), 0, "Mintable stETH shares should be equal to 0 because vault performed same as core");
+        assertEq(wrapperB().mintableStShares(USER1), 0, "Mintable stETH shares should be equal to 0 because vault performed same as core");
 
         //
         // Step 3b: Vault outperforms - core increases by 1%, vault increases by 2%
@@ -343,7 +332,7 @@ contract WrapperBTest is WrapperHarness {
         // Max additional mintable = 200 * 80% / 1.122 = ~142 shares (accounting for reserve ratio and stETH price)
         // But actual calculation is: total max mintable (7344) - already minted (7272) = 72 shares
 
-        assertEq(wrapper.mintableStShares(USER1), expectedUser1MintableStSharesAfterOutperformance, "User1 should be able to mint exactly 72 additional stETH shares after vault outperformed");
+        assertEq(wrapperB().mintableStShares(USER1), expectedUser1MintableStSharesAfterOutperformance, "User1 should be able to mint exactly 72 additional stETH shares after vault outperformed");
 
         // Preview redeem should show increased value due to vault outperformance
         uint256 user1RedeemValue = wrapper.previewRedeem(wrapper.balanceOf(USER1));
@@ -356,7 +345,7 @@ contract WrapperBTest is WrapperHarness {
 
         uint256 user2Deposit = 10_000 wei;
         vm.prank(USER2);
-        wrapper.depositETH{value: user2Deposit}(USER2);
+        wrapperB().depositETH{value: user2Deposit}(USER2, address(0));
 
         _assertUniversalInvariants("Step 4");
 
@@ -373,7 +362,7 @@ contract WrapperBTest is WrapperHarness {
         assertEq(wrapper.totalSupply(), wrapperConnectDepositStvShares + expectedUser1StvShares + expectedUser2StvShares, "Wrapper total supply should be equal to user deposit plus CONNECT_DEPOSIT");
         assertEq(wrapper.previewRedeem(wrapper.totalSupply()), vaultValue2Pct + user2Deposit, "Preview redeem should be equal to vault value after 2% increase plus user2Deposit");
 
-        assertEq(wrapper.mintableStShares(USER1), expectedUser1MintableStSharesAfterOutperformance, "User1 should be able to mint exactly 72 additional stETH shares after vault outperformed");
+        assertEq(wrapperB().mintableStShares(USER1), expectedUser1MintableStSharesAfterOutperformance, "User1 should be able to mint exactly 72 additional stETH shares after vault outperformed");
 
         //
         // Step 5: User1 withdraws half of his stvShares
@@ -386,21 +375,21 @@ contract WrapperBTest is WrapperHarness {
         // User1 requests withdrawal of half his shares, expect ALLOWANCE_EXCEEDED revert
         vm.expectRevert("ALLOWANCE_EXCEEDED");
         vm.prank(USER1);
-        wrapper.requestWithdrawal(user1StSharesToWithdraw);
+        wrapperB().requestWithdrawal(user1StSharesToWithdraw);
 
         _assertUniversalInvariants("Step 5.1");
 
         vm.startPrank(USER1);
 
-        uint256 user1StSharesToReturn = wrapper.stSharesForWithdrawal(USER1, user1StSharesToWithdraw);
+        uint256 user1StSharesToReturn = wrapperB().stSharesForWithdrawal(USER1, user1StSharesToWithdraw);
         uint256 user1StethToApprove = steth.getPooledEthByShares(user1StSharesToReturn);
         // NB: allowance is nominated in stETH not its shares
         steth.approve(address(wrapper), user1StethToApprove);
-        uint256 requestId = wrapper.requestWithdrawal(user1StSharesToWithdraw);
+        uint256 requestId = wrapperB().requestWithdrawal(user1StSharesToWithdraw);
         // TODO: compare with dashboard.liabilityShares() here
 
         vm.expectRevert("RequestNotFoundOrNotFinalized(1)");
-        wrapper.claimWithdrawal(requestId, USER1);
+        wrapperB().claimWithdrawal(requestId, USER1);
 
         vm.stopPrank();
 
@@ -431,7 +420,7 @@ contract WrapperBTest is WrapperHarness {
 
         uint256 user1EthBalanceBeforeClaim = USER1.balance;
         vm.prank(USER1);
-        wrapper.claimWithdrawal(requestId, USER1);
+        wrapperB().claimWithdrawal(requestId, USER1);
 
         assertEq(USER1.balance, user1EthBalanceBeforeClaim + user1ExpectedEthWithdrawn, "USER1 ETH balance should increase by the withdrawn amount after claim");
 
@@ -447,7 +436,7 @@ contract WrapperBTest is WrapperHarness {
         uint256 user1PreviewRedeemBefore = wrapper.previewRedeem(wrapper.balanceOf(USER1));
 
         vm.prank(USER1);
-        wrapper.depositETH{value: user1Deposit}(USER1);
+        wrapperB().depositETH{value: user1Deposit}(USER1, address(0));
 
         _assertUniversalInvariants("Step 6");
         assertEq(wrapper.previewRedeem(wrapper.balanceOf(USER1)), user1PreviewRedeemBefore + user1Deposit, "Wrapper preview redeem should be equal to user1PreviewRedeemBefore plus user1Deposit");

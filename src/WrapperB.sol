@@ -119,29 +119,12 @@ contract WrapperB is WrapperBase {
 
         uint256 reserveEth = Math.mulDiv(userEth, RESERVE_RATIO_BP, TOTAL_BASIS_POINTS, Math.Rounding.Floor);
         uint256 vaultRemainingMintingCapacity = DASHBOARD.remainingMintingCapacityShares(0);
-        console.log();
-        console.log("_calcYetMintableStShares", userEth);
-        console.log("reserveEth", reserveEth);
-        console.log("vaultRemainingMintingCapacity", vaultRemainingMintingCapacity);
+
         stShares = Math.min(
             STETH.getSharesByPooledEth(userEth - reserveEth) - _getStShares(_address),
             vaultRemainingMintingCapacity
         );
     }
-
-    // function _calcYetMintableStShares(uint256 _eth) public view returns (uint256 stShares) {
-    //     uint256 reserveEth = Math.mulDiv(_eth, RESERVE_RATIO_BP, TOTAL_BASIS_POINTS, Math.Rounding.Floor);
-    //     uint256 vaultRemainingMintingCapacity = DASHBOARD.remainingMintingCapacityShares(0);
-    //     console.log();
-    //     console.log("_calcYetMintableStShares", _eth);
-    //     console.log("reserveEth", reserveEth);
-    //     console.log("vaultRemainingMintingCapacity", vaultRemainingMintingCapacity);
-    //     stShares = Math.min(
-    //         STETH.getSharesByPooledEth(_eth - reserveEth),
-    //         vaultRemainingMintingCapacity
-    //     );
-    // }
-
 
     function mintStShares(uint256 _stShares) external {
         uint256 mintableStShares_ = _calcYetMintableStShares(msg.sender);
