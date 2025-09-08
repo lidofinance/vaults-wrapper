@@ -32,15 +32,13 @@ contract WrapperATest is WrapperAHarness {
      * 7. User1 deposits again → receives stvETH shares, system continues operating normally
      */
     function test_happy_path() public {
-        console.log("=== WrapperA Scenario (no minting, no strategy) ===");
-
         //
         // Step 1: User1 deposits
         //
 
         uint256 user1Deposit = 1 ether;
         vm.prank(USER1);
-        wrapperA().depositETH{value: user1Deposit}(USER1, address(0));
+        wrapper.depositETH{value: user1Deposit}(USER1, address(0));
 
         uint256 wrapperConnectDepositStvShares = CONNECT_DEPOSIT * EXTRA_BASE;
         uint256 expectedUser1StvShares = user1Deposit * EXTRA_BASE;
@@ -102,7 +100,7 @@ contract WrapperATest is WrapperAHarness {
 
         uint256 user2Deposit = 1 ether;
         vm.prank(USER2);
-        wrapperA().depositETH{value: user2Deposit}(USER2, address(0));
+        wrapper.depositETH{value: user2Deposit}(USER2, address(0));
 
         // After vault outperformance, User2 should get shares at the new exchange rate
         uint256 expectedUser2StvShares = wrapper.previewDeposit(user2Deposit);
@@ -125,7 +123,7 @@ contract WrapperATest is WrapperAHarness {
         uint256 user1ExpectedEthWithdrawn = wrapper.previewRedeem(user1SharesToWithdraw);
 
         vm.prank(USER1);
-        uint256 requestId = wrapperA().requestWithdrawal(user1SharesToWithdraw);
+        uint256 requestId = wrapper.requestWithdrawal(user1SharesToWithdraw);
 
         // Verify withdrawal request was created
         assertEq(wrapper.balanceOf(address(withdrawalQueue)), user1SharesToWithdraw, "Wrapper balance of withdrawalQueue should be equal to user1SharesToWithdraw");
@@ -134,7 +132,7 @@ contract WrapperATest is WrapperAHarness {
         // User cannot claim before finalization
         vm.expectRevert("RequestNotFoundOrNotFinalized(1)");
         vm.prank(USER1);
-        wrapperA().claimWithdrawal(requestId, USER1);
+        wrapper.claimWithdrawal(requestId, USER1);
 
         // Node operator finalizes the withdrawal
         vm.prank(NODE_OPERATOR);
@@ -151,7 +149,7 @@ contract WrapperATest is WrapperAHarness {
         // User1 claims their withdrawal
         uint256 user1EthBalanceBeforeClaim = USER1.balance;
         vm.prank(USER1);
-        wrapperA().claimWithdrawal(requestId, USER1);
+        wrapper.claimWithdrawal(requestId, USER1);
 
         assertEq(USER1.balance, user1EthBalanceBeforeClaim + user1ExpectedEthWithdrawn, "USER1 ETH balance should increase by the withdrawn amount");
 
@@ -165,7 +163,7 @@ contract WrapperATest is WrapperAHarness {
         uint256 user1PreviewRedeemBefore = wrapper.previewRedeem(wrapper.balanceOf(USER1));
 
         vm.prank(USER1);
-        wrapperA().depositETH{value: user1Deposit}(USER1, address(0));
+        wrapper.depositETH{value: user1Deposit}(USER1, address(0));
 
         assertEq(wrapper.previewRedeem(wrapper.balanceOf(USER1)), user1PreviewRedeemBefore + user1Deposit, "Wrapper preview redeem should increase by user1Deposit");
 

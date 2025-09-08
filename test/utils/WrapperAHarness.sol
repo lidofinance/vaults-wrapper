@@ -123,6 +123,16 @@ contract WrapperAHarness is Test {
     // TODO: add after finalizeWithdrawal invariants
     // TODO: add after claimWithdrawal invariants
 
+    function _allPossibleStvHolders() internal view virtual returns (address[] memory) {
+        address[] memory holders = new address[](5);
+        holders[0] = USER1;
+        holders[1] = USER2;
+        holders[2] = USER3;
+        holders[3] = address(wrapper);
+        holders[4] = address(withdrawalQueue);
+        return holders;
+    }
+
     function _assertUniversalInvariants(string memory _context) internal virtual {
 
         assertEq(
@@ -131,13 +141,7 @@ contract WrapperAHarness is Test {
             _contextMsg(_context, "previewRedeem(totalSupply) should equal totalAssets")
         );
 
-        address[] memory holders = new address[](5);
-        holders[0] = USER1;
-        holders[1] = USER2;
-        holders[2] = USER3;
-        holders[3] = address(wrapper);
-        holders[4] = address(withdrawalQueue);
-
+        address[] memory holders = _allPossibleStvHolders();
         {
             uint256 totalBalance = 0;
             for (uint256 i = 0; i < holders.length; i++) {
@@ -184,10 +188,5 @@ contract WrapperAHarness is Test {
 
     function _contextMsg(string memory _context, string memory _msg) internal pure returns (string memory) {
         return string(abi.encodePacked(_context, ": ", _msg));
-    }
-
-    // Helper function to get wrapper as WrapperA
-    function wrapperA() internal view returns (WrapperA) {
-        return WrapperA(payable(address(wrapper)));
     }
 }

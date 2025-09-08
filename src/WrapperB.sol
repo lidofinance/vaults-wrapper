@@ -70,6 +70,7 @@ contract WrapperB is WrapperBase {
      */
     function depositETH(address _receiver, address _referral) public payable virtual override returns (uint256 stvShares) {
         stvShares = _deposit(_receiver, _referral);
+        // TODO: if _receiver already had mintable stShares we must not use it for minting, must we?
         uint256 stShares = _calcYetMintableStShares(_receiver);
         _mintStShares(_receiver, stShares);
     }

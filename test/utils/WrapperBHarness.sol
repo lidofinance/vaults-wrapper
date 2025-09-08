@@ -40,13 +40,7 @@ contract WrapperBHarness is WrapperAHarness {
         // Call parent invariants
         super._assertUniversalInvariants(_context);
 
-        // WrapperB specific: check minting invariants
-        address[] memory holders = new address[](5);
-        holders[0] = USER1;
-        holders[1] = USER2;
-        holders[2] = USER3;
-        holders[3] = address(wrapper);
-        holders[4] = address(withdrawalQueue);
+        address[] memory holders = _allPossibleStvHolders();
 
         {   // Check none can mint beyond mintableStShares
             for (uint256 i = 0; i < holders.length; i++) {

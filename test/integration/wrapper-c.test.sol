@@ -6,7 +6,7 @@ import {Test, console} from "forge-std/Test.sol";
 import {WrapperCHarness} from "test/utils/WrapperCHarness.sol";
 import {WrapperC} from "src/WrapperC.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
-import {ExampleLoopStrategy} from "src/strategy/ExampleLoopStrategy.sol";
+import {LoopStrategy} from "src/strategy/LoopStrategy.sol";
 import {Factory} from "src/Factory.sol";
 
 /**
@@ -29,13 +29,13 @@ contract WrapperCTest is WrapperCHarness {
     // TODO: add strategy exit tests
 
 
-    // function test_happy_path() public {
-    //     uint256 user1Deposit = 10_000 wei;
-    //     vm.prank(USER1);
-    //     wrapper.depositETH{value: user1Deposit}(USER1);
+    function test_c_happy_path() public {
+        uint256 user1Deposit = 10_000 wei;
+        vm.prank(USER1);
+        wrapper.depositETH{value: user1Deposit}(USER1);
 
-    //     _assertUniversalInvariants("Step 1");
+        // _assertUniversalInvariants("Step 1");
 
-    // }
+    }
 
 }

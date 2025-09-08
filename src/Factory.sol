@@ -7,7 +7,7 @@ import {WrapperA} from "./WrapperA.sol";
 import {WrapperB} from "./WrapperB.sol";
 import {WrapperC} from "./WrapperC.sol";
 import {WithdrawalQueue} from "./WithdrawalQueue.sol";
-import {ExampleLoopStrategy} from "./strategy/ExampleLoopStrategy.sol";
+import {LoopStrategy} from "./strategy/LoopStrategy.sol";
 
 import {IVaultFactory} from "./interfaces/IVaultFactory.sol";
 import {IDashboard} from "./interfaces/IDashboard.sol";
@@ -205,9 +205,9 @@ contract Factory {
 
         // Step 5: Set the strategy on the wrapper
         if (_strategy == address(0)) {
-            // If no strategy provided, create a default ExampleLoopStrategy
-            uint256 loops = 3; // Default number of loops
-            ExampleLoopStrategy strategyImpl = new ExampleLoopStrategy(STETH, wrapperProxy, loops);
+            // If no strategy provided, create a default LoopStrategy
+            uint256 loops = 1; // Default number of loops
+            LoopStrategy strategyImpl = new LoopStrategy(STETH, wrapperProxy, loops);
             WrapperC(wrapperProxy).setStrategy(address(strategyImpl));
         } else {
             // Use the provided strategy

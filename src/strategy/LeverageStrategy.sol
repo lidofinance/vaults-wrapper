@@ -9,8 +9,12 @@ contract LeverageStrategy is Strategy {
 
     receive() external payable {}
 
-    function execute(address user, uint256 stETHAmount) external {
+    function execute(address _user, uint256 _stvShares, uint256 _mintableStShares) external {
+        // TODO
+    }
 
+    function execute(address user, uint256 stETHAmount) external override {
+        // TODO: remove when all strategies unify the execute interface
     }
 
     function strategyId() public pure override returns (bytes32) {

@@ -18,6 +18,8 @@ contract WrapperC is WrapperB {
 
     IStrategy public STRATEGY;
 
+    error NotStrategy();
+
     constructor(
         address _dashboard,
         address _stETH,
@@ -36,13 +38,26 @@ contract WrapperC is WrapperB {
      * @return stvShares Amount of stvETH shares minted
      */
     function depositETH(address _receiver, address _referral) public payable override returns (uint256 stvShares) {
+        uint256 strategyMintableStSharesBefore = this.mintableStShares(address(STRATEGY));
         uint256 mintableStSharesBefore = DASHBOARD.remainingMintingCapacityShares(0);
         stvShares = _deposit(address(STRATEGY), _referral);
+        uint256 strategyMintableStSharesAfter = this.mintableStShares(address(STRATEGY));
         uint256 mintableStSharesAfter = DASHBOARD.remainingMintingCapacityShares(0);
+
+        uint256 newStrategyMintableStShares = strategyMintableStSharesAfter - strategyMintableStSharesBefore;
+
+        // uint256 newMintableStShares = mintableStSharesAfter - mintableStSharesBefore;
+        // require(newStrategyMintableStShares == newMintableStShares, "Strategy mintable stETH shares do not match mintable stETH shares");
 
         // TODO: add assert
         // assert(mintableStShares(address(STRATEGY), stvShares) == mintableStSharesAfter - mintableStSharesBefore);
-        STRATEGY.execute(_receiver, stvShares);
+        STRATEGY.execute(_receiver, stvShares, newStrategyMintableStShares);
+    }
+
+    function depositForStrategy() external payable returns (uint256 stvShares) {
+        if (msg.sender != address(STRATEGY)) revert NotStrategy();
+
+        stvShares = _deposit(address(STRATEGY), address(0));
     }
 
     // TODO: get rid of this and make STRATEGY immutable

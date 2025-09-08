@@ -38,11 +38,15 @@ contract GGVStrategy is Strategy {
     //negative steth rebase - how to finalize requests
     //requestid - if not exists - claim
 
+
+    function execute(address _user, uint256 _stvShares, uint256 _mintableStShares) external {
+        // TODO
+
+    }
+
     /// @notice Executes the strategy
     /// @param user The user to execute the strategy for
     /// @param stETHAmount The amount of stETH to execute the strategy for
-
-    //stvToken
     function execute(address user, uint256 stETHAmount) external override {
         if (stETHAmount == 0) revert InvalidStETHAmount();
 

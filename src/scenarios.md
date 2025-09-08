@@ -31,9 +31,17 @@
 
 ## Case 7. Strategy mints stShares for the vault rewards accumulated
 
-## Cast 8. Strategy fails to return enough stShares for the vault to withdraw
+## Case 8. Strategy fails to return enough stShares for the vault to withdraw
 
-## Cast 9. Withdraw eth without burning stShares due to rewards
+## Case 9. Withdraw eth without burning stShares due to rewards
+
+## Case 10. Scenario for WrapperA with manual calculation
+
+TODO
+
+user1 deposits
+vault gets rewards
+user2 deposits
 
 
 

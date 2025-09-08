@@ -5,7 +5,7 @@ import {Test, console} from "forge-std/Test.sol";
 
 import {WrapperBHarness} from "test/utils/WrapperBHarness.sol";
 import {WrapperC} from "src/WrapperC.sol";
-import {ExampleLoopStrategy} from "src/strategy/ExampleLoopStrategy.sol";
+import {LoopStrategy} from "src/strategy/LoopStrategy.sol";
 import {Factory} from "src/Factory.sol";
 
 /**
@@ -14,7 +14,7 @@ import {Factory} from "src/Factory.sol";
  */
 contract WrapperCHarness is WrapperBHarness {
 
-    ExampleLoopStrategy public strategy;
+    LoopStrategy public strategy;
 
     function _setUp(
         Factory.WrapperConfiguration configuration,
@@ -28,10 +28,22 @@ contract WrapperCHarness is WrapperBHarness {
         if (strategy_ == address(0) && configuration == Factory.WrapperConfiguration.MINTING_AND_STRATEGY) {
             // Strategy was created by factory, get it from the wrapper
             WrapperC wrapperC_ = WrapperC(payable(address(wrapper)));
-            strategy = ExampleLoopStrategy(payable(address(wrapperC_.STRATEGY())));
+            strategy = LoopStrategy(payable(address(wrapperC_.STRATEGY())));
+
         } else {
-            strategy = ExampleLoopStrategy(payable(strategy_));
+            strategy = LoopStrategy(payable(strategy_));
         }
+        vm.deal(address(strategy.LENDER_MOCK()), 1000 ether);
+    }
+
+    function _allPossibleStvHolders() internal view override returns (address[] memory) {
+        address[] memory holders_ = super._allPossibleStvHolders();
+        address[] memory holders = new address[](holders_.length + 1);
+        for (uint256 i = 0; i < holders_.length; i++) {
+            holders[i] = holders_[i];
+        }
+        holders[holders_.length] = address(strategy);
+        return holders;
     }
 
     // Helper function to get wrapper as WrapperC
