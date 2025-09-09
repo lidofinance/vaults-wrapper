@@ -218,6 +218,7 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList {
         WithdrawalQueue.WithdrawalRequestStatus memory status = wq.getWithdrawalStatus(_requestId);
 
         if (msg.sender != status.owner) revert NotOwner(msg.sender, status.owner);
+        if (_recipient == address(0)) _recipient = msg.sender;
 
         uint256 ethClaimed = wq.claimWithdrawal(_requestId, _recipient);
 

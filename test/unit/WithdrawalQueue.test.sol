@@ -11,6 +11,7 @@ import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
 import {MockDashboard} from "../mocks/MockDashboard.sol";
 import {MockVaultHub} from "../mocks/MockVaultHub.sol";
 import {MockStakingVault} from "../mocks/MockStakingVault.sol";
+import {MockLazyOracle} from "../mocks/MockLazyOracle.sol";
 
 contract WithdrawalQueueTest is Test {
     WithdrawalQueue public withdrawalQueue;
@@ -18,6 +19,7 @@ contract WithdrawalQueueTest is Test {
     WrapperA public wrapper;
     MockStakingVault public stakingVault;
     MockDashboard public dashboard;
+    MockLazyOracle public lazyOracle;
 
     address public user1 = address(0x1);
     address public user2 = address(0x2);
@@ -72,9 +74,12 @@ contract WithdrawalQueueTest is Test {
         ERC1967Proxy proxy = new ERC1967Proxy(address(impl), initData);
         wrapper = WrapperA(payable(address(proxy)));
 
+        lazyOracle = new MockLazyOracle();
+        vm.label(address(lazyOracle), "LazyOracle");
+
         // Deploy withdrawal queue
         uint256 maxAcceptableWQFinalizationTimeInSeconds = 60 days;
-        address withdrawalQueueImpl = address(new WithdrawalQueue(wrapper, maxAcceptableWQFinalizationTimeInSeconds));
+        address withdrawalQueueImpl = address(new WithdrawalQueue(wrapper, address(lazyOracle), maxAcceptableWQFinalizationTimeInSeconds));
         vm.label(address(withdrawalQueue), "WithdrawalQueue");
 
         address wqInstance = address(
@@ -277,76 +282,89 @@ contract WithdrawalQueueTest is Test {
         assertEq(address(wrapper).balance, 0);
     }
 
-    // function test_EmergencyExit() public {
-    //     vm.startPrank(user1);
-    //     uint256 user1Shares = wrapper.depositETH{value: USER1_DEPOSIT}(user1);
-    //     vm.stopPrank();
+    function test_EmergencyExit() public {
+        vm.startPrank(user1);
+        uint256 user1Shares = wrapper.depositETH{value: USER1_DEPOSIT}(user1);
+        vm.stopPrank();
 
-    //     vm.startPrank(user2);
-    //     uint256 user2Shares = wrapper.depositETH{value: USER2_DEPOSIT}(user2);
-    //     vm.stopPrank();
+        vm.startPrank(user2);
+        uint256 user2Shares = wrapper.depositETH{value: USER2_DEPOSIT}(user2);
+        vm.stopPrank();
 
-    //     console.log("user1Shares", user1Shares);
-    //     console.log("user2Shares", user2Shares);
+        console.log("user1Shares", user1Shares);
+        console.log("user2Shares", user2Shares);
 
-    //     vm.startPrank(user1);
-    //     uint256 halfUser1Deposit = USER1_DEPOSIT/2;
-    //     wrapper.approve(address(withdrawalQueue), halfUser1Deposit);
-    //     uint256 user1RequestId = withdrawalQueue.requestWithdrawal(
-    //         user1,
-    //         halfUser1Deposit
-    //     );
-    //     vm.stopPrank();
+        vm.startPrank(user1);
+        uint256 halfUser1Deposit = user1Shares/2;
+        uint256 halfuser1Assets = wrapper.previewRedeem(halfUser1Deposit);
+        uint256 user1RequestId = wrapper.requestWithdrawal(
+            halfUser1Deposit
+        );
+        vm.stopPrank();
 
-    //     console.log("user1RequestId", user1RequestId);
-    //     console.log("--------------------------------");
-    //     console.log("unfinalizedRequestNumber", withdrawalQueue.unfinalizedRequestNumber());
-    //     console.log("unfinalizedAssets", withdrawalQueue.unfinalizedAssets());
-    //     console.log("unfinalizedShares", withdrawalQueue.unfinalizedShares());
-    //     console.log("lastRequestId", withdrawalQueue.getLastRequestId());
-    //     console.log("lastFinalizedRequestId", withdrawalQueue.getLastFinalizedRequestId());
-    //     console.log("halfUser1Deposit", halfUser1Deposit);
+        console.log("user1RequestId", user1RequestId);
+        console.log("--------------------------------");
+        console.log("unfinalizedRequestNumber", withdrawalQueue.unfinalizedRequestNumber());
+        console.log("unfinalizedAssets", withdrawalQueue.unfinalizedAssets());
+        console.log("unfinalizedShares", withdrawalQueue.unfinalizedShares());
+        console.log("lastRequestId", withdrawalQueue.getLastRequestId());
+        console.log("lastFinalizedRequestId", withdrawalQueue.getLastFinalizedRequestId());
+        console.log("halfUser1Deposit", halfUser1Deposit);
 
+        console.log("--- finalize ---");
+        console.log("emergencyExitActivated", withdrawalQueue.isEmergencyExitActivated());
+        assertEq(withdrawalQueue.isEmergencyExitActivated(), false);
+        assertEq(withdrawalQueue.isWithdrawalQueueStuck(), false);
 
-    //     console.log("--- calculateFinalizationBatches ---");
+        vm.expectRevert();
+        withdrawalQueue.finalize(1);
 
-    //     // Calculate batches first
-    //     uint256 remaining_eth_budget = withdrawalQueue.unfinalizedAssets();
+        assertEq(address(withdrawalQueue).balance, 0);
 
-    //     console.log("--- finalize ---");
-    //     console.log("emergencyExitActivated", withdrawalQueue.isEmergencyExitActivated());
-    //     assertEq(withdrawalQueue.isEmergencyExitActivated(), false);
-    //     assertEq(withdrawalQueue.isWithdrawalQueueStuck(), false);
+        vm.warp(block.timestamp + 61 days);
+        assertEq(withdrawalQueue.isEmergencyExitActivated(), false);
+        assertEq(withdrawalQueue.isWithdrawalQueueStuck(), true);
 
-    //     vm.expectRevert();
-    //     withdrawalQueue.finalize(1);
+        vm.prank(user1);
+        withdrawalQueue.activateEmergencyExit();
 
-    //     assertEq(address(withdrawalQueue).balance, 0);
+        assertEq(withdrawalQueue.isEmergencyExitActivated(), true);
+        assertEq(withdrawalQueue.isWithdrawalQueueStuck(), true);
 
-    //     vm.warp(block.timestamp + 61 days);
-    //     assertEq(withdrawalQueue.isEmergencyExitActivated(), false);
-    //     assertEq(withdrawalQueue.isWithdrawalQueueStuck(), true);
+        uint256 user1BalanceBefore = user1.balance;
 
-    //     vm.prank(user1);
-    //     withdrawalQueue.activateEmergencyExit();
+        vm.prank(user1);
+        uint256 maxRequests = 10;
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                WithdrawalQueue.InvalidRequestIdRange.selector,
+                withdrawalQueue.getLastFinalizedRequestId(),  // from
+                withdrawalQueue.getLastFinalizedRequestId() + maxRequests  // to
+            )
+        );
+        withdrawalQueue.finalize(maxRequests);
 
-    //     assertEq(withdrawalQueue.isEmergencyExitActivated(), true);
-    //     assertEq(withdrawalQueue.isWithdrawalQueueStuck(), true);
+        //
+        vm.prank(user1);
+        uint256 finalizedRequests = withdrawalQueue.finalize(1);
+        assertEq(finalizedRequests, 0);
 
-    //     uint256 user1BalanceBefore = user1.balance;
+        // set latest report timestamp to a time in the future
+        lazyOracle.mock__updateLatestReportTimestamp(block.timestamp);
 
-    //     vm.prank(user1);
-    //     withdrawalQueue.finalize(1);
+        vm.prank(user1);
+        finalizedRequests = withdrawalQueue.finalize(1);
+        assertEq(finalizedRequests, 1);
 
-    //     assertEq(address(withdrawalQueue).balance, halfUser1Deposit);
-    //     assertEq(address(user1).balance, user1BalanceBefore);
+        assertEq(address(withdrawalQueue).balance, halfuser1Assets);
+        assertEq(address(user1).balance, user1BalanceBefore);
 
-    //     vm.prank(user1);
-    //     withdrawalQueue.claimWithdrawal(user1RequestId);
+        vm.prank(user1);
+        wrapper.claimWithdrawal(user1RequestId, address(0));
 
-    //     assertEq(address(withdrawalQueue).balance, 0);
-    //     assertEq(address(user1).balance, user1BalanceBefore + halfUser1Deposit);
-    // }
+        assertEq(address(withdrawalQueue).balance, 0);
+        assertEq(address(user1).balance, user1BalanceBefore + halfuser1Assets);
+    }
 
     // Tests withdrawal handling when vault experiences staking rewards/rebases
     // Placeholder for testing share rate changes during withdrawal process

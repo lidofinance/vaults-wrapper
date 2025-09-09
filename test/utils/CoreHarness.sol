@@ -30,6 +30,12 @@ interface IVaultHub is IVaultHubIntact {
 }
 
 interface ILazyOracleMocked is ILazyOracle {
+    function updateReportData(
+        uint256 _vaultsDataTimestamp,
+        uint256 _vaultsDataRefSlot,
+        bytes32 _vaultsDataTreeRoot,
+        string memory _vaultsDataReportCid
+    ) external;
     function mock__updateVaultData(address _vault, uint256 _totalValue, uint256 _cumulativeLidoFees, uint256 _liabilityShares, uint256 _slashingReserve) external;
 }
 

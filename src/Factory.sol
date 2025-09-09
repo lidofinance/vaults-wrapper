@@ -11,6 +11,7 @@ import {LoopStrategy} from "./strategy/LoopStrategy.sol";
 
 import {IVaultFactory} from "./interfaces/IVaultFactory.sol";
 import {IDashboard} from "./interfaces/IDashboard.sol";
+import {ILidoLocator} from "./interfaces/ILidoLocator.sol";
 
 error InvalidConfiguration();
 
@@ -71,22 +72,27 @@ contract Factory {
         );
 
         IDashboard _dashboard = IDashboard(payable(dashboard));
+        ILidoLocator locator = ILidoLocator(VAULT_FACTORY.LIDO_LOCATOR());
+        address lazyOracle = locator.lazyOracle();
 
         if (_configuration == WrapperConfiguration.NO_MINTING_NO_STRATEGY) {
             (wrapperProxy, withdrawalQueueProxy) = _deployWrapperA(
                 dashboard,
+                lazyOracle,
                 _allowlistEnabled,
                 _nodeOperator
             );
         } else if (_configuration == WrapperConfiguration.MINTING_NO_STRATEGY) {
             (wrapperProxy, withdrawalQueueProxy) = _deployWrapperB(
                 dashboard,
+                lazyOracle,
                 _allowlistEnabled,
                 _nodeOperator
             );
         } else if (_configuration == WrapperConfiguration.MINTING_AND_STRATEGY) {
             (wrapperProxy, withdrawalQueueProxy) = _deployWrapperC(
                 dashboard,
+                lazyOracle,
                 _allowlistEnabled,
                 _nodeOperator,
                 _strategy
@@ -130,6 +136,7 @@ contract Factory {
 
     function _deployWrapperA(
         address dashboard,
+        address lazyOracle,
         bool _allowlistEnabled,
         address _nodeOperator
     ) internal returns (address payable wrapperProxy, address withdrawalQueueProxy) {
@@ -144,7 +151,7 @@ contract Factory {
 
         // Step 3: Deploy withdrawal queue implementation with known wrapper address
         uint256 maxFinalizationTime = 30 days;
-        WithdrawalQueue wqImpl = new WithdrawalQueue(WrapperBase(wrapperProxy), maxFinalizationTime);
+        WithdrawalQueue wqImpl = new WithdrawalQueue(WrapperBase(wrapperProxy), lazyOracle, maxFinalizationTime);
 
         // Step 4: Deploy withdrawal queue proxy
         withdrawalQueueProxy = address(new ERC1967Proxy(
@@ -155,6 +162,7 @@ contract Factory {
 
     function _deployWrapperB(
         address dashboard,
+        address lazyOracle,
         bool _allowlistEnabled,
         address _nodeOperator
     ) internal returns (address payable wrapperProxy, address withdrawalQueueProxy) {
@@ -169,7 +177,7 @@ contract Factory {
 
         // Step 3: Deploy withdrawal queue implementation with known wrapper address
         uint256 maxFinalizationTime = 30 days;
-        WithdrawalQueue wqImpl = new WithdrawalQueue(WrapperBase(wrapperProxy), maxFinalizationTime);
+        WithdrawalQueue wqImpl = new WithdrawalQueue(WrapperBase(wrapperProxy), lazyOracle, maxFinalizationTime);
 
         // Step 4: Deploy withdrawal queue proxy
         withdrawalQueueProxy = address(new ERC1967Proxy(
@@ -180,6 +188,7 @@ contract Factory {
 
     function _deployWrapperC(
         address dashboard,
+        address lazyOracle,
         bool _allowlistEnabled,
         address _nodeOperator,
         address _strategy
@@ -193,9 +202,11 @@ contract Factory {
             abi.encodeCall(WrapperB.initialize, (address(this), NAME, SYMBOL))
         )));
 
+
+
         // Step 3: Deploy withdrawal queue implementation with known wrapper address
         uint256 maxFinalizationTime = 30 days;
-        WithdrawalQueue wqImpl = new WithdrawalQueue(WrapperBase(wrapperProxy), maxFinalizationTime);
+        WithdrawalQueue wqImpl = new WithdrawalQueue(WrapperBase(wrapperProxy), lazyOracle, maxFinalizationTime);
 
         // Step 4: Deploy withdrawal queue proxy
         withdrawalQueueProxy = address(new ERC1967Proxy(
