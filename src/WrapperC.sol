@@ -56,8 +56,28 @@ contract WrapperC is WrapperB {
 
     function depositForStrategy() external payable returns (uint256 stvShares) {
         if (msg.sender != address(STRATEGY)) revert NotStrategy();
-
         stvShares = _deposit(address(STRATEGY), address(0));
+    }
+
+    /**
+     * @notice Requests a withdrawal of the specified amount of stvETH shares via the strategy.
+     *         Requires having position in the strategy with enough stvETH shares.
+     * @dev Forwards the withdrawal request to the configured strategy contract.
+     * @param _stvShares The amount of stvETH shares to withdraw.
+     */
+    function requestWithdrawalFromStrategy(uint256 _stvShares) external {
+        STRATEGY.requestWithdraw(msg.sender,_stvShares);
+    }
+
+    /**
+     * @notice Requests a withdrawal of the specified amount of stvETH shares without involving the strategy.
+     *         Requires having the stvShares and enough stETH approved for this contract
+     * @dev Calls the parent contract's requestWithdrawal function directly.
+     * @param _stvShares The amount of stvETH shares to withdraw.
+     * @return requestId The ID of the created withdrawal request.
+     */
+    function requestWithdrawal(uint256 _stvShares) public override returns (uint256 requestId) {
+        return super.requestWithdrawal(_stvShares);
     }
 
     // TODO: get rid of this and make STRATEGY immutable

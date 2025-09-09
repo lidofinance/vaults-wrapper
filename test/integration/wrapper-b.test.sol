@@ -16,6 +16,7 @@ contract WrapperBTest is WrapperBHarness {
 
     function setUp() public {
         _setUp(Factory.WrapperConfiguration.MINTING_NO_STRATEGY, address(0), false);
+        _checkInitialState();
     }
 
     function test_single_user_mints_full_in_one_step() public {

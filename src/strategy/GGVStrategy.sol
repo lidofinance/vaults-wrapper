@@ -68,7 +68,7 @@ contract GGVStrategy is Strategy {
 
     /// @notice Requests a withdrawal of ggv shares from the strategy
     /// @param shares The number of ggv shares to withdraw
-    function requestWithdraw(uint256 shares) external override {
+    function requestWithdraw(uint256 shares) external {
         if (shares == 0) revert InvalidGGVShares();
         address proxy = _getOrCreateProxy(msg.sender);
 

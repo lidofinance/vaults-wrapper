@@ -38,11 +38,13 @@ contract WrapperCHarness is WrapperBHarness {
 
     function _allPossibleStvHolders() internal view override returns (address[] memory) {
         address[] memory holders_ = super._allPossibleStvHolders();
-        address[] memory holders = new address[](holders_.length + 1);
-        for (uint256 i = 0; i < holders_.length; i++) {
+        address[] memory holders = new address[](holders_.length + 2);
+        uint256 i = 0;
+        for (i = 0; i < holders_.length; i++) {
             holders[i] = holders_[i];
         }
-        holders[holders_.length] = address(strategy);
+        holders[i++] = address(strategy);
+        holders[i++] = address(strategy.LENDER_MOCK());
         return holders;
     }
 
