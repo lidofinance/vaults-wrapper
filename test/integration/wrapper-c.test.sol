@@ -18,6 +18,9 @@ contract WrapperCTest is WrapperCHarness {
     function setUp() public {
         // Let the Factory create the strategy internally by passing address(0)
         _setUp(Factory.WrapperConfiguration.MINTING_AND_STRATEGY, address(0), false);
+        _checkInitialState();
+
+        assertEq(strategy.LOOPS(), 1, "Strategy loops is expected to be 1");
     }
 
     // TODO: add after report invariants
@@ -29,12 +32,12 @@ contract WrapperCTest is WrapperCHarness {
     // TODO: add strategy exit tests
 
 
-    function test_c_happy_path() public {
+    function test_happy_path_single_user_single_deposit() public {
         uint256 user1Deposit = 10_000 wei;
         vm.prank(USER1);
         wrapper.depositETH{value: user1Deposit}(USER1);
 
-        // _assertUniversalInvariants("Step 1");
+        _assertUniversalInvariants("Step 1");
 
     }
 

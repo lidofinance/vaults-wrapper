@@ -85,8 +85,6 @@ contract WrapperAHarness is Test {
         vm.deal(USER2, 100_000 ether);
         vm.deal(USER3, 100_000 ether);
 
-        // Perform initial state checks
-        _checkInitialState();
     }
 
     function _checkInitialState() internal virtual {
