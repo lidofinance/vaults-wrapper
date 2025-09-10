@@ -66,6 +66,10 @@ contract GGVStrategy is Strategy {
         emit Execute(msg.sender, stETHAmount);
     }
 
+    function requestWithdraw(address _user, uint256 _stvShares) external override returns (uint256 requestId) {
+        revert("Not implemented");
+    }
+
     /// @notice Requests a withdrawal of ggv shares from the strategy
     /// @param shares The number of ggv shares to withdraw
     function requestWithdraw(uint256 shares) external {

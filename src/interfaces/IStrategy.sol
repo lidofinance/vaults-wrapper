@@ -8,6 +8,6 @@ interface IStrategy {
     function execute(address user, uint256 stETHAmount) external;
 
     function strategyId() external view returns (bytes32);
-    function requestWithdraw(uint256 _stvShares) external;
+    function requestWithdraw(address _user, uint256 _stvShares) external returns (uint256 requestId);
     function claim(address asset, uint256 shares) external;
 }

@@ -65,8 +65,8 @@ contract WrapperC is WrapperB {
      * @dev Forwards the withdrawal request to the configured strategy contract.
      * @param _stvShares The amount of stvETH shares to withdraw.
      */
-    function requestWithdrawalFromStrategy(uint256 _stvShares) external {
-        STRATEGY.requestWithdraw(msg.sender,_stvShares);
+    function requestWithdrawalFromStrategy(uint256 _stvShares) external returns (uint256 requestId) {
+        return STRATEGY.requestWithdraw(msg.sender, _stvShares);
     }
 
     /**
