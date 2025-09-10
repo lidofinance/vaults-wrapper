@@ -6,6 +6,7 @@ import {console} from "forge-std/Test.sol";
 import {ERC20Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import { ERC1967Utils } from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Utils.sol";
+import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
 import {WithdrawalQueue} from "./WithdrawalQueue.sol";
@@ -375,7 +376,7 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList {
 
         _getWrapperBaseStorage().proposedUpgrade = proposed;
 
-        emit WrapperUpgradeProposed(_newImplementation, _newWqImplementation, proposed.proposalHash);
+        emit WrapperUpgradeProposed(_payload.newImplementation, _payload.newWqImplementation, proposed.proposalHash);
     }
 
     function cancelUpgradeProposal() external {
@@ -407,7 +408,7 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList {
             revert AlreadyConfirmed();
         }
         
-        if (proposed.proposalHash != keccak256(abi.encodePacked(_newImplementation, _newWqImplementation))) {
+        if (proposed.proposalHash != proposalHash) {
             revert NoMatchingProposal();
         }
 
@@ -439,7 +440,7 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList {
         // Reset proposal
         delete _getWrapperBaseStorage().proposedUpgrade;
 
-
+        // First upgrade the withdrawal queue
         withdrawalQueue().upgradeTo(_payload.newWqImplementation);
         // Then upgrade the wrapper itself
         ERC1967Utils.upgradeToAndCall(_payload.newImplementation, _payload.upgradeData);

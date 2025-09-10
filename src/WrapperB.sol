@@ -51,10 +51,11 @@ contract WrapperB is WrapperBase {
 
     function initialize(
         address _owner,
+        address _upgradeConformer,
         string memory _name,
         string memory _symbol
     ) public override initializer {
-        WrapperBase.initialize(_owner, _name, _symbol);
+        WrapperBase.initialize(_owner, _upgradeConformer, _name, _symbol);
         console.log("RESERVE_RATIO_BP", RESERVE_RATIO_BP);
     }
 

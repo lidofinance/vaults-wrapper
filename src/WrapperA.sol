@@ -19,10 +19,11 @@ contract WrapperA is WrapperBase {
 
     function initialize(
         address _owner,
+         address _upgradeConformer,
         string memory _name,
         string memory _symbol
     ) public override initializer {
-        WrapperBase.initialize(_owner, _name, _symbol);
+        WrapperBase.initialize(_owner, _upgradeConformer, _name, _symbol);
     }
 
     /**

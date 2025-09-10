@@ -44,6 +44,7 @@ contract Factory {
     function createVaultWithWrapper(
         address _nodeOperator,
         address _nodeOperatorManager,
+        address  _upgradeConformer,
         uint256 _nodeOperatorFeeBP,
         uint256 _confirmExpiry,
         WrapperConfiguration _configuration,
@@ -80,14 +81,16 @@ contract Factory {
                 dashboard,
                 lazyOracle,
                 _allowlistEnabled,
-                _nodeOperator
+                _nodeOperator,
+                _upgradeConformer
             );
         } else if (_configuration == WrapperConfiguration.MINTING_NO_STRATEGY) {
             (wrapperProxy, withdrawalQueueProxy) = _deployWrapperB(
                 dashboard,
                 lazyOracle,
                 _allowlistEnabled,
-                _nodeOperator
+                _nodeOperator,
+                _upgradeConformer
             );
         } else if (_configuration == WrapperConfiguration.MINTING_AND_STRATEGY) {
             (wrapperProxy, withdrawalQueueProxy) = _deployWrapperC(
@@ -95,6 +98,7 @@ contract Factory {
                 lazyOracle,
                 _allowlistEnabled,
                 _nodeOperator,
+                _upgradeConformer,
                 _strategy
             );
         } else {
@@ -138,7 +142,8 @@ contract Factory {
         address dashboard,
         address lazyOracle,
         bool _allowlistEnabled,
-        address _nodeOperator
+        address _nodeOperator,
+        address _upgradeConformer
     ) internal returns (address payable wrapperProxy, address withdrawalQueueProxy) {
         // Step 1: Create wrapper implementation
         WrapperA wrapperImpl = new WrapperA(dashboard, _allowlistEnabled);
@@ -146,7 +151,7 @@ contract Factory {
         // Step 2: Deploy wrapper proxy
         wrapperProxy = payable(address(new ERC1967Proxy(
             address(wrapperImpl),
-            abi.encodeCall(WrapperA.initialize, (address(this), NAME, SYMBOL))
+            abi.encodeCall(WrapperA.initialize, (address(this), _upgradeConformer, NAME, SYMBOL))
         )));
 
         // Step 3: Deploy withdrawal queue implementation with known wrapper address
@@ -164,7 +169,8 @@ contract Factory {
         address dashboard,
         address lazyOracle,
         bool _allowlistEnabled,
-        address _nodeOperator
+        address _nodeOperator,
+        address _upgradeConformer
     ) internal returns (address payable wrapperProxy, address withdrawalQueueProxy) {
         // Step 1: Create wrapper implementation
         WrapperB wrapperImpl = new WrapperB(dashboard, STETH, _allowlistEnabled);
@@ -172,7 +178,7 @@ contract Factory {
         // Step 2: Deploy wrapper proxy
         wrapperProxy = payable(address(new ERC1967Proxy(
             address(wrapperImpl),
-            abi.encodeCall(WrapperB.initialize, (address(this), NAME, SYMBOL))
+            abi.encodeCall(WrapperB.initialize, (address(this), _upgradeConformer, NAME, SYMBOL))
         )));
 
         // Step 3: Deploy withdrawal queue implementation with known wrapper address
@@ -191,6 +197,7 @@ contract Factory {
         address lazyOracle,
         bool _allowlistEnabled,
         address _nodeOperator,
+        address _upgradeConformer,
         address _strategy
     ) internal returns (address payable wrapperProxy, address withdrawalQueueProxy) {
         // Step 1: Create wrapper implementation with zero strategy initially
@@ -199,7 +206,7 @@ contract Factory {
         // Step 2: Deploy wrapper proxy
         wrapperProxy = payable(address(new ERC1967Proxy(
             address(wrapperImpl),
-            abi.encodeCall(WrapperB.initialize, (address(this), NAME, SYMBOL))
+            abi.encodeCall(WrapperB.initialize, (address(this), _upgradeConformer, NAME, SYMBOL))
         )));
 
 
