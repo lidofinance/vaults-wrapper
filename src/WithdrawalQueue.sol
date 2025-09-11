@@ -9,6 +9,8 @@ import {WrapperBase} from "./WrapperBase.sol";
 import {IDashboard} from "./interfaces/IDashboard.sol";
 import {IVaultHub} from "./interfaces/IVaultHub.sol";
 import {ILazyOracle} from "./interfaces/ILazyOracle.sol";
+import {console} from "forge-std/console.sol";
+
 
 /// @title Withdrawal Queue V3 for Staking Vault Wrapper
 /// @notice Handles withdrawal requests for stvToken holders
@@ -136,7 +138,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
     error CantSendValueRecipientMayHaveReverted();
     error InvalidHint(uint256 hint);
     error InvalidEmergencyExitActivation();
-    
+    error NoRequestsToFinalize();
 
     constructor(WrapperBase _wrapper, address _lazyOracle, uint256 _maxAcceptableWQFinalizationTimeInSeconds) {
         WRAPPER = _wrapper;
@@ -335,7 +337,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
             totalEthToFinalize += eth;
             totalSharesToBurn += shares;
             finalizedRequests++;
-        }
+        }        
 
         dashboard.withdraw(address(this), totalEthToFinalize);
         WRAPPER.burnSharesForWithdrawalQueue(totalSharesToBurn);

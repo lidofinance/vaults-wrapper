@@ -36,7 +36,7 @@ interface ILazyOracleMocked is ILazyOracle {
         bytes32 _vaultsDataTreeRoot,
         string memory _vaultsDataReportCid
     ) external;
-    function mock__updateVaultData(address _vault, uint256 _totalValue, uint256 _cumulativeLidoFees, uint256 _liabilityShares, uint256 _slashingReserve) external;
+    function mock__updateVaultData(address _vault, uint256 _totalValue, uint256 _cumulativeLidoFees, uint256 _liabilityShares, uint256 _maxLiabilityShares, uint256 _slashingReserve) external;
 }
 
 contract CoreHarness is Test {
@@ -110,6 +110,8 @@ contract CoreHarness is Test {
         bytes32 treeRoot = bytes32(0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef);
         string memory reportCid = "dummy-cid";
 
+        uint256 _maxLiabilityShares = _liabilityShares;
+
         // uint256 reportCumulativeLidoFees = _cumulativeLidoFees;
         // uint256 reportLiabilityShares = 0;
         // uint256 reportSlashingReserve = 0;
@@ -120,13 +122,14 @@ contract CoreHarness is Test {
         vm.warp(block.timestamp + 1 minutes);
 
         // Update report data with current timestamp to make it fresh
-        vm.prank(locator.accountingOracle());
+        vm.startPrank(locator.accountingOracle());
         lazyOracle.updateReportData(reportTimestamp, refSlot, treeRoot, reportCid);
+        vm.stopPrank();
 
         // TODO: remove _onlyUpdateReportData flag
         if (!_onlyUpdateReportData) {
             console.log("Calling mock__updateVaultData with totalValue:", _totalValue);
-            lazyOracle.mock__updateVaultData(_stakingVault, _totalValue, _cumulativeLidoFees, _liabilityShares, _slashingReserve);
+            lazyOracle.mock__updateVaultData(_stakingVault, _totalValue, _cumulativeLidoFees, _liabilityShares, _maxLiabilityShares, _slashingReserve);
             console.log("After mock__updateVaultData, totalValue from vaultHub:", vaultHub.totalValue(_stakingVault));
         }
 

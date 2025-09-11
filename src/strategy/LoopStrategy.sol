@@ -47,11 +47,7 @@ contract LoopStrategy is IStrategy {
         return userPositions[_address];
     }
 
-    function execute(address user, uint256 stETHAmount) external override {
-        // TODO: remove when all strategies unify the execute interface
-    }
-
-    function execute(address _user, uint256 _stvShares, uint256 _mintableStShares) external override {
+    function execute(address _user, uint256 _stvShares, uint256 _mintableStShares) external {
         UserPosition memory position = userPositions[_user];
         position.stvShares += _stvShares;
         position.user = _user;
@@ -98,5 +94,9 @@ contract LoopStrategy is IStrategy {
         return WRAPPER.requestWithdrawal(_stvShares);
     }
 
-    function claim(address asset, uint256 shares) external {}
+    function requestWithdraw(uint256 _stvShares) external override {
+        revert("Use requestWithdraw(address, uint256) instead");
+    }
+
+    function finalizeWithdrawal(uint256 shares) external returns(uint256 stvToken) {}
 }

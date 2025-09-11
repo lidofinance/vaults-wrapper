@@ -202,8 +202,6 @@ contract Factory {
             abi.encodeCall(WrapperB.initialize, (address(this), NAME, SYMBOL))
         )));
 
-
-
         // Step 3: Deploy withdrawal queue implementation with known wrapper address
         uint256 maxFinalizationTime = 30 days;
         WithdrawalQueue wqImpl = new WithdrawalQueue(WrapperBase(wrapperProxy), lazyOracle, maxFinalizationTime);

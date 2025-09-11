@@ -172,7 +172,6 @@ contract WrapperB is WrapperBase {
         WrapperBStorage storage $ = _getWrapperBStorage();
         stShares = $.stShares[_address];
     }
-
     //
     // ERC20 overrides
     //
