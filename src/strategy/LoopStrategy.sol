@@ -59,7 +59,7 @@ contract LoopStrategy is IStrategy {
         uint256 mintableStShares = _mintableStShares;
         uint256 borrowedEth = 0;
         for (uint256 i = 0; i < LOOPS; i++) {
-            WRAPPER.mintStShares(mintableStShares);
+            WRAPPER.mintStethShares(mintableStShares);
             position.stShares += _mintableStShares;
 
             borrowedEth = _borrowFromPool(STETH.getPooledEthByShares(mintableStShares));

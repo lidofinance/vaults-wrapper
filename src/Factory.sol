@@ -47,7 +47,8 @@ contract Factory {
         uint256 _confirmExpiry,
         WrapperConfiguration _configuration,
         address _strategy,
-        bool _allowlistEnabled
+        bool _allowlistEnabled,
+        uint256 _reserveRatioGapBP
     )
         external
         payable
@@ -82,14 +83,16 @@ contract Factory {
             (wrapperProxy, withdrawalQueueProxy) = _deployWrapperB(
                 dashboard,
                 _allowlistEnabled,
-                _nodeOperator
+                _nodeOperator,
+                _reserveRatioGapBP
             );
         } else if (_configuration == WrapperConfiguration.MINTING_AND_STRATEGY) {
             (wrapperProxy, withdrawalQueueProxy) = _deployWrapperC(
                 dashboard,
                 _allowlistEnabled,
                 _nodeOperator,
-                _strategy
+                _strategy,
+                _reserveRatioGapBP
             );
         } else {
             revert("Invalid configuration");
@@ -156,10 +159,11 @@ contract Factory {
     function _deployWrapperB(
         address dashboard,
         bool _allowlistEnabled,
-        address _nodeOperator
+        address _nodeOperator,
+        uint256 _reserveRatioGapBP
     ) internal returns (address payable wrapperProxy, address withdrawalQueueProxy) {
         // Step 1: Create wrapper implementation
-        WrapperB wrapperImpl = new WrapperB(dashboard, STETH, _allowlistEnabled);
+        WrapperB wrapperImpl = new WrapperB(dashboard, STETH, _allowlistEnabled, _reserveRatioGapBP);
 
         // Step 2: Deploy wrapper proxy
         wrapperProxy = payable(address(new ERC1967Proxy(
@@ -182,10 +186,11 @@ contract Factory {
         address dashboard,
         bool _allowlistEnabled,
         address _nodeOperator,
-        address _strategy
+        address _strategy,
+        uint256 _reserveRatioGapBP
     ) internal returns (address payable wrapperProxy, address withdrawalQueueProxy) {
         // Step 1: Create wrapper implementation with zero strategy initially
-        WrapperC wrapperImpl = new WrapperC(dashboard, STETH, _allowlistEnabled, address(0));
+        WrapperC wrapperImpl = new WrapperC(dashboard, STETH, _allowlistEnabled, address(0), _reserveRatioGapBP);
 
         // Step 2: Deploy wrapper proxy
         wrapperProxy = payable(address(new ERC1967Proxy(
