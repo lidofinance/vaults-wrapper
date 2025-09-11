@@ -60,16 +60,10 @@ contract GGVStrategy is Strategy {
         address proxy = _getOrCreateProxy(_user);
         uint256 stETHAmount = STETH.getPooledEthByShares(_mintableStShares);
 
-        console.log("execute._stvShares", _stvShares);
-        console.log("execute._mintableStShares", _mintableStShares);
-        console.log("execute.stETHAmount", stETHAmount);
-
         //save stv/st share rate
         UserPosition storage position = userPositions[_user];
         position.stvShares += _stvShares;
         position.stShares += _mintableStShares;
-
-        console.log("stv/st share rate", position.stvShares / position.stShares);
 
         WRAPPER.transfer(proxy, _stvShares);
 
@@ -85,10 +79,6 @@ contract GGVStrategy is Strategy {
             address(TELLER),
             abi.encodeWithSelector(TELLER.deposit.selector, address(STETH), stETHAmount, 0 /* minimumMint */)
         );
-
-        console.log("steth balance GGVStrategy", STETH.balanceOf(address(this)));
-        console.log("steth balance TELLER.vault()", STETH.balanceOf(address(TELLER.vault())));
-        console.log("steth balance proxy", STETH.balanceOf(proxy));
 
         emit Execute(msg.sender, _stvShares, _mintableStShares);
     }
@@ -134,7 +124,6 @@ contract GGVStrategy is Strategy {
             address(WRAPPER),
             abi.encodeWithSelector(WRAPPER.transfer.selector, address(_receiver), stvToken)
         );
-
 
         emit Claim(_receiver, address(STETH), stETHAmount);
     }
