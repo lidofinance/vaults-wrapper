@@ -5,18 +5,17 @@ import {console} from "forge-std/Test.sol";
 
 import {ERC20Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
-import { ERC1967Utils } from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Utils.sol";
-import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
 import {WithdrawalQueue} from "./WithdrawalQueue.sol";
 import {IVaultHub} from "./interfaces/IVaultHub.sol";
 import {IDashboard} from "./interfaces/IDashboard.sol";
 import {AllowList} from "./AllowList.sol";
+import {ProposalUpgradable} from "./ProposalUpgradable.sol";
 
 // TODO: move whitelist to a separate contract
 // TODO: likely we can get rid of the base and move all to WrapperA
-abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList {
+abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, ProposalUpgradable {
     // Custom errors
     error ZeroDeposit();
     error InvalidReceiver();
@@ -29,7 +28,6 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList {
 
     bytes32 public constant REQUEST_VALIDATOR_EXIT_ROLE = keccak256("REQUEST_VALIDATOR_EXIT_ROLE");
     bytes32 public constant TRIGGER_VALIDATOR_WITHDRAWAL_ROLE = keccak256("TRIGGER_VALIDATOR_WITHDRAWAL_ROLE");
-    bytes32 public constant UPGRADE_CONFORMER = keccak256("UPGRADE_CONFORMER");
 
     uint256 public immutable DECIMALS = 27;
     uint256 public immutable ASSET_DECIMALS = 18;
@@ -43,15 +41,8 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList {
 
     /// @custom:storage-location erc7201:wrapper.base.storage
     struct WrapperBaseStorage {
-        WrapperUpgradeProposal proposedUpgrade;
         WithdrawalQueue withdrawalQueue;
         bool vaultDisconnected;
-    }
-
-    struct WrapperUpgradeProposal {
-        bytes32 proposalHash;
-        uint64 timestamp;
-        bool confirmed;
     }
 
     // keccak256(abi.encode(uint256(keccak256("wrapper.base.storage")) - 1)) & ~bytes32(uint256(0xff))
@@ -63,7 +54,7 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList {
         }
     }
 
-    function withdrawalQueue() public view returns (WithdrawalQueue) {
+    function withdrawalQueue() public view override returns (WithdrawalQueue)  {
         return _getWrapperBaseStorage().withdrawalQueue;
     }
 
@@ -114,10 +105,7 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList {
 
         _grantRole(DEFAULT_ADMIN_ROLE, _owner);
         _initializeAllowList(_owner);
-
-        _setRoleAdmin(UPGRADE_CONFORMER, UPGRADE_CONFORMER);
-        if(_upgradeConformer != address(0))
-            _grantRole(UPGRADE_CONFORMER, _upgradeConformer);
+        _initializeProposalUpgradable(_owner, _upgradeConformer);
 
         // Initial vault balance must include the connect deposit
         // Minting shares for it to have clear shares math
@@ -246,7 +234,7 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList {
     }
 
     // TODO: remove this function
-    function setWithdrawalQueue(address _withdrawalQueue) external {
+    function setWithdrawalQueue(address _withdrawalQueue) external  {
         _getWrapperBaseStorage().withdrawalQueue = WithdrawalQueue(payable(_withdrawalQueue));
     }
 
@@ -329,121 +317,4 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList {
             _checkRole(_role, msg.sender);
         }
     }
-
-    // =================================================================================
-    // Upgrade functions
-    // =================================================================================
-
-    uint64 public immutable UPGRADE_DELAY = 7 days;
-
-    struct WrapperUpgradePayload {
-        address newImplementation;
-        address newWqImplementation;
-        bytes upgradeData;
-    }
-
-    event WrapperUpgradeProposed(address _newImplementation, address _newWqImplementation, bytes32 proposalHash);
-    event WrapperUpgradeCancelled(bytes32 proposalHash);
-    event WrapperUpgradeConfirmed(bytes32 proposalHash, uint64 enactTimestamp);
-
-    error NoMatchingProposal();
-    error AlreadyProposed();
-    error AlreadyConfirmed();
-    error NotYetConfirmed();
-    error TooEarlyToEnact();
-
-    function _hashUpgradePayload(WrapperUpgradePayload calldata _payload) internal pure returns (bytes32) {
-        return keccak256(abi.encodePacked(_payload.newImplementation, _payload.newWqImplementation, _payload.upgradeData));
-    }
-
-    function proposeUpgrade(WrapperUpgradePayload calldata _payload) external {
-        _checkRole(DEFAULT_ADMIN_ROLE, msg.sender);
-
-        WrapperUpgradeProposal storage existing = _getWrapperBaseStorage().proposedUpgrade;
-
-        bytes32 proposalHash = _hashUpgradePayload(_payload);
-
-        if(existing.proposalHash == proposalHash) {
-            revert AlreadyProposed();
-        }
-
-        WrapperUpgradeProposal memory proposed = WrapperUpgradeProposal({
-            proposalHash: proposalHash,
-            // used only after confirmation
-            timestamp: 0,
-            confirmed: false    
-        });
-
-        _getWrapperBaseStorage().proposedUpgrade = proposed;
-
-        emit WrapperUpgradeProposed(_payload.newImplementation, _payload.newWqImplementation, proposed.proposalHash);
-    }
-
-    function cancelUpgradeProposal() external {
-        _checkRole(DEFAULT_ADMIN_ROLE, msg.sender);
-
-        WrapperUpgradeProposal storage existing = _getWrapperBaseStorage().proposedUpgrade;
-
-        if(existing.confirmed) {
-            revert AlreadyConfirmed();
-        }
-
-        if(existing.proposalHash == bytes32(0)) {
-            revert NoMatchingProposal();
-        }
-
-        delete _getWrapperBaseStorage().proposedUpgrade;
-
-        emit WrapperUpgradeCancelled(existing.proposalHash);
-    } 
-
-    function confirmUpgrade(WrapperUpgradePayload calldata _payload) external {
-        _checkRole(UPGRADE_CONFORMER, msg.sender);
-
-        bytes32 proposalHash = _hashUpgradePayload(_payload);
-
-        WrapperUpgradeProposal storage proposed = _getWrapperBaseStorage().proposedUpgrade;
-
-        if(proposed.confirmed) {
-            revert AlreadyConfirmed();
-        }
-        
-        if (proposed.proposalHash != proposalHash) {
-            revert NoMatchingProposal();
-        }
-
-        proposed.confirmed = true;
-        proposed.timestamp = uint64(block.timestamp);    
-
-        emit WrapperUpgradeConfirmed(proposed.proposalHash, proposed.timestamp + UPGRADE_DELAY);
-    } 
-
-    function enactUpgrade(WrapperUpgradePayload calldata _payload) external {
-            _checkRole(DEFAULT_ADMIN_ROLE, msg.sender);
-
-        WrapperUpgradeProposal storage proposed = _getWrapperBaseStorage().proposedUpgrade;
-
-        bytes32 proposalHash = _hashUpgradePayload(_payload);
-
-        if(proposed.proposalHash != proposalHash) {
-            revert NoMatchingProposal();
-        }
-
-        if(!proposed.confirmed) {
-            revert NotYetConfirmed();
-        }
-
-        if(block.timestamp < proposed.timestamp + UPGRADE_DELAY) {
-            revert TooEarlyToEnact();
-        }
-
-        // Reset proposal
-        delete _getWrapperBaseStorage().proposedUpgrade;
-
-        // First upgrade the withdrawal queue
-        withdrawalQueue().upgradeTo(_payload.newWqImplementation);
-        // Then upgrade the wrapper itself
-        ERC1967Utils.upgradeToAndCall(_payload.newImplementation, _payload.upgradeData);
-    }
-
 }
