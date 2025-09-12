@@ -98,7 +98,8 @@ contract WrapperB is WrapperBase {
         uint256 userEthRequiringBurning = _convertToAssets(_stvShares) - userEthWithdrawableWithoutBurning;
 
         // ethAmount = userEthWithdrawableWithoutBurning + _getPartCorrespondingToStShares(_stSharesToBurn, userEthRequiringBurning, _address);
-        ethAmount = Math.mulDiv(_stethSharesToBurn, userEthRequiringBurning, _getStethShares(_address), Math.Rounding.Floor);
+        ethAmount = userEthWithdrawableWithoutBurning +
+            Math.mulDiv(_stethSharesToBurn, userEthRequiringBurning, _getStethShares(_address), Math.Rounding.Floor);
     }
 
 
