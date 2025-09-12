@@ -10,9 +10,9 @@ import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.s
 import {WithdrawalQueue} from "./WithdrawalQueue.sol";
 
 /**
- * @title 
- * @notice
- * @dev 
+ * @title ProposalUpgradable
+ * @notice Base contract providing two-step delayed upgrade functionality for wrappers and their associated withdrawal queues
+ * @dev exposes virtual functions to be overridden by inheriting contracts
  */
 abstract contract ProposalUpgradable is Initializable, AccessControlEnumerableUpgradeable {
     // Upgrade events
@@ -23,6 +23,7 @@ abstract contract ProposalUpgradable is Initializable, AccessControlEnumerableUp
 
     // Custom errors
     error NoMatchingProposal();
+    error UpgradeNotAllowed();
     error AlreadyProposed();
     error AlreadyConfirmed();
     error NotYetConfirmed();
@@ -108,6 +109,8 @@ abstract contract ProposalUpgradable is Initializable, AccessControlEnumerableUp
 
     function confirmUpgrade(WrapperUpgradePayload calldata _payload) external {
         _checkRole(UPGRADE_CONFORMER, msg.sender);
+        // check if upgrade is allowed before starting countdown via confirm
+        _beforeUpgrade();
 
         bytes32 proposalHash = _hashUpgradePayload(_payload);
 
@@ -128,6 +131,7 @@ abstract contract ProposalUpgradable is Initializable, AccessControlEnumerableUp
     }
 
     function enactUpgrade(WrapperUpgradePayload calldata _payload) external {
+        _beforeUpgrade();
         // anyone can call this, no need to check roles
 
         ProposalUpgradableStorage storage $ = _getProposalUpgradableStorage();
@@ -164,11 +168,22 @@ abstract contract ProposalUpgradable is Initializable, AccessControlEnumerableUp
     // =================================================================================
 
      function withdrawalQueue() virtual public view returns (WithdrawalQueue);
-    
+
+     // Override this function to add custom upgrade checks
+     function _canUpgrade() virtual internal view returns (bool) {
+         return true;
+     }
 
     // =================================================================================
     // Internal functions
     // =================================================================================
+
+
+    function _beforeUpgrade() internal view {
+        if(!_canUpgrade()) {
+            revert UpgradeNotAllowed();
+        }
+    }
 
     function _hashUpgradePayload(WrapperUpgradePayload calldata _payload) internal pure returns (bytes32) {
         return keccak256(abi.encodePacked(_payload.newImplementation, _payload.newWqImplementation, _payload.upgradeData));
