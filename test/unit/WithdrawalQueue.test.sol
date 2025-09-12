@@ -69,7 +69,7 @@ contract WithdrawalQueueTest is Test {
         );
         bytes memory initData = abi.encodeCall(
             WrapperA.initialize,
-            (admin, "Staked ETH Vault Wrapper", "stvETH")
+            (admin, admin, "Staked ETH Vault Wrapper", "stvETH")
         );
         ERC1967Proxy proxy = new ERC1967Proxy(address(impl), initData);
         wrapper = WrapperA(payable(address(proxy)));

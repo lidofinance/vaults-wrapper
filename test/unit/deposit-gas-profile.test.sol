@@ -87,7 +87,7 @@ contract DepositGasProfileTest is Test {
         );
         bytes memory initDataAllowList = abi.encodeCall(
             WrapperA.initialize,
-            (owner, "AllowListed Vault", "wstvETH")
+            (owner, owner, "AllowListed Vault", "wstvETH")
         );
         ERC1967Proxy allowListProxy = new ERC1967Proxy(address(allowListImpl), initDataAllowList);
         wrapperWithAllowList = WrapperA(payable(address(allowListProxy)));
@@ -99,7 +99,7 @@ contract DepositGasProfileTest is Test {
         );
         bytes memory initDataOpen = abi.encodeCall(
             WrapperA.initialize,
-            (owner, "Open Vault", "ostvETH")
+            (owner, owner, "Open Vault", "ostvETH")
         );
         ERC1967Proxy openProxy = new ERC1967Proxy(address(openImpl), initDataOpen);
         wrapperWithoutAllowList = WrapperA(payable(address(openProxy)));

@@ -61,6 +61,7 @@ contract FactoryTest is Test {
         ) = WrapperFactory.createVaultWithWrapper{value: connectDeposit}(
                 nodeOperator,
                 nodeOperatorManager,
+                nodeOperator,
                 100, // 1% fee
                 3600, // 1 hour confirm expiry
                 Factory.WrapperConfiguration.NO_MINTING_NO_STRATEGY,
@@ -99,6 +100,7 @@ contract FactoryTest is Test {
         WrapperFactory.createVaultWithWrapper(
             nodeOperator,
             nodeOperatorManager,
+            nodeOperator,
             100, // 1% fee
             3600, // 1 hour confirm expiry
             Factory.WrapperConfiguration.NO_MINTING_NO_STRATEGY,
@@ -117,6 +119,7 @@ contract FactoryTest is Test {
         ) = WrapperFactory.createVaultWithWrapper{value: connectDeposit}(
                 nodeOperator,
                 nodeOperatorManager,
+                nodeOperator,
                 100, // 1% fee
                 3600, // 1 hour confirm expiry
                 Factory.WrapperConfiguration.MINTING_AND_STRATEGY,
@@ -152,6 +155,7 @@ contract FactoryTest is Test {
         ) = WrapperFactory.createVaultWithWrapper{value: connectDeposit}(
                 nodeOperator,
                 nodeOperatorManager,
+                nodeOperator,
                 100, // 1% fee
                 3600, // 1 hour confirm expiry
                 Factory.WrapperConfiguration.NO_MINTING_NO_STRATEGY,

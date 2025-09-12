@@ -67,7 +67,7 @@ contract WrapperAHarness is Test {
 
         vm.startPrank(NODE_OPERATOR);
         (address vault_, address dashboard_, address payable wrapperAddress, address withdrawalQueue_) = factory.createVaultWithWrapper{value: CONNECT_DEPOSIT}(
-            NODE_OPERATOR, NODE_OPERATOR, NODE_OPERATOR_FEE_RATE, CONFIRM_EXPIRY, configuration, strategy, enableAllowlist
+            NODE_OPERATOR, NODE_OPERATOR,NODE_OPERATOR, NODE_OPERATOR_FEE_RATE, CONFIRM_EXPIRY, configuration, strategy, enableAllowlist
         );
         vm.stopPrank();
 
