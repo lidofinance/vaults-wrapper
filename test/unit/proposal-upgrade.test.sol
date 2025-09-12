@@ -86,7 +86,7 @@ contract ProposalUpgradableTest is Test {
         
         
         assertEq(proposalUpgradableProxy.getImplementation(), proposalUpgradableImplV2);
-        //assertEq(proposalUpgradableProxy.getImplementation(), wqImplementationV2);
+        assertEq(wqProxy.getImplementation(), wqImplementationV2);
 
     }
 }

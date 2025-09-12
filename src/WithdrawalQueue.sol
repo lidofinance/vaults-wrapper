@@ -141,7 +141,6 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
     error InvalidHint(uint256 hint);
     error InvalidEmergencyExitActivation();
     error NoRequestsToFinalize();
-    error OnlyWrapperCanUpgrade();
 
     constructor(WrapperBase _wrapper, address _lazyOracle, uint256 _maxAcceptableWQFinalizationTimeInSeconds) {
         WRAPPER = _wrapper;
@@ -652,7 +651,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
     /// @param newImplementation address of the new implementation contract
     /// @dev can only be called by the WRAPPER
     function upgradeTo(address newImplementation) external {
-        if(msg.sender != address(WRAPPER)) revert OnlyWrapperCanUpgrade();
+        if (msg.sender != address(WRAPPER)) revert OnlyWrapperCan();
         ERC1967Utils.upgradeToAndCall(newImplementation, new bytes(0));
         emit ImplementationUpgraded(newImplementation);
     }

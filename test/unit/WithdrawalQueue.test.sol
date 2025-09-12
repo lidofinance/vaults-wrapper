@@ -12,6 +12,7 @@ import {MockDashboard} from "../mocks/MockDashboard.sol";
 import {MockVaultHub} from "../mocks/MockVaultHub.sol";
 import {MockStakingVault} from "../mocks/MockStakingVault.sol";
 import {MockLazyOracle} from "../mocks/MockLazyOracle.sol";
+import {MockUpgradableWq} from "../mocks/MockUpgradableWq.sol";
 
 contract WithdrawalQueueTest is Test {
     WithdrawalQueue public withdrawalQueue;
@@ -369,4 +370,20 @@ contract WithdrawalQueueTest is Test {
     // Tests withdrawal handling when vault experiences staking rewards/rebases
     // Placeholder for testing share rate changes during withdrawal process
     function test_WithdrawalWithRebase() public {}
+
+    function test_WrapperUpgrade() public {
+        MockUpgradableWq mockUpgradableWq = new MockUpgradableWq(address(wrapper));
+
+        vm.prank(address(wrapper));
+        withdrawalQueue.upgradeTo(address(mockUpgradableWq));
+
+        assertEq(MockUpgradableWq(address(withdrawalQueue)).getImplementation(), address(mockUpgradableWq));
+    }
+
+    function test_revert_WrapperUpgrade_NotWrapper() public {
+        MockUpgradableWq mockUpgradableWq = new MockUpgradableWq(address(wrapper));
+
+        vm.expectRevert(abi.encodeWithSelector(WithdrawalQueue.OnlyWrapperCan.selector));
+        withdrawalQueue.upgradeTo(address(mockUpgradableWq));
+    }
 }
