@@ -13,15 +13,21 @@ contract LenderMock {
     }
 
     /// @notice Borrow ETH against stETH collateral
-    /// @param _amount Amount of stETH to transfer in
-    function borrow(uint256 _amount) external {
-        uint256 ethAmount = (_amount * BORROW_RATIO) / TOTAL_BASIS_POINTS;
+    /// @param _stethAmount Amount of stETH to transfer in
+    function borrow(uint256 _stethAmount) external {
+        uint256 ethAmount = (_stethAmount * BORROW_RATIO) / TOTAL_BASIS_POINTS;
         require(address(this).balance >= ethAmount, "Insufficient ETH in contract");
 
-        require(IERC20(STETH).transferFrom(msg.sender, address(this), _amount), "stETH transfer failed");
+        require(IERC20(STETH).transferFrom(msg.sender, address(this), _stethAmount), "stETH transfer failed");
 
         (bool sent, ) = msg.sender.call{value: ethAmount}("");
         require(sent, "ETH transfer failed");
+    }
+
+    function giveBack() external payable {
+        uint256 ethAmount = msg.value;
+        uint256 stethAmount = (ethAmount * TOTAL_BASIS_POINTS) / BORROW_RATIO;
+        require(IERC20(STETH).transfer(msg.sender, stethAmount), "stETH transfer failed");
     }
 
     receive() external payable {}

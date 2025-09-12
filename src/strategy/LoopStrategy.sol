@@ -43,14 +43,11 @@ contract LoopStrategy is IStrategy {
         return keccak256("ExampleLoopStrategy");
     }
 
-    function execute(address user, uint256 stETHAmount) external override {
-        // TODO: remove when all strategies unify the execute interface
+    function getUserPosition(address _address) external view returns (UserPosition memory) {
+        return userPositions[_address];
     }
 
-    function execute(address _user, uint256 _stvShares, uint256 _mintableStShares) external override {
-
-        // if (_mintableStShares == 0) revert NoStETHAvailableForLeverage();
-
+    function execute(address _user, uint256 _stvShares, uint256 _mintableStShares) external {
         UserPosition memory position = userPositions[_user];
         position.stvShares += _stvShares;
         position.user = _user;
@@ -85,7 +82,21 @@ contract LoopStrategy is IStrategy {
 
     receive() external payable {}
 
-    function requestWithdraw(uint256 shares) external {}
+    function _getStvSharesWithdrawableWithoutBurningStShares(address _address) internal view returns (uint256 stvShares) {
+        UserPosition memory position = userPositions[_address];
+        stvShares = position.stvShares; // TODO: calc properly
+    }
 
-    function claim(address asset, uint256 shares) external {}
+    function requestWithdraw(address _user, uint256 _stvShares) external override returns (uint256 requestId) {
+        // LENDER_MOCK.giveBack{value: address(this).balance}();
+        // return WRAPPER.requestWithdrawal(_stvShares);
+        uint256 stvShares = _getStvSharesWithdrawableWithoutBurningStShares(_user);
+        return WRAPPER.requestWithdrawal(_stvShares);
+    }
+
+    function requestWithdraw(uint256 _stvShares) external override {
+        revert("Use requestWithdraw(address, uint256) instead");
+    }
+
+    function finalizeWithdrawal(uint256 shares) external returns(uint256 stvToken) {}
 }

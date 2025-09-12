@@ -2,21 +2,24 @@
 pragma solidity >=0.8.25;
 
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {IStETH} from "src/interfaces/IStETH.sol";
 import {IStrategy} from "src/interfaces/IStrategy.sol";
 import {IStrategyProxy} from "src/interfaces/IStrategyProxy.sol";
+import {WrapperC} from "src/WrapperC.sol";
 
 abstract contract Strategy is IStrategy {
 
-    IERC20 public immutable STETH;
+    IStETH public immutable STETH;
     address public immutable STRATEGY_PROXY_IMPL;
+    WrapperC public immutable WRAPPER;
 
     mapping(bytes32 salt => address proxy) public userStrategyProxy;
 
     error ZeroAddress();
 
-    constructor(address _stETH, address _strategyProxyImpl) {
-        STETH = IERC20(_stETH);
+    constructor(address _stETH, address _wrapper, address _strategyProxyImpl) {
+        STETH = IStETH(_stETH);
+        WRAPPER = WrapperC(payable(_wrapper));
         STRATEGY_PROXY_IMPL = _strategyProxyImpl;
     }
 

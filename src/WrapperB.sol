@@ -136,7 +136,7 @@ contract WrapperB is WrapperBase {
     }
 
     // TODO: add request as ether as arg (not stvShares)
-    function requestWithdrawal(uint256 _stvShares) external virtual returns (uint256 requestId) {
+    function requestWithdrawal(uint256 _stvShares) public virtual returns (uint256 requestId) {
         if (_stvShares == 0) revert WrapperBase.ZeroStvShares();
 
         WithdrawalQueue withdrawalQueue = withdrawalQueue();
@@ -173,7 +173,6 @@ contract WrapperB is WrapperBase {
         WrapperBStorage storage $ = _getWrapperBStorage();
         stShares = $.stShares[_address];
     }
-
     //
     // ERC20 overrides
     //

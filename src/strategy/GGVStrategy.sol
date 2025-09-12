@@ -8,25 +8,38 @@ import {ITellerWithMultiAssetSupport} from "src/interfaces/ggv/ITellerWithMultiA
 import {IBoringOnChainQueue} from "src/interfaces/ggv/IBoringOnChainQueue.sol";
 import {Strategy} from "src/strategy/Strategy.sol";
 import {IStrategyProxy} from "src/interfaces/IStrategyProxy.sol";
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+
+import {console} from "forge-std/console.sol";
 
 contract GGVStrategy is Strategy {
 
     ITellerWithMultiAssetSupport public immutable TELLER;
     IBoringOnChainQueue public immutable BORING_QUEUE;
 
-    event Execute(address indexed user, uint256 stETHAmount);
+    event Execute(address indexed user, uint256 stvTokenAmount, uint256 stETHAmount);
     event RequestWithdraw(address indexed user, uint256 shares);
     event Claim(address indexed user, address indexed asset, uint256 shares);
 
     error InvalidStETHAmount();
     error InvalidGGVShares();
 
+    struct UserPosition {
+        address user;
+        uint256 stvShares;
+        uint256 stShares;
+        uint256 borrowedEth;
+    }
+
+    mapping(address user => UserPosition) public userPositions;
+
     constructor (
         address _strategyProxyImplementation,
         address _stETH,
+        address _wrapper,
         address _teller,
         address _boringQueue
-    ) Strategy(_stETH, _strategyProxyImplementation) {
+    ) Strategy(_stETH, _wrapper, _strategyProxyImplementation) {
         TELLER = ITellerWithMultiAssetSupport(_teller);
         BORING_QUEUE = IBoringOnChainQueue(_boringQueue);
     }
@@ -35,69 +48,85 @@ contract GGVStrategy is Strategy {
         return keccak256("strategy.ggv.v1");
     }
 
-    //negative steth rebase - how to finalize requests
-    //requestid - if not exists - claim
-
-
-    function execute(address _user, uint256 _stvShares, uint256 _mintableStShares) external {
-        // TODO
-
+    function getUserPosition(address _user) external view returns (UserPosition memory) {
+        return userPositions[_user];
     }
 
     /// @notice Executes the strategy
-    /// @param user The user to execute the strategy for
-    /// @param stETHAmount The amount of stETH to execute the strategy for
-    function execute(address user, uint256 stETHAmount) external override {
-        if (stETHAmount == 0) revert InvalidStETHAmount();
+    /// @param _user The user to execute the strategy for
+    /// @param _stvShares The number of stv shares to execute
+    /// @param _mintableStShares The number of steth shares to mint
+    function execute(address _user, uint256 _stvShares, uint256 _mintableStShares) external {
+        address proxy = _getOrCreateProxy(_user);
+        uint256 stETHAmount = STETH.getPooledEthByShares(_mintableStShares);
 
-        address proxy = _getOrCreateProxy(user);
+        //save stv/st share rate
+        UserPosition storage position = userPositions[_user];
+        position.stvShares += _stvShares;
+        position.stShares += _mintableStShares;
 
-        STETH.transfer(proxy, stETHAmount);
+        WRAPPER.transfer(proxy, _stvShares);
 
+        IStrategyProxy(proxy).call(
+            address(WRAPPER),
+            abi.encodeWithSelector(WRAPPER.mintStShares.selector, _mintableStShares)
+        );
         IStrategyProxy(proxy).call(
             address(STETH),
             abi.encodeWithSelector(STETH.approve.selector, address(TELLER.vault()), stETHAmount)
         );
         IStrategyProxy(proxy).call(
             address(TELLER),
-            abi.encodeWithSelector(TELLER.deposit.selector, address(STETH), stETHAmount, 0)
+            abi.encodeWithSelector(TELLER.deposit.selector, address(STETH), stETHAmount, 0 /* minimumMint */)
         );
 
-        emit Execute(msg.sender, stETHAmount);
+        emit Execute(msg.sender, _stvShares, _mintableStShares);
     }
 
     /// @notice Requests a withdrawal of ggv shares from the strategy
-    /// @param shares The number of ggv shares to withdraw
-    function requestWithdraw(uint256 shares) external override {
-        if (shares == 0) revert InvalidGGVShares();
+    /// @param ggvShares The number of ggv shares to withdraw
+    function requestWithdraw(uint256 ggvShares) external {
+        if (ggvShares == 0) revert InvalidGGVShares();
         address proxy = _getOrCreateProxy(msg.sender);
 
         IERC20 boringVault = IERC20(TELLER.vault());
 
         IStrategyProxy(proxy).call(
             address(boringVault),
-            abi.encodeWithSelector(boringVault.approve.selector, address(BORING_QUEUE), shares)
+            abi.encodeWithSelector(boringVault.approve.selector, address(BORING_QUEUE), ggvShares)
         );
          IStrategyProxy(proxy).call(
             address(BORING_QUEUE),
-            abi.encodeWithSelector(BORING_QUEUE.requestOnChainWithdraw.selector, address(STETH), uint128(shares), 1, type(uint24).max)
+            abi.encodeWithSelector(BORING_QUEUE.requestOnChainWithdraw.selector, address(STETH), uint128(ggvShares), 1, type(uint24).max)
         );
 
-        emit RequestWithdraw(msg.sender, shares);
+        emit RequestWithdraw(msg.sender, ggvShares);
     }
 
     /// @notice Claims the specified asset from the strategy
-    /// @param asset The asset to claim
-    /// @param shares The number of shares to claim
-    function claim(address asset, uint256 shares) external {
-        address proxy = _getOrCreateProxy(msg.sender);
+    function finalizeWithdrawal(uint256 stETHAmount) external returns(uint256 stvToken) {
+        address _receiver = msg.sender;
+        address proxy = _getOrCreateProxy(_receiver);
 
         IStrategyProxy(proxy).call(
-            address(asset),
-            abi.encodeWithSelector(IERC20(asset).transfer.selector, msg.sender, shares)
+            address(STETH),
+            abi.encodeWithSelector(STETH.transfer.selector, _receiver, stETHAmount)
         );
 
-        emit Claim(msg.sender, asset, shares);
+        UserPosition storage position = userPositions[_receiver];
+
+        uint256 stShares = STETH.getSharesByPooledEth(stETHAmount);
+        uint256 availableStShares = Math.min(stShares, position.stShares);
+
+        stvToken = Math.mulDiv(position.stvShares, availableStShares, position.stShares);
+
+        IStrategyProxy(proxy).call(
+            address(WRAPPER),
+            abi.encodeWithSelector(WRAPPER.transfer.selector, address(_receiver), stvToken)
+        );
+
+        emit Claim(_receiver, address(STETH), stETHAmount);
     }
 
+    function requestWithdraw(address _user, uint256 _stvShares) external returns (uint256 requestId) {}
 }

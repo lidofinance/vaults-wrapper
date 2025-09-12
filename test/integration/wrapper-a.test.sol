@@ -16,6 +16,7 @@ contract WrapperATest is WrapperAHarness {
 
     function setUp() public {
         _setUp(Factory.WrapperConfiguration.NO_MINTING_NO_STRATEGY, address(0), false);
+        _checkInitialState();
     }
 
     /**
