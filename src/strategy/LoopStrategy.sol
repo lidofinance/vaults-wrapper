@@ -43,14 +43,15 @@ contract LoopStrategy is IStrategy {
         return keccak256("ExampleLoopStrategy");
     }
 
+    function getUserPosition(address _address) external view returns (UserPosition memory) {
+        return userPositions[_address];
+    }
+
     function execute(address user, uint256 stETHAmount) external override {
         // TODO: remove when all strategies unify the execute interface
     }
 
     function execute(address _user, uint256 _stvShares, uint256 _mintableStShares) external override {
-
-        // if (_mintableStShares == 0) revert NoStETHAvailableForLeverage();
-
         UserPosition memory position = userPositions[_user];
         position.stvShares += _stvShares;
         position.user = _user;
@@ -58,7 +59,7 @@ contract LoopStrategy is IStrategy {
         uint256 mintableStShares = _mintableStShares;
         uint256 borrowedEth = 0;
         for (uint256 i = 0; i < LOOPS; i++) {
-            WRAPPER.mintStShares(mintableStShares);
+            WRAPPER.mintStethShares(mintableStShares);
             position.stShares += _mintableStShares;
 
             borrowedEth = _borrowFromPool(STETH.getPooledEthByShares(mintableStShares));
@@ -85,7 +86,17 @@ contract LoopStrategy is IStrategy {
 
     receive() external payable {}
 
-    function requestWithdraw(uint256 shares) external {}
+    function _getStvSharesWithdrawableWithoutBurningStShares(address _address) internal view returns (uint256 stvShares) {
+        UserPosition memory position = userPositions[_address];
+        stvShares = position.stvShares; // TODO: calc properly
+    }
+
+    function requestWithdraw(address _user, uint256 _stvShares) external override returns (uint256 requestId) {
+        // LENDER_MOCK.giveBack{value: address(this).balance}();
+        // return WRAPPER.requestWithdrawal(_stvShares);
+        uint256 stvShares = _getStvSharesWithdrawableWithoutBurningStShares(_user);
+        return WRAPPER.requestWithdrawal(_stvShares);
+    }
 
     function claim(address asset, uint256 shares) external {}
 }

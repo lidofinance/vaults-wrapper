@@ -21,7 +21,9 @@ contract LeverageStrategy is Strategy {
         return keccak256("strategy.leverage.v1");
     }
 
-    function requestWithdraw(uint256 shares) external {}
+    function requestWithdraw(address _user, uint256 _stvShares) external override returns (uint256 requestId) {
+        return 0;
+    }
 
     function claim(address asset, uint256 shares) external {}
 

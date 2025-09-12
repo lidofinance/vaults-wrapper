@@ -4,7 +4,11 @@ pragma solidity >=0.8.25;
 import {Test, console} from "forge-std/Test.sol";
 
 import {WrapperBHarness} from "test/utils/WrapperBHarness.sol";
+import {WrapperA} from "src/WrapperA.sol";
 import {WrapperC} from "src/WrapperC.sol";
+import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
+import {IDashboard} from "src/interfaces/IDashboard.sol";
+import {IStakingVault} from "src/interfaces/IStakingVault.sol";
 import {LoopStrategy} from "src/strategy/LoopStrategy.sol";
 import {Factory} from "src/Factory.sol";
 
@@ -16,60 +20,80 @@ contract WrapperCHarness is WrapperBHarness {
 
     LoopStrategy public strategy;
 
-    function _setUp(
-        Factory.WrapperConfiguration configuration,
+    function _deployWrapperC(
+        bool enableAllowlist,
         address strategy_,
-        bool enableAllowlist
-    ) internal virtual override {
-        // Call parent setUp
-        super._setUp(configuration, strategy_, enableAllowlist);
+        uint256 reserveRatioGapBP
+    ) internal returns (WrapperContext memory) {
+        DeploymentConfig memory config = DeploymentConfig({
+            configuration: Factory.WrapperConfiguration.MINTING_AND_STRATEGY,
+            strategy: strategy_,
+            enableAllowlist: enableAllowlist,
+            reserveRatioGapBP: reserveRatioGapBP,
+            nodeOperator: NODE_OPERATOR,
+            nodeOperatorManager: NODE_OPERATOR,
+            nodeOperatorFeeBP: NODE_OPERATOR_FEE_RATE,
+            confirmExpiry: CONFIRM_EXPIRY
+        });
+
+        WrapperContext memory context = _deployWrapperSystem(config);
+
+        WrapperC wrapperC_ = WrapperC(payable(address(context.wrapper)));
+        LoopStrategy strategy__;
 
         // Get the strategy address if it was created by the factory
-        if (strategy_ == address(0) && configuration == Factory.WrapperConfiguration.MINTING_AND_STRATEGY) {
+        if (strategy_ == address(0)) {
             // Strategy was created by factory, get it from the wrapper
-            WrapperC wrapperC_ = WrapperC(payable(address(wrapper)));
-            strategy = LoopStrategy(payable(address(wrapperC_.STRATEGY())));
-
+            strategy__ = LoopStrategy(payable(address(wrapperC_.STRATEGY())));
         } else {
-            strategy = LoopStrategy(payable(strategy_));
+            strategy__ = LoopStrategy(payable(strategy_));
         }
-        vm.deal(address(strategy.LENDER_MOCK()), 1000 ether);
+
+        // Deal ETH to the lender mock
+        vm.deal(address(strategy__.LENDER_MOCK()), 1000 ether);
+
+        // Store strategy reference for test compatibility
+        strategy = strategy__;
+
+        return context;
     }
 
-    function _allPossibleStvHolders() internal view override returns (address[] memory) {
-        address[] memory holders_ = super._allPossibleStvHolders();
-        address[] memory holders = new address[](holders_.length + 1);
-        for (uint256 i = 0; i < holders_.length; i++) {
+    function _allPossibleStvHolders(WrapperContext memory ctx) internal view override returns (address[] memory) {
+        address[] memory holders_ = super._allPossibleStvHolders(ctx);
+        address[] memory holders = new address[](holders_.length + 2);
+        uint256 i = 0;
+        for (i = 0; i < holders_.length; i++) {
             holders[i] = holders_[i];
         }
-        holders[holders_.length] = address(strategy);
+        holders[i++] = address(strategy);
+        holders[i++] = address(strategy.LENDER_MOCK());
         return holders;
     }
 
-    // Helper function to get wrapper as WrapperC
-    function wrapperC() internal view returns (WrapperC) {
-        return WrapperC(payable(address(wrapper)));
-    }
-
-    function _checkInitialState() internal virtual override {
+    function _checkInitialState(WrapperContext memory ctx) internal virtual override {
         // Call parent checks first
-        super._checkInitialState();
+        super._checkInitialState(ctx);
 
         // WrapperC specific: has strategy checks
         if (address(strategy) != address(0)) {
-            assertEq(address(wrapperC().STRATEGY()), address(strategy), "Strategy should be set correctly");
+            assertEq(address(wrapperC(ctx).STRATEGY()), address(strategy), "Strategy should be set correctly");
             // Additional strategy-specific initial state checks can go here
         }
     }
 
-    function _assertUniversalInvariants(string memory _context) internal virtual override {
+    function _assertUniversalInvariants(string memory _context, WrapperContext memory _ctx) internal virtual override {
         // Call parent invariants
-        super._assertUniversalInvariants(_context);
+        super._assertUniversalInvariants(_context, _ctx);
 
         // WrapperC specific: strategy-related invariants
         if (address(strategy) != address(0)) {
             // Add strategy-specific invariants here if needed
             // For example, checking strategy positions, health factors, etc.
         }
+    }
+
+    // Helper function to access WrapperC-specific functionality from context
+    function wrapperC(WrapperContext memory ctx) internal pure returns (WrapperC) {
+        return WrapperC(payable(address(ctx.wrapper)));
     }
 }
