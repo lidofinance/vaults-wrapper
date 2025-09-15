@@ -30,7 +30,13 @@ interface IVaultHub is IVaultHubIntact {
 }
 
 interface ILazyOracleMocked is ILazyOracle {
-    function mock__updateVaultData(address _vault, uint256 _totalValue, uint256 _cumulativeLidoFees, uint256 _liabilityShares, uint256 _slashingReserve) external;
+        function mock__updateVaultData(
+        address _vault,
+        uint256 _totalValue,
+        uint256 _cumulativeLidoFees,
+        uint256 _liabilityShares,
+        uint256 _maxLiabilityShares,
+        uint256 _slashingReserve) external;
 }
 
 contract CoreHarness is Test {
@@ -118,8 +124,9 @@ contract CoreHarness is Test {
 
         // TODO: remove _onlyUpdateReportData flag
         if (!_onlyUpdateReportData) {
+            uint256 maxLiabilityShares = vaultHub.vaultRecord(_stakingVault).maxLiabilityShares;
             console.log("Calling mock__updateVaultData with totalValue:", _totalValue);
-            lazyOracle.mock__updateVaultData(_stakingVault, _totalValue, _cumulativeLidoFees, _liabilityShares, _slashingReserve);
+            lazyOracle.mock__updateVaultData(_stakingVault, _totalValue, _cumulativeLidoFees, _liabilityShares, maxLiabilityShares, _slashingReserve);
             console.log("After mock__updateVaultData, totalValue from vaultHub:", vaultHub.totalValue(_stakingVault));
         }
 

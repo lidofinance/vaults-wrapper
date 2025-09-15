@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity >=0.8.25;
 
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+
 import {Test, console} from "forge-std/Test.sol";
 
 import {WrapperBHarness} from "test/utils/WrapperBHarness.sol";
@@ -256,7 +258,7 @@ contract WrapperBTest is WrapperBHarness {
         // _assertUniversalInvariants("Step 2", ctx);
     }
 
-    function test_user_can_withdraw_without_burning() public {
+    function test_user_withdraws_without_burning() public {
         WrapperContext memory ctx = _deployWrapperB(false, 0);
         WrapperB w = wrapperB(ctx);
 
@@ -285,13 +287,40 @@ contract WrapperBTest is WrapperBHarness {
         assertEq(w.withdrawableEth(USER1, w.balanceOf(USER1), 0), user1Rewards, "USER1 withdrawable eth should be equal to user1Rewards");
         assertEq(w.withdrawableEth(USER1, w.balanceOf(USER1), expectedUser1MintedStShares), w.previewRedeem(w.balanceOf(USER1)), "USER1 withdrawable eth should be equal to user1Deposit + user1Rewards");
 
-        assertEq(w.stethSharesForWithdrawal(USER1, w.balanceOf(USER1)), expectedUser1MintedStShares, "USER1 stSharesForWithdrawal should be equal to expectedUser1MintedStShares");
+        // assertEq(w.stethSharesForWithdrawal(USER1, w.balanceOf(USER1)), expectedUser1MintedStShares, "USER1 stSharesForWithdrawal should be equal to expectedUser1MintedStShares");
+
+        uint256 rewardsStvShares = Math.mulDiv(user1Rewards, w.balanceOf(USER1), user1Deposit + user1Rewards, Math.Rounding.Floor);
+        // TODO: fix fail here
+        assertEq(w.stethSharesForWithdrawal(USER1, rewardsStvShares), 0, "USER1 stSharesForWithdrawal should be equal to 0");
 
         _assertUniversalInvariants("Step 1", ctx);
 
+
         //
-        // Step 2: User1 withdraws
+        // Step 2: User1 withdraws rewards without burning any stethShares
         //
+
+        // uint256 requestId = w.requestWithdrawal(rewardsStvShares);
+        // WithdrawalQueue.WithdrawalRequestStatus memory status = ctx.withdrawalQueue.getWithdrawalStatus(requestId);
+        // assertEq(status.amountOfAssets, user1Rewards, "Withdrawal request amount should match previewRedeem");
+
+        // vm.prank(NODE_OPERATOR);
+        // ctx.withdrawalQueue.finalize(requestId);
+
+        // status = ctx.withdrawalQueue.getWithdrawalStatus(requestId);
+        // // assertTrue(status.isFinalized, "Withdrawal request should be finalized");
+        // assertEq(status.amountOfAssets, user1Rewards, "Withdrawal request amount should match previewRedeem");
+        // // assertEq(status.amountOfShares, user1SharesToWithdraw, "Withdrawal request shares should match user1SharesToWithdraw");
+
+        // // Deal ETH to withdrawal queue for the claim (simulating validator exit)
+        // vm.deal(address(ctx.withdrawalQueue), address(ctx.withdrawalQueue).balance + user1Rewards);
+
+        // // User1 claims their withdrawal
+        // uint256 user1EthBalanceBeforeClaim = USER1.balance;
+        // vm.prank(USER1);
+        // w.claimWithdrawal(requestId, USER1);
+
+        // assertEq(USER1.balance, user1EthBalanceBeforeClaim + user1Rewards, "USER1 ETH balance should increase by the withdrawn amount");
 
     }
 

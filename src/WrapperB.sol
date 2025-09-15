@@ -93,15 +93,18 @@ contract WrapperB is WrapperBase {
     //
 
     function withdrawableEth(address _address, uint256 _stvShares, uint256 _stethSharesToBurn) public view returns (uint256 ethAmount) {
-        uint256 vaultWithdrawableEth = DASHBOARD.withdrawableValue();
-        uint256 userEthWithdrawableWithoutBurning = _getPartCorrespondingToStvShares(_stvShares, vaultWithdrawableEth);
+        (, uint256 userEthWithdrawableWithoutBurning) = _calcWithdrawableWithoutBurning(_address);
         uint256 userEthRequiringBurning = _convertToAssets(_stvShares) - userEthWithdrawableWithoutBurning;
 
-        // ethAmount = userEthWithdrawableWithoutBurning + _getPartCorrespondingToStShares(_stSharesToBurn, userEthRequiringBurning, _address);
         ethAmount = userEthWithdrawableWithoutBurning +
             Math.mulDiv(_stethSharesToBurn, userEthRequiringBurning, _getStethShares(_address), Math.Rounding.Floor);
     }
 
+    function withdrawableStv(address _address, uint256 _stethSharesToBurn) public view returns (uint256 stv) {
+        uint256 userStv = balanceOf(_address);
+        uint256 eth = withdrawableEth(_address, userStv, _stethSharesToBurn);
+        stv = Math.mulDiv(eth, userStv, _convertToAssets(userStv), Math.Rounding.Floor);
+    }
 
     /**
      * @notice Calculate the amount of stETH shares required for a given amount of stvETH shares to withdraw
@@ -114,8 +117,27 @@ contract WrapperB is WrapperBase {
         uint256 balance = balanceOf(_address);
         if (balance == 0) return 0; // TODO: revert here?
 
+        (uint256 stvWithdrawableWithoutBurning, ) = _calcWithdrawableWithoutBurning(_address);
+
+        uint256 stv = Math.saturatingSub(_stvShares, stvWithdrawableWithoutBurning);
+
         // TODO: Ceil or Floor?
-        stethShares = Math.mulDiv(_stvShares, _getStethShares(_address), balance, Math.Rounding.Ceil);
+        stethShares = Math.mulDiv(stv, _getStethShares(_address), balance, Math.Rounding.Ceil);
+    }
+
+    function _calcEthWithdrawableWithoutBurning(address _address) internal view returns (uint256 withdrawableEther) {
+        uint256 vaultWithdrawableEth = DASHBOARD.withdrawableValue();
+        uint256 stvShares = balanceOf(_address);
+        withdrawableEther = _getPartCorrespondingToStvShares(stvShares, vaultWithdrawableEth);
+    }
+
+    function _calcWithdrawableWithoutBurning(address _address) internal view returns (uint256 stvShares, uint256 ethAmount) {
+        uint256 vaultWithdrawableEth = DASHBOARD.withdrawableValue();
+        uint256 totalUserStv = balanceOf(_address);
+        ethAmount = _getPartCorrespondingToStvShares(totalUserStv, vaultWithdrawableEth);
+        // uint256 userEthWithdrawableWithoutBurning = _calcEthWithdrawableWithoutBurning(_address);
+        // ethAmount = userEthWithdrawableWithoutBurning;
+        stvShares = Math.mulDiv(ethAmount, totalUserStv, _convertToAssets(totalUserStv), Math.Rounding.Floor);
     }
 
     function mintableStethShares(address _address) external view returns (uint256 stethShares) {
@@ -124,15 +146,15 @@ contract WrapperB is WrapperBase {
 
     function _calcYetMintableStethShares(address _address) public view returns (uint256 stethShares) {
         uint256 stvShares = balanceOf(_address);
-        uint256 userEth = _convertToAssets(stvShares);
+        uint256 stvEth = _convertToAssets(stvShares);
 
-        uint256 reserveEth = Math.mulDiv(userEth, WRAPPER_RR_BP, TOTAL_BASIS_POINTS, Math.Rounding.Floor);
+        uint256 reserveEth = Math.mulDiv(stvEth, WRAPPER_RR_BP, TOTAL_BASIS_POINTS, Math.Rounding.Floor);
         uint256 vaultRemainingMintingCapacity = DASHBOARD.remainingMintingCapacityShares(0);
 
-        stethShares = Math.min(
-            STETH.getSharesByPooledEth(userEth - reserveEth) - _getStethShares(_address),
-            vaultRemainingMintingCapacity
-        );
+        uint256 stethSharesForUnreservedEth = STETH.getSharesByPooledEth(stvEth - reserveEth);
+        uint256 notMintedStethShares = Math.saturatingSub(stethSharesForUnreservedEth, _getStethShares(_address));
+
+        stethShares = Math.min(notMintedStethShares, vaultRemainingMintingCapacity);
     }
 
     function mintStethShares(uint256 _stethShares) external {
