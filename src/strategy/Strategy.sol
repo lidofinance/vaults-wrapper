@@ -11,16 +11,20 @@ abstract contract Strategy is IStrategy {
 
     IStETH public immutable STETH;
     address public immutable STRATEGY_PROXY_IMPL;
-    WrapperC public immutable WRAPPER;
+
+    WrapperC public WRAPPER;
 
     mapping(bytes32 salt => address proxy) public userStrategyProxy;
 
     error ZeroAddress();
 
-    constructor(address _stETH, address _wrapper, address _strategyProxyImpl) {
+    constructor(address _stETH, address _strategyProxyImpl) {
         STETH = IStETH(_stETH);
-        WRAPPER = WrapperC(payable(_wrapper));
         STRATEGY_PROXY_IMPL = _strategyProxyImpl;
+    }
+
+    function initialize(address _wrapper) external {
+        WRAPPER = WrapperC(payable(_wrapper));
     }
 
     /// @notice Returns the strategy id

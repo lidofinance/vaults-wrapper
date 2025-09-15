@@ -65,7 +65,8 @@ contract FactoryTest is Test {
                 3600, // 1 hour confirm expiry
                 Factory.WrapperConfiguration.NO_MINTING_NO_STRATEGY,
                 address(0), // no strategy for this test
-                false // allowlist disabled
+                false, // allowlist disabled
+                0 // reserve ratio gap
             );
 
         WrapperBase wrapper = WrapperBase(wrapperProxy);
@@ -103,7 +104,8 @@ contract FactoryTest is Test {
             3600, // 1 hour confirm expiry
             Factory.WrapperConfiguration.NO_MINTING_NO_STRATEGY,
             address(0), // no strategy for this test
-            false // allowlist disabled
+            false, // allowlist disabled
+            0 // reserve ratio gap
         );
     }
 
@@ -121,7 +123,8 @@ contract FactoryTest is Test {
                 3600, // 1 hour confirm expiry
                 Factory.WrapperConfiguration.MINTING_AND_STRATEGY,
                 strategyAddress, // strategy for this test
-                false // allowlist disabled
+                false, // allowlist disabled
+                0 // reserve ratio gap
             );
 
         WrapperBase wrapper = WrapperBase(wrapperProxy);
@@ -156,7 +159,8 @@ contract FactoryTest is Test {
                 3600, // 1 hour confirm expiry
                 Factory.WrapperConfiguration.NO_MINTING_NO_STRATEGY,
                 address(0), // no strategy
-                true // allowlist enabled
+                true, // allowlist enabled
+                0 // reserve ratio gap
             );
 
         WrapperBase wrapper = WrapperBase(wrapperProxy);

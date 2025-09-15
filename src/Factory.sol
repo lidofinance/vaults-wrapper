@@ -12,6 +12,7 @@ import {LoopStrategy} from "./strategy/LoopStrategy.sol";
 import {IVaultFactory} from "./interfaces/IVaultFactory.sol";
 import {IDashboard} from "./interfaces/IDashboard.sol";
 import {ILidoLocator} from "./interfaces/ILidoLocator.sol";
+import {IStrategy} from "./interfaces/IStrategy.sol";
 
 error InvalidConfiguration();
 
@@ -29,6 +30,8 @@ contract Factory {
         address strategy,
         WrapperConfiguration configuration
     );
+
+    error ZeroAddress();
 
     enum WrapperConfiguration {
         NO_MINTING_NO_STRATEGY,    // (A) no minting, no strategy
@@ -48,7 +51,8 @@ contract Factory {
         uint256 _confirmExpiry,
         WrapperConfiguration _configuration,
         address _strategy,
-        bool _allowlistEnabled
+        bool _allowlistEnabled,
+        uint256 _reserveRatioGapBP
     )
         external
         payable
@@ -87,7 +91,8 @@ contract Factory {
                 dashboard,
                 lazyOracle,
                 _allowlistEnabled,
-                _nodeOperator
+                _nodeOperator,
+                _reserveRatioGapBP
             );
         } else if (_configuration == WrapperConfiguration.MINTING_AND_STRATEGY) {
             (wrapperProxy, withdrawalQueueProxy) = _deployWrapperC(
@@ -95,7 +100,8 @@ contract Factory {
                 lazyOracle,
                 _allowlistEnabled,
                 _nodeOperator,
-                _strategy
+                _strategy,
+                _reserveRatioGapBP
             );
         } else {
             revert("Invalid configuration");
@@ -164,10 +170,11 @@ contract Factory {
         address dashboard,
         address lazyOracle,
         bool _allowlistEnabled,
-        address _nodeOperator
+        address _nodeOperator,
+        uint256 _reserveRatioGapBP
     ) internal returns (address payable wrapperProxy, address withdrawalQueueProxy) {
         // Step 1: Create wrapper implementation
-        WrapperB wrapperImpl = new WrapperB(dashboard, STETH, _allowlistEnabled);
+        WrapperB wrapperImpl = new WrapperB(dashboard, STETH, _allowlistEnabled, _reserveRatioGapBP);
 
         // Step 2: Deploy wrapper proxy
         wrapperProxy = payable(address(new ERC1967Proxy(
@@ -191,10 +198,11 @@ contract Factory {
         address lazyOracle,
         bool _allowlistEnabled,
         address _nodeOperator,
-        address _strategy
+        address _strategy,
+        uint256 _reserveRatioGapBP
     ) internal returns (address payable wrapperProxy, address withdrawalQueueProxy) {
         // Step 1: Create wrapper implementation with zero strategy initially
-        WrapperC wrapperImpl = new WrapperC(dashboard, STETH, _allowlistEnabled, address(0));
+        WrapperC wrapperImpl = new WrapperC(dashboard, STETH, _allowlistEnabled, address(0), _reserveRatioGapBP);
 
         // Step 2: Deploy wrapper proxy
         wrapperProxy = payable(address(new ERC1967Proxy(
@@ -213,14 +221,20 @@ contract Factory {
         ));
 
         // Step 5: Set the strategy on the wrapper
-        if (_strategy == address(0)) {
-            // If no strategy provided, create a default LoopStrategy
-            uint256 loops = 1; // Default number of loops
-            LoopStrategy strategyImpl = new LoopStrategy(STETH, wrapperProxy, loops);
-            WrapperC(wrapperProxy).setStrategy(address(strategyImpl));
-        } else {
-            // Use the provided strategy
-            WrapperC(wrapperProxy).setStrategy(_strategy);
-        }
+        if (_strategy == address(0)) revert ZeroAddress();
+
+        IStrategy(_strategy).initialize(wrapperProxy);
+        WrapperC(wrapperProxy).setStrategy(_strategy);
+
+
+//        if (_strategy == address(0)) {
+//            // If no strategy provided, create a default LoopStrategy
+//            uint256 loops = 1; // Default number of loops
+//            LoopStrategy strategyImpl = new LoopStrategy(STETH, wrapperProxy, loops);
+//            WrapperC(wrapperProxy).setStrategy(address(strategyImpl));
+//        } else {
+//            // Use the provided strategy
+//
+//        }
     }
 }

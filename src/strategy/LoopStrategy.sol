@@ -15,8 +15,9 @@ error NoStETHAvailableForLeverage();
 contract LoopStrategy is IStrategy {
     IERC20 public immutable STV_TOKEN;
     IStETH public immutable STETH;
-    WrapperC public immutable WRAPPER;
     LenderMock public immutable LENDER_MOCK;
+
+    WrapperC public WRAPPER;
 
     struct UserPosition {
         address user;
@@ -29,14 +30,17 @@ contract LoopStrategy is IStrategy {
 
     uint256 public immutable LOOPS;
 
-    constructor(address _stETH, address _wrapper, uint256 _loops) {
+    constructor(address _stETH, uint256 _loops) {
         STETH = IStETH(_stETH);
-        WRAPPER = WrapperC(payable(_wrapper));
-        STV_TOKEN = IERC20(_wrapper);
+//        STV_TOKEN = IERC20(_wrapper);
 
         LOOPS = _loops;
 
         LENDER_MOCK = new LenderMock(_stETH);
+    }
+
+    function initialize(address _wrapper) external {
+        WRAPPER = WrapperC(payable(_wrapper));
     }
 
     function strategyId() external pure override returns (bytes32) {
@@ -55,7 +59,7 @@ contract LoopStrategy is IStrategy {
         uint256 mintableStShares = _mintableStShares;
         uint256 borrowedEth = 0;
         for (uint256 i = 0; i < LOOPS; i++) {
-            WRAPPER.mintStShares(mintableStShares);
+            WRAPPER.mintStethShares(mintableStShares);
             position.stShares += _mintableStShares;
 
             borrowedEth = _borrowFromPool(STETH.getPooledEthByShares(mintableStShares));
@@ -91,12 +95,9 @@ contract LoopStrategy is IStrategy {
         // LENDER_MOCK.giveBack{value: address(this).balance}();
         // return WRAPPER.requestWithdrawal(_stvShares);
         uint256 stvShares = _getStvSharesWithdrawableWithoutBurningStShares(_user);
-        return WRAPPER.requestWithdrawal(_stvShares);
-    }
-
-    function requestWithdraw(uint256 _stvShares) external override {
-        revert("Use requestWithdraw(address, uint256) instead");
+       return WRAPPER.requestWithdrawalQueue(msg.sender, msg.sender, stvShares);
     }
 
     function finalizeWithdrawal(uint256 shares) external returns(uint256 stvToken) {}
+    function finalizeWithdrawal(address _receiver, uint256 stETHAmount) external returns(uint256 stvToken) {}
 }

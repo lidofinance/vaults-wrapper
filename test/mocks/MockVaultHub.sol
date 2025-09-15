@@ -36,7 +36,7 @@ contract MockVaultHub { // TODO: maybe inherit IVaultHub
             owner: address(0),
             shareLimit: 0,
             vaultIndex: 0,
-            pendingDisconnect: false,
+            disconnectInitiatedTs: type(uint48).max,
             reserveRatioBP: 0,
             forcedRebalanceThresholdBP: 0,
             infraFeeBP: 0,

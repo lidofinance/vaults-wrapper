@@ -7,6 +7,7 @@ import {WrapperB} from "./WrapperB.sol";
 import {IStrategy} from "./interfaces/IStrategy.sol";
 import {WithdrawalQueue} from "./WithdrawalQueue.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 
 error InvalidConfiguration();
 
@@ -15,6 +16,7 @@ error InvalidConfiguration();
  * @notice Configuration C: Minting functionality with strategy - stvETH shares with stETH minting capability and strategy integration
  */
 contract WrapperC is WrapperB {
+    using EnumerableSet for EnumerableSet.UintSet;
 
     IStrategy public STRATEGY;
 
@@ -24,8 +26,9 @@ contract WrapperC is WrapperB {
         address _dashboard,
         address _stETH,
         bool _allowListEnabled,
-        address _strategy
-    ) WrapperB(_dashboard, _stETH, _allowListEnabled) {
+        address _strategy,
+        uint256 _reserveRatioGapBP
+    ) WrapperB(_dashboard, _stETH, _allowListEnabled, _reserveRatioGapBP) {
         // Strategy can be set to zero initially and set later via setStrategy
         STRATEGY = IStrategy(_strategy);
     }
@@ -38,10 +41,10 @@ contract WrapperC is WrapperB {
      * @return stvShares Amount of stvETH shares minted
      */
     function depositETH(address _receiver, address _referral) public payable override returns (uint256 stvShares) {
-        uint256 strategyMintableStSharesBefore = this.mintableStShares(address(STRATEGY));
+        uint256 strategyMintableStSharesBefore = this.mintableStethShares(address(STRATEGY));
         uint256 mintableStSharesBefore = DASHBOARD.remainingMintingCapacityShares(0);
         stvShares = _deposit(address(STRATEGY), _referral);
-        uint256 strategyMintableStSharesAfter = this.mintableStShares(address(STRATEGY));
+        uint256 strategyMintableStSharesAfter = this.mintableStethShares(address(STRATEGY));
         uint256 mintableStSharesAfter = DASHBOARD.remainingMintingCapacityShares(0);
 
         uint256 newStrategyMintableStShares = strategyMintableStSharesAfter - strategyMintableStSharesBefore;
@@ -50,7 +53,7 @@ contract WrapperC is WrapperB {
         // require(newStrategyMintableStShares == newMintableStShares, "Strategy mintable stETH shares do not match mintable stETH shares");
 
         // TODO: add assert
-        // assert(mintableStShares(address(STRATEGY), stvShares) == mintableStSharesAfter - mintableStSharesBefore);
+        // assert(mintableStethShares(address(STRATEGY), stvShares) == mintableStSharesAfter - mintableStSharesBefore);
         STRATEGY.execute(_receiver, stvShares, newStrategyMintableStShares);
     }
 
@@ -60,24 +63,68 @@ contract WrapperC is WrapperB {
     }
 
     /**
-     * @notice Requests a withdrawal of the specified amount of stvETH shares via the strategy.
-     *         Requires having position in the strategy with enough stvETH shares.
-     * @dev Forwards the withdrawal request to the configured strategy contract.
-     * @param _stvShares The amount of stvETH shares to withdraw.
-     */
-    function requestWithdrawalFromStrategy(uint256 _stvShares) external {
-         STRATEGY.requestWithdraw(msg.sender,_stvShares);
-    }
-
-    /**
      * @notice Requests a withdrawal of the specified amount of stvETH shares without involving the strategy.
      *         Requires having the stvShares and enough stETH approved for this contract
      * @dev Calls the parent contract's requestWithdrawal function directly.
      * @param _stvShares The amount of stvETH shares to withdraw.
      * @return requestId The ID of the created withdrawal request.
      */
-    function requestWithdrawal(uint256 _stvShares) public override returns (uint256 requestId) {
-        return super.requestWithdrawal(_stvShares);
+    function requestWithdrawal(uint256 _stvShares) public override returns (WithdrawalRequest memory) {
+        WrapperBaseStorage storage $ = _getWrapperBaseStorage();
+        uint256 requestId = $.withdrawalRequests.length;
+        WithdrawalRequest memory request = WithdrawalRequest({
+            requestId: requestId,
+            requestType: WithdrawalType.STRATEGY,
+            owner: msg.sender
+        });
+        $.withdrawalRequests.push(request);
+
+        $.requestsByOwner[msg.sender].add(requestId);
+        $.requestsByOwner[address(STRATEGY)].add(requestId);
+
+        STRATEGY.requestWithdraw(msg.sender, _stvShares);
+
+        emit WithdrawalRequestCreated(request.requestId, msg.sender, request.requestType);
+
+        return request;
+    }
+
+    function finalizeWithdrawal(uint256 _requestId, uint256 _stvShares) external {
+        WrapperBaseStorage storage $ = _getWrapperBaseStorage();
+        WithdrawalRequest memory request = $.withdrawalRequests[_requestId];
+        if (request.requestType != WithdrawalType.STRATEGY) revert WrapperBase.InvalidRequestType();
+
+        $.requestsByOwner[request.owner].remove(_requestId);
+        $.requestsByOwner[address(STRATEGY)].remove(_requestId);
+
+        STRATEGY.finalizeWithdrawal(request.owner, _stvShares);
+    }
+
+    //user -> createWithdrawalRequest
+    // requests[user] = 1
+    // теперь NO надо пофинаить этот requestId, т.е ему нужно видеть какие запросы сейчас открыты именно с типом стратегия
+
+    /// @notice Requests a withdrawal of the specified amount of stvETH shares from the strategy
+    /// @param _owner The address that owns the stvETH shares
+    /// @param _receiver The address to receive the stETH
+    /// @param _stvShares The amount of stvETH shares to withdraw
+    /// @return requestId The ID of the created withdrawal request
+    function requestWithdrawalQueue(address _owner, address _receiver, uint256 _stvShares) external returns (uint256 requestId) {
+        if (msg.sender != address(STRATEGY)) revert NotStrategy();
+        requestId = _requestWithdrawalQueue(_owner, _receiver,_stvShares);
+    }
+
+    /// @notice Adds a withdrawal request by strategy
+    function addWithdrawalRequest(WithdrawalRequest memory _request) external {
+        if (msg.sender != address(STRATEGY)) revert NotStrategy();
+        WrapperBaseStorage storage $ = _getWrapperBaseStorage();
+        $.withdrawalRequests.push(_request);
+        $.requestsByOwner[_request.owner].add(_request.requestId);
+    }
+
+    function getRequestStatus(uint256 requestId) external returns (WithdrawalRequest memory) {
+        WrapperBaseStorage storage $ = _getWrapperBaseStorage();
+        return $.withdrawalRequests[requestId];
     }
 
     // TODO: get rid of this and make STRATEGY immutable
