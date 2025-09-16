@@ -68,6 +68,15 @@ abstract contract ProposalUpgradable is Initializable, AccessControlEnumerableUp
     }
 
     // =================================================================================
+    // View functions
+    // =================================================================================
+
+    function getCurrentUpgradeProposal() external view returns  (ProposalUpgradableStorage memory) {
+        ProposalUpgradableStorage storage $ = _getProposalUpgradableStorage();
+        return $;
+    }
+
+    // =================================================================================
     // Upgrade functions
     // =================================================================================
 
@@ -186,7 +195,7 @@ abstract contract ProposalUpgradable is Initializable, AccessControlEnumerableUp
     }
 
     function _hashUpgradePayload(WrapperUpgradePayload calldata _payload) internal pure returns (bytes32) {
-        return keccak256(abi.encodePacked(_payload.newImplementation, _payload.newWqImplementation, _payload.upgradeData));
+        return keccak256(abi.encode(_payload));
     }
 
 }

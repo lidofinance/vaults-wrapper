@@ -6,7 +6,7 @@ import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
 
 contract ProposalUpgradableHarness is ProposalUpgradable {
     address private wqContract;
-    bool private canUpgrade = true;
+    bool private canUpgrade;
 
     event UpgradeInitialized();
     
@@ -20,6 +20,7 @@ contract ProposalUpgradableHarness is ProposalUpgradable {
         _grantRole(DEFAULT_ADMIN_ROLE, owner);
         _initializeProposalUpgradable(proposer, conformer);
         wqContract = _wqContract;
+        canUpgrade = true;
     }
 
     function initializeUpgrade() public{
