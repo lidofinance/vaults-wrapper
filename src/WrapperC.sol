@@ -2,7 +2,6 @@
 pragma solidity >=0.8.25;
 
 import {WrapperBase} from "./WrapperBase.sol";
-import {WrapperA} from "./WrapperA.sol";
 import {WrapperB} from "./WrapperB.sol";
 import {IStrategy} from "./interfaces/IStrategy.sol";
 import {WithdrawalQueue} from "./WithdrawalQueue.sol";
@@ -100,9 +99,6 @@ contract WrapperC is WrapperB {
         STRATEGY.finalizeWithdrawal(request.owner, _stvShares);
     }
 
-    //user -> createWithdrawalRequest
-    // requests[user] = 1
-    // теперь NO надо пофинаить этот requestId, т.е ему нужно видеть какие запросы сейчас открыты именно с типом стратегия
 
     /// @notice Requests a withdrawal of the specified amount of stvETH shares from the strategy
     /// @param _owner The address that owns the stvETH shares

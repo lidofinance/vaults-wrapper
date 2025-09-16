@@ -84,32 +84,6 @@ contract GGVTest is WrapperCHarness {
         _setupGGV();
     }
 
-//    function setUp() public {
-//        super._setUp(Factory.WrapperConfiguration.MINTING_AND_STRATEGY, address(0), false);
-//        _checkInitialState();
-//
-//        wrapperC = WrapperC(payable(address(wrapperC)));
-//
-//        address strategyProxyImpl = address(new StrategyProxy());
-//        strategy = new GGVStrategy(
-//            strategyProxyImpl,
-//            address(core.steth()),
-//            address(wrapperC),
-//            address(teller),
-//            address(boringOnChainQueue)
-//        );
-//
-//        vm.prank(NODE_OPERATOR);
-//        wrapperC.setStrategy(address(strategy));
-//
-//        vm.deal(user1, 1000 ether);
-//        vm.deal(user2, 1000 ether);
-//        vm.deal(user3, 1000 ether);
-//
-//        _setupGGV();
-//    }
-
-
     function _setupGGV() public {
         address tellerAuthority = teller.authority();
         console.log("teller authority", tellerAuthority);

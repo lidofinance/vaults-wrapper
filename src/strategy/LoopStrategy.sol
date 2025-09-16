@@ -54,7 +54,7 @@ contract LoopStrategy is IStrategy {
     function execute(address _user, uint256 _stvShares, uint256 _mintableStShares) external {
         UserPosition memory position = userPositions[_user];
         position.stvShares += _stvShares;
-        position.user = _user;
+        position.stShares += _mintableStShares;
 
         uint256 mintableStShares = _mintableStShares;
         uint256 borrowedEth = 0;
