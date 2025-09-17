@@ -40,9 +40,8 @@ contract WrapperC is WrapperB {
     function depositETH(address _receiver, address _referral) public payable override returns (uint256 stvShares) {
         uint256 mintableStSharesBefore = DASHBOARD.remainingMintingCapacityShares(0);
         stvShares = _deposit(address(STRATEGY), _referral);
-        uint256 mintableStSharesAfter = DASHBOARD.remainingMintingCapacityShares(0);
 
-        uint256 newStrategyMintableStShares = mintableStSharesAfter - mintableStSharesBefore;
+        uint256 newStrategyMintableStShares = DASHBOARD.remainingMintingCapacityShares(0) - mintableStSharesBefore;
 
         // TODO: add assert?
         // assert(mintableStethShares(address(STRATEGY), stvShares) == mintableStSharesAfter - mintableStSharesBefore);
