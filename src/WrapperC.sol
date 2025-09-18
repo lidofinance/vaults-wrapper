@@ -28,7 +28,6 @@ contract WrapperC is WrapperB {
         address _strategy,
         uint256 _reserveRatioGapBP
     ) WrapperB(_dashboard, _stETH, _allowListEnabled, _reserveRatioGapBP) {
-        // Strategy can be set to zero initially and set later via setStrategy
         STRATEGY = IStrategy(_strategy);
     }
 
@@ -40,18 +39,12 @@ contract WrapperC is WrapperB {
      * @return stvShares Amount of stvETH shares minted
      */
     function depositETH(address _receiver, address _referral) public payable override returns (uint256 stvShares) {
-        uint256 strategyMintableStSharesBefore = this.mintableStethShares(address(STRATEGY));
         uint256 mintableStSharesBefore = DASHBOARD.remainingMintingCapacityShares(0);
         stvShares = _deposit(address(STRATEGY), _referral);
-        uint256 strategyMintableStSharesAfter = this.mintableStethShares(address(STRATEGY));
-        uint256 mintableStSharesAfter = DASHBOARD.remainingMintingCapacityShares(0);
 
-        uint256 newStrategyMintableStShares = strategyMintableStSharesAfter - strategyMintableStSharesBefore;
+        uint256 newStrategyMintableStShares = DASHBOARD.remainingMintingCapacityShares(0) - mintableStSharesBefore;
 
-        // uint256 newMintableStShares = mintableStSharesAfter - mintableStSharesBefore;
-        // require(newStrategyMintableStShares == newMintableStShares, "Strategy mintable stETH shares do not match mintable stETH shares");
-
-        // TODO: add assert
+        // TODO: add assert?
         // assert(mintableStethShares(address(STRATEGY), stvShares) == mintableStSharesAfter - mintableStSharesBefore);
         STRATEGY.execute(_receiver, stvShares, newStrategyMintableStShares);
     }

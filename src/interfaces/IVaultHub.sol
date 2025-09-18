@@ -74,6 +74,47 @@ interface IVaultHub is IAccessControl {
         uint48 timestamp;
     }
 
+    struct VaultRecord {
+        // ### 1st slot
+        /// @notice latest report for the vault
+        Report report;
+        // ### 2nd slot
+        /// @notice max number of shares that was minted by the vault in current Oracle period
+        /// (used to calculate the locked value on the vault)
+        uint96 maxLiabilityShares;
+        /// @notice liability shares of the vault
+        uint96 liabilityShares;
+        // ### 3rd and 4th slots
+        /// @notice inOutDelta of the vault (all deposits - all withdrawals)
+        Int104WithCache[2] inOutDelta; // 2 is the constant DOUBLE_CACHE_LENGTH from RefSlotCache.sol
+        // ### 5th slot
+        /// @notice the minimal value that the reserve part of the locked can be
+        uint128 minimalReserve;
+        /// @notice part of liability shares reserved to be burnt as Lido core redemptions
+        uint128 redemptionShares;
+        // ### 6th slot
+        /// @notice cumulative value for Lido fees that accrued on the vault
+        uint128 cumulativeLidoFees;
+        /// @notice cumulative value for Lido fees that were settled on the vault
+        uint128 settledLidoFees;
+    }
+
+    struct Report {
+        /// @notice total value of the vault
+        uint104 totalValue;
+        /// @notice inOutDelta of the report
+        int104 inOutDelta;
+        /// @notice timestamp (in seconds)
+        uint48 timestamp;
+    }
+
+    struct Int104WithCache {
+        int104 value;
+        int104 valueOnRefSlot;
+        uint48 refSlot;
+    }
+
+
     function CONNECT_DEPOSIT() external view returns (uint256);
 
     function fund(address vault) external payable;
@@ -92,6 +133,8 @@ interface IVaultHub is IAccessControl {
     function vaultRecord(address _vault) external view returns (VaultRecord memory);
     function maxLockableValue(address _vault) external view returns (uint256);
     function isReportFresh(address _vault) external view returns (bool);
+
+    function vaultRecord(address _vault) external view returns (VaultRecord memory);
 
     function transferVaultOwnership(address _vault, address _newOwner) external;
 
