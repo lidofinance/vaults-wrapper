@@ -164,25 +164,31 @@ contract WrapperB is WrapperBase {
 
     // TODO: add request as ether as arg (not stvShares)
     function requestWithdrawal(uint256 _stv) public virtual returns (uint256 requestId) {
+        uint256 withdrawalQueueRequestId = _requestWithdrawalQueue(msg.sender, msg.sender, _stv);
+
+        return withdrawalQueueRequestId;
+    }
+
+    function _requestWithdrawalQueue(address _owner, address _receiver, uint256 _stv) internal returns (uint256 requestId) {
         if (_stv == 0) revert WrapperBase.ZeroStvShares();
 
         // TODO: move min max withdrawal amount check from WQ here?
 
         WithdrawalQueue withdrawalQueue = withdrawalQueue();
 
-        uint256 stethShares = stethSharesForWithdrawal(msg.sender, _stv);
+        uint256 stethShares = stethSharesForWithdrawal(_owner, _stv);
 
-        _transfer(msg.sender, address(this), _stv);
+        _transfer(_owner, address(this), _stv);
 
         if (stethShares > 0) {
-            STETH.transferSharesFrom(msg.sender, address(this), stethShares);
+            STETH.transferSharesFrom(_owner, address(this), stethShares);
             _burnStethShares(stethShares);
         }
 
         // NB: needed to transfer to Wrapper first to do the math correctly
         _transfer(address(this), address(withdrawalQueue), _stv);
 
-        requestId = withdrawalQueue.requestWithdrawal(_stv, msg.sender);
+        requestId = withdrawalQueue.requestWithdrawal(_stv, _receiver);
     }
 
     //

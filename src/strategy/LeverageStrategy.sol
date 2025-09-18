@@ -8,16 +8,22 @@ import {WrapperC} from "../WrapperC.sol";
 import {IVaultHub} from "../interfaces/IVaultHub.sol";
 import {IDashboard} from "../interfaces/IDashboard.sol";
 import {LenderMock} from 'src/mock/LenderMock.sol';
+import {IWstETH} from "../interfaces/IWstETH.sol";
+
+import {console} from "forge-std/console.sol";
 
 contract LeverageStrategy is IStrategy {
 
     IERC20 public immutable STV_TOKEN;
     IStETH public immutable STETH;
+    IWstETH public immutable WSTETH;
     LenderMock public immutable LENDER_MOCK;
 
     WrapperC public WRAPPER;
 
     uint256 public immutable LOOPS;
+
+    error InvalidWrapper();
 
     struct UserPosition {
         address user;
@@ -28,11 +34,17 @@ contract LeverageStrategy is IStrategy {
 
     mapping(address user => UserPosition) public userPositions;
 
-    constructor(address _stETH, uint256 _loops) {
+
+    error InvalidWrapper();
+
+    constructor(address _stETH, address _wstETH, address _aavePool, uint256 _loops) {
         STETH = IStETH(_stETH);
+        WSTETH = IWstETH(_wstETH);
         LOOPS = _loops;
         LENDER_MOCK = new LenderMock(_stETH);
     }
+
+    receive() external payable {}
 
     function initialize(address _wrapper) external {
         WRAPPER = WrapperC(payable(_wrapper));
@@ -42,20 +54,56 @@ contract LeverageStrategy is IStrategy {
         return keccak256("strategy.leverage.v1");
     }
 
-    function execute(address _user, uint256 _stvShares, uint256 _mintableStShares) external {
+    function getUserPosition(address _address) external view returns (UserPosition memory) {
+        return userPositions[_address];
+    }
+
+    function execute(address _user, uint256 _stvShares, uint256 _mintableStethShares) external {
         _onlyWrapper();
+
+        console.log("\n---Execute start");
 
         UserPosition storage position = userPositions[_user];
         position.stvShares += _stvShares;
-        position.stShares += _mintableStShares;
+        position.stShares += _mintableStethShares;
 
-        
-        
+        uint256 borrowedEth = 0;
+        for (uint256 i = 0; i < LOOPS; i++) {
+           
+            WRAPPER.mintStethShares(_mintableStethShares);
+
+            uint256 stethAmount = STETH.getPooledEthByShares(_mintableStethShares);
+            STETH.approve(address(LENDER_MOCK), stethAmount);
+
+            uint256 ethBefore = address(this).balance;
+
+            // uint256 aToken = aave.supply(steth)
+            LENDER_MOCK.borrow(stethAmount);
+            // borrowedEth = weth().withdraw(weth);
+            
+            borrowedEth = address(this).balance - ethBefore;
+            position.borrowedEth += borrowedEth;
+
+            console.log("Send stETH %s, get %s ETH", stethAmount/ 1e18, borrowedEth / 1e18);
+
+            uint256 stethSharesBefore = STETH.sharesOf(address(this));
+
+            position.stvShares += WRAPPER.depositForStrategy{value: borrowedEth}();
+            _mintableStethShares = WRAPPER.mintableStethShares(address(this));
+            position.stShares += _mintableStethShares;
+        }
+
+
+
+        console.log("Execute end---");
     }
 
     function requestWithdraw(address _user, uint256 _stvShares) external returns (uint256 requestId) {}
 
-    function finalizeWithdrawal(address _receiver, uint256 stETHAmount) external returns(uint256 stvToken) {}
+    function finalizeWithdrawal(address _receiver, uint256 stETHAmount) external returns(uint256 stvToken) {
+
+        
+    }
  
     function finalizeWithdrawal(uint256 shares) external returns(uint256 stvToken) {}
 
