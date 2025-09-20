@@ -51,6 +51,9 @@ core-deploy:
 start-fork:
 	anvil --chain-id 1 --auto-impersonate --port $(CORE_RPC_PORT)
 
+start-fork-no-size-limit:
+	anvil --chain-id 1 --auto-impersonate --port $(CORE_RPC_PORT) --disable-code-size-limit
+
 core-save-patch:
 	cd $(CORE_SUBDIR) && \
 	git diff > ../test/core-mocking.patch

@@ -46,7 +46,7 @@ contract CoreHarness is Test {
     IVaultHub public vaultHub;
     ILazyOracleMocked public lazyOracle;
 
-    uint256 public constant INITIAL_LIDO_SUBMISSION = 1_000_000 ether;
+    uint256 public constant INITIAL_LIDO_SUBMISSION = 15_000 ether;
     uint256 public constant CONNECT_DEPOSIT = 1 ether;
     uint256 public constant LIDO_TOTAL_BASIS_POINTS = 10000;
     uint256 public constant NODE_OPERATOR_FEE_RATE = 1_00; // 1% in basis points

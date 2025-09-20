@@ -4,7 +4,9 @@ out = "out"
 libs = ["lib"]
 fs_permissions = [
     { access = "read", path = "./lido-core/deployed-local.json"},
-    { access = "read-write", path = "./artifacts" }
+    { access = "read-write", path = "./artifacts" },
+    { access = "read", path = "./" },
+    { access = "read-write", path = "./deployments" }
 ]
 solc_version = "0.8.30"
 via_ir = true # although it's slower it helps with stack too deep errors in tests
