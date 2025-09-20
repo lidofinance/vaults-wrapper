@@ -34,6 +34,7 @@ contract WrapperCHarness is WrapperBHarness {
             reserveRatioGapBP: reserveRatioGapBP,
             nodeOperator: NODE_OPERATOR,
             nodeOperatorManager: NODE_OPERATOR,
+            upgradeConformer: NODE_OPERATOR,
             nodeOperatorFeeBP: NODE_OPERATOR_FEE_RATE,
             confirmExpiry: CONFIRM_EXPIRY,
             teller: _teller,

@@ -98,6 +98,7 @@ contract FactoryTest is Test {
         ) = WrapperFactory.createVaultWithNoMintingNoStrategy{value: connectDeposit}(
                 nodeOperator,
                 nodeOperatorManager,
+                nodeOperator,
                 100, // 1% fee
                 3600, // 1 hour confirm expiry
                 false // allowlist disabled
@@ -134,6 +135,7 @@ contract FactoryTest is Test {
         WrapperFactory.createVaultWithNoMintingNoStrategy(
             nodeOperator,
             nodeOperatorManager,
+            nodeOperator,
             100, // 1% fee
             3600, // 1 hour confirm expiry
             false // allowlist disabled
@@ -150,6 +152,7 @@ contract FactoryTest is Test {
         ) = WrapperFactory.createVaultWithLoopStrategy{value: connectDeposit}(
                 nodeOperator,
                 nodeOperatorManager,
+                nodeOperator,
                 100, // 1% fee
                 3600, // 1 hour confirm expiry
                 false, // allowlist disabled
@@ -185,6 +188,7 @@ contract FactoryTest is Test {
         ) = WrapperFactory.createVaultWithNoMintingNoStrategy{value: connectDeposit}(
                 nodeOperator,
                 nodeOperatorManager,
+                nodeOperator,
                 100, // 1% fee
                 3600, // 1 hour confirm expiry
                 true // allowlist enabled

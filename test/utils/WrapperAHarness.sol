@@ -59,6 +59,7 @@ contract WrapperAHarness is Test {
         uint256 reserveRatioGapBP;
         address nodeOperator;
         address nodeOperatorManager;
+        address upgradeConformer;
         uint256 nodeOperatorFeeBP;
         uint256 confirmExpiry;
         address teller;
@@ -106,6 +107,7 @@ contract WrapperAHarness is Test {
             (vault_, dashboard_, wrapperAddress, withdrawalQueue_) = factory.createVaultWithNoMintingNoStrategy{value: CONNECT_DEPOSIT}(
                 config.nodeOperator,
                 config.nodeOperatorManager,
+                config.upgradeConformer,
                 config.nodeOperatorFeeBP,
                 config.confirmExpiry,
                 config.enableAllowlist
@@ -114,6 +116,7 @@ contract WrapperAHarness is Test {
             (vault_, dashboard_, wrapperAddress, withdrawalQueue_) = factory.createVaultWithMintingNoStrategy{value: CONNECT_DEPOSIT}(
                 config.nodeOperator,
                 config.nodeOperatorManager,
+                config.upgradeConformer,
                 config.nodeOperatorFeeBP,
                 config.confirmExpiry,
                 config.enableAllowlist,
@@ -124,6 +127,7 @@ contract WrapperAHarness is Test {
             (vault_, dashboard_, wrapperAddress, withdrawalQueue_) = factory.createVaultWithLoopStrategy{value: CONNECT_DEPOSIT}(
                 config.nodeOperator,
                 config.nodeOperatorManager,
+                config.upgradeConformer,
                 config.nodeOperatorFeeBP,
                 config.confirmExpiry,
                 config.enableAllowlist,
@@ -134,6 +138,7 @@ contract WrapperAHarness is Test {
             (vault_, dashboard_, wrapperAddress, withdrawalQueue_) = factory.createVaultWithGGVStrategy{value: CONNECT_DEPOSIT}(
                 config.nodeOperator,
                 config.nodeOperatorManager,
+                config.upgradeConformer,
                 config.nodeOperatorFeeBP,
                 config.confirmExpiry,
                 config.enableAllowlist,
@@ -172,6 +177,7 @@ contract WrapperAHarness is Test {
             reserveRatioGapBP: 0,
             nodeOperator: NODE_OPERATOR,
             nodeOperatorManager: NODE_OPERATOR,
+            upgradeConformer: NODE_OPERATOR,
             nodeOperatorFeeBP: NODE_OPERATOR_FEE_RATE,
             confirmExpiry: CONFIRM_EXPIRY,
             teller: address(0),

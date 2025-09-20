@@ -3,6 +3,7 @@ pragma solidity >=0.8.25;
 
 import {AccessControlEnumerableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/extensions/AccessControlEnumerableUpgradeable.sol";
 import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
+import { ERC1967Utils } from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Utils.sol";
 import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import {WrapperBase} from "./WrapperBase.sol";
 import {IDashboard} from "./interfaces/IDashboard.sol";
@@ -117,6 +118,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
         uint256 timestamp
     );
     event EmergencyExitActivated(uint256 timestamp);
+    event ImplementationUpgraded(address newImplementation);
 
     error ZeroAddress();
     error OnlyWrapperCan();
@@ -640,6 +642,15 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
     /// @notice Returns the last checkpoint index
     function getLastCheckpointIndex() public view returns (uint256) {
         return _getWithdrawalQueueStorage().lastCheckpointIndex;
+    }
+
+    /// @notice enacts implementation upgrade
+    /// @param newImplementation address of the new implementation contract
+    /// @dev can only be called by the WRAPPER
+    function upgradeTo(address newImplementation) external {
+        if (msg.sender != address(WRAPPER)) revert OnlyWrapperCan();
+        ERC1967Utils.upgradeToAndCall(newImplementation, new bytes(0));
+        emit ImplementationUpgraded(newImplementation);
     }
 
     /// @notice Receive ETH

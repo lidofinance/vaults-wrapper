@@ -13,6 +13,7 @@ import {MockDashboard} from "../mocks/MockDashboard.sol";
 import {MockVaultHub} from "../mocks/MockVaultHub.sol";
 import {MockStakingVault} from "../mocks/MockStakingVault.sol";
 import {MockLazyOracle} from "../mocks/MockLazyOracle.sol";
+import {MockUpgradableWq} from "../mocks/MockUpgradableWq.sol";
 
 contract WithdrawalQueueTest is Test {
     WithdrawalQueue public withdrawalQueue;
@@ -70,6 +71,7 @@ contract WithdrawalQueueTest is Test {
         OssifiableProxy wrapperProxy = new OssifiableProxy(address(0), admin, bytes(""));
 
         lazyOracle = new MockLazyOracle();
+        vm.label(address(lazyOracle), "LazyOracle");
 
         // Deploy WQ implementation with immutable wrapper; proxy it and initialize
         address wqImpl = address(new WithdrawalQueue(address(wrapperProxy), address(lazyOracle), maxAcceptableWQFinalizationTimeInSeconds));
@@ -77,7 +79,7 @@ contract WithdrawalQueueTest is Test {
 
         // Deploy wrapper implementation with immutable WQ, then upgrade wrapper proxy and initialize
         WrapperA impl = new WrapperA(address(dashboard), false, address(wqProxy));
-        wrapperProxy.proxy__upgradeToAndCall(address(impl), abi.encodeCall(WrapperBase.initialize, (admin, "Staked ETH Vault Wrapper", "stvETH")));
+        wrapperProxy.proxy__upgradeToAndCall(address(impl), abi.encodeCall(WrapperBase.initialize, (admin, admin, "Staked ETH Vault Wrapper", "stvETH")));
         wrapper = WrapperA(payable(address(wrapperProxy)));
 
         withdrawalQueue = WithdrawalQueue(payable(address(wqProxy)));
@@ -346,4 +348,20 @@ contract WithdrawalQueueTest is Test {
     // Tests withdrawal handling when vault experiences staking rewards/rebases
     // Placeholder for testing share rate changes during withdrawal process
     function test_WithdrawalWithRebase() public {}
+
+    function test_WrapperUpgrade() public {
+        MockUpgradableWq mockUpgradableWq = new MockUpgradableWq(address(wrapper));
+
+        vm.prank(address(wrapper));
+        withdrawalQueue.upgradeTo(address(mockUpgradableWq));
+
+        assertEq(MockUpgradableWq(address(withdrawalQueue)).getImplementation(), address(mockUpgradableWq));
+    }
+
+    function test_revert_WrapperUpgrade_NotWrapper() public {
+        MockUpgradableWq mockUpgradableWq = new MockUpgradableWq(address(wrapper));
+
+        vm.expectRevert(abi.encodeWithSelector(WithdrawalQueue.OnlyWrapperCan.selector));
+        withdrawalQueue.upgradeTo(address(mockUpgradableWq));
+    }
 }

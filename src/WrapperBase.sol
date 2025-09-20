@@ -12,10 +12,11 @@ import {WithdrawalQueue} from "./WithdrawalQueue.sol";
 import {IVaultHub} from "./interfaces/IVaultHub.sol";
 import {IDashboard} from "./interfaces/IDashboard.sol";
 import {AllowList} from "./AllowList.sol";
+import {ProposalUpgradable} from "./ProposalUpgradable.sol";
 
 // TODO: move whitelist to a separate contract
 // TODO: likely we can get rid of the base and move all to WrapperA
-abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList {
+abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, ProposalUpgradable {
     using EnumerableSet for EnumerableSet.UintSet;
 
     // Custom errors
@@ -74,6 +75,9 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList {
         }
     }
 
+    function withdrawalQueue() public view override returns (WithdrawalQueue)  {
+        return WITHDRAWAL_QUEUE;
+    }
 
     function vaultDisconnected() public view returns (bool) {
         return _getWrapperBaseStorage().vaultDisconnected;
@@ -115,6 +119,7 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList {
 
     function initialize(
         address _owner,
+        address _upgradeConformer,
         string memory _name,
         string memory _symbol
     ) public virtual initializer {
@@ -123,6 +128,7 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList {
 
         _grantRole(DEFAULT_ADMIN_ROLE, _owner);
         _initializeAllowList(_owner);
+        _initializeProposalUpgradable(_owner, _upgradeConformer);
 
         // Initial vault balance must include the connect deposit
         // Minting shares for it to have clear shares math
@@ -357,5 +363,4 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList {
             _checkRole(_role, msg.sender);
         }
     }
-
 }

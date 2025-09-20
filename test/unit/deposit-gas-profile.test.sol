@@ -93,7 +93,7 @@ contract DepositGasProfileTest is Test {
         WrapperA allowListImpl = new WrapperA(address(dashboardWithAllowList), true, wqProxy1);
         bytes memory initDataAllowList = abi.encodeCall(
             WrapperBase.initialize,
-            (owner, "AllowListed Vault", "wstvETH")
+            (owner, owner, "AllowListed Vault", "wstvETH")
         );
         allowListProxy = new ERC1967Proxy(address(allowListImpl), initDataAllowList);
         wrapperWithAllowList = WrapperA(payable(address(allowListProxy)));
@@ -104,7 +104,7 @@ contract DepositGasProfileTest is Test {
         WrapperA openImpl = new WrapperA(address(dashboardWithoutAllowList), false, wqProxy2);
         bytes memory initDataOpen = abi.encodeCall(
             WrapperBase.initialize,
-            (owner, "Open Vault", "ostvETH")
+            (owner, owner, "Open Vault", "ostvETH")
         );
         openProxy = new ERC1967Proxy(address(openImpl), initDataOpen);
         wrapperWithoutAllowList = WrapperA(payable(address(openProxy)));

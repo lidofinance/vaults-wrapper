@@ -84,6 +84,7 @@ contract Factory {
     function createVaultWithConfiguredWrapper(
         address _nodeOperator,
         address _nodeOperatorManager,
+        address _upgradeConformer,
         uint256 _nodeOperatorFeeBP,
         uint256 _confirmExpiry,
         WrapperType _configuration,
@@ -122,7 +123,8 @@ contract Factory {
             _reserveRatioGapBP,
             _withdrawalQueueProxy,
             usedStrategy,
-            _wrapperProxy
+            _wrapperProxy,
+            _upgradeConformer
         );
 
         _configureAndFinalize(_dashboard, wrapper, _wrapperProxy, _withdrawalQueueProxy, vault, _configuration, usedStrategy);
@@ -137,6 +139,7 @@ contract Factory {
     function createVaultWithNoMintingNoStrategy(
         address _nodeOperator,
         address _nodeOperatorManager,
+        address _upgradeConformer,
         uint256 _nodeOperatorFeeBP,
         uint256 _confirmExpiry,
         bool _allowlistEnabled
@@ -167,7 +170,8 @@ contract Factory {
             0,
             _withdrawalQueueProxy,
             address(0),
-            _wrapperProxy
+            _wrapperProxy,
+            _upgradeConformer
         );
 
         _configureAndFinalize(_dashboard, wrapper, _wrapperProxy, _withdrawalQueueProxy, vault, WrapperType.NO_MINTING_NO_STRATEGY, address(0));
@@ -178,6 +182,7 @@ contract Factory {
     function createVaultWithMintingNoStrategy(
         address _nodeOperator,
         address _nodeOperatorManager,
+        address _upgradeConformer,
         uint256 _nodeOperatorFeeBP,
         uint256 _confirmExpiry,
         bool _allowlistEnabled,
@@ -209,7 +214,8 @@ contract Factory {
             _reserveRatioGapBP,
             _withdrawalQueueProxy,
             address(0),
-            _wrapperProxy
+            _wrapperProxy,
+            _upgradeConformer
         );
 
         _configureAndFinalize(_dashboard, wrapper, _wrapperProxy, _withdrawalQueueProxy, vault, WrapperType.MINTING_NO_STRATEGY, address(0));
@@ -220,6 +226,7 @@ contract Factory {
     function createVaultWithLoopStrategy(
         address _nodeOperator,
         address _nodeOperatorManager,
+        address _upgradeConformer,
         uint256 _nodeOperatorFeeBP,
         uint256 _confirmExpiry,
         bool _allowlistEnabled,
@@ -254,7 +261,8 @@ contract Factory {
             _reserveRatioGapBP,
             _withdrawalQueueProxy,
             loopStrategy,
-            _wrapperProxy
+            _wrapperProxy,
+            _upgradeConformer
         );
 
         _configureAndFinalize(_dashboard, wrapper, _wrapperProxy, _withdrawalQueueProxy, vault, WrapperType.LOOP_STRATEGY, loopStrategy);
@@ -265,6 +273,7 @@ contract Factory {
     function createVaultWithGGVStrategy(
         address _nodeOperator,
         address _nodeOperatorManager,
+        address _upgradeConformer,
         uint256 _nodeOperatorFeeBP,
         uint256 _confirmExpiry,
         bool _allowlistEnabled,
@@ -300,7 +309,8 @@ contract Factory {
             _reserveRatioGapBP,
             _withdrawalQueueProxy,
             ggvStrategy,
-            _wrapperProxy
+            _wrapperProxy,
+            _upgradeConformer
         );
 
         _configureAndFinalize(_dashboard, wrapper, _wrapperProxy, _withdrawalQueueProxy, vault, WrapperType.GGV_STRATEGY, ggvStrategy);
@@ -373,7 +383,8 @@ contract Factory {
         uint256 _reserveRatioGapBP,
         address withdrawalQueueProxy,
         address _strategy,
-        address payable wrapperProxy
+        address payable wrapperProxy,
+        address _upgradeConformer
     ) internal returns (WrapperBase wrapper) {
         address wrapperImpl = _deployWrapper(
             _configuration,
@@ -384,7 +395,7 @@ contract Factory {
             _strategy
         );
 
-        OssifiableProxy(wrapperProxy).proxy__upgradeToAndCall(wrapperImpl, abi.encodeCall(WrapperBase.initialize, (address(this), NAME, SYMBOL)));
+        OssifiableProxy(wrapperProxy).proxy__upgradeToAndCall(wrapperImpl, abi.encodeCall(WrapperBase.initialize, (address(this), _upgradeConformer, NAME, SYMBOL)));
         wrapper = WrapperBase(payable(address(wrapperProxy)));
     }
 
