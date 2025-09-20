@@ -16,7 +16,7 @@ error InvalidConfiguration();
 contract WrapperC is WrapperB {
     using EnumerableSet for EnumerableSet.UintSet;
 
-    IStrategy public STRATEGY;
+    IStrategy public immutable STRATEGY;
 
     error InvalidSender();
 
@@ -25,8 +25,9 @@ contract WrapperC is WrapperB {
         address _stETH,
         bool _allowListEnabled,
         address _strategy,
-        uint256 _reserveRatioGapBP
-    ) WrapperB(_dashboard, _stETH, _allowListEnabled, _reserveRatioGapBP) {
+        uint256 _reserveRatioGapBP,
+        address _withdrawalQueue
+    ) WrapperB(_dashboard, _stETH, _allowListEnabled, _reserveRatioGapBP, _withdrawalQueue) {
         STRATEGY = IStrategy(_strategy);
     }
 
@@ -105,12 +106,4 @@ contract WrapperC is WrapperB {
         return _getWrapperBaseStorage().withdrawalRequests[requestId];
     }
 
-    // TODO: get rid of this and make STRATEGY immutable
-    function setStrategy(address _strategy) external {
-        _checkRole(DEFAULT_ADMIN_ROLE);
-        if (_strategy == address(0)) {
-            revert InvalidConfiguration();
-        }
-        STRATEGY = IStrategy(_strategy);
-    }
 }

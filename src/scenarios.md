@@ -40,7 +40,7 @@
 ## Case 11. User gets less stShares due to vault underperformance
 
 What are the consequences?
-1. Need to deposit enough to overcome collateral provided by connect deposit. E.g. 1000 ETH and 1% decrease
+1. Need to deposit enough to overcome collateral provided by connect deposit. E.g. 1000 ETH and 0.1% decrease (compared to stETH?)
 
 ## Case 12. User deposits little after vault with lots of eth performed poorly
 

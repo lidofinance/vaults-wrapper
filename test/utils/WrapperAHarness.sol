@@ -14,6 +14,12 @@ import {WrapperBase} from "src/WrapperBase.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
 import {IVaultFactory} from "src/interfaces/IVaultFactory.sol";
 import {Factory} from "src/Factory.sol";
+import {WrapperAFactory} from "src/factories/WrapperAFactory.sol";
+import {WrapperBFactory} from "src/factories/WrapperBFactory.sol";
+import {WrapperCFactory} from "src/factories/WrapperCFactory.sol";
+import {WithdrawalQueueFactory} from "src/factories/WithdrawalQueueFactory.sol";
+import {DummyImplementation} from "src/proxy/DummyImplementation.sol";
+import {FactoryHelper} from "test/utils/FactoryHelper.sol";
 
 /**
  * @title WrapperAHarness
@@ -45,7 +51,7 @@ contract WrapperAHarness is Test {
 
     // Deployment configuration struct
     struct DeploymentConfig {
-        Factory.WrapperConfiguration configuration;
+        Factory.WrapperType configuration;
         address strategy;
         bool enableAllowlist;
         uint256 reserveRatioGapBP;
@@ -86,19 +92,43 @@ contract WrapperAHarness is Test {
         require(address(core) != address(0), "CoreHarness not initialized");
 
         address vaultFactory = core.locator().vaultFactory();
-        Factory factory = new Factory(vaultFactory, address(steth));
+        FactoryHelper helper = new FactoryHelper();
+        Factory factory = helper.deployMainFactory(vaultFactory, address(steth));
 
         vm.startPrank(config.nodeOperator);
-        (vault_, dashboard_, wrapperAddress, withdrawalQueue_) = factory.createVaultWithWrapper{value: CONNECT_DEPOSIT}(
-            config.nodeOperator,
-            config.nodeOperatorManager,
-            config.nodeOperatorFeeBP,
-            config.confirmExpiry,
-            config.configuration,
-            config.strategy,
-            config.enableAllowlist,
-            config.reserveRatioGapBP
-        );
+        if (config.configuration == Factory.WrapperType.NO_MINTING_NO_STRATEGY) {
+            (vault_, dashboard_, wrapperAddress, withdrawalQueue_) = factory.createVaultWithNoMintingNoStrategy{value: CONNECT_DEPOSIT}(
+                config.nodeOperator,
+                config.nodeOperatorManager,
+                config.nodeOperatorFeeBP,
+                config.confirmExpiry,
+                config.enableAllowlist
+            );
+        } else if (config.configuration == Factory.WrapperType.MINTING_NO_STRATEGY) {
+            (vault_, dashboard_, wrapperAddress, withdrawalQueue_) = factory.createVaultWithMintingNoStrategy{value: CONNECT_DEPOSIT}(
+                config.nodeOperator,
+                config.nodeOperatorManager,
+                config.nodeOperatorFeeBP,
+                config.confirmExpiry,
+                config.enableAllowlist,
+                config.reserveRatioGapBP
+            );
+        } else if (config.configuration == Factory.WrapperType.LOOP_STRATEGY) {
+            uint256 loops = 1;
+            (vault_, dashboard_, wrapperAddress, withdrawalQueue_) = factory.createVaultWithLoopStrategy{value: CONNECT_DEPOSIT}(
+                config.nodeOperator,
+                config.nodeOperatorManager,
+                config.nodeOperatorFeeBP,
+                config.confirmExpiry,
+                config.enableAllowlist,
+                config.reserveRatioGapBP,
+                loops
+            );
+        } else if (config.configuration == Factory.WrapperType.GGV_STRATEGY) {
+            revert("GGV strategy harness not implemented");
+        } else {
+            revert("Invalid configuration");
+        }
         vm.stopPrank();
 
         // Apply initial vault report
@@ -121,7 +151,7 @@ contract WrapperAHarness is Test {
         IStakingVault vault_
     ) {
         DeploymentConfig memory config = DeploymentConfig({
-            configuration: Factory.WrapperConfiguration.NO_MINTING_NO_STRATEGY,
+            configuration: Factory.WrapperType.NO_MINTING_NO_STRATEGY,
             strategy: address(0),
             enableAllowlist: enableAllowlist,
             reserveRatioGapBP: 0,

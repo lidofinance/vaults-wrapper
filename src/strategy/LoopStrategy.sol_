@@ -68,7 +68,7 @@ contract LoopStrategy is IStrategy {
             position.borrowedEth += borrowedEth;
 
             uint256 stSharesBefore = STETH.balanceOf(address(this));
-            uint256 mintedStvShares = WRAPPER.depositForStrategy{value: borrowedEth}();
+            uint256 mintedStvShares = WRAPPER.depositETH{value: borrowedEth}(address(this), address(0), 0);
             position.stvShares += mintedStvShares;
             mintableStShares = STETH.balanceOf(address(this)) - stSharesBefore;
         }
