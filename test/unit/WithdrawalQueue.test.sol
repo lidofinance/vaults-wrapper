@@ -12,6 +12,7 @@ import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
 import {MockDashboard} from "../mocks/MockDashboard.sol";
 import {MockVaultHub} from "../mocks/MockVaultHub.sol";
 import {MockStakingVault} from "../mocks/MockStakingVault.sol";
+import {MockLazyOracle} from "../mocks/MockLazyOracle.sol";
 
 contract WithdrawalQueueTest is Test {
     WithdrawalQueue public withdrawalQueue;
@@ -19,6 +20,7 @@ contract WithdrawalQueueTest is Test {
     WrapperA public wrapper;
     MockStakingVault public stakingVault;
     MockDashboard public dashboard;
+    MockLazyOracle public lazyOracle;
 
     address public user1 = address(0x1);
     address public user2 = address(0x2);
@@ -67,8 +69,10 @@ contract WithdrawalQueueTest is Test {
         // Precreate wrapper proxy with empty implementation
         OssifiableProxy wrapperProxy = new OssifiableProxy(address(0), admin, bytes(""));
 
+        lazyOracle = new MockLazyOracle();
+
         // Deploy WQ implementation with immutable wrapper; proxy it and initialize
-        address wqImpl = address(new WithdrawalQueue(address(wrapperProxy), maxAcceptableWQFinalizationTimeInSeconds));
+        address wqImpl = address(new WithdrawalQueue(address(wrapperProxy), address(lazyOracle), maxAcceptableWQFinalizationTimeInSeconds));
         OssifiableProxy wqProxy = new OssifiableProxy(wqImpl, admin, abi.encodeCall(WithdrawalQueue.initialize, (admin, operator)));
 
         // Deploy wrapper implementation with immutable WQ, then upgrade wrapper proxy and initialize

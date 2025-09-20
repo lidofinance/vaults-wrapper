@@ -1,14 +1,13 @@
-// SPDX-License-Identifier: GPL-3.0
+// SPDX-License-Identifier: MIT
 pragma solidity >=0.8.25;
 
 import {AccessControlEnumerableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/extensions/AccessControlEnumerableUpgradeable.sol";
 import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
-import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {WrapperBase} from "./WrapperBase.sol";
 import {IDashboard} from "./interfaces/IDashboard.sol";
 import {IVaultHub} from "./interfaces/IVaultHub.sol";
-import {console} from "forge-std/console.sol";
+import {ILazyOracle} from "./interfaces/ILazyOracle.sol";
 
 /// @title Withdrawal Queue V3 for Staking Vault Wrapper
 /// @notice Handles withdrawal requests for stvToken holders
@@ -17,6 +16,9 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
 
     /// @notice max time for finalization of the withdrawal request
     uint256 public immutable MAX_ACCEPTABLE_WQ_FINALIZATION_TIME_IN_SECONDS;
+
+    /// @notice min delay between withdrawal request and finalization
+    uint256 public immutable MIN_WITHDRAWAL_DELAY_TIME_IN_SECONDS;
 
     // ACL
     bytes32 public constant PAUSE_ROLE = keccak256("PAUSE_ROLE");
@@ -30,8 +32,11 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
     uint256 public constant MIN_WITHDRAWAL_AMOUNT = 100;
     uint256 public constant MAX_WITHDRAWAL_AMOUNT = 10_000 * 1e18;
 
-    /// @dev return value for the `find...` methods in case of no result
+    /// @dev return value for the `_findCheckpointHint` method in case of no result
     uint256 internal constant NOT_FOUND = 0;
+
+    WrapperBase public immutable WRAPPER;
+    ILazyOracle public immutable LAZY_ORACLE;
 
     /// @notice structure representing a request for withdrawal
     struct WithdrawalRequest {
@@ -69,26 +74,29 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
         bool isClaimed;
     }
 
-    WrapperBase public immutable WRAPPER;
-
     /// @custom:storage-location erc7201:wrapper.storage.WithdrawalQueue
     struct WithdrawalQueueStorage {
+        // ### 1st slot
         /// @dev queue for withdrawal requests, indexes (requestId) start from 1
         mapping(uint256 => WithdrawalRequest) requests;
-        /// @dev last index in request queue
-        uint256 lastRequestId;
-        /// @dev last index of finalized request in the queue
-        uint256 lastFinalizedRequestId;
-        /// @dev finalization rate history, indexes start from 1
-        mapping(uint256 => Checkpoint) checkpoints;
-        /// @dev last index in checkpoints array
-        uint256 lastCheckpointIndex;
-        /// @dev amount of ETH locked on contract for further claiming
-        uint256 totalLockedAssets;
+        // ### 2nd slot
         /// @dev withdrawal requests mapped to the owners
         mapping(address => EnumerableSet.UintSet) requestsByOwner;
+        // ### 3rd slot
+        /// @dev finalization rate history, indexes start from 1
+        mapping(uint256 => Checkpoint) checkpoints;
+        // ### 4th slot
+        /// @dev last index in request queue
+        uint96 lastRequestId;
+        /// @dev last index of finalized request in the queue
+        uint96 lastFinalizedRequestId;
         /// @dev timestamp of emergency exit activation
-        uint256 emergencyExitActivationTimestamp;
+        uint40 emergencyExitActivationTimestamp;
+        // ### 5th slot
+        /// @dev last index in checkpoints array
+        uint96 lastCheckpointIndex;
+        /// @dev amount of ETH locked on contract for further claiming
+        uint96 totalLockedAssets;
     }
 
     // keccak256(abi.encode(uint256(keccak256("wrapper.storage.WithdrawalQueue")) - 1)) & ~bytes32(uint256(0xff))
@@ -110,49 +118,32 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
     );
     event EmergencyExitActivated(uint256 timestamp);
 
-    error AdminZeroAddress();
+    error ZeroAddress();
     error OnlyWrapperCan();
     error RequestAmountTooSmall(uint256 amount);
     error RequestAmountTooLarge(uint256 amount);
     error InvalidRequestId(uint256 requestId);
-    error RequestNotFinalized(uint256 requestId);
+    error InvalidRequestIdRange(uint256 start, uint256 end);
     error RequestAlreadyClaimed(uint256 requestId);
-    error NotEnoughETH(uint256 available, uint256 required);
-    error InvalidShareRate(uint256 shareRate);
-    error TooMuchEtherToFinalize(
-        uint256 amountOfETH,
-        uint256 totalAssetsToFinalize
-    );
-    error ZeroRecipient();
+    error RequestNotFoundOrNotFinalized(uint256 requestId);
+    error RequestIdsNotSorted();
     error ArraysLengthMismatch(
         uint256 firstArrayLength,
         uint256 secondArrayLength
     );
     error ReportStale();
-    error InvalidRequestIdRange(uint256 start, uint256 end);
-    error RequestNotFoundOrNotFinalized(uint256 requestId);
     error CantSendValueRecipientMayHaveReverted();
     error InvalidHint(uint256 hint);
-    error InvalidState();
-    error ZeroShareRate();
-    error EmptyBatches();
-    error BatchesAreNotSorted();
-    error RequestIdsNotSorted();
     error InvalidEmergencyExitActivation();
-    error ZeroAddress();
+    error NoRequestsToFinalize();
 
-    /// @notice Modifier to check role or Emergency Exit
-    modifier onlyRoleOrEmergencyExit(bytes32 role) {
-        if (!isEmergencyExitActivated()) {
-            _checkRole(role, msg.sender);
-        }
-        _;
-    }
-
-    constructor(address _wrapper, uint256 _maxAcceptableWQFinalizationTimeInSeconds) {
+    constructor(address _wrapper, address _lazyOracle, uint256 _maxAcceptableWQFinalizationTimeInSeconds) {
         WRAPPER = WrapperBase(payable(_wrapper));
+        LAZY_ORACLE = ILazyOracle(_lazyOracle);
         MAX_ACCEPTABLE_WQ_FINALIZATION_TIME_IN_SECONDS = _maxAcceptableWQFinalizationTimeInSeconds;
+
         _disableInitializers();
+        _pause();
     }
 
     /// @notice Initialize the contract storage explicitly.
@@ -160,7 +151,10 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
     /// @dev Reverts if `_admin` equals to `address(0)`
     /// @dev NB! It's initialized in paused state by default and should be resumed explicitly to start
     function initialize(address _admin, address _finalizeRoleHolder) external initializer {
-        if (_admin == address(0)) revert AdminZeroAddress();
+        if (_admin == address(0)) revert ZeroAddress();
+
+        __AccessControlEnumerable_init();
+        __Pausable_init();
 
         _grantRole(DEFAULT_ADMIN_ROLE, _admin);
         _grantRole(FINALIZE_ROLE, _finalizeRoleHolder);
@@ -168,12 +162,17 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
         _getWithdrawalQueueStorage().requests[0] = WithdrawalRequest({
             cumulativeAssets: 0,
             cumulativeShares: 0,
-            owner: address(this),
+            owner: address(0),
             timestamp: uint40(block.timestamp),
             claimed: true
         });
 
         emit Initialized(_admin);
+    }
+
+    function pause() external {
+        _checkRole(PAUSE_ROLE, msg.sender);
+        _pause();
     }
 
     /// @notice Resume withdrawal requests placement and finalization
@@ -221,7 +220,9 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
         returns (uint256[] memory requestIds)
     {
         // TODO: update to match requestWithdrawal
-        _requireNotPaused();
+        if (!isEmergencyExitActivated()) {
+            _requireNotPaused();
+        }
 
         IDashboard dashboard = IDashboard(WRAPPER.DASHBOARD());
         IVaultHub vaultHub = IVaultHub(dashboard.VAULT_HUB());
@@ -239,7 +240,9 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
         public
         returns (uint256 requestId)
     {
-        _requireNotPaused();
+        if (!isEmergencyExitActivated()) {
+            _requireNotPaused();
+        }
         if (msg.sender != address(WRAPPER)) revert OnlyWrapperCan();
 
         uint256 assets = WRAPPER.previewRedeem(_stvShares);
@@ -253,7 +256,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
         WithdrawalRequest memory lastRequest = $.requests[lastRequestId];
 
         requestId = lastRequestId + 1;
-        $.lastRequestId = requestId;
+        $.lastRequestId = uint96(requestId);
 
         uint256 cumulativeAssets = lastRequest.cumulativeAssets + assets;
         uint256 cumulativeShares = lastRequest.cumulativeShares + _stvShares;
@@ -271,27 +274,31 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
         emit WithdrawalRequested(requestId, _owner, assets, _stvShares);
     }
 
-    /// @notice Finalize withdrawal requests up to the specified request ID
-    /// @param _maxRequests the last request ID to finalize
+    /// @notice Finalize withdrawal requests
+    /// @param _maxRequests the maximum number of requests to finalize
     function finalize(uint256 _maxRequests)
         external
-        onlyRoleOrEmergencyExit(FINALIZE_ROLE)
         returns (uint256 finalizedRequests)
     {
+        if (!isEmergencyExitActivated()) {
+            _requireNotPaused();
+            _checkRole(FINALIZE_ROLE, msg.sender);
+        }
+
         // check report freshness
         IDashboard dashboard = IDashboard(WRAPPER.DASHBOARD());
         IVaultHub vaultHub = IVaultHub(dashboard.VAULT_HUB());
         if (!vaultHub.isReportFresh(WRAPPER.STAKING_VAULT())) revert ReportStale();
 
-        WithdrawalQueueStorage storage wqStorage = _getWithdrawalQueueStorage();
+        WithdrawalQueueStorage storage $ = _getWithdrawalQueueStorage();
 
-        uint256 lastFinalizedRequestId = wqStorage.lastFinalizedRequestId;
+        uint256 lastFinalizedRequestId = $.lastFinalizedRequestId;
         uint256 firstRequestIdToFinalize = lastFinalizedRequestId + 1;
         uint256 lastRequestIdToFinalize = lastFinalizedRequestId + _maxRequests;
 
         // Validate that _maxRequests is within valid range
-        if (lastRequestIdToFinalize > wqStorage.lastRequestId) {
-            revert InvalidRequestIdRange(lastFinalizedRequestId, _maxRequests);
+        if (lastRequestIdToFinalize > $.lastRequestId) {
+            revert InvalidRequestIdRange(lastFinalizedRequestId, lastRequestIdToFinalize);
         }
 
         uint256 currentShareRate = calculateCurrentShareRate();
@@ -301,9 +308,9 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
         uint256 totalSharesToBurn;
 
         // Finalize all requests in the range
-        for (uint256 i = firstRequestIdToFinalize; i <= lastRequestIdToFinalize; i++) {
-            WithdrawalRequest memory request = wqStorage.requests[i];
-            WithdrawalRequest memory prevRequest = wqStorage.requests[i - 1];
+        for (uint256 i = firstRequestIdToFinalize; i <= lastRequestIdToFinalize; ++i) {
+            WithdrawalRequest memory request = $.requests[i];
+            WithdrawalRequest memory prevRequest = $.requests[i - 1];
             (uint256 requestShareRate, uint256 eth, uint256 shares) = _calcStats(prevRequest, request);
 
             // Apply discount if the request share rate is above the current share rate
@@ -311,8 +318,15 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
                 eth = (shares * currentShareRate) / E27_PRECISION_BASE;
             }
 
-            // Stop if insufficient ETH to cover this request
-            if (eth > withdrawableValue) {
+
+            if (
+                // stop if insufficient ETH to cover this request
+                eth > withdrawableValue ||
+                // stop if not enough time has passed since the request was created
+                request.timestamp + MIN_WITHDRAWAL_DELAY_TIME_IN_SECONDS > block.timestamp ||
+                // stop if the request was created after the latest report was published, at least one oracle report is required
+                request.timestamp > LAZY_ORACLE.latestReportTimestamp()
+            ) {
                 break;
             }
 
@@ -322,6 +336,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
             finalizedRequests++;
         }
 
+        dashboard.withdraw(address(this), totalEthToFinalize);
         WRAPPER.burnSharesForWithdrawalQueue(totalSharesToBurn);
 
         if (finalizedRequests == 0) {
@@ -331,15 +346,15 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
         lastFinalizedRequestId = lastFinalizedRequestId + finalizedRequests;
 
         // Create checkpoint with ShareRate
-        uint256 lastCheckpointIndex = wqStorage.lastCheckpointIndex + 1;
-        wqStorage.checkpoints[lastCheckpointIndex] = Checkpoint({
+        uint256 lastCheckpointIndex = $.lastCheckpointIndex + 1;
+        $.checkpoints[lastCheckpointIndex] = Checkpoint({
             fromRequestId: firstRequestIdToFinalize,
             shareRate: currentShareRate
         });
 
-        wqStorage.lastCheckpointIndex = lastCheckpointIndex;
-        wqStorage.lastFinalizedRequestId = lastFinalizedRequestId;
-        wqStorage.totalLockedAssets += totalEthToFinalize;
+        $.lastCheckpointIndex = uint96(lastCheckpointIndex);
+        $.lastFinalizedRequestId = uint96(lastFinalizedRequestId);
+        $.totalLockedAssets += uint96(totalEthToFinalize);
 
         emit WithdrawalsFinalized(firstRequestIdToFinalize, lastFinalizedRequestId, totalEthToFinalize, totalSharesToBurn, block.timestamp);
     }
@@ -365,30 +380,26 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
     ///  Reverts if request is not finalized or already claimed
     ///  Reverts if msg sender is not an owner of request
     function claimWithdrawal(uint256 _requestId, address _recipient) external returns (uint256) {
-        uint256 checkpoint = _findCheckpointHint(_requestId, 1, getLastCheckpointIndex());
-        // address recipient = _recipient == address(0) ? msg.sender : _recipient;
-        _recipient = _recipient == address(0) ? msg.sender : _recipient;
-
-
         if (_requestId == 0) revert InvalidRequestId(_requestId);
         if (msg.sender != address(WRAPPER)) revert OnlyWrapperCan();
 
-        WithdrawalQueueStorage storage wqStorage = _getWithdrawalQueueStorage();
-        if (_requestId > wqStorage.lastFinalizedRequestId) revert RequestNotFoundOrNotFinalized(_requestId);
+        WithdrawalQueueStorage storage $ = _getWithdrawalQueueStorage();
+        if (_requestId > $.lastFinalizedRequestId) revert RequestNotFoundOrNotFinalized(_requestId);
 
-        WithdrawalRequest storage request = wqStorage.requests[_requestId];
+        WithdrawalRequest storage request = $.requests[_requestId];
 
         if (request.claimed) revert RequestAlreadyClaimed(_requestId);
         // if (request.owner != msg.sender) revert NotOwner(msg.sender, request.owner);
 
         request.claimed = true;
-        assert(wqStorage.requestsByOwner[request.owner].remove(_requestId));
+        assert($.requestsByOwner[request.owner].remove(_requestId));
 
+        uint256 checkpoint = _findCheckpointHint(_requestId, 1, getLastCheckpointIndex());
         uint256 ethWithDiscount = _calculateClaimableEther(request, _requestId, checkpoint);
         // because of the stETH rounding issue
         // (issue: https://github.com/lidofinance/lido-dao/issues/442 )
         // some dust (1-2 wei per request) will be accumulated upon claiming
-        wqStorage.totalLockedAssets -= ethWithDiscount;
+        $.totalLockedAssets -= uint96(ethWithDiscount);
 
         (bool success, ) = _recipient.call{value: ethWithDiscount}("");
         if (!success) revert CantSendValueRecipientMayHaveReverted();
@@ -449,25 +460,25 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
     ///
     /// @return hint for later use in other methods or 0 if hint not found in the range
     function _findCheckpointHint(uint256 _requestId, uint256 _start, uint256 _end) internal view returns (uint256) {
-        WithdrawalQueueStorage storage wqStorage = _getWithdrawalQueueStorage();
-        if (_requestId == 0 || _requestId > wqStorage.lastRequestId) revert InvalidRequestId(_requestId);
+        WithdrawalQueueStorage storage $ = _getWithdrawalQueueStorage();
+        if (_requestId == 0 || _requestId > $.lastRequestId) revert InvalidRequestId(_requestId);
 
-        uint256 lastCheckpointIndex_ = wqStorage.lastCheckpointIndex;
+        uint256 lastCheckpointIndex_ = $.lastCheckpointIndex;
         if (_start == 0 || _end > lastCheckpointIndex_) revert InvalidRequestIdRange(_start, _end);
 
-        if (lastCheckpointIndex_ == 0 || _requestId > wqStorage.lastFinalizedRequestId || _start > _end) return NOT_FOUND;
+        if (lastCheckpointIndex_ == 0 || _requestId > $.lastFinalizedRequestId || _start > _end) return NOT_FOUND;
 
         // Right boundary
-        if (_requestId >= wqStorage.checkpoints[_end].fromRequestId) {
+        if (_requestId >= $.checkpoints[_end].fromRequestId) {
             // it's the last checkpoint, so it's valid
             if (_end == lastCheckpointIndex_) return _end;
             // it fits right before the next checkpoint
-            if (_requestId < wqStorage.checkpoints[_end + 1].fromRequestId) return _end;
+            if (_requestId < $.checkpoints[_end + 1].fromRequestId) return _end;
 
             return NOT_FOUND;
         }
         // Left boundary
-        if (_requestId < wqStorage.checkpoints[_start].fromRequestId) {
+        if (_requestId < $.checkpoints[_start].fromRequestId) {
             return NOT_FOUND;
         }
 
@@ -477,7 +488,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
 
         while (max > min) {
             uint256 mid = (max + min + 1) / 2;
-            if (wqStorage.checkpoints[mid].fromRequestId <= _requestId) {
+            if ($.checkpoints[mid].fromRequestId <= _requestId) {
                 min = mid;
             } else {
                 max = mid - 1;
@@ -518,8 +529,34 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
     /// @notice Returns all withdrawal requests that belong to the `_owner` address
     /// @param _owner address to get requests for
     /// @return requestIds array of request ids
+    ///
+    /// WARNING: This operation will copy the entire storage to memory, which can be quite expensive. This is designed
+    /// to mostly be used by view accessors that are queried without any gas fees. Developers should keep in mind that
+    /// this function has an unbounded cost, and using it as part of a state-changing function may render the function
+    /// uncallable if the set grows to a point where copying to memory consumes too much gas to fit in a block.
+    ///
     function getWithdrawalRequests(address _owner) external view returns (uint256[] memory requestIds) {
         return _getWithdrawalQueueStorage().requestsByOwner[_owner].values();
+    }
+
+    /// @notice Returns all withdrawal requests that belong to the `_owner` address
+    /// @param _owner address to get requests for
+    /// @param _start start index
+    /// @param _end end index
+    /// @return requestIds array of request ids
+    ///
+    /// WARNING: This operation will copy the entire storage to memory, which can be quite expensive. This is designed
+    /// to mostly be used by view accessors that are queried without any gas fees. Developers should keep in mind that
+    /// this function has an unbounded cost, and using it as part of a state-changing function may render the function
+    /// uncallable if the set grows to a point where copying to memory consumes too much gas to fit in a block.
+    ///
+    function getWithdrawalRequests(address _owner, uint256 _start, uint256 _end) external view returns (uint256[] memory requestIds) {
+        return _getWithdrawalQueueStorage().requestsByOwner[_owner].values(_start, _end);
+    }
+
+    /// @notice Returns the length of the withdrawal requests that belong to the `_owner` address.
+    function getWithdrawalRequestsLength(address _owner) external view returns (uint256) {
+        return _getWithdrawalQueueStorage().requestsByOwner[_owner].length();
     }
 
     /// @notice Returns status for requests with provided ids
@@ -541,6 +578,14 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
     /// @return status withdrawal request status
     function getWithdrawalStatus(uint256 _requestId) external view returns (WithdrawalRequestStatus memory status) {
         return _getStatus(_requestId);
+    }
+
+    /// @notice Returns the claimable ether for a request
+    /// @param _requestId request id
+    /// @return claimable ether
+    function getClaimableEther(uint256 _requestId) external view returns (uint256) {
+        uint256 checkpoint = _findCheckpointHint(_requestId, 1, getLastCheckpointIndex());
+        return _getClaimableEther(_requestId, checkpoint);
     }
 
     /// @notice Returns amount of ether available for claim for each provided request id
@@ -565,20 +610,21 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
 
     /// @notice return the number of unfinalized requests in the queue
     function unfinalizedRequestNumber() external view returns (uint256) {
-        WithdrawalQueueStorage storage wqStorage = _getWithdrawalQueueStorage();
-        return wqStorage.lastRequestId - wqStorage.lastFinalizedRequestId;
+        WithdrawalQueueStorage storage $ = _getWithdrawalQueueStorage();
+        return $.lastRequestId - $.lastFinalizedRequestId;
     }
 
     /// @notice Returns the amount of assets in the queue yet to be finalized
+    /// @dev NOTE: This returns the nominal amount. Actual ETH needed may be less due to discounts.
     function unfinalizedAssets() external view returns (uint256) {
-        WithdrawalQueueStorage storage wqStorage = _getWithdrawalQueueStorage();
-        return wqStorage.requests[wqStorage.lastRequestId].cumulativeAssets - wqStorage.requests[wqStorage.lastFinalizedRequestId].cumulativeAssets;
+        WithdrawalQueueStorage storage $ = _getWithdrawalQueueStorage();
+        return $.requests[$.lastRequestId].cumulativeAssets - $.requests[$.lastFinalizedRequestId].cumulativeAssets;
     }
 
     /// @notice Returns the amount of shares in the queue yet to be finalized
     function unfinalizedShares() external view returns (uint256) {
-        WithdrawalQueueStorage storage wqStorage = _getWithdrawalQueueStorage();
-        return wqStorage.requests[wqStorage.lastRequestId].cumulativeShares - wqStorage.requests[wqStorage.lastFinalizedRequestId].cumulativeShares;
+        WithdrawalQueueStorage storage $ = _getWithdrawalQueueStorage();
+        return $.requests[$.lastRequestId].cumulativeShares - $.requests[$.lastFinalizedRequestId].cumulativeShares;
     }
 
     /// @notice Returns the last request id
@@ -606,14 +652,14 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
 
     /// @notice Returns true if requests have not been finalized for a long time
     function isWithdrawalQueueStuck() public view returns (bool) {
-        WithdrawalQueueStorage storage wqStorage = _getWithdrawalQueueStorage();
-        if (wqStorage.lastFinalizedRequestId >= wqStorage.lastRequestId) {
+        WithdrawalQueueStorage storage $ = _getWithdrawalQueueStorage();
+        if ($.lastFinalizedRequestId >= $.lastRequestId) {
             return false;
         }
 
-        uint256 firstPendingRequest = wqStorage.lastFinalizedRequestId + 1;
+        uint256 firstPendingRequest = $.lastFinalizedRequestId + 1;
 
-        uint256 firstPendingRequestTimestamp = wqStorage.requests[firstPendingRequest].timestamp;
+        uint256 firstPendingRequestTimestamp = $.requests[firstPendingRequest].timestamp;
         uint256 maxAcceptableTime = firstPendingRequestTimestamp + MAX_ACCEPTABLE_WQ_FINALIZATION_TIME_IN_SECONDS;
 
         return maxAcceptableTime < block.timestamp;
@@ -622,17 +668,12 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
     /// @notice Permissionless method to activate Emergency Exit
     /// @dev can only be called if Withdrawal Queue is stuck
     function activateEmergencyExit() external {
-        WithdrawalQueueStorage storage wqStorage = _getWithdrawalQueueStorage();
-        if (wqStorage.emergencyExitActivationTimestamp > 0 || !isWithdrawalQueueStuck()) revert InvalidEmergencyExitActivation();
+        WithdrawalQueueStorage storage $ = _getWithdrawalQueueStorage();
+        if ($.emergencyExitActivationTimestamp > 0 || !isWithdrawalQueueStuck()) revert InvalidEmergencyExitActivation();
 
-        wqStorage.emergencyExitActivationTimestamp = block.timestamp;
+        $.emergencyExitActivationTimestamp = uint40(block.timestamp);
 
-        emit EmergencyExitActivated(wqStorage.emergencyExitActivationTimestamp);
-    }
-
-    /// @notice Get the queue
-    function _getQueue() internal view returns (mapping(uint256 => WithdrawalRequest) storage queue) {
-        return _getWithdrawalQueueStorage().requests;
+        emit EmergencyExitActivated($.emergencyExitActivationTimestamp);
     }
 
     /// @notice Calculate claimable ether for a request
@@ -640,11 +681,11 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
     /// @param _hint checkpoint hint
     /// @return amount of claimable ether
     function _getClaimableEther(uint256 _requestId, uint256 _hint) internal view returns (uint256) {
-        WithdrawalQueueStorage storage wqStorage = _getWithdrawalQueueStorage();
-        if (_requestId == 0 || _requestId > wqStorage.lastRequestId) return 0;
-        if (_requestId > wqStorage.lastFinalizedRequestId) return 0;
+        WithdrawalQueueStorage storage $ = _getWithdrawalQueueStorage();
+        if (_requestId == 0 || _requestId > $.lastRequestId) return 0;
+        if (_requestId > $.lastFinalizedRequestId) return 0;
 
-        WithdrawalRequest storage request = wqStorage.requests[_requestId];
+        WithdrawalRequest storage request = $.requests[_requestId];
         if (request.claimed) return 0;
 
         return _calculateClaimableEther(request, _requestId, _hint);
@@ -658,12 +699,12 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
     function _calculateClaimableEther(WithdrawalRequest storage _request, uint256 _requestId, uint256 _hint) internal view returns (uint256) {
         if (_hint == 0) revert InvalidHint(_hint);
 
-        WithdrawalQueueStorage storage wqStorage = _getWithdrawalQueueStorage();
+        WithdrawalQueueStorage storage $ = _getWithdrawalQueueStorage();
 
-        uint256 lastCheckpointIndex_ = wqStorage.lastCheckpointIndex;
+        uint256 lastCheckpointIndex_ = $.lastCheckpointIndex;
         if (_hint > lastCheckpointIndex_) revert InvalidHint(_hint);
 
-        Checkpoint memory checkpoint = wqStorage.checkpoints[_hint];
+        Checkpoint memory checkpoint = $.checkpoints[_hint];
         // Reverts if requestId is not in range [checkpoint[hint], checkpoint[hint+1])
         // ______(>______
         //    ^  hint
@@ -671,17 +712,12 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
         if (_hint < lastCheckpointIndex_) {
             // ______(>______(>________
             //       hint    hint+1  ^
-            Checkpoint memory nextCheckpoint = wqStorage.checkpoints[_hint + 1];
+            Checkpoint memory nextCheckpoint = $.checkpoints[_hint + 1];
             if (nextCheckpoint.fromRequestId <= _requestId) revert InvalidHint(_hint);
         }
 
-        WithdrawalRequest memory prevRequest = wqStorage.requests[_requestId - 1];
+        WithdrawalRequest memory prevRequest = $.requests[_requestId - 1];
         (uint256 batchShareRate, uint256 eth, uint256 shares) = _calcStats(prevRequest, _request);
-
-        console.log("batchShareRate", batchShareRate);
-        console.log("checkpoint.shareRate", checkpoint.shareRate);
-        console.log("shares", shares);
-        console.log("eth", eth);
 
         if (batchShareRate > checkpoint.shareRate) {
             eth = (shares * checkpoint.shareRate) / E27_PRECISION_BASE;
@@ -706,18 +742,18 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
     /// @param _requestId request id
     /// @return status withdrawal request status
     function _getStatus(uint256 _requestId) internal view returns (WithdrawalRequestStatus memory) {
-        WithdrawalQueueStorage storage wqStorage = _getWithdrawalQueueStorage();
-        if (_requestId == 0 || _requestId > wqStorage.lastRequestId) revert InvalidRequestId(_requestId);
+        WithdrawalQueueStorage storage $ = _getWithdrawalQueueStorage();
+        if (_requestId == 0 || _requestId > $.lastRequestId) revert InvalidRequestId(_requestId);
 
-        WithdrawalRequest storage request = wqStorage.requests[_requestId];
-        WithdrawalRequest storage previousRequest = wqStorage.requests[_requestId - 1];
+        WithdrawalRequest storage request = $.requests[_requestId];
+        WithdrawalRequest storage previousRequest = $.requests[_requestId - 1];
 
         return WithdrawalRequestStatus({
             amountOfAssets: request.cumulativeAssets - previousRequest.cumulativeAssets,
             amountOfShares: request.cumulativeShares - previousRequest.cumulativeShares,
             owner: request.owner,
             timestamp: request.timestamp,
-            isFinalized: _requestId <= wqStorage.lastFinalizedRequestId,
+            isFinalized: _requestId <= $.lastFinalizedRequestId,
             isClaimed: request.claimed
         });
     }

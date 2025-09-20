@@ -9,6 +9,7 @@ import {Factory} from "src/Factory.sol";
 import {WrapperA} from "src/WrapperA.sol";
 import {IDashboard} from "src/interfaces/IDashboard.sol";
 import {IStakingVault} from "src/interfaces/IStakingVault.sol";
+import {ILazyOracle} from "src/interfaces/ILazyOracle.sol";
 
 /**
  * @title WrapperATest
@@ -55,7 +56,7 @@ contract WrapperATest is WrapperAHarness {
     function test_happy_path() public {
         // Deploy wrapper system for this test
         (WrapperA wrapper, WithdrawalQueue withdrawalQueue, IDashboard dashboard, IStakingVault vault) = _deployWrapperA(false);
-        
+
         //
         // Step 1: User1 deposits
         //
@@ -157,6 +158,9 @@ contract WrapperATest is WrapperAHarness {
         vm.expectRevert("RequestNotFoundOrNotFinalized(1)");
         vm.prank(USER1);
         wrapper.claimWithdrawal(requestId, USER1);
+
+        // Update report data with current timestamp to make it fresh
+        core.applyVaultReport(address(vault), wrapper.totalAssets(), 0, 0, 0, false);
 
         // Node operator finalizes the withdrawal
         vm.prank(NODE_OPERATOR);

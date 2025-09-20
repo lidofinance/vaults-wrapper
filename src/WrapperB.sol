@@ -6,22 +6,28 @@ import {console} from "forge-std/Test.sol";
 import {WrapperBase} from "./WrapperBase.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 
 import {WithdrawalQueue} from "./WithdrawalQueue.sol";
 
 import {IStETH} from "./interfaces/IStETH.sol";
+
+import {console} from "forge-std/console.sol";
 
 /**
  * @title WrapperB
  * @notice Configuration B: Minting, no strategy - stvETH shares + maximum stETH minting for user
  */
 contract WrapperB is WrapperBase {
+    using EnumerableSet for EnumerableSet.UintSet;
 
     error InsufficientSharesLocked(address user);
     error InsufficientMintableStShares();
     error ZeroArgument();
     error MintingForThanTargetStSharesShareIsNotAllowed();
     error TodoError();
+
+    event WithdrawalRequestCreated(uint256 indexed requestId, address indexed user, WithdrawalType requestType);
 
     IStETH public immutable STETH;
     uint256 public immutable WRAPPER_RR_BP; // vault's reserve ratio plus gap for wrapper
@@ -152,25 +158,29 @@ contract WrapperB is WrapperBase {
 
     // TODO: add request as ether as arg (not stvShares)
     function requestWithdrawal(uint256 _stv) public virtual returns (uint256 requestId) {
+        return _requestWithdrawalQueue(msg.sender, msg.sender, _stv);
+    }
+
+    function _requestWithdrawalQueue(address _owner, address _receiver, uint256 _stv) internal returns (uint256 requestId) {
         if (_stv == 0) revert WrapperBase.ZeroStvShares();
 
         // TODO: move min max withdrawal amount check from WQ here?
 
         WithdrawalQueue withdrawalQueue = WITHDRAWAL_QUEUE;
 
-        uint256 stethShares = stethSharesForWithdrawal(msg.sender, _stv);
+        uint256 stethShares = stethSharesForWithdrawal(_owner, _stv);
 
-        _transfer(msg.sender, address(this), _stv);
+        _transfer(_owner, address(this), _stv);
 
         if (stethShares > 0) {
-            STETH.transferSharesFrom(msg.sender, address(this), stethShares);
+            STETH.transferSharesFrom(_owner, address(this), stethShares);
             _burnStethShares(stethShares);
         }
 
         // NB: needed to transfer to Wrapper first to do the math correctly
         _transfer(address(this), address(withdrawalQueue), _stv);
 
-        requestId = withdrawalQueue.requestWithdrawal(_stv, msg.sender);
+        requestId = withdrawalQueue.requestWithdrawal(_stv, _receiver);
     }
 
     //
@@ -279,7 +289,7 @@ contract WrapperB is WrapperBase {
         assets = Math.mulDiv(_stv, _assets, totalSupply(), Math.Rounding.Floor);
     }
 
-    function _getWrapperBStorage() private pure returns (WrapperBStorage storage $) {
+    function _getWrapperBStorage() internal pure returns (WrapperBStorage storage $) {
         assembly {
             $.slot := WRAPPER_B_STORAGE_LOCATION
         }

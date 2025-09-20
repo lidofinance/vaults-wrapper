@@ -9,7 +9,7 @@ import {WrapperC} from "src/WrapperC.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
 import {IDashboard} from "src/interfaces/IDashboard.sol";
 import {IStakingVault} from "src/interfaces/IStakingVault.sol";
-import {LoopStrategy} from "src/strategy/LoopStrategy.sol";
+import {IStrategy} from "src/interfaces/IStrategy.sol";
 import {Factory} from "src/Factory.sol";
 
 /**
@@ -18,44 +18,34 @@ import {Factory} from "src/Factory.sol";
  */
 contract WrapperCHarness is WrapperBHarness {
 
-    LoopStrategy public strategy;
+    IStrategy public strategy;
 
     function _deployWrapperC(
         bool enableAllowlist,
         address strategy_,
-        uint256 reserveRatioGapBP
+        uint256 reserveRatioGapBP,
+        address _teller,
+        address _boringQueue
     ) internal returns (WrapperContext memory) {
         DeploymentConfig memory config = DeploymentConfig({
-            configuration: Factory.WrapperType.LOOP_STRATEGY,
+            configuration: Factory.WrapperType.GGV_STRATEGY,
             strategy: strategy_,
             enableAllowlist: enableAllowlist,
             reserveRatioGapBP: reserveRatioGapBP,
             nodeOperator: NODE_OPERATOR,
             nodeOperatorManager: NODE_OPERATOR,
             nodeOperatorFeeBP: NODE_OPERATOR_FEE_RATE,
-            confirmExpiry: CONFIRM_EXPIRY
+            confirmExpiry: CONFIRM_EXPIRY,
+            teller: _teller,
+            boringQueue: _boringQueue
         });
 
-        WrapperContext memory context = _deployWrapperSystem(config);
+        WrapperContext memory ctx = _deployWrapperSystem(config);
+        WrapperC wrapperC_ = WrapperC(payable(address(ctx.wrapper)));
 
-        WrapperC wrapperC_ = WrapperC(payable(address(context.wrapper)));
-        LoopStrategy strategy__;
+        strategy = IStrategy(payable(strategy_));
 
-        // Get the strategy address if it was created by the factory
-        if (strategy_ == address(0)) {
-            // Strategy was created by factory, get it from the wrapper
-            strategy__ = LoopStrategy(payable(address(wrapperC_.STRATEGY())));
-        } else {
-            strategy__ = LoopStrategy(payable(strategy_));
-        }
-
-        // Deal ETH to the lender mock
-        vm.deal(address(strategy__.LENDER_MOCK()), 1000 ether);
-
-        // Store strategy reference for test compatibility
-        strategy = strategy__;
-
-        return context;
+        return ctx;
     }
 
     function _allPossibleStvHolders(WrapperContext memory ctx) internal view override returns (address[] memory) {
@@ -66,7 +56,7 @@ contract WrapperCHarness is WrapperBHarness {
             holders[i] = holders_[i];
         }
         holders[i++] = address(strategy);
-        holders[i++] = address(strategy.LENDER_MOCK());
+//        holders[i++] = address(strategy.LENDER_MOCK());
         return holders;
     }
 

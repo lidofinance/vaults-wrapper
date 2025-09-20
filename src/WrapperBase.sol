@@ -6,6 +6,7 @@ import {console} from "forge-std/Test.sol";
 import {ERC20Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 
 import {WithdrawalQueue} from "./WithdrawalQueue.sol";
 import {IVaultHub} from "./interfaces/IVaultHub.sol";
@@ -15,15 +16,17 @@ import {AllowList} from "./AllowList.sol";
 // TODO: move whitelist to a separate contract
 // TODO: likely we can get rid of the base and move all to WrapperA
 abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList {
+    using EnumerableSet for EnumerableSet.UintSet;
+
     // Custom errors
     error ZeroDeposit();
     error InvalidReceiver();
     error NoMintingCapacityAvailable();
     error ZeroStvShares();
     error TransferNotAllowed();
-    error InvalidWithdrawalType();
     error NotOwner(address caller, address owner);
     error NotWithdrawalQueue();
+    error InvalidRequestType();
 
     // keccak256("REQUEST_VALIDATOR_EXIT_ROLE")
     bytes32 public immutable REQUEST_VALIDATOR_EXIT_ROLE = 0x2bbd6da7b06270fd63c039b4a14614f791d085d02c5a2e297591df95b05e4185;
@@ -41,15 +44,31 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList {
 
     WithdrawalQueue public immutable WITHDRAWAL_QUEUE;
 
+    enum WithdrawalType {
+        WITHDRAWAL_QUEUE,
+        STRATEGY
+    }
+
+    struct WithdrawalRequest {
+        uint256 requestId;
+        WithdrawalType requestType;
+        address owner;
+        uint40 timestamp;
+        uint256 amount;
+    }
+
     /// @custom:storage-location erc7201:wrapper.base.storage
     struct WrapperBaseStorage {
         bool vaultDisconnected;
+
+        WithdrawalRequest[] withdrawalRequests;
+        mapping(address => EnumerableSet.UintSet) requestsByOwner;
     }
 
     // keccak256(abi.encode(uint256(keccak256("wrapper.base.storage")) - 1)) & ~bytes32(uint256(0xff))
     bytes32 private constant WRAPPER_BASE_STORAGE_LOCATION = 0x8405b42399982e28cdd42aed39df9522715c70c841209124c7b936e15fd30300;
 
-    function _getWrapperBaseStorage() private pure returns (WrapperBaseStorage storage $) {
+    function _getWrapperBaseStorage() internal pure returns (WrapperBaseStorage storage $) {
         assembly {
             $.slot := WRAPPER_BASE_STORAGE_LOCATION
         }
@@ -219,6 +238,7 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList {
         WithdrawalQueue.WithdrawalRequestStatus memory status = wq.getWithdrawalStatus(_requestId);
 
         if (msg.sender != status.owner) revert NotOwner(msg.sender, status.owner);
+        if (_recipient == address(0)) _recipient = msg.sender;
 
         uint256 ethClaimed = wq.claimWithdrawal(_requestId, _recipient);
 
@@ -231,6 +251,32 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList {
     }
 
     // withdrawal queue is immutable and set in constructor
+
+    /// @notice Returns all withdrawal requests that belong to the `_owner` address
+    /// @param _owner address to get requests for
+    /// @return requestIds array of request ids
+    function getWithdrawalRequests(address _owner) external view returns (uint256[] memory requestIds) {
+        WrapperBaseStorage storage $ = _getWrapperBaseStorage();
+        return $.requestsByOwner[_owner].values();
+    }
+
+    /// @notice Returns all withdrawal requests that belong to the `_owner` address
+    /// @param _owner address to get requests for
+    /// @param _start start index
+    /// @param _end end index
+    /// @return requestIds array of request ids
+    function getWithdrawalRequests(address _owner, uint256 _start, uint256 _end) external view returns (uint256[] memory requestIds) {
+        WrapperBaseStorage storage $ = _getWrapperBaseStorage();
+        return $.requestsByOwner[_owner].values(_start, _end);
+    }
+
+    /// @notice Returns the length of the withdrawal requests that belong to the `_owner` address
+    /// @param _owner address to get requests for
+    /// @return length of the withdrawal requests
+    function getWithdrawalRequestsLength(address _owner) external view returns (uint256) {
+        WrapperBaseStorage storage $ = _getWrapperBaseStorage();
+        return $.requestsByOwner[_owner].length();
+    }
 
     // =================================================================================
     // VAULT MANAGEMENT

@@ -6,6 +6,7 @@ import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.s
 import {WrapperA} from "src/WrapperA.sol";
 import {WrapperBase} from "src/WrapperBase.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
+import {MockLazyOracle} from "../mocks/MockLazyOracle.sol";
 
 // Mock contracts
 contract MockDashboard {
@@ -86,7 +87,8 @@ contract DepositGasProfileTest is Test {
         ERC1967Proxy allowListProxy;
         ERC1967Proxy openProxy;
 
-        address wqImpl1 = address(new WithdrawalQueue(address(0), 30 days));
+        MockLazyOracle lazyOracle = new MockLazyOracle();
+        address wqImpl1 = address(new WithdrawalQueue(address(0), address(lazyOracle), 30 days));
         address wqProxy1 = address(new ERC1967Proxy(wqImpl1, ""));
         WrapperA allowListImpl = new WrapperA(address(dashboardWithAllowList), true, wqProxy1);
         bytes memory initDataAllowList = abi.encodeCall(
@@ -97,7 +99,7 @@ contract DepositGasProfileTest is Test {
         wrapperWithAllowList = WrapperA(payable(address(allowListProxy)));
 
         // Create wrapper without allowlist
-        address wqImpl2 = address(new WithdrawalQueue(address(0), 30 days));
+        address wqImpl2 = address(new WithdrawalQueue(address(0), address(lazyOracle), 30 days));
         address wqProxy2 = address(new ERC1967Proxy(wqImpl2, ""));
         WrapperA openImpl = new WrapperA(address(dashboardWithoutAllowList), false, wqProxy2);
         bytes memory initDataOpen = abi.encodeCall(
