@@ -16,7 +16,7 @@ error InvalidConfiguration();
  */
 contract WrapperC is WrapperB {
 
-    IStrategy public STRATEGY;
+    IStrategy public immutable STRATEGY;
 
     error NotStrategy();
 
@@ -25,8 +25,9 @@ contract WrapperC is WrapperB {
         address _stETH,
         bool _allowListEnabled,
         address _strategy,
-        uint256 _reserveRatioGapBP
-    ) WrapperB(_dashboard, _stETH, _allowListEnabled, _reserveRatioGapBP) {
+        uint256 _reserveRatioGapBP,
+        address _withdrawalQueue
+    ) WrapperB(_dashboard, _stETH, _allowListEnabled, _reserveRatioGapBP, _withdrawalQueue) {
         STRATEGY = IStrategy(_strategy);
     }
 
@@ -48,21 +49,6 @@ contract WrapperC is WrapperB {
         STRATEGY.execute(_receiver, stvShares, newStrategyMintableStShares);
     }
 
-    function depositForStrategy() external payable returns (uint256 stvShares) {
-        if (msg.sender != address(STRATEGY)) revert NotStrategy();
-        stvShares = _deposit(address(STRATEGY), address(0));
-    }
-
-    /**
-     * @notice Requests a withdrawal of the specified amount of stvETH shares via the strategy.
-     *         Requires having position in the strategy with enough stvETH shares.
-     * @dev Forwards the withdrawal request to the configured strategy contract.
-     * @param _stvShares The amount of stvETH shares to withdraw.
-     */
-    function requestWithdrawalFromStrategy(uint256 _stvShares) external returns (uint256 requestId) {
-        return STRATEGY.requestWithdraw(msg.sender, _stvShares);
-    }
-
     /**
      * @notice Requests a withdrawal of the specified amount of stvETH shares without involving the strategy.
      *         Requires having the stvShares and enough stETH approved for this contract
@@ -74,12 +60,4 @@ contract WrapperC is WrapperB {
         return super.requestWithdrawal(_stvShares);
     }
 
-    // TODO: get rid of this and make STRATEGY immutable
-    function setStrategy(address _strategy) external {
-        _checkRole(DEFAULT_ADMIN_ROLE);
-        if (_strategy == address(0)) {
-            revert InvalidConfiguration();
-        }
-        STRATEGY = IStrategy(_strategy);
-    }
 }

@@ -149,10 +149,9 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
         _;
     }
 
-    constructor(WrapperBase _wrapper, uint256 _maxAcceptableWQFinalizationTimeInSeconds) {
-        WRAPPER = _wrapper;
+    constructor(address _wrapper, uint256 _maxAcceptableWQFinalizationTimeInSeconds) {
+        WRAPPER = WrapperBase(payable(_wrapper));
         MAX_ACCEPTABLE_WQ_FINALIZATION_TIME_IN_SECONDS = _maxAcceptableWQFinalizationTimeInSeconds;
-
         _disableInitializers();
     }
 
@@ -175,11 +174,6 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
         });
 
         emit Initialized(_admin);
-    }
-
-    function test() external view {
-        console.logBytes32(DEFAULT_ADMIN_ROLE);
-        console.log(hasRole(DEFAULT_ADMIN_ROLE, msg.sender));
     }
 
     /// @notice Resume withdrawal requests placement and finalization

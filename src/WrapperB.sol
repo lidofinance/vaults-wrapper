@@ -36,27 +36,18 @@ contract WrapperB is WrapperBase {
     // keccak256(abi.encode(uint256(keccak256("wrapper.b.storage")) - 1)) & ~bytes32(uint256(0xff))
     bytes32 private constant WRAPPER_B_STORAGE_LOCATION = 0x68280b7606a1a98bf19dd7ad4cb88029b355c2c81a554f53b998c73f934e4400;
 
-
     constructor(
         address _dashboard,
         address _stETH,
         bool _allowListEnabled,
-        uint256 _reserveRatioGapBP
-    ) WrapperBase(_dashboard, _allowListEnabled) {
+        uint256 _reserveRatioGapBP,
+        address _withdrawalQueue
+    ) WrapperBase(_dashboard, _allowListEnabled, _withdrawalQueue) {
         STETH = IStETH(_stETH);
 
-        // TODO: Can we assume vault's RR is unchangeable?
         uint256 vaultRR = DASHBOARD.reserveRatioBP();
         require(_reserveRatioGapBP < TOTAL_BASIS_POINTS - vaultRR, "Reserve ratio gap too high");
         WRAPPER_RR_BP = vaultRR + _reserveRatioGapBP;
-    }
-
-    function initialize(
-        address _owner,
-        string memory _name,
-        string memory _symbol
-    ) public override initializer {
-        WrapperBase.initialize(_owner, _name, _symbol);
     }
 
     //
@@ -165,7 +156,7 @@ contract WrapperB is WrapperBase {
 
         // TODO: move min max withdrawal amount check from WQ here?
 
-        WithdrawalQueue withdrawalQueue = withdrawalQueue();
+        WithdrawalQueue withdrawalQueue = WITHDRAWAL_QUEUE;
 
         uint256 stethShares = stethSharesForWithdrawal(msg.sender, _stv);
 

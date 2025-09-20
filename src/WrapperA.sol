@@ -14,16 +14,9 @@ contract WrapperA is WrapperBase {
 
     constructor(
         address _dashboard,
-        bool _allowListEnabled
-    ) WrapperBase(_dashboard, _allowListEnabled) {}
-
-    function initialize(
-        address _owner,
-        string memory _name,
-        string memory _symbol
-    ) public override initializer {
-        WrapperBase.initialize(_owner, _name, _symbol);
-    }
+        bool _allowListEnabled,
+        address _withdrawalQueue
+    ) WrapperBase(_dashboard, _allowListEnabled, _withdrawalQueue) {}
 
     /**
      * @notice Deposit native ETH and receive stvETH shares
@@ -44,8 +37,8 @@ contract WrapperA is WrapperBase {
     function requestWithdrawal(uint256 _stvShares) external returns (uint256 requestId) {
         if (_stvShares == 0) revert WrapperBase.ZeroStvShares();
 
-        _transfer(msg.sender, address(withdrawalQueue()), _stvShares);
+        _transfer(msg.sender, address(WITHDRAWAL_QUEUE), _stvShares);
 
-        requestId = withdrawalQueue().requestWithdrawal(_stvShares, msg.sender);
+        requestId = WITHDRAWAL_QUEUE.requestWithdrawal(_stvShares, msg.sender);
     }
 }
