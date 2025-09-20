@@ -5,6 +5,7 @@ import {Test, console} from "forge-std/Test.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
+import {WrapperBase} from "src/WrapperBase.sol";
 import {WrapperA} from "src/WrapperA.sol";
 import {OssifiableProxy} from "src/proxy/OssifiableProxy.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
@@ -61,32 +62,22 @@ contract WithdrawalQueueTest is Test {
         vaultHub.mock_setVaultBalance(address(stakingVault), 1 ether);
 
         // Deploy wrapper
-        WrapperA impl = new WrapperA(
-            address(dashboard),
-            false // allowlist disabled
-        );
-        bytes memory initData = abi.encodeCall(
-            WrapperA.initialize,
-            (admin, "Staked ETH Vault Wrapper", "stvETH")
-        );
-        ERC1967Proxy proxy = new ERC1967Proxy(address(impl), initData);
-        wrapper = WrapperA(payable(address(proxy)));
-
-        // Deploy withdrawal queue
         uint256 maxAcceptableWQFinalizationTimeInSeconds = 60 days;
-        address withdrawalQueueImpl = address(new WithdrawalQueue(wrapper, maxAcceptableWQFinalizationTimeInSeconds));
-        vm.label(address(withdrawalQueue), "WithdrawalQueue");
 
-        address wqInstance = address(
-            new OssifiableProxy({
-                implementation_: address(withdrawalQueueImpl),
-                data_: new bytes(0),
-                admin_: admin
-            })
-        );
-        withdrawalQueue = WithdrawalQueue(payable(wqInstance));
-        withdrawalQueue.initialize(admin, operator);
-        vm.label(address(wqInstance), "WithdrawalQueue");
+        // Precreate wrapper proxy with empty implementation
+        OssifiableProxy wrapperProxy = new OssifiableProxy(address(0), admin, bytes(""));
+
+        // Deploy WQ implementation with immutable wrapper; proxy it and initialize
+        address wqImpl = address(new WithdrawalQueue(address(wrapperProxy), maxAcceptableWQFinalizationTimeInSeconds));
+        OssifiableProxy wqProxy = new OssifiableProxy(wqImpl, admin, abi.encodeCall(WithdrawalQueue.initialize, (admin, operator)));
+
+        // Deploy wrapper implementation with immutable WQ, then upgrade wrapper proxy and initialize
+        WrapperA impl = new WrapperA(address(dashboard), false, address(wqProxy));
+        wrapperProxy.proxy__upgradeToAndCall(address(impl), abi.encodeCall(WrapperBase.initialize, (admin, "Staked ETH Vault Wrapper", "stvETH")));
+        wrapper = WrapperA(payable(address(wrapperProxy)));
+
+        withdrawalQueue = WithdrawalQueue(payable(address(wqProxy)));
+        vm.label(address(wqProxy), "WithdrawalQueue");
 
         // Grant necessary roles to wrapper for dashboard operations
         vm.startPrank(admin);
@@ -94,7 +85,7 @@ contract WithdrawalQueueTest is Test {
         dashboard.grantRole(dashboard.WITHDRAW_ROLE(), address(withdrawalQueue));
         vm.stopPrank();
 
-        wrapper.setWithdrawalQueue(address(withdrawalQueue));
+        // No need to set in wrapper; it is immutable now
     }
 
     // Tests the complete withdrawal queue flow from deposit to final ETH claim

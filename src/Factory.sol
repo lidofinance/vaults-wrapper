@@ -7,7 +7,15 @@ import {WrapperA} from "./WrapperA.sol";
 import {WrapperB} from "./WrapperB.sol";
 import {WrapperC} from "./WrapperC.sol";
 import {WithdrawalQueue} from "./WithdrawalQueue.sol";
+import {WrapperAFactory} from "./factories/WrapperAFactory.sol";
+import {WrapperBFactory} from "./factories/WrapperBFactory.sol";
+import {WrapperCFactory} from "./factories/WrapperCFactory.sol";
+import {WithdrawalQueueFactory} from "./factories/WithdrawalQueueFactory.sol";
 import {LoopStrategy} from "./strategy/LoopStrategy.sol";
+import {LoopStrategyFactory} from "./factories/LoopStrategyFactory.sol";
+import {GGVStrategyFactory} from "./factories/GGVStrategyFactory.sol";
+import {OssifiableProxy} from "./proxy/OssifiableProxy.sol";
+import {DummyImplementation} from "./proxy/DummyImplementation.sol";
 
 import {IVaultFactory} from "./interfaces/IVaultFactory.sol";
 import {IDashboard} from "./interfaces/IDashboard.sol";
@@ -15,9 +23,28 @@ import {IDashboard} from "./interfaces/IDashboard.sol";
 error InvalidConfiguration();
 
 contract Factory {
+    struct WrapperConfig {
+        address vaultFactory;
+        address steth;
+        address wrapperAFactory;
+        address wrapperBFactory;
+        address wrapperCFactory;
+        address withdrawalQueueFactory;
+        address loopStrategyFactory;
+        address ggvStrategyFactory;
+        address dummyImplementation;
+        uint256 maxFinalizationTime;
+    }
     IVaultFactory public immutable VAULT_FACTORY;
     address public immutable STETH;
-
+    WrapperAFactory public immutable WRAPPER_A_FACTORY;
+    WrapperBFactory public immutable WRAPPER_B_FACTORY;
+    WrapperCFactory public immutable WRAPPER_C_FACTORY;
+    WithdrawalQueueFactory public immutable WITHDRAWAL_QUEUE_FACTORY;
+    LoopStrategyFactory public immutable LOOP_STRATEGY_FACTORY;
+    GGVStrategyFactory public immutable GGV_STRATEGY_FACTORY;
+    address public immutable DUMMY_IMPLEMENTATION;
+    uint256 public immutable MAX_FINALIZATION_TIME;
     string constant NAME = "Staked ETH Vault Wrapper";
     string constant SYMBOL = "stvToken";
 
@@ -26,26 +53,35 @@ contract Factory {
         address indexed wrapper,
         address indexed withdrawalQueue,
         address strategy,
-        WrapperConfiguration configuration
+        WrapperType configuration
     );
 
-    enum WrapperConfiguration {
-        NO_MINTING_NO_STRATEGY,    // (A) no minting, no strategy
-        MINTING_NO_STRATEGY,       // (B) minting, no strategy
-        MINTING_AND_STRATEGY       // (C) minting and strategy
+    enum WrapperType {
+        NO_MINTING_NO_STRATEGY,
+        MINTING_NO_STRATEGY,
+        LOOP_STRATEGY,
+        GGV_STRATEGY
     }
 
-    constructor(address _vaultFactory, address _steth) {
-        VAULT_FACTORY = IVaultFactory(_vaultFactory);
-        STETH = _steth;
+    constructor(WrapperConfig memory a) {
+        VAULT_FACTORY = IVaultFactory(a.vaultFactory);
+        STETH = a.steth;
+        WRAPPER_A_FACTORY = WrapperAFactory(a.wrapperAFactory);
+        WRAPPER_B_FACTORY = WrapperBFactory(a.wrapperBFactory);
+        WRAPPER_C_FACTORY = WrapperCFactory(a.wrapperCFactory);
+        WITHDRAWAL_QUEUE_FACTORY = WithdrawalQueueFactory(a.withdrawalQueueFactory);
+        LOOP_STRATEGY_FACTORY = LoopStrategyFactory(a.loopStrategyFactory);
+        GGV_STRATEGY_FACTORY = GGVStrategyFactory(a.ggvStrategyFactory);
+        DUMMY_IMPLEMENTATION = a.dummyImplementation;
+        MAX_FINALIZATION_TIME = a.maxFinalizationTime;
     }
 
-    function createVaultWithWrapper(
+    function createVaultWithConfiguredWrapper(
         address _nodeOperator,
         address _nodeOperatorManager,
         uint256 _nodeOperatorFeeBP,
         uint256 _confirmExpiry,
-        WrapperConfiguration _configuration,
+        WrapperType _configuration,
         address _strategy,
         bool _allowlistEnabled,
         uint256 _reserveRatioGapBP
@@ -59,11 +95,258 @@ contract Factory {
             address withdrawalQueueProxy
         )
     {
-        // Deploy vault and dashboard
-        (vault, dashboard) = VAULT_FACTORY.createVaultWithDashboard{
-            value: msg.value
-        }(
-            address(this), // temporary admin
+        IDashboard _dashboard;
+        address payable _wrapperProxy;
+        address _withdrawalQueueProxy;
+        (vault, dashboard, _dashboard, _wrapperProxy, _withdrawalQueueProxy) = _setupVaultAndProxies(
+            _nodeOperator,
+            _nodeOperatorManager,
+            _nodeOperatorFeeBP,
+            _confirmExpiry
+        );
+
+        address usedStrategy = _strategy;
+        if (_configuration == WrapperType.LOOP_STRATEGY && usedStrategy == address(0)) {
+            usedStrategy = LOOP_STRATEGY_FACTORY.deploy(STETH, address(_wrapperProxy), 1);
+        }
+
+        WrapperBase wrapper = _deployAndInitWrapper(
+            _configuration,
+            dashboard,
+            _allowlistEnabled,
+            _reserveRatioGapBP,
+            _withdrawalQueueProxy,
+            usedStrategy,
+            _wrapperProxy
+        );
+
+        _configureAndFinalize(_dashboard, wrapper, _wrapperProxy, _withdrawalQueueProxy, vault, _configuration, usedStrategy);
+
+        return (vault, dashboard, _wrapperProxy, _withdrawalQueueProxy);
+    }
+
+    // =================================================================================
+    // Overloads per configuration
+    // =================================================================================
+
+    function createVaultWithNoMintingNoStrategy(
+        address _nodeOperator,
+        address _nodeOperatorManager,
+        uint256 _nodeOperatorFeeBP,
+        uint256 _confirmExpiry,
+        bool _allowlistEnabled
+    )
+        external
+        payable
+        returns (
+            address vault,
+            address dashboard,
+            address payable wrapperProxy,
+            address withdrawalQueueProxy
+        )
+    {
+        IDashboard _dashboard;
+        address payable _wrapperProxy;
+        address _withdrawalQueueProxy;
+        (vault, dashboard, _dashboard, _wrapperProxy, _withdrawalQueueProxy) = _setupVaultAndProxies(
+            _nodeOperator,
+            _nodeOperatorManager,
+            _nodeOperatorFeeBP,
+            _confirmExpiry
+        );
+
+        WrapperBase wrapper = _deployAndInitWrapper(
+            WrapperType.NO_MINTING_NO_STRATEGY,
+            dashboard,
+            _allowlistEnabled,
+            0,
+            _withdrawalQueueProxy,
+            address(0),
+            _wrapperProxy
+        );
+
+        _configureAndFinalize(_dashboard, wrapper, _wrapperProxy, _withdrawalQueueProxy, vault, WrapperType.NO_MINTING_NO_STRATEGY, address(0));
+
+        return (vault, dashboard, _wrapperProxy, _withdrawalQueueProxy);
+    }
+
+    function createVaultWithMintingNoStrategy(
+        address _nodeOperator,
+        address _nodeOperatorManager,
+        uint256 _nodeOperatorFeeBP,
+        uint256 _confirmExpiry,
+        bool _allowlistEnabled,
+        uint256 _reserveRatioGapBP
+    )
+        external
+        payable
+        returns (
+            address vault,
+            address dashboard,
+            address payable wrapperProxy,
+            address withdrawalQueueProxy
+        )
+    {
+        IDashboard _dashboard;
+        address payable _wrapperProxy;
+        address _withdrawalQueueProxy;
+        (vault, dashboard, _dashboard, _wrapperProxy, _withdrawalQueueProxy) = _setupVaultAndProxies(
+            _nodeOperator,
+            _nodeOperatorManager,
+            _nodeOperatorFeeBP,
+            _confirmExpiry
+        );
+
+        WrapperBase wrapper = _deployAndInitWrapper(
+            WrapperType.MINTING_NO_STRATEGY,
+            dashboard,
+            _allowlistEnabled,
+            _reserveRatioGapBP,
+            _withdrawalQueueProxy,
+            address(0),
+            _wrapperProxy
+        );
+
+        _configureAndFinalize(_dashboard, wrapper, _wrapperProxy, _withdrawalQueueProxy, vault, WrapperType.MINTING_NO_STRATEGY, address(0));
+
+        return (vault, dashboard, _wrapperProxy, _withdrawalQueueProxy);
+    }
+
+    function createVaultWithLoopStrategy(
+        address _nodeOperator,
+        address _nodeOperatorManager,
+        uint256 _nodeOperatorFeeBP,
+        uint256 _confirmExpiry,
+        bool _allowlistEnabled,
+        uint256 _reserveRatioGapBP,
+        uint256 _loops
+    )
+        external
+        payable
+        returns (
+            address vault,
+            address dashboard,
+            address payable wrapperProxy,
+            address withdrawalQueueProxy
+        )
+    {
+        IDashboard _dashboard;
+        address payable _wrapperProxy;
+        address _withdrawalQueueProxy;
+        (vault, dashboard, _dashboard, _wrapperProxy, _withdrawalQueueProxy) = _setupVaultAndProxies(
+            _nodeOperator,
+            _nodeOperatorManager,
+            _nodeOperatorFeeBP,
+            _confirmExpiry
+        );
+
+        address loopStrategy = LOOP_STRATEGY_FACTORY.deploy(STETH, address(_wrapperProxy), _loops);
+
+        WrapperBase wrapper = _deployAndInitWrapper(
+            WrapperType.LOOP_STRATEGY,
+            dashboard,
+            _allowlistEnabled,
+            _reserveRatioGapBP,
+            _withdrawalQueueProxy,
+            loopStrategy,
+            _wrapperProxy
+        );
+
+        _configureAndFinalize(_dashboard, wrapper, _wrapperProxy, _withdrawalQueueProxy, vault, WrapperType.LOOP_STRATEGY, loopStrategy);
+
+        return (vault, dashboard, _wrapperProxy, _withdrawalQueueProxy);
+    }
+
+    function createVaultWithGGVStrategy(
+        address _nodeOperator,
+        address _nodeOperatorManager,
+        uint256 _nodeOperatorFeeBP,
+        uint256 _confirmExpiry,
+        bool _allowlistEnabled,
+        uint256 _reserveRatioGapBP,
+        address _teller,
+        address _boringQueue
+    )
+        external
+        payable
+        returns (
+            address vault,
+            address dashboard,
+            address payable wrapperProxy,
+            address withdrawalQueueProxy
+        )
+    {
+        IDashboard _dashboard;
+        address payable _wrapperProxy;
+        address _withdrawalQueueProxy;
+        (vault, dashboard, _dashboard, _wrapperProxy, _withdrawalQueueProxy) = _setupVaultAndProxies(
+            _nodeOperator,
+            _nodeOperatorManager,
+            _nodeOperatorFeeBP,
+            _confirmExpiry
+        );
+
+        address ggvStrategy = GGV_STRATEGY_FACTORY.deploy(STETH, _teller, _boringQueue);
+
+        WrapperBase wrapper = _deployAndInitWrapper(
+            WrapperType.GGV_STRATEGY,
+            dashboard,
+            _allowlistEnabled,
+            _reserveRatioGapBP,
+            _withdrawalQueueProxy,
+            ggvStrategy,
+            _wrapperProxy
+        );
+
+        _configureAndFinalize(_dashboard, wrapper, _wrapperProxy, _withdrawalQueueProxy, vault, WrapperType.GGV_STRATEGY, ggvStrategy);
+
+        return (vault, dashboard, _wrapperProxy, _withdrawalQueueProxy);
+    }
+
+    function _deployWrapper(
+        WrapperType _configuration,
+        address dashboard,
+        bool _allowlistEnabled,
+        uint256 _reserveRatioGapBP,
+        address withdrawalQueueProxy,
+        address _strategy
+    ) internal returns (address wrapperImpl) {
+        if (_configuration == WrapperType.NO_MINTING_NO_STRATEGY) {
+            wrapperImpl = WRAPPER_A_FACTORY.deploy(dashboard, _allowlistEnabled, withdrawalQueueProxy);
+        } else if (_configuration == WrapperType.MINTING_NO_STRATEGY) {
+            wrapperImpl = WRAPPER_B_FACTORY.deploy(dashboard, STETH, _allowlistEnabled, _reserveRatioGapBP, withdrawalQueueProxy);
+        } else if (
+            _configuration == WrapperType.LOOP_STRATEGY ||
+            _configuration == WrapperType.GGV_STRATEGY
+        ) {
+            if (_strategy == address(0)) revert InvalidConfiguration();
+            wrapperImpl = WRAPPER_C_FACTORY.deploy(
+                dashboard,
+                STETH,
+                _allowlistEnabled,
+                _strategy,
+                _reserveRatioGapBP,
+                withdrawalQueueProxy
+            );
+        } else {
+            revert InvalidConfiguration();
+        }
+    }
+
+    function _setupVaultAndProxies(
+        address _nodeOperator,
+        address _nodeOperatorManager,
+        uint256 _nodeOperatorFeeBP,
+        uint256 _confirmExpiry
+    ) internal returns (
+        address vault,
+        address dashboard,
+        IDashboard _dashboard,
+        address payable wrapperProxy,
+        address withdrawalQueueProxy
+    ) {
+        (vault, dashboard) = VAULT_FACTORY.createVaultWithDashboard{ value: msg.value }(
+            address(this),
             _nodeOperator,
             _nodeOperatorManager,
             _nodeOperatorFeeBP,
@@ -71,152 +354,65 @@ contract Factory {
             new IVaultFactory.RoleAssignment[](0)
         );
 
-        IDashboard _dashboard = IDashboard(payable(dashboard));
+        _dashboard = IDashboard(payable(dashboard));
 
-        if (_configuration == WrapperConfiguration.NO_MINTING_NO_STRATEGY) {
-            (wrapperProxy, withdrawalQueueProxy) = _deployWrapperA(
-                dashboard,
-                _allowlistEnabled,
-                _nodeOperator
-            );
-        } else if (_configuration == WrapperConfiguration.MINTING_NO_STRATEGY) {
-            (wrapperProxy, withdrawalQueueProxy) = _deployWrapperB(
-                dashboard,
-                _allowlistEnabled,
-                _nodeOperator,
-                _reserveRatioGapBP
-            );
-        } else if (_configuration == WrapperConfiguration.MINTING_AND_STRATEGY) {
-            (wrapperProxy, withdrawalQueueProxy) = _deployWrapperC(
-                dashboard,
-                _allowlistEnabled,
-                _nodeOperator,
-                _strategy,
-                _reserveRatioGapBP
-            );
-        } else {
-            revert("Invalid configuration");
-        }
+        wrapperProxy = payable(address(new OssifiableProxy(DUMMY_IMPLEMENTATION, address(this), bytes(""))));
+        address wqImpl = WITHDRAWAL_QUEUE_FACTORY.deploy(address(wrapperProxy), MAX_FINALIZATION_TIME);
+        withdrawalQueueProxy = address(new OssifiableProxy(wqImpl, address(this), abi.encodeCall(WithdrawalQueue.initialize, (_nodeOperator, _nodeOperator))));
+    }
 
-        WrapperBase wrapper = WrapperBase(payable(wrapperProxy));
+    function _deployAndInitWrapper(
+        WrapperType _configuration,
+        address dashboard,
+        bool _allowlistEnabled,
+        uint256 _reserveRatioGapBP,
+        address withdrawalQueueProxy,
+        address _strategy,
+        address payable wrapperProxy
+    ) internal returns (WrapperBase wrapper) {
+        address wrapperImpl = _deployWrapper(
+            _configuration,
+            dashboard,
+            _allowlistEnabled,
+            _reserveRatioGapBP,
+            withdrawalQueueProxy,
+            _strategy
+        );
 
-        // Configure the system
-        _dashboard.grantRole(_dashboard.FUND_ROLE(), wrapperProxy);
+        OssifiableProxy(wrapperProxy).proxy__upgradeToAndCall(wrapperImpl, abi.encodeCall(WrapperBase.initialize, (address(this), NAME, SYMBOL)));
+        wrapper = WrapperBase(payable(address(wrapperProxy)));
+    }
+
+    function _configureAndFinalize(
+        IDashboard _dashboard,
+        WrapperBase wrapper,
+        address payable wrapperProxy,
+        address withdrawalQueueProxy,
+        address vault,
+        WrapperType _configuration,
+        address _strategy
+    ) internal {
+        _dashboard.grantRole(_dashboard.FUND_ROLE(), address(wrapperProxy));
         _dashboard.grantRole(_dashboard.WITHDRAW_ROLE(), withdrawalQueueProxy);
 
-        // For WrapperB and WrapperC, grant mint/burn roles
-        if (_configuration != WrapperConfiguration.NO_MINTING_NO_STRATEGY) {
-            _dashboard.grantRole(_dashboard.MINT_ROLE(), wrapperProxy);
-            _dashboard.grantRole(_dashboard.BURN_ROLE(), wrapperProxy);
+        if (_configuration != WrapperType.NO_MINTING_NO_STRATEGY) {
+            _dashboard.grantRole(_dashboard.MINT_ROLE(), address(wrapperProxy));
+            _dashboard.grantRole(_dashboard.BURN_ROLE(), address(wrapperProxy));
         }
 
-        wrapper.setWithdrawalQueue(withdrawalQueueProxy);
-
-        // Transfer admin role to the user (for wrapper)
         wrapper.grantRole(wrapper.DEFAULT_ADMIN_ROLE(), msg.sender);
         wrapper.revokeRole(wrapper.DEFAULT_ADMIN_ROLE(), address(this));
 
-        // Transfer admin role to the user (for dashboard)
         _dashboard.grantRole(_dashboard.DEFAULT_ADMIN_ROLE(), msg.sender);
         _dashboard.revokeRole(_dashboard.DEFAULT_ADMIN_ROLE(), address(this));
 
         emit VaultWrapperCreated(
             vault,
-            wrapperProxy,
+            address(wrapper),
             withdrawalQueueProxy,
             _strategy,
             _configuration
         );
-
-        return (vault, dashboard, wrapperProxy, withdrawalQueueProxy);
     }
 
-    function _deployWrapperA(
-        address dashboard,
-        bool _allowlistEnabled,
-        address _nodeOperator
-    ) internal returns (address payable wrapperProxy, address withdrawalQueueProxy) {
-        // Step 1: Create wrapper implementation
-        WrapperA wrapperImpl = new WrapperA(dashboard, _allowlistEnabled);
-
-        // Step 2: Deploy wrapper proxy
-        wrapperProxy = payable(address(new ERC1967Proxy(
-            address(wrapperImpl),
-            abi.encodeCall(WrapperA.initialize, (address(this), NAME, SYMBOL))
-        )));
-
-        // Step 3: Deploy withdrawal queue implementation with known wrapper address
-        uint256 maxFinalizationTime = 30 days;
-        WithdrawalQueue wqImpl = new WithdrawalQueue(WrapperBase(wrapperProxy), maxFinalizationTime);
-
-        // Step 4: Deploy withdrawal queue proxy
-        withdrawalQueueProxy = address(new ERC1967Proxy(
-            address(wqImpl),
-            abi.encodeCall(WithdrawalQueue.initialize, (_nodeOperator, _nodeOperator))
-        ));
-    }
-
-    function _deployWrapperB(
-        address dashboard,
-        bool _allowlistEnabled,
-        address _nodeOperator,
-        uint256 _reserveRatioGapBP
-    ) internal returns (address payable wrapperProxy, address withdrawalQueueProxy) {
-        // Step 1: Create wrapper implementation
-        WrapperB wrapperImpl = new WrapperB(dashboard, STETH, _allowlistEnabled, _reserveRatioGapBP);
-
-        // Step 2: Deploy wrapper proxy
-        wrapperProxy = payable(address(new ERC1967Proxy(
-            address(wrapperImpl),
-            abi.encodeCall(WrapperB.initialize, (address(this), NAME, SYMBOL))
-        )));
-
-        // Step 3: Deploy withdrawal queue implementation with known wrapper address
-        uint256 maxFinalizationTime = 30 days;
-        WithdrawalQueue wqImpl = new WithdrawalQueue(WrapperBase(wrapperProxy), maxFinalizationTime);
-
-        // Step 4: Deploy withdrawal queue proxy
-        withdrawalQueueProxy = address(new ERC1967Proxy(
-            address(wqImpl),
-            abi.encodeCall(WithdrawalQueue.initialize, (_nodeOperator, _nodeOperator))
-        ));
-    }
-
-    function _deployWrapperC(
-        address dashboard,
-        bool _allowlistEnabled,
-        address _nodeOperator,
-        address _strategy,
-        uint256 _reserveRatioGapBP
-    ) internal returns (address payable wrapperProxy, address withdrawalQueueProxy) {
-        // Step 1: Create wrapper implementation with zero strategy initially
-        WrapperC wrapperImpl = new WrapperC(dashboard, STETH, _allowlistEnabled, address(0), _reserveRatioGapBP);
-
-        // Step 2: Deploy wrapper proxy
-        wrapperProxy = payable(address(new ERC1967Proxy(
-            address(wrapperImpl),
-            abi.encodeCall(WrapperB.initialize, (address(this), NAME, SYMBOL))
-        )));
-
-        // Step 3: Deploy withdrawal queue implementation with known wrapper address
-        uint256 maxFinalizationTime = 30 days;
-        WithdrawalQueue wqImpl = new WithdrawalQueue(WrapperBase(wrapperProxy), maxFinalizationTime);
-
-        // Step 4: Deploy withdrawal queue proxy
-        withdrawalQueueProxy = address(new ERC1967Proxy(
-            address(wqImpl),
-            abi.encodeCall(WithdrawalQueue.initialize, (_nodeOperator, _nodeOperator))
-        ));
-
-        // Step 5: Set the strategy on the wrapper
-        if (_strategy == address(0)) {
-            // If no strategy provided, create a default LoopStrategy
-            uint256 loops = 1; // Default number of loops
-            LoopStrategy strategyImpl = new LoopStrategy(STETH, wrapperProxy, loops);
-            WrapperC(wrapperProxy).setStrategy(address(strategyImpl));
-        } else {
-            // Use the provided strategy
-            WrapperC(wrapperProxy).setStrategy(_strategy);
-        }
-    }
 }

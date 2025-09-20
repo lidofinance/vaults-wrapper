@@ -26,7 +26,7 @@ contract WrapperCHarness is WrapperBHarness {
         uint256 reserveRatioGapBP
     ) internal returns (WrapperContext memory) {
         DeploymentConfig memory config = DeploymentConfig({
-            configuration: Factory.WrapperConfiguration.MINTING_AND_STRATEGY,
+            configuration: Factory.WrapperType.LOOP_STRATEGY,
             strategy: strategy_,
             enableAllowlist: enableAllowlist,
             reserveRatioGapBP: reserveRatioGapBP,

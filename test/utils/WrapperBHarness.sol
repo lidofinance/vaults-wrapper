@@ -10,6 +10,7 @@ import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
 import {IDashboard} from "src/interfaces/IDashboard.sol";
 import {IStakingVault} from "src/interfaces/IStakingVault.sol";
 import {Factory} from "src/Factory.sol";
+import {FactoryHelper} from "test/utils/FactoryHelper.sol";
 
 /**
  * @title WrapperBHarness
@@ -22,7 +23,7 @@ contract WrapperBHarness is WrapperAHarness {
         uint256 reserveRatioGapBP
     ) internal returns (WrapperContext memory) {
         DeploymentConfig memory config = DeploymentConfig({
-            configuration: Factory.WrapperConfiguration.MINTING_NO_STRATEGY,
+            configuration: Factory.WrapperType.MINTING_NO_STRATEGY,
             strategy: address(0),
             enableAllowlist: enableAllowlist,
             reserveRatioGapBP: reserveRatioGapBP,

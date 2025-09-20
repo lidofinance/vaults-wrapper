@@ -4,6 +4,7 @@ pragma solidity >=0.8.25;
 import {Test, console} from "forge-std/Test.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {WrapperA} from "src/WrapperA.sol";
+import {WrapperBase} from "src/WrapperBase.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
 
 // Mock contracts
@@ -11,18 +12,18 @@ contract MockDashboard {
     bytes32 public constant FUND_ROLE = keccak256("FUND_ROLE");
     address public immutable VAULT_HUB;
     address public immutable stakingVault;
-    
+
     constructor(address _vaultHub, address _stakingVault) {
         VAULT_HUB = _vaultHub;
         stakingVault = _stakingVault;
     }
-    
+
     function fund() external payable {
         payable(stakingVault).transfer(msg.value);
     }
-    
+
     function grantRole(bytes32, address) external {}
-    
+
     function maxLockableValue() external view returns (uint256) {
         return stakingVault.balance;
     }
@@ -32,11 +33,11 @@ contract MockVaultHub {
     function totalValue(address vault) external view returns (uint256) {
         return vault.balance;
     }
-    
+
     function isReportFresh(address) external pure returns (bool, bool) {
         return (true, false);
     }
-    
+
     function CONNECT_DEPOSIT() external pure returns (uint256) {
         return 1 ether;
     }
@@ -81,27 +82,29 @@ contract DepositGasProfileTest is Test {
         vm.deal(address(stakingVaultWithoutAllowList), 1 ether);
 
         // Create wrapper with allowlist enabled
-        WrapperA allowListImpl = new WrapperA(
-            address(dashboardWithAllowList),
-            true // allowlist enabled
-        );
+        // Precreate wrapper proxy addresses first
+        ERC1967Proxy allowListProxy;
+        ERC1967Proxy openProxy;
+
+        address wqImpl1 = address(new WithdrawalQueue(address(0), 30 days));
+        address wqProxy1 = address(new ERC1967Proxy(wqImpl1, ""));
+        WrapperA allowListImpl = new WrapperA(address(dashboardWithAllowList), true, wqProxy1);
         bytes memory initDataAllowList = abi.encodeCall(
-            WrapperA.initialize,
+            WrapperBase.initialize,
             (owner, "AllowListed Vault", "wstvETH")
         );
-        ERC1967Proxy allowListProxy = new ERC1967Proxy(address(allowListImpl), initDataAllowList);
+        allowListProxy = new ERC1967Proxy(address(allowListImpl), initDataAllowList);
         wrapperWithAllowList = WrapperA(payable(address(allowListProxy)));
 
         // Create wrapper without allowlist
-        WrapperA openImpl = new WrapperA(
-            address(dashboardWithoutAllowList),
-            false // allowlist disabled
-        );
+        address wqImpl2 = address(new WithdrawalQueue(address(0), 30 days));
+        address wqProxy2 = address(new ERC1967Proxy(wqImpl2, ""));
+        WrapperA openImpl = new WrapperA(address(dashboardWithoutAllowList), false, wqProxy2);
         bytes memory initDataOpen = abi.encodeCall(
-            WrapperA.initialize,
+            WrapperBase.initialize,
             (owner, "Open Vault", "ostvETH")
         );
-        ERC1967Proxy openProxy = new ERC1967Proxy(address(openImpl), initDataOpen);
+        openProxy = new ERC1967Proxy(address(openImpl), initDataOpen);
         wrapperWithoutAllowList = WrapperA(payable(address(openProxy)));
 
         // Grant FUND_ROLE to wrappers
@@ -121,13 +124,13 @@ contract DepositGasProfileTest is Test {
         uint256 gasBefore = gasleft();
         wrapperWithAllowList.depositETH{value: 1 ether}(user);
         uint256 gasWithAllowList = gasBefore - gasleft();
-        
+
         // Test without allowlist
         vm.prank(user);
         gasBefore = gasleft();
         wrapperWithoutAllowList.depositETH{value: 1 ether}(user);
         uint256 gasWithoutAllowList = gasBefore - gasleft();
-        
+
         console.log("Gas used for first deposit:");
         console.log("  With allowlist:   ", gasWithAllowList);
         console.log("  Without allowlist:", gasWithoutAllowList);
@@ -142,18 +145,18 @@ contract DepositGasProfileTest is Test {
         wrapperWithAllowList.depositETH{value: 1 ether}(user);
         vm.prank(user);
         wrapperWithoutAllowList.depositETH{value: 1 ether}(user);
-        
+
         // Second deposits
         vm.prank(user);
         uint256 gasBefore = gasleft();
         wrapperWithAllowList.depositETH{value: 1 ether}(user);
         uint256 gasWithAllowList = gasBefore - gasleft();
-        
+
         vm.prank(user);
         gasBefore = gasleft();
         wrapperWithoutAllowList.depositETH{value: 1 ether}(user);
         uint256 gasWithoutAllowList = gasBefore - gasleft();
-        
+
         console.log("Gas used for second deposit:");
         console.log("  With allowlist:   ", gasWithAllowList);
         console.log("  Without allowlist:", gasWithoutAllowList);
@@ -165,19 +168,19 @@ contract DepositGasProfileTest is Test {
     function test_gasProfile_multipleDeposits() public {
         uint256[] memory gasWithAllowList = new uint256[](5);
         uint256[] memory gasWithoutAllowList = new uint256[](5);
-        
+
         for (uint256 i = 0; i < 5; i++) {
             vm.prank(user);
             uint256 gasBefore = gasleft();
             wrapperWithAllowList.depositETH{value: 1 ether}(user);
             gasWithAllowList[i] = gasBefore - gasleft();
-            
+
             vm.prank(user);
             gasBefore = gasleft();
             wrapperWithoutAllowList.depositETH{value: 1 ether}(user);
             gasWithoutAllowList[i] = gasBefore - gasleft();
         }
-        
+
         console.log("Gas profile for 5 consecutive deposits:");
         for (uint256 i = 0; i < 5; i++) {
             console.log("  Deposit", i + 1, "- With allowlist:", gasWithAllowList[i]);
@@ -194,19 +197,19 @@ contract DepositGasProfileTest is Test {
         amounts[1] = 1 ether;
         amounts[2] = 10 ether;
         amounts[3] = 50 ether;
-        
+
         console.log("Gas profile for different deposit amounts:");
         for (uint256 i = 0; i < amounts.length; i++) {
             vm.prank(user);
             uint256 gasBefore = gasleft();
             wrapperWithAllowList.depositETH{value: amounts[i]}(user);
             uint256 gasWithAllowList = gasBefore - gasleft();
-            
+
             vm.prank(user);
             gasBefore = gasleft();
             wrapperWithoutAllowList.depositETH{value: amounts[i]}(user);
             uint256 gasWithoutAllowList = gasBefore - gasleft();
-            
+
             console.log("  Amount:", amounts[i], "- With allowlist:", gasWithAllowList);
             console.log("    Without allowlist:", gasWithoutAllowList);
             console.log("    Difference:", int256(gasWithAllowList) - int256(gasWithoutAllowList));
@@ -221,13 +224,13 @@ contract DepositGasProfileTest is Test {
         uint256 gasBefore = gasleft();
         wrapperWithAllowList.depositETH{value: 1 ether}(); // No receiver parameter
         uint256 gasWithAllowList = gasBefore - gasleft();
-        
+
         // Test without allowlist
         vm.prank(user);
         gasBefore = gasleft();
         wrapperWithoutAllowList.depositETH{value: 1 ether}(); // No receiver parameter
         uint256 gasWithoutAllowList = gasBefore - gasleft();
-        
+
         console.log("Gas used for depositETH() convenience function:");
         console.log("  With allowlist:   ", gasWithAllowList);
         console.log("  Without allowlist:", gasWithoutAllowList);

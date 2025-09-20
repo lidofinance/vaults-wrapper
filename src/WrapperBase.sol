@@ -25,22 +25,24 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList {
     error NotOwner(address caller, address owner);
     error NotWithdrawalQueue();
 
-    bytes32 public constant REQUEST_VALIDATOR_EXIT_ROLE = keccak256("REQUEST_VALIDATOR_EXIT_ROLE");
-    bytes32 public constant TRIGGER_VALIDATOR_WITHDRAWAL_ROLE = keccak256("TRIGGER_VALIDATOR_WITHDRAWAL_ROLE");
+    // keccak256("REQUEST_VALIDATOR_EXIT_ROLE")
+    bytes32 public immutable REQUEST_VALIDATOR_EXIT_ROLE = 0x2bbd6da7b06270fd63c039b4a14614f791d085d02c5a2e297591df95b05e4185;
+
+    bytes32 public immutable TRIGGER_VALIDATOR_WITHDRAWAL_ROLE = keccak256("TRIGGER_VALIDATOR_WITHDRAWAL_ROLE");
 
     uint256 public immutable DECIMALS = 27;
     uint256 public immutable ASSET_DECIMALS = 18;
     uint256 public immutable EXTRA_DECIMALS_BASE = 10 ** (DECIMALS - ASSET_DECIMALS);
     uint256 public immutable TOTAL_BASIS_POINTS = 100_00;
 
-
     IDashboard public immutable DASHBOARD;
     IVaultHub public immutable VAULT_HUB;
     address public immutable STAKING_VAULT;
 
+    WithdrawalQueue public immutable WITHDRAWAL_QUEUE;
+
     /// @custom:storage-location erc7201:wrapper.base.storage
     struct WrapperBaseStorage {
-        WithdrawalQueue withdrawalQueue;
         bool vaultDisconnected;
     }
 
@@ -53,9 +55,6 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList {
         }
     }
 
-    function withdrawalQueue() public view returns (WithdrawalQueue) {
-        return _getWrapperBaseStorage().withdrawalQueue;
-    }
 
     function vaultDisconnected() public view returns (bool) {
         return _getWrapperBaseStorage().vaultDisconnected;
@@ -83,11 +82,13 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList {
 
     constructor(
         address _dashboard,
-        bool _allowListEnabled
+        bool _allowListEnabled,
+        address _withdrawalQueue
     ) AllowList(_allowListEnabled) {
         DASHBOARD = IDashboard(payable(_dashboard));
         VAULT_HUB = IVaultHub(DASHBOARD.VAULT_HUB());
         STAKING_VAULT = address(DASHBOARD.stakingVault());
+        WITHDRAWAL_QUEUE = WithdrawalQueue(payable(_withdrawalQueue));
 
         // Disable initializers since we only support proxy deployment
         _disableInitializers();
@@ -214,7 +215,7 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList {
      * @param _recipient The address to receive the claimed ether
      */
     function claimWithdrawal(uint256 _requestId, address _recipient) external virtual {
-        WithdrawalQueue wq = withdrawalQueue();
+        WithdrawalQueue wq = WITHDRAWAL_QUEUE;
         WithdrawalQueue.WithdrawalRequestStatus memory status = wq.getWithdrawalStatus(_requestId);
 
         if (msg.sender != status.owner) revert NotOwner(msg.sender, status.owner);
@@ -225,14 +226,11 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList {
     }
 
     function burnSharesForWithdrawalQueue(uint256 _shares) external {
-        if (msg.sender != address(withdrawalQueue())) revert NotWithdrawalQueue();
+        if (msg.sender != address(WITHDRAWAL_QUEUE)) revert NotWithdrawalQueue();
         _burn(msg.sender, _shares);
     }
 
-    // TODO: remove this function
-    function setWithdrawalQueue(address _withdrawalQueue) external {
-        _getWrapperBaseStorage().withdrawalQueue = WithdrawalQueue(payable(_withdrawalQueue));
-    }
+    // withdrawal queue is immutable and set in constructor
 
     // =================================================================================
     // VAULT MANAGEMENT
@@ -309,10 +307,9 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList {
 
     /// @notice Modifier to check role or Emergency Exit
     function _checkOnlyRoleOrEmergencyExit(bytes32 _role) internal view {
-        if (!_getWrapperBaseStorage().withdrawalQueue.isEmergencyExitActivated()) {
+        if (!WITHDRAWAL_QUEUE.isEmergencyExitActivated()) {
             _checkRole(_role, msg.sender);
         }
     }
-
 
 }
