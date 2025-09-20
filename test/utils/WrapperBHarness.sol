@@ -30,7 +30,9 @@ contract WrapperBHarness is WrapperAHarness {
             nodeOperator: NODE_OPERATOR,
             nodeOperatorManager: NODE_OPERATOR,
             nodeOperatorFeeBP: NODE_OPERATOR_FEE_RATE,
-            confirmExpiry: CONFIRM_EXPIRY
+            confirmExpiry: CONFIRM_EXPIRY,
+            teller: address(0),
+            boringQueue: address(0)
         });
 
         WrapperContext memory context = _deployWrapperSystem(config);

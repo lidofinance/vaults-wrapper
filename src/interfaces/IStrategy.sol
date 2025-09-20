@@ -2,7 +2,6 @@
 pragma solidity >= 0.5.0;
 
 interface IStrategy {
-    function initialize(address wrapper) external;
     function execute(address _user, uint256 _stvShares) external;
 
     function strategyId() external view returns (bytes32);

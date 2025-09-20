@@ -46,11 +46,12 @@ contract GGVStrategy is Strategy {
 
     constructor (
         address _strategyProxyImplementation,
+        address _wrapper,
         address _stETH,
         address _wstETH,
         address _teller,
         address _boringQueue
-    ) Strategy(_stETH, _wstETH, _strategyProxyImplementation) {
+    ) Strategy(_wrapper, _stETH, _wstETH, _strategyProxyImplementation) {
         TELLER = ITellerWithMultiAssetSupport(_teller);
         BORING_QUEUE = IBoringOnChainQueue(_boringQueue);
 

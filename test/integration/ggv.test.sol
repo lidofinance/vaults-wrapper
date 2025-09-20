@@ -90,36 +90,26 @@ contract GGVTest is WrapperCHarness {
 //            0);
 //        solver = new MockBoringSolver(boringVault, address(boringOnChainQueue));
 
-        address strategyProxyImpl = address(new StrategyProxy());
+        WrapperContext memory ctx = _deployWrapperC(false, address(strategy), 0, address(teller), address(boringOnChainQueue));
+        wrapper = WrapperC(payable(ctx.wrapper));
 
-        strategy = new GGVStrategy(
-            strategyProxyImpl,
-            address(core.steth()),
-            address(core.wsteth()),
-            address(teller),
-            address(boringOnChainQueue)
-        );
+        strategy = IStrategy(wrapper.STRATEGY());
 
-        WrapperContext memory ctx = _deployWrapperC(false, address(strategy), 0);
-        wrapper = wrapperC(ctx);
+        console.log("wrapper", address(wrapper));
+        console.log("strategy", address(strategy));
 
         console.log("wrapper setup finished");
 
         _setupGGV();
-
-        console.log("setup GGV finished");
     }
 
     function _setupGGV() public {
         address tellerAuthority = teller.authority();
-        console.log("teller authority", tellerAuthority);
 
         IAuthority authority = IAuthority(tellerAuthority);
         address authorityOwner = authority.owner();
-        console.log("authority owner", authorityOwner);
 
         IAccountant accountant = IAccountant(teller.accountant());
-        console.log("accountant", address(accountant));
 
         vm.startPrank(authorityOwner);
         authority.setUserRole(address(this), OWNER_ROLE, true);
@@ -322,7 +312,7 @@ contract GGVTest is WrapperCHarness {
         vm.stopPrank();
 
         vm.startPrank(NODE_OPERATOR);
-        wrapper.withdrawalQueue().finalize(_maxRequest);
+        wrapper.WITHDRAWAL_QUEUE().finalize(_maxRequest);
         vm.stopPrank();
     }
 }

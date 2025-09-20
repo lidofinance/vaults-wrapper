@@ -9,23 +9,19 @@ import {WrapperC} from "src/WrapperC.sol";
 import {IWstETH} from "src/interfaces/IWstETH.sol";
 abstract contract Strategy is IStrategy {
 
+    WrapperC public immutable WRAPPER;
     IStETH public immutable STETH;
     IWstETH public immutable WSTETH;
     address public immutable STRATEGY_PROXY_IMPL;
-
-    WrapperC public WRAPPER;
 
     mapping(bytes32 salt => address proxy) public userStrategyProxy;
 
     error ZeroAddress();
 
-    constructor(address _stETH, address _wstETH, address _strategyProxyImpl) {
+    constructor(address _wrapper, address _stETH, address _wstETH, address _strategyProxyImpl) {
         STETH = IStETH(_stETH);
         WSTETH = IWstETH(_wstETH);
         STRATEGY_PROXY_IMPL = _strategyProxyImpl;
-    }
-
-    function initialize(address _wrapper) external {
         WRAPPER = WrapperC(payable(_wrapper));
     }
 

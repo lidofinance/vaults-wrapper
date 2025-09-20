@@ -69,8 +69,10 @@ contract WithdrawalQueueTest is Test {
         // Precreate wrapper proxy with empty implementation
         OssifiableProxy wrapperProxy = new OssifiableProxy(address(0), admin, bytes(""));
 
+        lazyOracle = new MockLazyOracle();
+
         // Deploy WQ implementation with immutable wrapper; proxy it and initialize
-        address wqImpl = address(new WithdrawalQueue(address(wrapperProxy), maxAcceptableWQFinalizationTimeInSeconds));
+        address wqImpl = address(new WithdrawalQueue(address(wrapperProxy), address(lazyOracle), maxAcceptableWQFinalizationTimeInSeconds));
         OssifiableProxy wqProxy = new OssifiableProxy(wqImpl, admin, abi.encodeCall(WithdrawalQueue.initialize, (admin, operator)));
 
         // Deploy wrapper implementation with immutable WQ, then upgrade wrapper proxy and initialize
