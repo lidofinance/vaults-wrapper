@@ -6,10 +6,11 @@ import {IStETH} from "src/interfaces/IStETH.sol";
 import {IStrategy} from "src/interfaces/IStrategy.sol";
 import {IStrategyProxy} from "src/interfaces/IStrategyProxy.sol";
 import {WrapperC} from "src/WrapperC.sol";
-
+import {IWstETH} from "src/interfaces/IWstETH.sol";
 abstract contract Strategy is IStrategy {
 
     IStETH public immutable STETH;
+    IWstETH public immutable WSTETH;
     address public immutable STRATEGY_PROXY_IMPL;
 
     WrapperC public WRAPPER;
@@ -18,8 +19,9 @@ abstract contract Strategy is IStrategy {
 
     error ZeroAddress();
 
-    constructor(address _stETH, address _strategyProxyImpl) {
+    constructor(address _stETH, address _wstETH, address _strategyProxyImpl) {
         STETH = IStETH(_stETH);
+        WSTETH = IWstETH(_wstETH);
         STRATEGY_PROXY_IMPL = _strategyProxyImpl;
     }
 
@@ -35,14 +37,14 @@ abstract contract Strategy is IStrategy {
     /// @param user The user for which to get the strategy proxy address
     /// @return proxy The address of the strategy proxy
     function getStrategyProxyAddress(address user) public view returns (address proxy) {
-        bytes32 salt = keccak256(abi.encode(strategyId(), address(this), user));
+        bytes32 salt = _generateSalt(user);
         proxy = Clones.predictDeterministicAddress(STRATEGY_PROXY_IMPL, salt);
     }
 
     function _getOrCreateProxy(address user) internal returns (address proxy) {
         if (user == address(0)) revert ZeroAddress();
 
-        bytes32 salt = keccak256(abi.encode(strategyId(), address(this), user));
+        bytes32 salt = _generateSalt(user);
         proxy = userStrategyProxy[salt];
         if (proxy != address(0)) return proxy;
 
@@ -51,5 +53,9 @@ abstract contract Strategy is IStrategy {
         userStrategyProxy[salt] = proxy;
 
         return proxy;
+    }
+
+    function _generateSalt(address user) internal view returns (bytes32 salt) {
+        salt = keccak256(abi.encode(strategyId(), address(this), user));
     }
 }

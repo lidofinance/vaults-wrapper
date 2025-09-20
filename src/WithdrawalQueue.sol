@@ -9,8 +9,6 @@ import {WrapperBase} from "./WrapperBase.sol";
 import {IDashboard} from "./interfaces/IDashboard.sol";
 import {IVaultHub} from "./interfaces/IVaultHub.sol";
 import {ILazyOracle} from "./interfaces/ILazyOracle.sol";
-import {console} from "forge-std/console.sol";
-
 
 /// @title Withdrawal Queue V3 for Staking Vault Wrapper
 /// @notice Handles withdrawal requests for stvToken holders
@@ -321,7 +319,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
                 eth = (shares * currentShareRate) / E27_PRECISION_BASE;
             }
 
-            
+
             if (
                 // stop if insufficient ETH to cover this request
                 eth > withdrawableValue || 

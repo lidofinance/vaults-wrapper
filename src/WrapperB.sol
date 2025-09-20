@@ -12,6 +12,8 @@ import {WithdrawalQueue} from "./WithdrawalQueue.sol";
 
 import {IStETH} from "./interfaces/IStETH.sol";
 
+import {console} from "forge-std/console.sol";
+
 /**
  * @title WrapperB
  * @notice Configuration B: Minting, no strategy - stvETH shares + maximum stETH minting for user
@@ -164,9 +166,7 @@ contract WrapperB is WrapperBase {
 
     // TODO: add request as ether as arg (not stvShares)
     function requestWithdrawal(uint256 _stv) public virtual returns (uint256 requestId) {
-        uint256 withdrawalQueueRequestId = _requestWithdrawalQueue(msg.sender, msg.sender, _stv);
-
-        return withdrawalQueueRequestId;
+        return _requestWithdrawalQueue(msg.sender, msg.sender, _stv);
     }
 
     function _requestWithdrawalQueue(address _owner, address _receiver, uint256 _stv) internal returns (uint256 requestId) {

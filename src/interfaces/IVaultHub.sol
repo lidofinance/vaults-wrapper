@@ -99,9 +99,6 @@ interface IVaultHub is IAccessControl {
     function vaultRecord(address _vault) external view returns (VaultRecord memory);
     function maxLockableValue(address _vault) external view returns (uint256);
     function isReportFresh(address _vault) external view returns (bool);
-
-    function vaultRecord(address _vault) external view returns (VaultRecord memory);
-
     function transferVaultOwnership(address _vault, address _newOwner) external;
 
     function applyVaultReport(

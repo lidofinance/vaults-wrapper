@@ -9,6 +9,7 @@ import {Factory} from "src/Factory.sol";
 import {WrapperA} from "src/WrapperA.sol";
 import {IDashboard} from "src/interfaces/IDashboard.sol";
 import {IStakingVault} from "src/interfaces/IStakingVault.sol";
+import {ILazyOracle} from "src/interfaces/ILazyOracle.sol";
 
 /**
  * @title WrapperATest
@@ -55,7 +56,7 @@ contract WrapperATest is WrapperAHarness {
     function test_happy_path() public {
         // Deploy wrapper system for this test
         (WrapperA wrapper, WithdrawalQueue withdrawalQueue, IDashboard dashboard, IStakingVault vault) = _deployWrapperA(false);
-        
+
         //
         // Step 1: User1 deposits
         //
@@ -90,7 +91,7 @@ contract WrapperATest is WrapperAHarness {
         //
 
         vm.warp(block.timestamp + 1 days);
-        core.applyVaultReport(address(vault), address(vault).balance, 0, 0, 0, 0, false);
+        core.applyVaultReport(address(vault), address(vault).balance, 0, 0, 0, false);
         assertEq(dashboard.totalValue(), address(vault).balance, "Vault's total value should be equal to its balance");
 
         //
@@ -103,7 +104,7 @@ contract WrapperATest is WrapperAHarness {
         // Apply 2% increase to vault
         uint256 vaultValue2Pct = (CONNECT_DEPOSIT + user1Deposit) * 102 / 100;
         vm.warp(block.timestamp + 1 days);
-        core.applyVaultReport(address(vault), vaultValue2Pct, 0, 0, 0, 0,false);
+        core.applyVaultReport(address(vault), vaultValue2Pct, 0, 0, 0, false);
 
         // Verify vault outperformed
         assertEq(dashboard.totalValue(), vaultValue2Pct, "Vault's total value should reflect 2% increase");
@@ -157,6 +158,9 @@ contract WrapperATest is WrapperAHarness {
         vm.expectRevert("RequestNotFoundOrNotFinalized(1)");
         vm.prank(USER1);
         wrapper.claimWithdrawal(requestId, USER1);
+
+        // Update report data with current timestamp to make it fresh
+        core.applyVaultReport(address(vault), wrapper.totalAssets(), 0, 0, 0, false);
 
         // Node operator finalizes the withdrawal
         vm.prank(NODE_OPERATOR);

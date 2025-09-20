@@ -3,10 +3,17 @@ pragma solidity >=0.8.25;
 
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+
+import {console} from "forge-std/console.sol";
 
 contract MockBoringVault is ERC20, Ownable{
 
     uint256 public shareRate = 1e18;
+
+    mapping (address user => mapping (address asset => uint256 balance)) public deposits;
+
+    uint256 public _totalSupply;
 
     //============================== EVENTS ===============================
 
@@ -45,7 +52,16 @@ contract MockBoringVault is ERC20, Ownable{
 
         emit Exit(to, address(asset), assetAmount, from, shareAmount);
     }
-    
+
+    function previewEnter(ERC20 depositAsset, uint256 depositAmount) external returns(uint256) {
+        uint256 supply = depositAsset.totalSupply();
+
+        if (supply == 0 || totalSupply() == 0) {
+            return depositAmount * 797237821400583551/799999999999999999; //
+        }
+
+        return Math.mulDiv(depositAmount, supply, totalSupply(), Math.Rounding.Floor);
+    }
 
     receive() external payable {}
 }

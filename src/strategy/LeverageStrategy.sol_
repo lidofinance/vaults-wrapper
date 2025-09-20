@@ -23,8 +23,6 @@ contract LeverageStrategy is IStrategy {
 
     uint256 public immutable LOOPS;
 
-    error InvalidWrapper();
-
     struct UserPosition {
         address user;
         uint256 stvShares;
@@ -33,7 +31,6 @@ contract LeverageStrategy is IStrategy {
     }
 
     mapping(address user => UserPosition) public userPositions;
-
 
     error InvalidWrapper();
 
@@ -58,10 +55,12 @@ contract LeverageStrategy is IStrategy {
         return userPositions[_address];
     }
 
-    function execute(address _user, uint256 _stvShares, uint256 _mintableStethShares) external {
+    function execute(address _user, uint256 _stvShares) external {
         _onlyWrapper();
 
         console.log("\n---Execute start");
+
+        uint256 _mintableStethShares = WRAPPER.mintableStethShares(address(this));
 
         UserPosition storage position = userPositions[_user];
         position.stvShares += _stvShares;
@@ -98,7 +97,7 @@ contract LeverageStrategy is IStrategy {
         console.log("Execute end---");
     }
 
-    function requestWithdraw(address _user, uint256 _stvShares) external returns (uint256 requestId) {}
+    function requestWithdrawByETH(address _user, uint256 _stvShares) external returns (uint256 requestId) {}
 
     function finalizeWithdrawal(address _receiver, uint256 stETHAmount) external returns(uint256 stvToken) {
 
@@ -106,6 +105,7 @@ contract LeverageStrategy is IStrategy {
     }
  
     function finalizeWithdrawal(uint256 shares) external returns(uint256 stvToken) {}
+    function getWithdrawableEth(address _address) external view returns (uint256 ethAmount) {}
 
 
     function _onlyWrapper() internal view {

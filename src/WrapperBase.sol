@@ -49,6 +49,8 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList {
         uint256 requestId;
         WithdrawalType requestType;
         address owner;
+        uint40 timestamp;
+        uint256 amount;
     }
 
     /// @custom:storage-location erc7201:wrapper.base.storage

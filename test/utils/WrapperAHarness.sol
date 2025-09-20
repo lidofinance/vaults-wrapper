@@ -102,7 +102,7 @@ contract WrapperAHarness is Test {
         vm.stopPrank();
 
         // Apply initial vault report
-        core.applyVaultReport(vault_, 0, 0, 0, 0, 0, true);
+        core.applyVaultReport(vault_, 0, 0, 0, 0, true);
 
         return WrapperContext({
             wrapper: WrapperA(payable(wrapperAddress)),
@@ -177,7 +177,7 @@ contract WrapperAHarness is Test {
     function reportVaultValueChangeNoFees(WrapperContext memory ctx, uint256 _factorBp) public {
         uint256 totalValue = ctx.dashboard.totalValue();
         totalValue = totalValue * _factorBp / 10000;
-        core.applyVaultReport(address(ctx.vault), totalValue, 0, 0, 0, 0, false);
+        core.applyVaultReport(address(ctx.vault), totalValue, 0, 0, 0, false);
     }
 
     // TODO: add after report invariants

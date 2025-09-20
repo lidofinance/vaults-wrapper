@@ -14,7 +14,7 @@ contract WrapperCTest is WrapperCHarness {
     function setUp() public {
         _initializeCore();
 
-        strategy = new LeverageStrategy(address(core.steth()), 1);
+        strategy = new LeverageStrategy(address(core.steth()), address(core.wsteth()), address(0), 1);
 
         WrapperContext memory ctx = _deployWrapperC(false, address(strategy), 0);
         wrapper = wrapperC(ctx);

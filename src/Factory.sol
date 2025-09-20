@@ -7,7 +7,6 @@ import {WrapperA} from "./WrapperA.sol";
 import {WrapperB} from "./WrapperB.sol";
 import {WrapperC} from "./WrapperC.sol";
 import {WithdrawalQueue} from "./WithdrawalQueue.sol";
-import {LoopStrategy} from "./strategy/LoopStrategy.sol";
 
 import {IVaultFactory} from "./interfaces/IVaultFactory.sol";
 import {IDashboard} from "./interfaces/IDashboard.sol";

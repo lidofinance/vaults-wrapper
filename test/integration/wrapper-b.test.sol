@@ -311,6 +311,9 @@ contract WrapperBTest is WrapperBHarness {
         WithdrawalQueue.WithdrawalRequestStatus memory status = ctx.withdrawalQueue.getWithdrawalStatus(requestId);
         assertEq(status.amountOfAssets, user1Rewards, "Withdrawal request amount should match previewRedeem");
 
+        // Update report data with current timestamp to make it fresh
+        core.applyVaultReport(address(ctx.vault), w.totalAssets(), 0, 0, 0, false);
+
         vm.prank(NODE_OPERATOR);
         ctx.withdrawalQueue.finalize(requestId);
 
