@@ -4,8 +4,13 @@ pragma solidity >=0.8.25;
 import {Test, console} from "forge-std/Test.sol";
 
 import {WrapperAHarness} from "test/utils/WrapperAHarness.sol";
+import {WrapperA} from "src/WrapperA.sol";
 import {WrapperB} from "src/WrapperB.sol";
+import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
+import {IDashboard} from "src/interfaces/IDashboard.sol";
+import {IStakingVault} from "src/interfaces/IStakingVault.sol";
 import {Factory} from "src/Factory.sol";
+import {FactoryHelper} from "test/utils/FactoryHelper.sol";
 
 /**
  * @title WrapperBHarness
@@ -13,44 +18,62 @@ import {Factory} from "src/Factory.sol";
  */
 contract WrapperBHarness is WrapperAHarness {
 
-    function _setUp(
-        Factory.WrapperConfiguration configuration,
-        address strategy,
-        bool enableAllowlist
-    ) internal virtual override {
-        // Call parent setUp
-        super._setUp(configuration, strategy, enableAllowlist);
+    function _deployWrapperB(
+        bool enableAllowlist,
+        uint256 reserveRatioGapBP
+    ) internal returns (WrapperContext memory) {
+        DeploymentConfig memory config = DeploymentConfig({
+            configuration: Factory.WrapperType.MINTING_NO_STRATEGY,
+            strategy: address(0),
+            enableAllowlist: enableAllowlist,
+            reserveRatioGapBP: reserveRatioGapBP,
+            nodeOperator: NODE_OPERATOR,
+            nodeOperatorManager: NODE_OPERATOR,
+            upgradeConformer: NODE_OPERATOR,
+            nodeOperatorFeeBP: NODE_OPERATOR_FEE_RATE,
+            confirmExpiry: CONFIRM_EXPIRY,
+            teller: address(0),
+            boringQueue: address(0)
+        });
+
+        WrapperContext memory context = _deployWrapperSystem(config);
+
+
+        return context;
     }
 
-    // Helper function to get wrapper as WrapperB
-    function wrapperB() internal view returns (WrapperB) {
-        return WrapperB(payable(address(wrapper)));
-    }
-
-    function _checkInitialState() internal virtual override {
+    function _checkInitialState(WrapperContext memory ctx) internal virtual override {
         // Call parent checks first
-        super._checkInitialState();
+        super._checkInitialState(ctx);
 
         // WrapperB specific: has minting capacity
         // Note: Cannot check mintableStShares for users with no deposits as it would cause underflow
         // Minting capacity checks are performed in individual tests after deposits are made
     }
 
-    function _assertUniversalInvariants(string memory _context) internal virtual override {
+    function _assertUniversalInvariants(string memory _context, WrapperContext memory _ctx) internal virtual override {
         // Call parent invariants
-        super._assertUniversalInvariants(_context);
+        super._assertUniversalInvariants(_context, _ctx);
 
-        address[] memory holders = _allPossibleStvHolders();
+        // TODO: check minting capacity of wrapper which owns connect deposit stv shares
+
+        address[] memory holders = _allPossibleStvHolders(_ctx);
 
         {   // Check none can mint beyond mintableStShares
             for (uint256 i = 0; i < holders.length; i++) {
                 address holder = holders[i];
-                uint256 mintableStShares = wrapperB().mintableStShares(holder);
+                uint256 mintableStShares = wrapperB(_ctx).mintableStethShares(holder);
+
                 vm.startPrank(holder);
                 vm.expectRevert("InsufficientMintableStShares()");
-                wrapperB().mintStShares(mintableStShares + 1);
+                wrapperB(_ctx).mintStethShares(mintableStShares + 1);
                 vm.stopPrank();
             }
         }
+    }
+
+    // Helper function to access WrapperB-specific functionality from context
+    function wrapperB(WrapperContext memory ctx) internal pure returns (WrapperB) {
+        return WrapperB(payable(address(ctx.wrapper)));
     }
 }

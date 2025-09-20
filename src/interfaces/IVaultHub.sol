@@ -3,6 +3,14 @@ pragma solidity >= 0.5.0;
 
 import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
 
+uint256 constant DOUBLE_CACHE_LENGTH = 2;
+library DoubleRefSlotCache {
+    struct Int104WithCache {
+        int104 value;
+        int104 valueOnRefSlot;
+        uint48 refSlot;
+    }
+}
 interface IVaultHub is IAccessControl {
     struct VaultConnection {
         // ### 1st slot
@@ -11,11 +19,11 @@ interface IVaultHub is IAccessControl {
         /// @notice maximum number of stETH shares that can be minted by vault owner
         uint96 shareLimit;
         // ### 2nd slot
-        /// @notice index of the vault in the list of vaults. Indexes is guaranteed to be stable only if there was no deletions.
+        /// @notice index of the vault in the list of vaults. Indexes are not guaranteed to be stable.
         /// @dev vaultIndex is always greater than 0
         uint96 vaultIndex;
         /// @notice if true, vault is disconnected and fee is not accrued
-        bool pendingDisconnect;
+        uint48 disconnectInitiatedTs;
         /// @notice share of ether that is locked on the vault as an additional reserve
         /// e.g RR=30% means that for 1stETH minted 1/(1-0.3)=1.428571428571428571 ETH is locked on the vault
         uint16 reserveRatioBP;
@@ -29,8 +37,49 @@ interface IVaultHub is IAccessControl {
         uint16 reservationFeeBP;
         /// @notice if true, vault owner manually paused the beacon chain deposits
         bool isBeaconDepositsManuallyPaused;
-        /// 64 bits gap
+        /// 24 bits gap
     }
+
+    struct VaultRecord {
+        // ### 1st slot
+        /// @notice latest report for the vault
+        Report report;
+        // ### 2nd slot
+        /// @notice max number of shares that was minted by the vault in current Oracle period
+        /// (used to calculate the locked value on the vault)
+        uint96 maxLiabilityShares;
+        /// @notice liability shares of the vault
+        uint96 liabilityShares;
+        // ### 3rd and 4th slots
+        /// @notice inOutDelta of the vault (all deposits - all withdrawals)
+        Int104WithCache[2] inOutDelta; // 2 is the constant DOUBLE_CACHE_LENGTH from RefSlotCache.sol
+        // ### 5th slot
+        /// @notice the minimal value that the reserve part of the locked can be
+        uint128 minimalReserve;
+        /// @notice part of liability shares reserved to be burnt as Lido core redemptions
+        uint128 redemptionShares;
+        // ### 6th slot
+        /// @notice cumulative value for Lido fees that accrued on the vault
+        uint128 cumulativeLidoFees;
+        /// @notice cumulative value for Lido fees that were settled on the vault
+        uint128 settledLidoFees;
+    }
+
+    struct Report {
+        /// @notice total value of the vault
+        uint104 totalValue;
+        /// @notice inOutDelta of the report
+        int104 inOutDelta;
+        /// @notice timestamp (in seconds)
+        uint48 timestamp;
+    }
+
+    struct Int104WithCache {
+        int104 value;
+        int104 valueOnRefSlot;
+        uint48 refSlot;
+    }
+
 
     function CONNECT_DEPOSIT() external view returns (uint256);
 
@@ -47,9 +96,9 @@ interface IVaultHub is IAccessControl {
     ) external payable;
     function mintShares(address _vault, address _recipient, uint256 _amountOfShares) external;
     function vaultConnection(address _vault) external view returns (VaultConnection memory);
+    function vaultRecord(address _vault) external view returns (VaultRecord memory);
     function maxLockableValue(address _vault) external view returns (uint256);
     function isReportFresh(address _vault) external view returns (bool);
-
     function transferVaultOwnership(address _vault, address _newOwner) external;
 
     function applyVaultReport(

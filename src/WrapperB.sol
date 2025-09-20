@@ -6,57 +6,54 @@ import {console} from "forge-std/Test.sol";
 import {WrapperBase} from "./WrapperBase.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 
 import {WithdrawalQueue} from "./WithdrawalQueue.sol";
 
 import {IStETH} from "./interfaces/IStETH.sol";
+
+import {console} from "forge-std/console.sol";
 
 /**
  * @title WrapperB
  * @notice Configuration B: Minting, no strategy - stvETH shares + maximum stETH minting for user
  */
 contract WrapperB is WrapperBase {
+    using EnumerableSet for EnumerableSet.UintSet;
 
     error InsufficientSharesLocked(address user);
     error InsufficientMintableStShares();
     error ZeroArgument();
+    error MintingForThanTargetStSharesShareIsNotAllowed();
+    error TodoError();
+
+    event WithdrawalRequestCreated(uint256 indexed requestId, address indexed user, WithdrawalType requestType);
 
     IStETH public immutable STETH;
-    uint256 public immutable RESERVE_RATIO_BP;
+    uint256 public immutable WRAPPER_RR_BP; // vault's reserve ratio plus gap for wrapper
 
     /// @custom:storage-location erc7201:wrapper.b.storage
+    // TODO: maybe count stShares in E27 as well
     struct WrapperBStorage {
         mapping(address => uint256) stShares;
+        uint256 totalStShares;
     }
 
     // keccak256(abi.encode(uint256(keccak256("wrapper.b.storage")) - 1)) & ~bytes32(uint256(0xff))
     bytes32 private constant WRAPPER_B_STORAGE_LOCATION = 0x68280b7606a1a98bf19dd7ad4cb88029b355c2c81a554f53b998c73f934e4400;
 
-    function _getWrapperBStorage() private pure returns (WrapperBStorage storage $) {
-        assembly {
-            $.slot := WRAPPER_B_STORAGE_LOCATION
-        }
-    }
-
     constructor(
         address _dashboard,
         address _stETH,
-        bool _allowListEnabled
-    ) WrapperBase(_dashboard, _allowListEnabled) {
+        bool _allowListEnabled,
+        uint256 _reserveRatioGapBP,
+        address _withdrawalQueue
+    ) WrapperBase(_dashboard, _allowListEnabled, _withdrawalQueue) {
         STETH = IStETH(_stETH);
 
-        // TODO: Can we fix it like this?
-        RESERVE_RATIO_BP = DASHBOARD.reserveRatioBP();
-    }
-
-    function initialize(
-        address _owner,
-        address _upgradeConformer,
-        string memory _name,
-        string memory _symbol
-    ) public override initializer {
-        WrapperBase.initialize(_owner, _upgradeConformer, _name, _symbol);
-        console.log("RESERVE_RATIO_BP", RESERVE_RATIO_BP);
+        uint256 vaultRR = DASHBOARD.reserveRatioBP();
+        require(_reserveRatioGapBP < TOTAL_BASIS_POINTS - vaultRR, "Reserve ratio gap too high");
+        WRAPPER_RR_BP = vaultRR + _reserveRatioGapBP;
     }
 
     //
@@ -67,23 +64,24 @@ contract WrapperB is WrapperBase {
      * @notice Deposit native ETH and receive stvETH shares
      * @dev Deposits and mints maximum stETH to user
      * @param _receiver Address to receive the minted shares
-     * @return stvShares Amount of stvETH shares minted
+     * @return stv Amount of stvETH shares minted
      */
-    function depositETH(address _receiver, address _referral) public payable virtual override returns (uint256 stvShares) {
-        stvShares = _deposit(_receiver, _referral);
-        // TODO: if _receiver already had mintable stShares we must not use it for minting, must we?
-        uint256 stShares = _calcYetMintableStShares(_receiver);
-        _mintStShares(_receiver, stShares);
+    function depositETH(address _receiver, address _referral) public payable virtual override returns (uint256 stv) {
+        uint256 targetStethShares = _calcTargetStethSharesAmount(msg.value);
+        stv = depositETH(_receiver, _referral, targetStethShares);
     }
 
-    function depositETH(address _receiver, address _referral, uint256 _stSharesToMint) public payable returns (uint256 stvShares) {
-        stvShares = _deposit(_receiver, _referral);
+    function depositETH(address _receiver, address _referral, uint256 _stethSharesToMint) public payable returns (uint256 stv) {
+        stv = _deposit(_receiver, _referral);
 
-        uint256 maxStShares = _calcYetMintableStShares(_receiver);
-        if (_stSharesToMint > maxStShares) revert InsufficientMintableStShares();
+        uint256 maxStethShares = _calcYetMintableStethShares(_receiver);
+        uint256 targetStethShares = _calcTargetStethSharesAmount(msg.value);
 
-        if (_stSharesToMint > 0) {
-            _mintStShares(_receiver, _stSharesToMint);
+        if (_stethSharesToMint > targetStethShares) revert MintingForThanTargetStSharesShareIsNotAllowed();
+        if (_stethSharesToMint > maxStethShares) revert InsufficientMintableStShares();
+
+        if (_stethSharesToMint > 0) {
+            _mintStethShares(_receiver, _stethSharesToMint);
         }
     }
 
@@ -91,88 +89,120 @@ contract WrapperB is WrapperBase {
     // Withdrawal functions
     //
 
-    function withdrawableEth(address _address, uint256 _stvShares, uint256 _stSharesToBurn) public view returns (uint256 ethAmount) {
-        // TODO
-        // Math.mulDiv(_stvShares, balanceOf(_address), totalSupply(), Math.Rounding.Floor);
+    function withdrawableEth(address _address, uint256 _stv, uint256 _stethSharesToBurn) public view returns (uint256 ethAmount) {
+        (, uint256 userEthWithdrawableWithoutBurning) = _calcWithdrawableWithoutBurning(_address);
+        uint256 userEthRequiringBurning = _convertToAssets(_stv) - userEthWithdrawableWithoutBurning;
+
+        ethAmount = userEthWithdrawableWithoutBurning +
+            Math.mulDiv(_stethSharesToBurn, userEthRequiringBurning, _getStethShares(_address), Math.Rounding.Floor);
+    }
+
+    function withdrawableStv(address _address, uint256 _stethSharesToBurn) public view returns (uint256 stv) {
+        uint256 userStv = balanceOf(_address);
+        uint256 eth = withdrawableEth(_address, userStv, _stethSharesToBurn);
+        stv = Math.mulDiv(eth, userStv, _convertToAssets(userStv), Math.Rounding.Floor);
+    }
+
+    function getStethShares(address _address) public view returns (uint256 stethShares) {
+        return _getStethShares(_address);
     }
 
     /**
      * @notice Calculate the amount of stETH shares required for a given amount of stvETH shares to withdraw
-     * @param _stvShares The amount of stvETH shares to withdraw
-     * @return stShares The corresponding amount of stETH shares needed for withdrawal
+     * @param _stv The amount of stvETH shares to withdraw
+     * @return stethShares The corresponding amount of stETH shares needed for withdrawal
      */
-    function stSharesForWithdrawal(address _address, uint256 _stvShares) public view returns (uint256 stShares) {
-        if (_stvShares == 0) return 0;
+    function stethSharesForWithdrawal(address _address, uint256 _stv) public view returns (uint256 stethShares) {
+        if (_stv == 0) return 0;
 
         uint256 balance = balanceOf(_address);
-        if (balance == 0) return 0;
+        if (balance == 0) return 0; // TODO: revert here?
+
+        (uint256 stvWithdrawableWithoutBurning, ) = _calcWithdrawableWithoutBurning(_address);
+
+        uint256 stvRequiringBurning = Math.saturatingSub(_stv, stvWithdrawableWithoutBurning);
 
         // TODO: Ceil or Floor?
-        stShares = Math.mulDiv(_stvShares, _getStShares(_address), balance, Math.Rounding.Ceil);
+        stethShares = Math.mulDiv(stvRequiringBurning, _getStethShares(_address), balance, Math.Rounding.Ceil);
     }
 
-    function mintableStShares(address _address) external view returns (uint256 stShares) {
-        return _calcYetMintableStShares(_address);
+    function mintableStethShares(address _address) external view returns (uint256 stethShares) {
+        return _calcYetMintableStethShares(_address);
     }
 
-    function _calcYetMintableStShares(address _address) public view returns (uint256 stShares) {
-        uint256 stvShares = balanceOf(_address);
-        uint256 userEth = _convertToAssets(stvShares);
+    function _calcWithdrawableWithoutBurning(address _address) internal view returns (uint256 stv, uint256 ethAmount) {
+        uint256 vaultWithdrawableEth = totalAssets() - DASHBOARD.locked();
+        uint256 totalUserStv = balanceOf(_address);
+        ethAmount = _getPartCorrespondingToStv(totalUserStv, vaultWithdrawableEth);
+        stv = Math.mulDiv(ethAmount, totalUserStv, _convertToAssets(totalUserStv), Math.Rounding.Floor);
+    }
 
-        uint256 reserveEth = Math.mulDiv(userEth, RESERVE_RATIO_BP, TOTAL_BASIS_POINTS, Math.Rounding.Floor);
+    function _calcYetMintableStethShares(address _address) public view returns (uint256 stethShares) {
+        uint256 stvEth = _convertToAssets(balanceOf(_address));
+
+        uint256 reserveEth = Math.mulDiv(stvEth, WRAPPER_RR_BP, TOTAL_BASIS_POINTS, Math.Rounding.Floor);
         uint256 vaultRemainingMintingCapacity = DASHBOARD.remainingMintingCapacityShares(0);
 
-        stShares = Math.min(
-            STETH.getSharesByPooledEth(userEth - reserveEth) - _getStShares(_address),
-            vaultRemainingMintingCapacity
-        );
+        uint256 stethSharesForUnreservedEth = STETH.getSharesByPooledEth(stvEth - reserveEth);
+        uint256 notMintedStethShares = Math.saturatingSub(stethSharesForUnreservedEth, _getStethShares(_address));
+
+        stethShares = Math.min(notMintedStethShares, vaultRemainingMintingCapacity);
     }
 
-    function mintStShares(uint256 _stShares) external {
-        uint256 mintableStShares_ = _calcYetMintableStShares(msg.sender);
-        if (mintableStShares_ < _stShares) revert InsufficientMintableStShares();
+    function mintStethShares(uint256 _stethShares) external {
+        uint256 mintableStShares_ = _calcYetMintableStethShares(msg.sender);
+        if (mintableStShares_ < _stethShares) revert InsufficientMintableStShares();
 
-        _mintStShares(msg.sender, _stShares);
+        _mintStethShares(msg.sender, _stethShares);
     }
 
     // TODO: add request as ether as arg (not stvShares)
-    function requestWithdrawal(uint256 _stvShares) public virtual returns (uint256 requestId) {
-        if (_stvShares == 0) revert WrapperBase.ZeroStvShares();
+    function requestWithdrawal(uint256 _stv) public virtual returns (uint256 requestId) {
+        return _requestWithdrawalQueue(msg.sender, msg.sender, _stv);
+    }
 
-        WithdrawalQueue withdrawalQueue = withdrawalQueue();
+    function _requestWithdrawalQueue(address _owner, address _receiver, uint256 _stv) internal returns (uint256 requestId) {
+        if (_stv == 0) revert WrapperBase.ZeroStvShares();
 
-        uint256 stShares = stSharesForWithdrawal(msg.sender, _stvShares);
+        // TODO: move min max withdrawal amount check from WQ here?
 
-        _transfer(msg.sender, address(this), _stvShares);
+        WithdrawalQueue withdrawalQueue = WITHDRAWAL_QUEUE;
 
-        STETH.transferSharesFrom(msg.sender, address(this), stShares);
-        _burnStShares(stShares);
+        uint256 stethShares = stethSharesForWithdrawal(_owner, _stv);
 
-        // NB: need to transfer to Wrapper first to do the math correctly
-        _transfer(address(this), address(withdrawalQueue), _stvShares);
+        _transfer(_owner, address(this), _stv);
 
-        requestId = withdrawalQueue.requestWithdrawal(_stvShares, msg.sender);
+        if (stethShares > 0) {
+            STETH.transferSharesFrom(_owner, address(this), stethShares);
+            _burnStethShares(stethShares);
+        }
+
+        // NB: needed to transfer to Wrapper first to do the math correctly
+        _transfer(address(this), address(withdrawalQueue), _stv);
+
+        requestId = withdrawalQueue.requestWithdrawal(_stv, _receiver);
     }
 
     //
     // Calculation helpers
     //
 
-    function _calcStShares(address _address, uint256 _stvShares) internal view returns (uint256 stShares) {
+    function _calcTargetStethSharesAmount(uint256 _eth) internal view returns (uint256 stethShares) {
+        uint256 notReservedEth = Math.mulDiv(_eth, TOTAL_BASIS_POINTS - WRAPPER_RR_BP, TOTAL_BASIS_POINTS, Math.Rounding.Floor);
+        stethShares = STETH.getSharesByPooledEth(notReservedEth);
+    }
+
+    function _calcStShares(address _address, uint256 _stv) internal view returns (uint256 stShares) {
         uint256 balance = balanceOf(_address);
         if (balance == 0) return 0;
 
         // TODO: replace by assert
-        if (balance < _stvShares) revert InsufficientSharesLocked(_address);
+        if (balance < _stv) revert InsufficientSharesLocked(_address);
 
         // TODO: how to round here?
-        stShares = Math.mulDiv(_stvShares, _getStShares(_address), balance, Math.Rounding.Ceil);
+        stShares = Math.mulDiv(_stv, _getStShares(_address), balance, Math.Rounding.Ceil);
     }
 
-    function _getStShares(address _address) internal view returns (uint256 stShares) {
-        WrapperBStorage storage $ = _getWrapperBStorage();
-        stShares = $.stShares[_address];
-    }
     //
     // ERC20 overrides
     //
@@ -187,10 +217,10 @@ contract WrapperB is WrapperBase {
     //
     //
 
-    function _updateStShares(address _from, address _to, uint256 _stvSharesToMove) internal {
+    function _updateStShares(address _from, address _to, uint256 _stvToMove) internal {
         // if (_from == address(0) || _to == address(0) || _stvSharesMoved == 0) revert ZeroArgument();
 
-        uint256 stSharesToMove = _calcStShares(_from, _stvSharesToMove);
+        uint256 stSharesToMove = _calcStShares(_from, _stvToMove);
 
         // Don't update stShares if the sender has no stShares to move
         WrapperBStorage storage $ = _getWrapperBStorage();
@@ -202,24 +232,67 @@ contract WrapperB is WrapperBase {
         $.stShares[_to] += stSharesToMove;
     }
 
-    function _burnStShares(uint256 _stShares) internal {
-        if (_stShares == 0) revert ZeroArgument();
-
-        WrapperBStorage storage $ = _getWrapperBStorage();
-        $.stShares[address(this)] -= _stShares;
-        STETH.approve(address(DASHBOARD), STETH.getPooledEthByShares(_stShares));
-        DASHBOARD.burnShares(_stShares);
-    }
-
-
-
-    function _mintStShares(address _receiver, uint256 _stShares) internal {
-        if (_stShares == 0) revert ZeroArgument();
+    function _mintStethShares(address _receiver, uint256 _stethShares) internal {
+        if (_stethShares == 0) revert ZeroArgument();
         if (_receiver == address(0)) revert ZeroArgument();
 
-        DASHBOARD.mintShares(_receiver, _stShares);
+        DASHBOARD.mintShares(_receiver, _stethShares);
 
-        _getWrapperBStorage().stShares[_receiver] += _stShares;
+        WrapperBStorage storage $ = _getWrapperBStorage();
+
+        uint256 vaultStethShares = DASHBOARD.liabilityShares();
+        uint256 totalStShares = $.totalStShares;
+
+        // return;
+        uint256 newStShares;
+        if (totalStShares == 0) {
+            newStShares = _stethShares;
+        } else {
+            newStShares = Math.mulDiv(vaultStethShares, totalStShares, vaultStethShares - _stethShares, Math.Rounding.Floor) - totalStShares;
+        }
+
+        $.totalStShares += newStShares;
+        $.stShares[_receiver] += newStShares;
+    }
+
+    function _burnStethShares(uint256 _stethShares) internal {
+        if (_stethShares == 0) revert ZeroArgument();
+        uint256 vaultLiabilityShares = DASHBOARD.liabilityShares();
+        if (vaultLiabilityShares == 0) revert TodoError();
+
+        WrapperBStorage storage $ = _getWrapperBStorage();
+
+        uint256 stShares = Math.mulDiv(_stethShares, $.totalStShares, vaultLiabilityShares, Math.Rounding.Floor);
+
+        $.stShares[address(this)] -= stShares;
+        $.totalStShares -= stShares;
+
+        STETH.approve(address(DASHBOARD), STETH.getPooledEthByShares(_stethShares));
+        DASHBOARD.burnShares(_stethShares);
+    }
+
+    function _getStShares(address _address) internal view returns (uint256 stShares) {
+        stShares = _getWrapperBStorage().stShares[_address];
+    }
+    function _getStethShares(address _address) internal view returns (uint256 stethShares) {
+        uint256 totalStShares = _getWrapperBStorage().totalStShares;
+        if (totalStShares == 0) return 0;
+        return Math.mulDiv(_getStShares(_address), DASHBOARD.liabilityShares(), totalStShares, Math.Rounding.Floor);
+
+    }
+
+    function _getPartCorrespondingToStShares(uint256 _stShares, uint256 _assets, address _address) internal view returns (uint256 assets) {
+        assets = Math.mulDiv(_stShares, _assets, _getStShares(_address), Math.Rounding.Floor);
+    }
+
+    function _getPartCorrespondingToStv(uint256 _stv, uint256 _assets) internal view returns (uint256 assets) {
+        assets = Math.mulDiv(_stv, _assets, totalSupply(), Math.Rounding.Floor);
+    }
+
+    function _getWrapperBStorage() internal pure returns (WrapperBStorage storage $) {
+        assembly {
+            $.slot := WRAPPER_B_STORAGE_LOCATION
+        }
     }
 
 }

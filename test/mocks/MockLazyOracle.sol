@@ -18,4 +18,20 @@ contract MockLazyOracle is ILazyOracle {
     function mock__updateLatestReportTimestamp(uint256 _timestamp) external {
         _latestReportTimestamp = _timestamp;
     }
+
+    function updateReportData(
+        uint256 _vaultsDataTimestamp,
+        uint256 _vaultsDataRefSlot,
+        bytes32 _vaultsDataTreeRoot,
+        string memory _vaultsDataReportCid
+    ) external {}
+    function updateVaultData(
+        address _vault,
+        uint256 _totalValue,
+        uint256 _cumulativeLidoFees,
+        uint256 _liabilityShares,
+        uint256 _slashingReserve,
+        bytes32[] calldata _proof
+    ) external {}
+    function latestReportData() external view returns (uint256 timestamp, uint256 refSlot, bytes32 treeRoot, string memory reportCid) {}
 }

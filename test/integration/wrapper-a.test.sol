@@ -7,6 +7,9 @@ import {WrapperAHarness} from "test/utils/WrapperAHarness.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
 import {Factory} from "src/Factory.sol";
 import {WrapperA} from "src/WrapperA.sol";
+import {IDashboard} from "src/interfaces/IDashboard.sol";
+import {IStakingVault} from "src/interfaces/IStakingVault.sol";
+import {ILazyOracle} from "src/interfaces/ILazyOracle.sol";
 
 /**
  * @title WrapperATest
@@ -15,8 +18,26 @@ import {WrapperA} from "src/WrapperA.sol";
 contract WrapperATest is WrapperAHarness {
 
     function setUp() public {
-        _setUp(Factory.WrapperConfiguration.NO_MINTING_NO_STRATEGY, address(0), false);
-        _checkInitialState();
+        _initializeCore();
+    }
+
+    /**
+     * @notice Test deploying a wrapper with custom configuration (allowlist enabled)
+     */
+    function test_custom_deployment_with_allowlist() public {
+        // Deploy wrapper with allowlist enabled
+        (WrapperA customWrapper, WithdrawalQueue customQueue, IDashboard customDashboard, IStakingVault customVault) = _deployWrapperA(true);
+
+        // Verify the custom wrapper was deployed with allowlist enabled
+        assertTrue(customWrapper.ALLOW_LIST_ENABLED(), "Custom wrapper should have allowlist enabled");
+
+        // Deploy another wrapper without allowlist to compare
+        (WrapperA defaultWrapper, WithdrawalQueue defaultQueue, , ) = _deployWrapperA(false);
+
+        // Verify the wrappers are different instances
+        assertTrue(address(customWrapper) != address(defaultWrapper), "Custom wrapper should be different from default");
+        assertTrue(address(customQueue) != address(defaultQueue), "Custom queue should be different from default");
+        assertFalse(defaultWrapper.ALLOW_LIST_ENABLED(), "Default wrapper should not have allowlist enabled");
     }
 
     /**
@@ -33,6 +54,9 @@ contract WrapperATest is WrapperAHarness {
      * 7. User1 deposits again → receives stvETH shares, system continues operating normally
      */
     function test_happy_path() public {
+        // Deploy wrapper system for this test
+        (WrapperA wrapper, WithdrawalQueue withdrawalQueue, IDashboard dashboard, IStakingVault vault) = _deployWrapperA(false);
+
         //
         // Step 1: User1 deposits
         //
@@ -135,6 +159,9 @@ contract WrapperATest is WrapperAHarness {
         vm.prank(USER1);
         wrapper.claimWithdrawal(requestId, USER1);
 
+        // Update report data with current timestamp to make it fresh
+        core.applyVaultReport(address(vault), wrapper.totalAssets(), 0, 0, 0, false);
+
         // Node operator finalizes the withdrawal
         vm.prank(NODE_OPERATOR);
         withdrawalQueue.finalize(requestId);
@@ -174,7 +201,10 @@ contract WrapperATest is WrapperAHarness {
         assertEq(dashboard.liabilityShares(), 0, "Vault should have no liability shares - no minting occurred");
     }
 
-    function test_initial_state() public view {
+    function test_initial_state() public {
+        // Deploy wrapper system for this test
+        (WrapperA wrapper, WithdrawalQueue withdrawalQueue, IDashboard dashboard, IStakingVault vault) = _deployWrapperA(false);
+        
         // Verify initial state for WrapperA (no minting, no strategy)
         assertEq(wrapper.totalAssets(), CONNECT_DEPOSIT, "Initial total assets should be CONNECT_DEPOSIT");
         assertEq(wrapper.totalSupply(), CONNECT_DEPOSIT * EXTRA_BASE, "Initial total supply should be CONNECT_DEPOSIT * EXTRA_BASE");
