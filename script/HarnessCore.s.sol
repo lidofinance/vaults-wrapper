@@ -27,56 +27,73 @@ contract HarnessCore is Script {
     function run() external {
         string memory deployedJsonPath = vm.envOr("DEPLOYED_JSON", string("lido-core/deployed-local.json"));
         string memory rpcUrl = vm.envOr("RPC_URL", string("http://localhost:9123"));
-        uint256 initialSubmit = vm.envOr("INITIAL_LIDO_SUBMISSION", uint256(15_000 ether));
+        uint256 initialSubmit = vm.envOr("INITIAL_LIDO_SUBMISSION", uint256(20_000 ether));
 
         CoreAddrs memory a = _readCore(deployedJsonPath);
+
+        // Prefer stETH address from Locator if available, fallback to JSON
+        (bool lidoOk, address stethFromLocator) = _safeStaticCallAddr(a.locator, abi.encodeWithSignature("lido()"));
+        if (lidoOk && stethFromLocator != address(0)) {
+            a.steth = stethFromLocator;
+        }
 
         // 1) Impersonate agent on local Anvil
         _cast(_arr6("cast","rpc","anvil_impersonateAccount", vm.toString(a.agent), "--rpc-url", rpcUrl));
 
         // 1.1) Fund agent to cover value + gas
-        _cast(_arr7("cast","rpc","anvil_setBalance", vm.toString(a.agent), "0x3635C9ADC5DEA00000", "--rpc-url", rpcUrl)); // ~1,000 ETH
+        _cast(_arr7("cast","rpc","anvil_setBalance", vm.toString(a.agent), "0x3635C9ADC5DEA0000000", "--rpc-url", rpcUrl)); // ~256,000 ETH
 
-        // 2) updateInitialEpoch(1) on HashConsensus
-        _cast(_arr14(
-            "cast","send",
-            "--from", vm.toString(a.agent),
-            "--unlocked",
-            vm.toString(a.hashConsensus),
-            "updateInitialEpoch(uint256)",
-            "1",
-            "--rpc-url", rpcUrl,
-            "--gas-limit","2000000",
-            "--gas-price","1"
-        ));
+        // 2) (optional) updateInitialEpoch(1) on HashConsensus — skipped by default
+        // This call may revert depending on current core state/permissions. Enable if needed.
+        // _cast(_arr10(
+        //     "cast","send",
+        //     "--from", vm.toString(a.agent),
+        //     "--unlocked",
+        //     vm.toString(a.hashConsensus),
+        //     "updateInitialEpoch(uint256)",
+        //     "1",
+        //     "--rpc-url", rpcUrl
+        // ));
 
-        // 3) Lido.setMaxExternalRatioBP(10000)
-        _cast(_arr14(
+        // 3) Lido.setMaxExternalRatioBP(10000) (best-effort; ok if already 10000)
+        _cast(_arr10(
             "cast","send",
             "--from", vm.toString(a.agent),
             "--unlocked",
             vm.toString(a.steth),
             "setMaxExternalRatioBP(uint256)",
             "10000",
-            "--rpc-url", rpcUrl,
-            "--gas-limit","2000000",
-            "--gas-price","1"
+            "--rpc-url", rpcUrl
         ));
 
-        // 4) Lido.resume()
-        _cast(_arr13(
+        // 4) Resume pool ops, lift staking limit, and resume staking (best-effort)
+        _cast(_arr9(
             "cast","send",
             "--from", vm.toString(a.agent),
             "--unlocked",
             vm.toString(a.steth),
             "resume()",
-            "--rpc-url", rpcUrl,
-            "--gas-limit","2000000",
-            "--gas-price","1"
+            "--rpc-url", rpcUrl
+        ));
+        _cast(_arr9(
+            "cast","send",
+            "--from", vm.toString(a.agent),
+            "--unlocked",
+            vm.toString(a.steth),
+            "removeStakingLimit()",
+            "--rpc-url", rpcUrl
+        ));
+        _cast(_arr9(
+            "cast","send",
+            "--from", vm.toString(a.agent),
+            "--unlocked",
+            vm.toString(a.steth),
+            "resumeStaking()",
+            "--rpc-url", rpcUrl
         ));
 
-        // 5) Lido.submit(address(this)) with value initialSubmit
-        _cast(_arr16(
+        // 5) Lido.submit(agent) with value initialSubmit (best-effort)
+        _cast(_arr12(
             "cast","send",
             "--from", vm.toString(a.agent),
             "--unlocked",
@@ -84,9 +101,7 @@ contract HarnessCore is Script {
             vm.toString(a.steth),
             "submit(address)",
             vm.toString(a.agent),
-            "--rpc-url", rpcUrl,
-            "--gas-limit","2000000",
-            "--gas-price","1"
+            "--rpc-url", rpcUrl
         ));
 
         console2.log("Harnessed core via impersonation:");
@@ -95,6 +110,12 @@ contract HarnessCore is Script {
         console2.log(" hashConsensus:", a.hashConsensus);
         console2.log(" agent:", a.agent);
         console2.log(" submitted:", initialSubmit);
+        (bool tsOk, uint256 ts) = _safeStaticCallUint(a.steth, abi.encodeWithSignature("getTotalShares()"));
+        if (tsOk) {
+            console2.log(" total shares:", ts);
+        } else {
+            console2.log(" total shares: unknown");
+        }
     }
 
     function _readCore(string memory path) internal view returns (CoreAddrs memory a) {
@@ -110,6 +131,24 @@ contract HarnessCore is Script {
         vm.ffi(args);
     }
 
+    function _safeStaticCallUint(address target, bytes memory data) private view returns (bool ok, uint256 value) {
+        (bool success, bytes memory ret) = target.staticcall(data);
+        if (!success || ret.length < 32) return (false, 0);
+        return (true, abi.decode(ret, (uint256)));
+    }
+
+    function _safeStaticCallBool(address target, bytes memory data) private view returns (bool ok, bool value) {
+        (bool success, bytes memory ret) = target.staticcall(data);
+        if (!success || ret.length < 32) return (false, false);
+        return (true, abi.decode(ret, (bool)));
+    }
+
+    function _safeStaticCallAddr(address target, bytes memory data) private view returns (bool ok, address value) {
+        (bool success, bytes memory ret) = target.staticcall(data);
+        if (!success || ret.length < 32) return (false, address(0));
+        return (true, abi.decode(ret, (address)));
+    }
+
     function _arr6(string memory a,string memory b,string memory c,string memory d,string memory e,string memory f) private pure returns (string[] memory r){
         r = new string[](6); r[0]=a;r[1]=b;r[2]=c;r[3]=d;r[4]=e;r[5]=f;
     }
@@ -118,6 +157,9 @@ contract HarnessCore is Script {
     }
     function _arr10(string memory a,string memory b,string memory c,string memory d,string memory e,string memory f,string memory g,string memory h,string memory i,string memory j) private pure returns (string[] memory r){
         r = new string[](10); r[0]=a;r[1]=b;r[2]=c;r[3]=d;r[4]=e;r[5]=f;r[6]=g;r[7]=h;r[8]=i;r[9]=j;
+    }
+    function _arr12(string memory a,string memory b,string memory c,string memory d,string memory e,string memory f,string memory g,string memory h,string memory i,string memory j,string memory k,string memory l) private pure returns (string[] memory r){
+        r = new string[](12); r[0]=a;r[1]=b;r[2]=c;r[3]=d;r[4]=e;r[5]=f;r[6]=g;r[7]=h;r[8]=i;r[9]=j;r[10]=k;r[11]=l;
     }
     function _arr7(string memory a,string memory b,string memory c,string memory d,string memory e,string memory f,string memory g) private pure returns (string[] memory r){
         r = new string[](7); r[0]=a;r[1]=b;r[2]=c;r[3]=d;r[4]=e;r[5]=f;r[6]=g;

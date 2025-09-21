@@ -24,7 +24,7 @@ test-unit:
 
 # Requires entr util
 test-watch:
-	find . -type f -name '*.sol' | entr -r bash -c 'make test-integration'
+	find . -type f -name '*.sol' | entr -r bash -c 'make test-integration-debug'
 
 core-init:
 	rm -rf ./$(CORE_SUBDIR)

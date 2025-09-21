@@ -5,6 +5,7 @@ import "forge-std/Script.sol";
 import {Factory} from "src/Factory.sol";
 import {WrapperBase} from "src/WrapperBase.sol";
 import {WrapperC} from "src/WrapperC.sol";
+import {IStETH} from "src/interfaces/IStETH.sol";
 
 contract DeployWrapper is Script {
     struct WrapperParams {
@@ -61,6 +62,13 @@ contract DeployWrapper is Script {
 
         address factoryAddr = _readFactoryAddress(factoryJsonPath);
         WrapperParams memory p = _readWrapperParams(paramsJsonPath);
+
+        // Check Lido total shares before broadcasting
+        Factory factoryView = Factory(factoryAddr);
+        address stethAddr = factoryView.STETH();
+        uint256 totalShares = IStETH(stethAddr).getTotalShares();
+        console2.log("Lido getTotalShares:", totalShares);
+        require(totalShares > 100000, "Lido totalShares must be > 100000");
 
         vm.startBroadcast();
         Factory factory = Factory(factoryAddr);
