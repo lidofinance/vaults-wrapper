@@ -156,8 +156,8 @@ contract WrapperAHarness is Test {
         }
         vm.stopPrank();
 
-        // Apply initial vault report
-        core.applyVaultReport(vault_, 0, 0, 0, 0, true);
+        // Apply initial vault report with current total value equal to connect deposit
+        core.applyVaultReport(vault_, CONNECT_DEPOSIT, 0, 0, 0, false);
 
         return WrapperContext({
             wrapper: WrapperA(payable(wrapperAddress)),

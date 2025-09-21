@@ -110,8 +110,6 @@ contract CoreHarness is Test {
     }
 
     function applyVaultReport(address _stakingVault, uint256 _totalValue, uint256 _cumulativeLidoFees, uint256 _liabilityShares, uint256 _slashingReserve, bool _onlyUpdateReportData) public {
-        uint256 reportTimestamp = block.timestamp;
-        uint256 refSlot = block.timestamp / 12; // Simulate a slot number based on timestamp (12 second slots)
         bytes32 treeRoot = bytes32(0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef);
         string memory reportCid = "dummy-cid";
 
@@ -123,6 +121,10 @@ contract CoreHarness is Test {
         // console.log("isFresh before", isFresh);
 
         vm.warp(block.timestamp + 1 minutes);
+
+        // Compute report time and ref slot AFTER advancing time to keep it fresh
+        uint256 reportTimestamp = block.timestamp;
+        uint256 refSlot = block.timestamp / 12; // Simulate a slot number based on timestamp (12 second slots)
 
         // Update report data with current timestamp to make it fresh
         vm.prank(locator.accountingOracle());
