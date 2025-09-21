@@ -21,6 +21,8 @@ contract DeployWrapperFactory is Script {
         address locator;
         address vaultFactory;
         address steth;
+        address wsteth;
+        address lazyOracle;
     }
 
     function _readCoreFromJson(string memory deployedJsonPath) internal view returns (CoreAddresses memory core) {
@@ -30,6 +32,8 @@ contract DeployWrapperFactory is Script {
         ILidoLocator locator = ILidoLocator(core.locator);
         core.vaultFactory = locator.vaultFactory();
         core.steth = address(locator.lido());
+        core.wsteth = locator.wstETH();
+        core.lazyOracle = locator.lazyOracle();
     }
 
     function run() external {
@@ -58,6 +62,8 @@ contract DeployWrapperFactory is Script {
         Factory.WrapperConfig memory cfg = Factory.WrapperConfig({
             vaultFactory: core.vaultFactory,
             steth: core.steth,
+            wsteth: core.wsteth,
+            lazyOracle: core.lazyOracle,
             wrapperAFactory: address(waf),
             wrapperBFactory: address(wbf),
             wrapperCFactory: address(wcf),
@@ -77,6 +83,8 @@ contract DeployWrapperFactory is Script {
         root = vm.serializeAddress("core", "locator", core.locator);
         root = vm.serializeAddress("core", "vaultFactory", core.vaultFactory);
         root = vm.serializeAddress("core", "steth", core.steth);
+        root = vm.serializeAddress("core", "wsteth", core.wsteth);
+        root = vm.serializeAddress("core", "lazyOracle", core.lazyOracle);
 
         string memory facs = "";
         facs = vm.serializeAddress("factories", "wrapperAFactory", address(waf));

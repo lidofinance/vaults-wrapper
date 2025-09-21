@@ -12,6 +12,7 @@ contract DeployWrapper is Script {
         uint256 wrapperType; // 0:A, 1:B, 2:LOOP, 3:GGV
         address nodeOperator;
         address nodeOperatorManager;
+        address upgradeConformer;
         uint256 nodeOperatorFeeBP;
         uint256 confirmExpiry;
         bool allowlistEnabled;
@@ -34,6 +35,7 @@ contract DeployWrapper is Script {
         p.wrapperType = vm.parseJsonUint(json, "$.wrapperType");
         p.nodeOperator = vm.parseJsonAddress(json, "$.nodeOperator");
         p.nodeOperatorManager = vm.parseJsonAddress(json, "$.nodeOperatorManager");
+        p.upgradeConformer = vm.parseJsonAddress(json, "$.upgradeConformer");
         p.nodeOperatorFeeBP = vm.parseJsonUint(json, "$.nodeOperatorFeeBP");
         p.confirmExpiry = vm.parseJsonUint(json, "$.confirmExpiry");
         p.allowlistEnabled = vm.parseJsonBool(json, "$.allowlistEnabled");
@@ -83,6 +85,7 @@ contract DeployWrapper is Script {
             (vault, dashboard, wrapperProxy, withdrawalQueueProxy) = factory.createVaultWithNoMintingNoStrategy{value: p.value}(
                 p.nodeOperator,
                 p.nodeOperatorManager,
+                p.upgradeConformer,
                 p.nodeOperatorFeeBP,
                 p.confirmExpiry,
                 p.allowlistEnabled
@@ -91,6 +94,7 @@ contract DeployWrapper is Script {
             (vault, dashboard, wrapperProxy, withdrawalQueueProxy) = factory.createVaultWithMintingNoStrategy{value: p.value}(
                 p.nodeOperator,
                 p.nodeOperatorManager,
+                p.upgradeConformer,
                 p.nodeOperatorFeeBP,
                 p.confirmExpiry,
                 p.allowlistEnabled,
@@ -100,6 +104,7 @@ contract DeployWrapper is Script {
             (vault, dashboard, wrapperProxy, withdrawalQueueProxy) = factory.createVaultWithLoopStrategy{value: p.value}(
                 p.nodeOperator,
                 p.nodeOperatorManager,
+                p.upgradeConformer,
                 p.nodeOperatorFeeBP,
                 p.confirmExpiry,
                 p.allowlistEnabled,
@@ -111,6 +116,7 @@ contract DeployWrapper is Script {
             (vault, dashboard, wrapperProxy, withdrawalQueueProxy) = factory.createVaultWithGGVStrategy{value: p.value}(
                 p.nodeOperator,
                 p.nodeOperatorManager,
+                p.upgradeConformer,
                 p.nodeOperatorFeeBP,
                 p.confirmExpiry,
                 p.allowlistEnabled,

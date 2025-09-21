@@ -2,6 +2,7 @@
   "wrapperType": 1,
   "nodeOperator": "0x0000000000000000000000000000000000001004",
   "nodeOperatorManager": "0x0000000000000000000000000000000000001004",
+  "upgradeConformer": "0x0000000000000000000000000000000000001004",
   "nodeOperatorFeeBP": 0,
   "confirmExpiry": 3600,
   "allowlistEnabled": false,
