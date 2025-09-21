@@ -52,11 +52,21 @@ deploy-wrapper-from-factory:
 		--sig 'run()' \
 		--non-interactive
 
-do-entire-local-flow:
-	NETWORK=local \
+
+do-entire-flow-with-core-deploy:
+	export NETWORK=$(NETWORK) && \
+	export RPC_URL=$(RPC_URL) && \
+	export PRIVATE_KEY=$(PRIVATE_KEY) && \
+	export DEPLOYER=$(DEPLOYER) && \
+	export CORE_DEPLOYED_JSON=$(CORE_DEPLOYED_JSON) && \
+	export OUTPUT_JSON=$(OUTPUT_JSON) && \
+	export WRAPPER_PARAMS_JSON=$(WRAPPER_PARAMS_JSON) && \
+	export OUTPUT_INSTANCE_JSON=$(OUTPUT_INSTANCE_JSON) && \
 	make core-deploy && \
+	rm -f $(CORE_SUBDIR)/deployed-$(NETWORK).json && \
+	mv $(CORE_SUBDIR)/deployed-local.json $(CORE_SUBDIR)/deployed-$(NETWORK).json && \
 	make harness-core && \
-	make deploy-factory &&\
+	make deploy-factory && \
 	make deploy-wrapper-from-factory
 
 # Requires entr util
@@ -74,7 +84,7 @@ core-init:
 
 core-deploy:
 	cd $(CORE_SUBDIR) && \
-	NETWORK="local" \
+	NETWORK=local \
 	GENESIS_TIME=1639659600 \
 	DEPLOYER=$(DEPLOYER) \
 	GAS_PRIORITY_FEE=1 \

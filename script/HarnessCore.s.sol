@@ -17,7 +17,7 @@ interface IHashConsensus {
 /// Requires an agent key with permissions to call Lido setters and HashConsensus;
 /// on Anvil use any pre-funded key that matches the agent account in deployed-local.json
 contract HarnessCore is Script {
-    struct CoreAddrs {
+    struct CoreAddresses {
         address locator;
         address steth;
         address hashConsensus;
@@ -29,7 +29,7 @@ contract HarnessCore is Script {
         string memory rpcUrl = vm.envOr("RPC_URL", string("http://localhost:9123"));
         uint256 initialSubmit = vm.envOr("INITIAL_LIDO_SUBMISSION", uint256(20_000 ether));
 
-        CoreAddrs memory a = _readCore(deployedJsonPath);
+        CoreAddresses memory a = _readCore(deployedJsonPath);
 
         // Prefer stETH address from Locator if available, fallback to JSON
         (bool lidoOk, address stethFromLocator) = _safeStaticCallAddr(a.locator, abi.encodeWithSignature("lido()"));
@@ -118,7 +118,7 @@ contract HarnessCore is Script {
         }
     }
 
-    function _readCore(string memory path) internal view returns (CoreAddrs memory a) {
+    function _readCore(string memory path) internal view returns (CoreAddresses memory a) {
         string memory json = vm.readFile(path);
         a.locator = vm.parseJsonAddress(json, "$.lidoLocator.proxy.address");
         a.agent = vm.parseJsonAddress(json, "$.['app:aragon-agent'].proxy.address");
