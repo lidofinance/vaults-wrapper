@@ -25,7 +25,7 @@ contract HarnessCore is Script {
     }
 
     function run() external {
-        string memory deployedJsonPath = vm.envOr("DEPLOYED_JSON", string("lido-core/deployed-local.json"));
+        string memory deployedJsonPath = vm.envOr("CORE_DEPLOYED_JSON", string("lido-core/deployed-local.json"));
         string memory rpcUrl = vm.envOr("RPC_URL", string("http://localhost:9123"));
         uint256 initialSubmit = vm.envOr("INITIAL_LIDO_SUBMISSION", uint256(20_000 ether));
 

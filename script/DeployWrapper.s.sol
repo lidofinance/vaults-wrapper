@@ -15,6 +15,7 @@ contract DeployWrapper is Script {
         address upgradeConformer;
         uint256 nodeOperatorFeeBP;
         uint256 confirmExpiry;
+        uint256 maxFinalizationTime;
         bool allowlistEnabled;
         uint256 reserveRatioGapBP; // B/C only
         uint256 loops; // LOOP only
@@ -38,6 +39,7 @@ contract DeployWrapper is Script {
         p.upgradeConformer = vm.parseJsonAddress(json, "$.upgradeConformer");
         p.nodeOperatorFeeBP = vm.parseJsonUint(json, "$.nodeOperatorFeeBP");
         p.confirmExpiry = vm.parseJsonUint(json, "$.confirmExpiry");
+        p.maxFinalizationTime = vm.parseJsonUint(json, "$.maxFinalizationTime");
         p.allowlistEnabled = vm.parseJsonBool(json, "$.allowlistEnabled");
         // Parse only fields relevant to the wrapper type
         if (
@@ -88,6 +90,7 @@ contract DeployWrapper is Script {
                 p.upgradeConformer,
                 p.nodeOperatorFeeBP,
                 p.confirmExpiry,
+                p.maxFinalizationTime,
                 p.allowlistEnabled
             );
         } else if (p.wrapperType == uint256(Factory.WrapperType.MINTING_NO_STRATEGY)) {
@@ -97,6 +100,7 @@ contract DeployWrapper is Script {
                 p.upgradeConformer,
                 p.nodeOperatorFeeBP,
                 p.confirmExpiry,
+                p.maxFinalizationTime,
                 p.allowlistEnabled,
                 p.reserveRatioGapBP
             );
@@ -107,6 +111,7 @@ contract DeployWrapper is Script {
                 p.upgradeConformer,
                 p.nodeOperatorFeeBP,
                 p.confirmExpiry,
+                p.maxFinalizationTime,
                 p.allowlistEnabled,
                 p.reserveRatioGapBP,
                 p.loops
@@ -119,6 +124,7 @@ contract DeployWrapper is Script {
                 p.upgradeConformer,
                 p.nodeOperatorFeeBP,
                 p.confirmExpiry,
+                p.maxFinalizationTime,
                 p.allowlistEnabled,
                 p.reserveRatioGapBP,
                 p.teller,

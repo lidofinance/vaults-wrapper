@@ -39,10 +39,11 @@ contract DeployWrapperFactory is Script {
     function run() external {
         // Expect environment variables for non-interactive deploys
         // REQUIRED: DEPLOYED_JSON (path to Lido core deployed json, like CoreHarness)
-        // OPTIONAL: MAX_FINALIZATION_TIME (seconds), OUTPUT_JSON
-        string memory deployedJsonPath = vm.envString("DEPLOYED_JSON");
-
-        uint256 maxFinalizationTime = vm.envOr("MAX_FINALIZATION_TIME", uint256(30 days));
+        // OPTIONAL: OUTPUT_JSON
+        string memory deployedJsonPath = vm.envOr(
+            "CORE_DEPLOYED_JSON",
+            vm.envOr("DEPLOYED_JSON", string("lido-core/deployed-local.json"))
+        );
         string memory outputJsonPath = vm.envOr("OUTPUT_JSON", string(string.concat("deployments/wrapper-", vm.toString(block.chainid), ".json")));
 
         CoreAddresses memory core = _readCoreFromJson(deployedJsonPath);
@@ -70,8 +71,7 @@ contract DeployWrapperFactory is Script {
             withdrawalQueueFactory: address(wqf),
             loopStrategyFactory: address(lsf),
             ggvStrategyFactory: address(ggvf),
-            dummyImplementation: address(dummy),
-            maxFinalizationTime: maxFinalizationTime
+            dummyImplementation: address(dummy)
         });
 
         Factory factory = new Factory(cfg);
@@ -96,7 +96,6 @@ contract DeployWrapperFactory is Script {
 
         string memory meta = "";
         meta = vm.serializeString("meta", "chainId", vm.toString(block.chainid));
-        meta = vm.serializeUint("meta", "maxFinalizationTime", maxFinalizationTime);
 
         string memory out = "";
         out = vm.serializeAddress("deployment", "factory", address(factory));

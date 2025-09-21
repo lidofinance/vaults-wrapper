@@ -1,26 +1,63 @@
 CORE_RPC_PORT ?= 9123
+RPC_URL ?= http://localhost:$(CORE_RPC_PORT)
 CORE_BRANCH ?= feat/testnet-2
 CORE_SUBDIR ?= lido-core
+NETWORK ?= local
 VERBOSITY ?= vv
 DEBUG_TEST ?= test_debug
 PRIVATE_KEY ?= 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
+DEPLOYER ?= 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
+CORE_DEPLOYED_JSON ?= ./lido-core/deployed-$(NETWORK).json
+OUTPUT_JSON ?= ./deployments/wrapper-factory-$(NETWORK).json
+WRAPPER_PARAMS_JSON ?= ./script/deploy-$(NETWORK)-config.json
+OUTPUT_INSTANCE_JSON ?= ./deployments/wrapper-instance-$(NETWORK).json
 
 VAULT_FACTORY ?= 0x86A2EE8FAf9A840F7a2c64CA3d51209F9A02081D
 STETH ?= 0xf2A08B9C303496f7FF99Ce2d4A6b6efb65E0e752
 
 test-integration:
-	FOUNDRY_PROFILE=test forge test test/integration/**/*.test.sol -$(VERBOSITY) --fork-url http://localhost:$(CORE_RPC_PORT)
+	FOUNDRY_PROFILE=test forge test test/integration/**/*.test.sol -$(VERBOSITY) --fork-url $(RPC_URL)
 
 test-integration-debug:
-	FOUNDRY_PROFILE=test forge test --match-test $(DEBUG_TEST) -$(VERBOSITY) --fork-url http://localhost:$(CORE_RPC_PORT)
-	# FOUNDRY_PROFILE=test forge test test/integration/**/*.test.sol -vv --fork-url http://localhost:$(CORE_RPC_PORT)
+	FOUNDRY_PROFILE=test forge test --match-test $(DEBUG_TEST) -$(VERBOSITY) --fork-url $(RPC_URL)
+	# FOUNDRY_PROFILE=test forge test test/integration/**/*.test.sol -vv --fork-url $(RPC_URL)
+
+test-unit:
+	FOUNDRY_PROFILE=test forge test -$(VERBOSITY) --no-match-path 'test/integration/*' test
 
 test-all:
 	make test-unit
 	make test-integration
 
-test-unit:
-	FOUNDRY_PROFILE=test forge test -$(VERBOSITY) --no-match-path 'test/integration/*' test
+deploy-factory:
+	OUTPUT_JSON=$(OUTPUT_JSON) \
+	CORE_DEPLOYED_JSON=$(CORE_DEPLOYED_JSON) \
+	forge script script/DeployWrapperFactory.s.sol:DeployWrapperFactory \
+		--rpc-url $(RPC_URL) \
+		--broadcast \
+		--private-key $(PRIVATE_KEY) \
+		--sender $(DEPLOYER) \
+		--sig 'run()' \
+		--non-interactive
+
+deploy-wrapper-from-factory:
+	FACTORY_JSON=$(OUTPUT_JSON) \
+	WRAPPER_PARAMS_JSON=$(WRAPPER_PARAMS_JSON) \
+	OUTPUT_INSTANCE_JSON=$(OUTPUT_INSTANCE_JSON) \
+	forge script script/DeployWrapper.s.sol:DeployWrapper \
+		--rpc-url $(RPC_URL) \
+		--broadcast \
+		--sender $(DEPLOYER) \
+		--private-key $(PRIVATE_KEY) \
+		--sig 'run()' \
+		--non-interactive
+
+do-entire-local-flow:
+	NETWORK=local \
+	make core-deploy && \
+	make harness-core && \
+	make deploy-factory &&\
+	make deploy-wrapper-from-factory
 
 # Requires entr util
 test-watch:
@@ -39,14 +76,17 @@ core-deploy:
 	cd $(CORE_SUBDIR) && \
 	NETWORK="local" \
 	GENESIS_TIME=1639659600 \
-	DEPLOYER="0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266" \
+	DEPLOYER=$(DEPLOYER) \
 	GAS_PRIORITY_FEE=1 \
 	GAS_MAX_FEE=100 \
 	NETWORK_STATE_FILE="deployed-local.json" \
 	NETWORK_STATE_DEFAULTS_FILE="scripts/defaults/testnet-defaults.json" \
-	RPC_URL=http://localhost:$(CORE_RPC_PORT) \
+	RPC_URL=$(RPC_URL) \
 	SKIP_CONTRACT_SIZE=true SKIP_GAS_REPORT=true SKIP_INTERFACES_CHECK=true LOG_LEVEL=warn \
 	bash scripts/dao-deploy.sh
+
+harness-core:
+	forge script script/HarnessCore.s.sol:HarnessCore --ffi
 
 start-fork:
 	anvil --chain-id 1 --auto-impersonate --port $(CORE_RPC_PORT)
@@ -62,10 +102,10 @@ mock-deploy:
 	PRIVATE_KEY=$(PRIVATE_KEY) \
 	VAULT_FACTORY=$(VAULT_FACTORY) \
 	STETH=$(STETH) \
-	forge script script/DeployWrapper.s.sol --rpc-url localhost:9123 --broadcast
+	forge script script/DeployWrapper.s.sol --rpc-url $(RPC_URL) --broadcast
 
 mock-strategy:
 	PRIVATE_KEY=$(PRIVATE_KEY) \
 	VAULT_FACTORY=$(VAULT_FACTORY) \
 	STETH=$(STETH) \
-	forge script script/DeployStrategy.s.sol --rpc-url localhost:9123 --broadcast
+	forge script script/DeployStrategy.s.sol --rpc-url $(RPC_URL) --broadcast

@@ -37,6 +37,7 @@ contract WrapperCHarness is WrapperBHarness {
             upgradeConformer: NODE_OPERATOR,
             nodeOperatorFeeBP: NODE_OPERATOR_FEE_RATE,
             confirmExpiry: CONFIRM_EXPIRY,
+            maxFinalizationTime: 30 days,
             teller: _teller,
             boringQueue: _boringQueue
         });

@@ -85,8 +85,10 @@ contract CoreHarness is Test {
         vm.prank(agent);
         steth.setMaxExternalRatioBP(LIDO_TOTAL_BASIS_POINTS);
 
-        vm.prank(agent);
-        steth.resume();
+        if (steth.isStopped()) {
+            vm.prank(agent);
+            steth.resume();
+        }
 
         // Need some ether in Lido to pass ShareLimitTooHigh check upon vault creation/connection
         steth.submit{value: INITIAL_LIDO_SUBMISSION}(address(this));

@@ -55,8 +55,7 @@ contract FactoryHelper {
             withdrawalQueueFactory: WITHDRAWAL_QUEUE_FACTORY,
             loopStrategyFactory: LOOP_STRATEGY_FACTORY,
             ggvStrategyFactory: GGV_STRATEGY_FACTORY,
-            dummyImplementation: DUMMY_IMPLEMENTATION,
-            maxFinalizationTime: 30 days
+            dummyImplementation: DUMMY_IMPLEMENTATION
         });
         factory = new Factory(a);
     }
