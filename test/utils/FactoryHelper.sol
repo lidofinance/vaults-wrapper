@@ -8,7 +8,6 @@ import {WrapperA} from "src/WrapperA.sol";
 import {WrapperB} from "src/WrapperB.sol";
 import {WrapperC} from "src/WrapperC.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
-import {LoopStrategy} from "src/strategy/LoopStrategy.sol";
 import {GGVStrategy} from "src/strategy/GGVStrategy.sol";
 import {WrapperAFactory} from "src/factories/WrapperAFactory.sol";
 import {WrapperBFactory} from "src/factories/WrapperBFactory.sol";
@@ -39,7 +38,7 @@ contract FactoryHelper {
     }
 
     /// @notice Deploy main Factory with freshly deployed impl factories
-    function deployMainFactory(address _vaultFactory, address _steth)
+    function deployMainFactory(address _vaultFactory, address _steth, address _wsteth, address _lazyOracle)
         external
         returns (
             Factory factory
@@ -48,6 +47,8 @@ contract FactoryHelper {
         Factory.WrapperConfig memory a = Factory.WrapperConfig({
             vaultFactory: _vaultFactory,
             steth: _steth,
+            wsteth: _wsteth,
+            lazyOracle: _lazyOracle,
             wrapperAFactory: WRAPPER_A_FACTORY,
             wrapperBFactory: WRAPPER_B_FACTORY,
             wrapperCFactory: WRAPPER_C_FACTORY,
@@ -79,10 +80,12 @@ contract FactoryHelper {
     /// @param _boringQueue Address of Boring On-Chain Queue
     /// @return impl Address of the deployed GGVStrategy
     function deployGGVStrategy(
+        address _wrapper,
         address _steth,
+        address _wsteth,
         address _teller,
         address _boringQueue
     ) external returns (address impl) {
-        impl = GGVStrategyFactory(GGV_STRATEGY_FACTORY).deploy(_steth, _teller, _boringQueue);
+        impl = GGVStrategyFactory(GGV_STRATEGY_FACTORY).deploy(_wrapper, _steth, _wsteth, _teller, _boringQueue);
     }
 }

@@ -8,6 +8,7 @@ import {IDashboard} from "src/interfaces/IDashboard.sol";
 import {IVaultHub} from "src/interfaces/IVaultHub.sol";
 import {IStakingVault} from "src/interfaces/IStakingVault.sol";
 import {ILido} from "src/interfaces/ILido.sol";
+import {IWstETH} from "src/interfaces/IWstETH.sol";
 
 import {WrapperA} from "src/WrapperA.sol";
 import {WrapperBase} from "src/WrapperBase.sol";
@@ -30,6 +31,7 @@ contract WrapperAHarness is Test {
 
     // Core contracts
     ILido public steth;
+    IWstETH public wsteth;
     IVaultHub public vaultHub;
 
     // Test users
@@ -57,8 +59,11 @@ contract WrapperAHarness is Test {
         uint256 reserveRatioGapBP;
         address nodeOperator;
         address nodeOperatorManager;
+        address upgradeConformer;
         uint256 nodeOperatorFeeBP;
         uint256 confirmExpiry;
+        address teller;
+        address boringQueue;
     }
 
     struct WrapperContext {
@@ -71,6 +76,7 @@ contract WrapperAHarness is Test {
     function _initializeCore() internal {
         core = new CoreHarness("lido-core/deployed-local.json");
         steth = core.steth();
+        wsteth = core.wsteth();
         vaultHub = core.vaultHub();
         CONNECT_DEPOSIT = vaultHub.CONNECT_DEPOSIT();
 
@@ -92,14 +98,16 @@ contract WrapperAHarness is Test {
         require(address(core) != address(0), "CoreHarness not initialized");
 
         address vaultFactory = core.locator().vaultFactory();
+        address lazyOracle = core.locator().lazyOracle();
         FactoryHelper helper = new FactoryHelper();
-        Factory factory = helper.deployMainFactory(vaultFactory, address(steth));
+        Factory factory = helper.deployMainFactory(vaultFactory, address(steth), address(wsteth), lazyOracle);
 
         vm.startPrank(config.nodeOperator);
         if (config.configuration == Factory.WrapperType.NO_MINTING_NO_STRATEGY) {
             (vault_, dashboard_, wrapperAddress, withdrawalQueue_) = factory.createVaultWithNoMintingNoStrategy{value: CONNECT_DEPOSIT}(
                 config.nodeOperator,
                 config.nodeOperatorManager,
+                config.upgradeConformer,
                 config.nodeOperatorFeeBP,
                 config.confirmExpiry,
                 config.enableAllowlist
@@ -108,6 +116,7 @@ contract WrapperAHarness is Test {
             (vault_, dashboard_, wrapperAddress, withdrawalQueue_) = factory.createVaultWithMintingNoStrategy{value: CONNECT_DEPOSIT}(
                 config.nodeOperator,
                 config.nodeOperatorManager,
+                config.upgradeConformer,
                 config.nodeOperatorFeeBP,
                 config.confirmExpiry,
                 config.enableAllowlist,
@@ -118,6 +127,7 @@ contract WrapperAHarness is Test {
             (vault_, dashboard_, wrapperAddress, withdrawalQueue_) = factory.createVaultWithLoopStrategy{value: CONNECT_DEPOSIT}(
                 config.nodeOperator,
                 config.nodeOperatorManager,
+                config.upgradeConformer,
                 config.nodeOperatorFeeBP,
                 config.confirmExpiry,
                 config.enableAllowlist,
@@ -125,7 +135,17 @@ contract WrapperAHarness is Test {
                 loops
             );
         } else if (config.configuration == Factory.WrapperType.GGV_STRATEGY) {
-            revert("GGV strategy harness not implemented");
+            (vault_, dashboard_, wrapperAddress, withdrawalQueue_) = factory.createVaultWithGGVStrategy{value: CONNECT_DEPOSIT}(
+                config.nodeOperator,
+                config.nodeOperatorManager,
+                config.upgradeConformer,
+                config.nodeOperatorFeeBP,
+                config.confirmExpiry,
+                config.enableAllowlist,
+                config.reserveRatioGapBP,
+                config.teller,
+                config.boringQueue
+            );
         } else {
             revert("Invalid configuration");
         }
@@ -157,8 +177,11 @@ contract WrapperAHarness is Test {
             reserveRatioGapBP: 0,
             nodeOperator: NODE_OPERATOR,
             nodeOperatorManager: NODE_OPERATOR,
+            upgradeConformer: NODE_OPERATOR,
             nodeOperatorFeeBP: NODE_OPERATOR_FEE_RATE,
-            confirmExpiry: CONFIRM_EXPIRY
+            confirmExpiry: CONFIRM_EXPIRY,
+            teller: address(0),
+            boringQueue: address(0)
         });
 
         WrapperContext memory context = _deployWrapperSystem(config);

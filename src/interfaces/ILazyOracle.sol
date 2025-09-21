@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2025 Lido <info@lido.fi>
 // SPDX-License-Identifier: MIT
 
-pragma solidity >=0.5.0;
+pragma solidity >=0.8.25;
 
 /**
  * Interface to connect AccountingOracle with LazyOracle and force type consistency
@@ -22,11 +22,6 @@ interface ILazyOracle {
         uint256 _slashingReserve,
         bytes32[] calldata _proof
     ) external;
-
-    error AdminCannotBeZero();
-    error NotAuthorized();
-    error InvalidProof();
-    error UnderflowInTotalValueCalculation();
-    error TotalValueTooLarge();
-    error VaultReportIsFreshEnough();
+    function latestReportTimestamp() external view returns (uint256);
+    function latestReportData() external view returns (uint256 timestamp, uint256 refSlot, bytes32 treeRoot, string memory reportCid);
 }

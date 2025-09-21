@@ -6,9 +6,11 @@ out/
 lido-core/
 
 # IDE
+.idea/
 .cursor/
 .code/
 .vscode/
+.wake/
 
 # LLM files
 **/CLAUDE.md
@@ -29,3 +31,4 @@ docs/
 
 # MacOS
 .DS_Store
+artifacts/

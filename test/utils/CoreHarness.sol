@@ -12,7 +12,7 @@ import {IDashboard} from "src/interfaces/IDashboard.sol";
 import {IVaultHub as IVaultHubIntact} from "src/interfaces/IVaultHub.sol";
 import {IVaultFactory} from "src/interfaces/IVaultFactory.sol";
 import {IStakingVault} from "src/interfaces/IStakingVault.sol";
-
+import {IWstETH} from "../../src/interfaces/IWstETH.sol";
 
 interface IHashConsensus {
     function updateInitialEpoch(uint256 initialEpoch) external;
@@ -43,6 +43,7 @@ contract CoreHarness is Test {
     ILidoLocator public locator;
     IDashboard public dashboard;
     ILido public steth;
+    IWstETH public wsteth;
     IVaultHub public vaultHub;
     ILazyOracleMocked public lazyOracle;
 
@@ -77,6 +78,9 @@ contract CoreHarness is Test {
 
         steth = ILido(locator.lido());
         vm.label(address(steth), "Lido");
+
+        wsteth = IWstETH(locator.wstETH());
+        vm.label(address(wsteth), "WstETH");
 
         vm.prank(agent);
         steth.setMaxExternalRatioBP(LIDO_TOTAL_BASIS_POINTS);

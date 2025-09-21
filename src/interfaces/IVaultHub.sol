@@ -3,6 +3,14 @@ pragma solidity >= 0.5.0;
 
 import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
 
+uint256 constant DOUBLE_CACHE_LENGTH = 2;
+library DoubleRefSlotCache {
+    struct Int104WithCache {
+        int104 value;
+        int104 valueOnRefSlot;
+        uint48 refSlot;
+    }
+}
 interface IVaultHub is IAccessControl {
     struct VaultConnection {
         // ### 1st slot
@@ -11,11 +19,11 @@ interface IVaultHub is IAccessControl {
         /// @notice maximum number of stETH shares that can be minted by vault owner
         uint96 shareLimit;
         // ### 2nd slot
-        /// @notice index of the vault in the list of vaults. Indexes is guaranteed to be stable only if there was no deletions.
+        /// @notice index of the vault in the list of vaults. Indexes are not guaranteed to be stable.
         /// @dev vaultIndex is always greater than 0
         uint96 vaultIndex;
         /// @notice if true, vault is disconnected and fee is not accrued
-        bool pendingDisconnect;
+        uint48 disconnectInitiatedTs;
         /// @notice share of ether that is locked on the vault as an additional reserve
         /// e.g RR=30% means that for 1stETH minted 1/(1-0.3)=1.428571428571428571 ETH is locked on the vault
         uint16 reserveRatioBP;
@@ -29,7 +37,7 @@ interface IVaultHub is IAccessControl {
         uint16 reservationFeeBP;
         /// @notice if true, vault owner manually paused the beacon chain deposits
         bool isBeaconDepositsManuallyPaused;
-        /// 64 bits gap
+        /// 24 bits gap
     }
 
     struct VaultRecord {
@@ -88,11 +96,9 @@ interface IVaultHub is IAccessControl {
     ) external payable;
     function mintShares(address _vault, address _recipient, uint256 _amountOfShares) external;
     function vaultConnection(address _vault) external view returns (VaultConnection memory);
+    function vaultRecord(address _vault) external view returns (VaultRecord memory);
     function maxLockableValue(address _vault) external view returns (uint256);
     function isReportFresh(address _vault) external view returns (bool);
-
-    function vaultRecord(address _vault) external view returns (VaultRecord memory);
-
     function transferVaultOwnership(address _vault, address _newOwner) external;
 
     function applyVaultReport(
