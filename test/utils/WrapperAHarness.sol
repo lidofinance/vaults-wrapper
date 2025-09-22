@@ -62,6 +62,7 @@ contract WrapperAHarness is Test {
         address upgradeConformer;
         uint256 nodeOperatorFeeBP;
         uint256 confirmExpiry;
+            uint256 maxFinalizationTime;
         address teller;
         address boringQueue;
     }
@@ -110,6 +111,7 @@ contract WrapperAHarness is Test {
                 config.upgradeConformer,
                 config.nodeOperatorFeeBP,
                 config.confirmExpiry,
+                config.maxFinalizationTime,
                 config.enableAllowlist
             );
         } else if (config.configuration == Factory.WrapperType.MINTING_NO_STRATEGY) {
@@ -119,6 +121,7 @@ contract WrapperAHarness is Test {
                 config.upgradeConformer,
                 config.nodeOperatorFeeBP,
                 config.confirmExpiry,
+                config.maxFinalizationTime,
                 config.enableAllowlist,
                 config.reserveRatioGapBP
             );
@@ -130,6 +133,7 @@ contract WrapperAHarness is Test {
                 config.upgradeConformer,
                 config.nodeOperatorFeeBP,
                 config.confirmExpiry,
+                config.maxFinalizationTime,
                 config.enableAllowlist,
                 config.reserveRatioGapBP,
                 loops
@@ -141,6 +145,7 @@ contract WrapperAHarness is Test {
                 config.upgradeConformer,
                 config.nodeOperatorFeeBP,
                 config.confirmExpiry,
+                config.maxFinalizationTime,
                 config.enableAllowlist,
                 config.reserveRatioGapBP,
                 config.teller,
@@ -151,8 +156,8 @@ contract WrapperAHarness is Test {
         }
         vm.stopPrank();
 
-        // Apply initial vault report
-        core.applyVaultReport(vault_, 0, 0, 0, 0, true);
+        // Apply initial vault report with current total value equal to connect deposit
+        core.applyVaultReport(vault_, CONNECT_DEPOSIT, 0, 0, 0, false);
 
         return WrapperContext({
             wrapper: WrapperA(payable(wrapperAddress)),
@@ -180,6 +185,7 @@ contract WrapperAHarness is Test {
             upgradeConformer: NODE_OPERATOR,
             nodeOperatorFeeBP: NODE_OPERATOR_FEE_RATE,
             confirmExpiry: CONFIRM_EXPIRY,
+            maxFinalizationTime: 30 days,
             teller: address(0),
             boringQueue: address(0)
         });

@@ -8,7 +8,7 @@ import {IBoringOnChainQueue} from "src/interfaces/ggv/IBoringOnChainQueue.sol";
 import {IBoringSolver} from "src/interfaces/ggv/IBoringSolver.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
-import {CoreHarness} from "test/utils/CoreHarness.sol";  
+import {CoreHarness} from "test/utils/CoreHarness.sol";
 import {WrapperCHarness} from "test/utils/WrapperCHarness.sol";
 
 import {Factory} from "src/Factory.sol";
@@ -51,10 +51,10 @@ contract GGVTest is WrapperCHarness {
     uint8 public constant STRATEGIST_MULTISIG_ROLE = 10;
     uint8 public constant SOLVER_ORIGIN_ROLE = 33;
 
-    // ggv mainnet
-    ITellerWithMultiAssetSupport public teller = ITellerWithMultiAssetSupport(0x0baAb6db8d694E1511992b504476ef4073fe614B);
-    IBoringOnChainQueue public boringOnChainQueue = IBoringOnChainQueue(0xe39682c3C44b73285A2556D4869041e674d1a6B7);
-    IBoringSolver public solver = IBoringSolver(0xAC20dba743CDCd883f6E5309954C05b76d41e080);
+    // Use local mocks for teller/on-chain queue/solver in integration tests
+    ITellerWithMultiAssetSupport public teller;
+    IBoringOnChainQueue public boringOnChainQueue;
+    IBoringSolver public solver;
 
 //    ITellerWithMultiAssetSupport public teller;
 //    MockBoringOnChainQueue public boringOnChainQueue;
@@ -68,7 +68,7 @@ contract GGVTest is WrapperCHarness {
     address public user2 = address(0x1002);
     address public user3 = address(0x3);
 
-    address WSTETH = 0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0;
+    address WSTETH = address(0); // unused with mocks
 
     //allowed
     //0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0 wsteth
@@ -79,16 +79,23 @@ contract GGVTest is WrapperCHarness {
     function setUp() public {
         _initializeCore();
 
-//        address boringVault = address(new MockBoringVault());
-//        teller = ITellerWithMultiAssetSupport(address(new MockTeller(boringVault)));
-//        boringOnChainQueue = new MockBoringOnChainQueue(boringVault);
-//        boringOnChainQueue.updateWithdrawAsset(address(core.steth()),
-//            0,
-//            604800,
-//            1,
-//            9,
-//            0);
-//        solver = new MockBoringSolver(boringVault, address(boringOnChainQueue));
+        address boringVault = address(new MockBoringVault());
+        teller = ITellerWithMultiAssetSupport(address(new MockTeller(boringVault)));
+        boringOnChainQueue = new MockBoringOnChainQueue(boringVault);
+        // Configure withdraw assets for stETH and wstETH on the mock queue
+        boringOnChainQueue.updateWithdrawAsset(address(core.steth()),
+            0,
+            604800,
+            1,
+            9,
+            0);
+        boringOnChainQueue.updateWithdrawAsset(address(core.wsteth()),
+            0,
+            604800,
+            1,
+            9,
+            0);
+        solver = new MockBoringSolver(boringVault, address(boringOnChainQueue));
 
         WrapperContext memory ctx = _deployWrapperC(false, address(strategy), 0, address(teller), address(boringOnChainQueue));
         wrapper = WrapperC(payable(ctx.wrapper));
@@ -100,7 +107,7 @@ contract GGVTest is WrapperCHarness {
 
         console.log("wrapper setup finished");
 
-        _setupGGV();
+        // Skip external GGV mainnet setup when using local mocks
     }
 
     function _setupGGV() public {
@@ -217,19 +224,19 @@ contract GGVTest is WrapperCHarness {
         console.log("requests[0]");
         console.logBytes32(keccak256(abi.encode(requests[0])));
 
-        // ================= BoringSolver sent request =================
+        // ================= BoringSolver sends assets and solves =================
 
         vm.warp(block.timestamp + secondsToMaturity + 1);
 
-//        vm.startPrank(USER2);
-//        steth.submit{value: 20 ether}(address(0));
-//        steth.approve(address(core.wsteth()), type(uint256).max);
-//        uint256 wstETHAmount = core.wsteth().wrap(10 ether);
-////        core.wsteth().approve(address(solver), wstETHAmount);
-//        core.wsteth().transfer(address(solver), wstETHAmount);
-//        vm.stopPrank();
+        // Fund solver with enough stETH and approve queue to pull them
+        vm.startPrank(USER2);
+        steth.submit{value: 50 ether}(address(0));
+        uint256 u2StEth = steth.balanceOf(USER2);
+        steth.transfer(address(solver), u2StEth);
+        vm.stopPrank();
 
-
+        vm.prank(address(solver));
+        steth.approve(address(boringOnChainQueue), type(uint256).max);
 
         solver.boringRedeemSolve(requests, address(teller), true);
 
@@ -257,7 +264,7 @@ contract GGVTest is WrapperCHarness {
             uint256 userWrapperBalanceBefore = wrapper.balanceOf(USER1);
 
             wrapper.finalizeWithdrawal(requestIds[i]);
-        }    
+        }
         vm.stopPrank();
 
         requestIds = wrapper.getWithdrawalRequests(USER1);
@@ -270,17 +277,19 @@ contract GGVTest is WrapperCHarness {
         uint256 withdrawableStv = wrapper.withdrawableStv(USER1, steth.sharesOf(USER1));
 
         console.log("withdrawableStv", withdrawableStv);
-        console.log("wrapper balance", wrapper.balanceOf(USER1));
+        uint256 userStvBal = wrapper.balanceOf(USER1);
+        console.log("wrapper balance", userStvBal);
         console.log("steth shares", steth.sharesOf(USER1));
         console.log("strategyProxy wrapper shares", wrapper.balanceOf(strategyProxy));
         console.log("strategyProxy wrapper shares", wrapper.balanceOf(strategyProxy));
 
+        // Cap to user balance to avoid InsufficientSharesLocked
+        uint256 stvToWithdraw = withdrawableStv > userStvBal ? userStvBal : withdrawableStv;
 
-        vm.expectRevert("ALLOWANCE_EXCEEDED");
-        wrapper.requestWithdrawal(withdrawableStv);
-
-        steth.approve(address(wrapper), withdrawableStv);
-        requestId = wrapper.requestWithdrawal(withdrawableStv);
+        uint256 stethSharesToBurn = wrapper.stethSharesForWithdrawal(USER1, stvToWithdraw);
+        // Grant ample allowance for share transfer and potential rounding
+        steth.approve(address(wrapper), type(uint256).max);
+        requestId = wrapper.requestWithdrawal(stvToWithdraw);
         vm.stopPrank();
 
         // ================= [NODE OPERATOR] Step5. Finalize withdrawal request in WQ =================

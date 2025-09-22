@@ -54,8 +54,8 @@ The Factory orchestrates deployment of the entire wrapper system (Vault, Dashboa
   - **Implementation factories**: `WrapperAFactory`, `WrapperBFactory`, `WrapperCFactory`, `WithdrawalQueueFactory`, `LoopStrategyFactory`, `GGVStrategyFactory`
   - **Proxy stub**: `DummyImplementation` (for `OssifiableProxy` bootstrap)
 
-- Deploy `Factory` (either deploy the factories yourself or use `test/utils/FactoryHelper.sol` as a reference):
-  - `new Factory(vaultFactory, stETH, waf, wbf, wcf, wqf, lsf, ggvf, dummyImplementation)`
+- Deploy `Factory` (either deploy the factories yourself or use `script/DeployWrapperFactory.s.sol`):
+  - `new Factory(WrapperConfig{ vaultFactory, stETH, wrapperAFactory, wrapperBFactory, wrapperCFactory, withdrawalQueueFactory, loopStrategyFactory, ggvStrategyFactory, dummyImplementation, maxFinalizationTime })`
 
 - Create a complete wrapper system using one of the specialized entrypoints (send `msg.value == VaultHub.CONNECT_DEPOSIT`):
   - `createVaultWithNoMintingNoStrategy(nodeOperator, nodeOperatorManager, nodeOperatorFeeBP, confirmExpiry, allowlistEnabled)`
@@ -109,6 +109,23 @@ Note on circular dependencies and gas savings
 - Because the definitive addresses are known at constructor-time for implementations, contracts store them as `immutable` (e.g., `WrapperBase` references, `WrapperC.STRATEGY`, strategy’s `WRAPPER`). This reduces storage reads and saves gas on regular transactions.
 
 Dedicated factories for wrappers, withdrawal queue and strategies are required to keep Factory contract bytecode size withing the limit.
+
+Local deployment (quickstart)
+
+- Files/scripts:
+  - `lido-core/deployed-local.json` (core addresses produced by `make core-deploy`)
+  - `script/HarnessCore.s.sol` + `script/harness-core.sh` (prepares core via impersonation: sets epoch, resumes Lido, submits initial ETH)
+  - `script/DeployWrapperFactory.s.sol` (deploys Factory + implementation factories; writes `deployments/wrapper-local.json`)
+  - `script/DeployWrapper.s.sol` (deploys a wrapper instance from the Factory using `script/deploy-local-config.json`)
+  - `foundry.toml` (`fs_permissions` allow writing to `deployments/`)
+- Procedure:
+  - Start RPC (e.g., Anvil on `http://localhost:9123`).
+  - `make core-deploy` (deploys core and writes `lido-core/deployed-local.json`).
+  - `bash script/harness-core.sh` (prepares core; default initial submission ≈ 15k ETH; override `INITIAL_LIDO_SUBMISSION` if needed).
+  - `bash script/deploy-local.sh` (deploys Factory and then a Wrapper using `script/deploy-local-config.json`).
+  - Artifacts:
+    - `deployments/wrapper-local.json`: deployed `Factory` and implementation factory addresses
+    - `deployments/wrapper-instance.json`: deployed Vault, Dashboard, Wrapper proxy, Withdrawal Queue, and Strategy (if applicable)
 
 ### Cast
 

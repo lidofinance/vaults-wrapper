@@ -82,8 +82,7 @@ contract FactoryTest is Test {
             withdrawalQueueFactory: address(wqf),
             loopStrategyFactory: address(lsf),
             ggvStrategyFactory: address(ggvf),
-            dummyImplementation: dummy,
-            maxFinalizationTime: 30 days
+            dummyImplementation: dummy
         });
         WrapperFactory = new Factory(a);
     }
@@ -101,6 +100,7 @@ contract FactoryTest is Test {
                 nodeOperator,
                 100, // 1% fee
                 3600, // 1 hour confirm expiry
+                30 days,
                 false // allowlist disabled
             );
 
@@ -138,6 +138,7 @@ contract FactoryTest is Test {
             nodeOperator,
             100, // 1% fee
             3600, // 1 hour confirm expiry
+            30 days,
             false // allowlist disabled
         );
     }
@@ -155,6 +156,7 @@ contract FactoryTest is Test {
                 nodeOperator,
                 100, // 1% fee
                 3600, // 1 hour confirm expiry
+                30 days,
                 false, // allowlist disabled
                 0, // reserve ratio gap
                 1 // loops
@@ -191,6 +193,7 @@ contract FactoryTest is Test {
                 nodeOperator,
                 100, // 1% fee
                 3600, // 1 hour confirm expiry
+                30 days,
                 true // allowlist enabled
             );
 

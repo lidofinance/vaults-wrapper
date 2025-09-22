@@ -47,7 +47,7 @@ contract CoreHarness is Test {
     IVaultHub public vaultHub;
     ILazyOracleMocked public lazyOracle;
 
-    uint256 public constant INITIAL_LIDO_SUBMISSION = 1_000_000 ether;
+    uint256 public constant INITIAL_LIDO_SUBMISSION = 15_000 ether;
     uint256 public constant CONNECT_DEPOSIT = 1 ether;
     uint256 public constant LIDO_TOTAL_BASIS_POINTS = 10000;
     uint256 public constant NODE_OPERATOR_FEE_RATE = 1_00; // 1% in basis points
@@ -85,8 +85,10 @@ contract CoreHarness is Test {
         vm.prank(agent);
         steth.setMaxExternalRatioBP(LIDO_TOTAL_BASIS_POINTS);
 
-        vm.prank(agent);
-        steth.resume();
+        if (steth.isStopped()) {
+            vm.prank(agent);
+            steth.resume();
+        }
 
         // Need some ether in Lido to pass ShareLimitTooHigh check upon vault creation/connection
         steth.submit{value: INITIAL_LIDO_SUBMISSION}(address(this));
@@ -108,8 +110,6 @@ contract CoreHarness is Test {
     }
 
     function applyVaultReport(address _stakingVault, uint256 _totalValue, uint256 _cumulativeLidoFees, uint256 _liabilityShares, uint256 _slashingReserve, bool _onlyUpdateReportData) public {
-        uint256 reportTimestamp = block.timestamp;
-        uint256 refSlot = block.timestamp / 12; // Simulate a slot number based on timestamp (12 second slots)
         bytes32 treeRoot = bytes32(0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef);
         string memory reportCid = "dummy-cid";
 
@@ -121,6 +121,10 @@ contract CoreHarness is Test {
         // console.log("isFresh before", isFresh);
 
         vm.warp(block.timestamp + 1 minutes);
+
+        // Compute report time and ref slot AFTER advancing time to keep it fresh
+        uint256 reportTimestamp = block.timestamp;
+        uint256 refSlot = block.timestamp / 12; // Simulate a slot number based on timestamp (12 second slots)
 
         // Update report data with current timestamp to make it fresh
         vm.prank(locator.accountingOracle());

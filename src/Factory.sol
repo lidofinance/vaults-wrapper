@@ -34,7 +34,6 @@ contract Factory {
         address loopStrategyFactory;
         address ggvStrategyFactory;
         address dummyImplementation;
-        uint256 maxFinalizationTime;
     }
     IVaultFactory public immutable VAULT_FACTORY;
     address public immutable STETH;
@@ -47,7 +46,6 @@ contract Factory {
     LoopStrategyFactory public immutable LOOP_STRATEGY_FACTORY;
     GGVStrategyFactory public immutable GGV_STRATEGY_FACTORY;
     address public immutable DUMMY_IMPLEMENTATION;
-    uint256 public immutable MAX_FINALIZATION_TIME;
     string constant NAME = "Staked ETH Vault Wrapper";
     string constant SYMBOL = "stvToken";
 
@@ -78,7 +76,6 @@ contract Factory {
         LOOP_STRATEGY_FACTORY = LoopStrategyFactory(a.loopStrategyFactory);
         GGV_STRATEGY_FACTORY = GGVStrategyFactory(a.ggvStrategyFactory);
         DUMMY_IMPLEMENTATION = a.dummyImplementation;
-        MAX_FINALIZATION_TIME = a.maxFinalizationTime;
     }
 
     function createVaultWithConfiguredWrapper(
@@ -87,6 +84,7 @@ contract Factory {
         address _upgradeConformer,
         uint256 _nodeOperatorFeeBP,
         uint256 _confirmExpiry,
+        uint256 _maxFinalizationTime,
         WrapperType _configuration,
         address _strategy,
         bool _allowlistEnabled,
@@ -108,7 +106,8 @@ contract Factory {
             _nodeOperator,
             _nodeOperatorManager,
             _nodeOperatorFeeBP,
-            _confirmExpiry
+            _confirmExpiry,
+            _maxFinalizationTime
         );
 
         address usedStrategy = _strategy;
@@ -142,6 +141,7 @@ contract Factory {
         address _upgradeConformer,
         uint256 _nodeOperatorFeeBP,
         uint256 _confirmExpiry,
+        uint256 _maxFinalizationTime,
         bool _allowlistEnabled
     )
         external
@@ -160,7 +160,8 @@ contract Factory {
             _nodeOperator,
             _nodeOperatorManager,
             _nodeOperatorFeeBP,
-            _confirmExpiry
+            _confirmExpiry,
+            _maxFinalizationTime
         );
 
         WrapperBase wrapper = _deployAndInitWrapper(
@@ -185,6 +186,7 @@ contract Factory {
         address _upgradeConformer,
         uint256 _nodeOperatorFeeBP,
         uint256 _confirmExpiry,
+        uint256 _maxFinalizationTime,
         bool _allowlistEnabled,
         uint256 _reserveRatioGapBP
     )
@@ -204,7 +206,8 @@ contract Factory {
             _nodeOperator,
             _nodeOperatorManager,
             _nodeOperatorFeeBP,
-            _confirmExpiry
+            _confirmExpiry,
+            _maxFinalizationTime
         );
 
         WrapperBase wrapper = _deployAndInitWrapper(
@@ -229,6 +232,7 @@ contract Factory {
         address _upgradeConformer,
         uint256 _nodeOperatorFeeBP,
         uint256 _confirmExpiry,
+        uint256 _maxFinalizationTime,
         bool _allowlistEnabled,
         uint256 _reserveRatioGapBP,
         uint256 _loops
@@ -249,7 +253,8 @@ contract Factory {
             _nodeOperator,
             _nodeOperatorManager,
             _nodeOperatorFeeBP,
-            _confirmExpiry
+            _confirmExpiry,
+            _maxFinalizationTime
         );
 
         address loopStrategy = LOOP_STRATEGY_FACTORY.deploy(STETH, address(_wrapperProxy), _loops);
@@ -276,6 +281,7 @@ contract Factory {
         address _upgradeConformer,
         uint256 _nodeOperatorFeeBP,
         uint256 _confirmExpiry,
+        uint256 _maxFinalizationTime,
         bool _allowlistEnabled,
         uint256 _reserveRatioGapBP,
         address _teller,
@@ -297,7 +303,8 @@ contract Factory {
             _nodeOperator,
             _nodeOperatorManager,
             _nodeOperatorFeeBP,
-            _confirmExpiry
+            _confirmExpiry,
+            _maxFinalizationTime
         );
 
         address ggvStrategy = GGV_STRATEGY_FACTORY.deploy(_wrapperProxy, STETH, WSTETH, _teller, _boringQueue);
@@ -352,7 +359,8 @@ contract Factory {
         address _nodeOperator,
         address _nodeOperatorManager,
         uint256 _nodeOperatorFeeBP,
-        uint256 _confirmExpiry
+        uint256 _confirmExpiry,
+        uint256 _maxFinalizationTime
     ) internal returns (
         address vault,
         address dashboard,
@@ -372,7 +380,7 @@ contract Factory {
         _dashboard = IDashboard(payable(dashboard));
 
         wrapperProxy = payable(address(new OssifiableProxy(DUMMY_IMPLEMENTATION, address(this), bytes(""))));
-        address wqImpl = WITHDRAWAL_QUEUE_FACTORY.deploy(address(wrapperProxy), LAZY_ORACLE, MAX_FINALIZATION_TIME);
+        address wqImpl = WITHDRAWAL_QUEUE_FACTORY.deploy(address(wrapperProxy), LAZY_ORACLE, _maxFinalizationTime);
         withdrawalQueueProxy = address(new OssifiableProxy(wqImpl, address(this), abi.encodeCall(WithdrawalQueue.initialize, (_nodeOperator, _nodeOperator))));
     }
 

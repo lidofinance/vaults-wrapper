@@ -1,0 +1,14 @@
+{
+  "wrapperType": 1,
+  "nodeOperator": "0x0000000000000000000000000000000000001004",
+  "nodeOperatorManager": "0x0000000000000000000000000000000000001004",
+  "upgradeConformer": "0x0000000000000000000000000000000000001004",
+  "nodeOperatorFeeBP": 0,
+  "confirmExpiry": 3600,
+  "maxFinalizationTime": 2592000,
+  "allowlistEnabled": false,
+  "reserveRatioGapBP": 0,
+  "value": 1000000000000000000
+}
+
+
