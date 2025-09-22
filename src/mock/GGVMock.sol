@@ -53,6 +53,8 @@ contract GGVMockTeller is ITellerWithMultiAssetSupport {
         
         // eq to 10 ** vault.decimals()
         ONE_SHARE = 10 ** 18;
+
+        _updateAssetData(ERC20(address(steth)), true, true, 0);
     }
 
     function deposit(ERC20 depositAsset, uint256 depositAmount, uint256 minimumMint) external returns (uint256 shares){
@@ -80,15 +82,22 @@ contract GGVMockTeller is ITellerWithMultiAssetSupport {
         
     }
 
+    
 
-
-    function updateAssetData(ERC20 asset, bool allowDeposits, bool allowWithdraws, uint16 sharePremium) external {
-        require(msg.sender == owner, "Only owner can update asset data");
+    function _updateAssetData(ERC20 asset, bool allowDeposits, bool allowWithdraws, uint16 sharePremium) internal {
         if(address(asset) != address(steth)) {
             revert("Asset not supported");
         }
         assets[asset] = Asset(allowDeposits, allowWithdraws, sharePremium);
     }
+
+    function updateAssetData(ERC20 asset, bool allowDeposits, bool allowWithdraws, uint16 sharePremium) external {
+        require(msg.sender == owner, "Only owner can update asset data");
+        _updateAssetData(asset, allowDeposits, allowWithdraws, sharePremium);
+    }
+
+
+
 
     function authority() external view returns (address){
         return owner;
@@ -182,11 +191,11 @@ contract GGVQueueMock is IBoringOnChainQueue{
         }
 
         uint128 amountOfAssets = uint128(_vault.getAssetsByShares(amountOfShares));
-        if( amountOfAssets > steth.balanceOf(address(_vault))) {
+        if( amountOfAssets > steth.sharesOf(address(_vault))) {
             revert("Not enough assets in vault");
         }
 
-        // needs approve
+        // needs approval
         _vault.transferFrom(msg.sender, address(this), amountOfShares);
 
         uint96 requestNonce;
@@ -365,12 +374,13 @@ contract GGVVaultMock is ERC20  {
        return BorrowedMath.mulDivDown(shares, _totalAssets, totalSupply());
     }
 
+
     function depositByTeller( address asset,uint256 shares,uint256 assets, address user) external  {
         require(msg.sender == address(TELLER), "Only teller can call depositByTeller");
         
         
         require(asset == address(steth), "Only steth asset supported");
-        steth.transferSharesFrom(msg.sender, address(this), assets);
+        steth.transferSharesFrom(user, address(this), assets);
 
         _mint(user, shares);
         _totalAssets += assets;
