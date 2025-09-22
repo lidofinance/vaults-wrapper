@@ -38,13 +38,13 @@ contract DeployWrapperFactory is Script {
 
     function run() external {
         // Expect environment variables for non-interactive deploys
-        // REQUIRED: DEPLOYED_JSON (path to Lido core deployed json, like CoreHarness)
+        // REQUIRED: CORE_DEPLOYED_JSON (path to Lido core deployed json, like CoreHarness)
         // OPTIONAL: OUTPUT_JSON
-        string memory deployedJsonPath = vm.envOr(
-            "CORE_DEPLOYED_JSON",
-            vm.envOr("DEPLOYED_JSON", string("lido-core/deployed-local.json"))
-        );
+        string memory deployedJsonPath = vm.envString("CORE_DEPLOYED_JSON");
         string memory outputJsonPath = vm.envOr("OUTPUT_JSON", string(string.concat("deployments/wrapper-", vm.toString(block.chainid), ".json")));
+
+        require(vm.isFile(deployedJsonPath), "CORE_DEPLOYED_JSON file does not exist");
+
 
         CoreAddresses memory core = _readCoreFromJson(deployedJsonPath);
 

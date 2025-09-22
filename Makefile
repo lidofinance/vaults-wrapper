@@ -8,8 +8,12 @@ NETWORK ?= local
 VERBOSITY ?= vv
 DEBUG_TEST ?= test_debug
 
-RPC_URL ?= http://localhost:$(CORE_RPC_PORT)
-CORE_DEPLOYED_JSON ?= ./lido-core/deployed-$(NETWORK).json
+# RPC_URL ?= "http://localhost:9123"
+# RPC_URL ?= http://localhost:$(CORE_RPC_PORT)
+# Effective RPC URL: prefer env-provided RPC_URL if set, else fallback to localhost
+# RPC_FALLBACK := http://localhost:$(CORE_RPC_PORT)
+# RPC_URL_EFFECTIVE := $(if $(strip $(RPC_URL)),$(strip $(RPC_URL)),$(RPC_FALLBACK))
+# CORE_DEPLOYED_JSON ?= ./lido-core/deployed-$(NETWORK).json
 OUTPUT_JSON ?= ./deployments/wrapper-factory-$(NETWORK).json
 WRAPPER_PARAMS_JSON ?= ./script/deploy-$(NETWORK)-config.json
 OUTPUT_INSTANCE_JSON ?= ./deployments/wrapper-instance-$(NETWORK).json
@@ -32,25 +36,42 @@ test-all:
 	make test-integration
 
 deploy-factory:
+	. .env 2>/dev/null || true; \
+	VERIFY_FLAGS=""; \
+	if [ -n "$$PUBLISH_SOURCES" ]; then \
+		export ETHERSCAN_API_KEY="$${ETHERSCAN_API_KEY:-$${ETHERSCAN_TOKEN}}"; \
+		VERIFY_FLAGS="--verify --verifier etherscan --delay $${VERIFY_DELAY:-60} --retries $${VERIFY_RETRIES:-7}"; \
+	fi; \
+	SLOW_FLAG="--slow"; \
+	if [ -n "$$DISABLE_SLOW" ]; then \
+		SLOW_FLAG=""; \
+	fi; \
 	OUTPUT_JSON=$(OUTPUT_JSON) \
-	CORE_DEPLOYED_JSON=$(CORE_DEPLOYED_JSON) \
 	forge script script/DeployWrapperFactory.s.sol:DeployWrapperFactory \
-		--rpc-url $(RPC_URL) \
+		--rpc-url $${RPC_URL:-http://localhost:9123} \
 		--broadcast \
-		--private-key $(PRIVATE_KEY) \
-		--sender $(DEPLOYER) \
+		--private-key $${PRIVATE_KEY:-$(PRIVATE_KEY)} \
+		--sender $${DEPLOYER:-$(DEPLOYER)} \
+		$$VERIFY_FLAGS \
+		$$SLOW_FLAG \
 		--sig 'run()' \
 		--non-interactive
 
 deploy-wrapper-from-factory:
-	FACTORY_JSON=$(OUTPUT_JSON) \
-	WRAPPER_PARAMS_JSON=$(WRAPPER_PARAMS_JSON) \
-	OUTPUT_INSTANCE_JSON=$(OUTPUT_INSTANCE_JSON) \
+	. .env 2>/dev/null || true; \
+	SLOW_FLAG="--slow"; \
+	if [ -n "$$DISABLE_SLOW" ]; then \
+		SLOW_FLAG=""; \
+	fi; \
+	FACTORY_JSON=$${FACTORY_JSON:-$(OUTPUT_JSON)} \
+	WRAPPER_PARAMS_JSON=$${WRAPPER_PARAMS_JSON:-$(WRAPPER_PARAMS_JSON)} \
+	OUTPUT_INSTANCE_JSON=$${OUTPUT_INSTANCE_JSON:-$(OUTPUT_INSTANCE_JSON)} \
 	forge script script/DeployWrapper.s.sol:DeployWrapper \
-		--rpc-url $(RPC_URL) \
+		--rpc-url $${RPC_URL:-http://localhost:9123} \
 		--broadcast \
-		--sender $(DEPLOYER) \
-		--private-key $(PRIVATE_KEY) \
+		--sender $${DEPLOYER:-$(DEPLOYER)} \
+		--private-key $${PRIVATE_KEY:-$(PRIVATE_KEY)} \
+		$$SLOW_FLAG \
 		--sig 'run()' \
 		--non-interactive
 
