@@ -97,10 +97,16 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
     event VaultDisconnected(address indexed initiator);
     event ConnectDepositClaimed(address indexed recipient, uint256 amount);
     event WithdrawalClaimed(
-        uint256 indexed requestId,
+        uint256 requestId,
         address indexed owner,
         address indexed receiver,
         uint256 amountOfETH
+    );
+    event WithdrawalRequestCreated(
+        uint256 requestId,
+        address indexed user,
+        uint256 amount,
+        WithdrawalType requestType
     );
 
     constructor(
@@ -282,6 +288,31 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
     function getWithdrawalRequestsLength(address _owner) external view returns (uint256) {
         WrapperBaseStorage storage $ = _getWrapperBaseStorage();
         return $.requestsByOwner[_owner].length();
+    }
+
+    function getWithdrawalRequest(uint256 requestId) external view returns(WithdrawalRequest memory) {
+        return _getWrapperBaseStorage().withdrawalRequests[requestId];
+    }
+
+    function _addWithdrawalRequest(
+        address _owner,
+        uint256 _ethAmount,
+        WithdrawalType _type
+    ) internal returns(uint256 requestId) {
+        WrapperBaseStorage storage $ = _getWrapperBaseStorage();
+        requestId = $.withdrawalRequests.length;
+        WithdrawalRequest memory request = WithdrawalRequest({
+            requestId: requestId,
+            requestType: _type,
+            owner: _owner,
+            timestamp: uint40(block.timestamp),
+            amount: _ethAmount
+        });
+
+        $.withdrawalRequests.push(request);
+        $.requestsByOwner[_owner].add(requestId);
+
+        emit WithdrawalRequestCreated(requestId,_owner, _ethAmount, request.requestType);
     }
 
     // =================================================================================

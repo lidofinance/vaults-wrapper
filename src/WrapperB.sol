@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >=0.8.25;
 
-import {console} from "forge-std/Test.sol";
-
 import {WrapperBase} from "./WrapperBase.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
@@ -11,8 +9,6 @@ import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet
 import {WithdrawalQueue} from "./WithdrawalQueue.sol";
 
 import {IStETH} from "./interfaces/IStETH.sol";
-
-import {console} from "forge-std/console.sol";
 
 /**
  * @title WrapperB
@@ -26,8 +22,6 @@ contract WrapperB is WrapperBase {
     error ZeroArgument();
     error MintingForThanTargetStSharesShareIsNotAllowed();
     error TodoError();
-
-    event WithdrawalRequestCreated(uint256 indexed requestId, address indexed user, WithdrawalType requestType);
 
     IStETH public immutable STETH;
     uint256 public immutable WRAPPER_RR_BP; // vault's reserve ratio plus gap for wrapper

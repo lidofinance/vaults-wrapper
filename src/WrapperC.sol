@@ -5,7 +5,6 @@ import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet
 
 import {WrapperB} from "./WrapperB.sol";
 import {IStrategy} from "./interfaces/IStrategy.sol";
-import {console} from "forge-std/Test.sol";
 
 error InvalidConfiguration();
 
@@ -39,32 +38,14 @@ contract WrapperC is WrapperB {
      * @return stvShares Amount of stvETH shares minted
      */
     function depositETH(address _receiver, address _referral) public payable override returns (uint256 stvShares) {
+        uint256 targetStethShares = _calcTargetStethSharesAmount(msg.value);
         stvShares = _deposit(address(STRATEGY), _referral);
-        STRATEGY.execute(_receiver, stvShares);
-    }
-
-    function depositForStrategy() external payable returns (uint256 stvShares) {
-        if (msg.sender != address(STRATEGY)) revert InvalidSender();
-        stvShares = _deposit(address(STRATEGY), address(0));
+        STRATEGY.execute(_receiver, stvShares, targetStethShares);
     }
 
     function requestWithdrawalFromStrategy(uint256 _ethAmount) public returns (uint256 requestId) {
-        WrapperBaseStorage storage $ = _getWrapperBaseStorage();
-        requestId = $.withdrawalRequests.length;
-        WithdrawalRequest memory request = WithdrawalRequest({
-            requestId: requestId,
-            requestType: WithdrawalType.STRATEGY,
-            owner: msg.sender,
-            timestamp: uint40(block.timestamp),
-            amount: _ethAmount
-        });
-
-        $.withdrawalRequests.push(request);
-        $.requestsByOwner[msg.sender].add(requestId);
-
+        requestId = _addWithdrawalRequest(msg.sender, _ethAmount, WithdrawalType.STRATEGY);
         STRATEGY.requestWithdrawByETH(msg.sender, _ethAmount);
-
-        emit WithdrawalRequestCreated(request.requestId, msg.sender, request.requestType);
     }
 
     function finalizeWithdrawal(uint256 _requestId) external {
@@ -91,15 +72,6 @@ contract WrapperC is WrapperB {
     function requestWithdrawalQueue(address _owner, address _receiver, uint256 _stvShares) external returns (uint256 requestId) {
         if (msg.sender != address(STRATEGY)) revert InvalidSender();
         requestId = _requestWithdrawalQueue(_owner, _receiver,_stvShares);
-    }
-
-    /// @notice Adds a withdrawal request by strategy
-    function addWithdrawalRequest(WithdrawalRequest memory _request) external returns (uint256 requestId) {
-        if (msg.sender != address(STRATEGY)) revert InvalidSender();
-        WrapperBaseStorage storage $ = _getWrapperBaseStorage();
-        requestId = $.withdrawalRequests.length;
-        $.withdrawalRequests.push(_request);
-        $.requestsByOwner[_request.owner].add(requestId);
     }
 
     function getRequest(uint256 requestId) external returns (WithdrawalRequest memory) {

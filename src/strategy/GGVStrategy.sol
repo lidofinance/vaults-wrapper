@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >=0.8.25;
 
-
 import {IERC20} from '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
@@ -20,12 +19,12 @@ contract GGVStrategy is Strategy {
 
     address public assetOut;
 
-    event Execute(address indexed user, uint256 stvTokenAmount, uint256 stETHAmount);
+    event Execute(address indexed user, uint256 stvTokenAmount, uint256 stETHAmount, uint256 ggvShares);
     event RequestWithdraw(address indexed user, uint256 shares);
-    event Claim(address indexed user, address indexed asset, uint256 shares, uint256 stethShares, uint256 ggvShares, uint256 stv);
+    event Claim(address indexed user, address indexed asset, uint256 shares, uint256 stv);
 
     error InvalidWrapper();
-    error InvalidStethShares();
+    error InvalidEthAmount();
     error AlreadyRequested();
 
     struct UserPosition {
@@ -36,8 +35,6 @@ contract GGVStrategy is Strategy {
         uint256 ggvShares;
 
         bytes32 exitRequestId;
-        uint128 exitAmountOfAssets128;
-        uint128 exitGgvShares;
         uint256 exitStethShares;
         uint256 exitStvShares;
     }
@@ -69,23 +66,21 @@ contract GGVStrategy is Strategy {
     /// @notice Executes the strategy
     /// @param _user The user to execute the strategy for
     /// @param _stvShares The number of stv shares to execute
-    function execute(address _user, uint256 _stvShares) external {
+    function execute(address _user, uint256 _stvShares, uint256 _stethShares) external {
         _onlyWrapper();
 
         address proxy = _getOrCreateProxy(_user);
-        uint256 mintableStethShares = WRAPPER.mintableStethShares(address(this));
-        uint256 stETHAmount = STETH.getPooledEthByShares(mintableStethShares);
+        uint256 stETHAmount = STETH.getPooledEthByShares(_stethShares);
 
-        //save stv/st share rate
         UserPosition storage position = userPositions[_user];
         position.stvShares += _stvShares;
-        position.stethShares += mintableStethShares;
+        position.stethShares += _stethShares;
 
         WRAPPER.transfer(proxy, _stvShares);
 
         IStrategyProxy(proxy).call(
             address(WRAPPER),
-            abi.encodeWithSelector(WRAPPER.mintStethShares.selector, mintableStethShares)
+            abi.encodeWithSelector(WRAPPER.mintStethShares.selector, _stethShares)
         );
         IStrategyProxy(proxy).call(
             address(STETH),
@@ -95,10 +90,9 @@ contract GGVStrategy is Strategy {
             address(TELLER),
             abi.encodeWithSelector(TELLER.deposit.selector, address(STETH), stETHAmount, MINIMUM_MINT)
         );
+        uint256 ggvShares = abi.decode(data, (uint256));
 
-        position.ggvShares += abi.decode(data, (uint256));
-
-        emit Execute(_user, _stvShares, mintableStethShares);
+        emit Execute(_user, _stvShares, _stethShares, ggvShares);
     }
 
     /// @notice Requests a withdrawal of ggv shares from the strategy
@@ -108,33 +102,33 @@ contract GGVStrategy is Strategy {
         UserPosition storage position = userPositions[_user];
         if (position.exitRequestId != bytes32(0)) revert AlreadyRequested();
 
-        uint256 stethShares = STETH.getSharesByPooledEth(_ethAmount);
-        if (position.stethShares < stethShares) revert InvalidStethShares();
-        uint128 ggvShares = uint128(Math.mulDiv(position.ggvShares, stethShares, position.stethShares));
-
-        uint256 exitStvShares = Math.mulDiv(position.stvShares, stethShares, position.stethShares);
-
         address proxy = _getOrCreateProxy(_user);
+
+        uint256 totalStvShares = WRAPPER.balanceOf(proxy);
+        uint256 userTotalEth = WRAPPER.previewRedeem(totalStvShares);
+        if (userTotalEth < _ethAmount) revert InvalidEthAmount();
+
         IERC20 boringVault = IERC20(TELLER.vault());
+
+        uint256 totalGgvShares = boringVault.balanceOf(proxy);
+        uint256 ggvShares = Math.mulDiv(totalGgvShares, _ethAmount, userTotalEth);
+        uint256 exitStvShares = Math.mulDiv(totalStvShares, _ethAmount, userTotalEth);
+
+        uint128 amountOfAssets128 = BORING_QUEUE.previewAssetsOut(assetOut, uint128(ggvShares), DISCOUNT);
 
         IStrategyProxy(proxy).call(
             address(boringVault),
             abi.encodeWithSelector(boringVault.approve.selector, address(BORING_QUEUE), ggvShares)
         );
 
-        uint128 amountOfAssets128 = BORING_QUEUE.previewAssetsOut(assetOut, ggvShares, DISCOUNT);
-
         bytes memory data = IStrategyProxy(proxy).call(
             address(BORING_QUEUE),
-            abi.encodeWithSelector(BORING_QUEUE.requestOnChainWithdraw.selector, assetOut, ggvShares, DISCOUNT, type(uint24).max)
+            abi.encodeWithSelector(BORING_QUEUE.requestOnChainWithdraw.selector, assetOut, uint128(ggvShares), DISCOUNT, type(uint24).max)
         );
         bytes32 ggvRequestId = abi.decode(data, (bytes32));
 
         position.exitRequestId = ggvRequestId;
-        position.exitAmountOfAssets128 = amountOfAssets128;
-        position.exitGgvShares = ggvShares;
-        position.exitStethShares = stethShares;
-        position.exitStvShares = exitStvShares;
+        position.exitStvShares = totalStvShares;
 
         emit RequestWithdraw(_user, ggvShares);
         
@@ -153,50 +147,52 @@ contract GGVStrategy is Strategy {
         bytes32 requestId = abi.decode(data, (bytes32));
 
         position.exitRequestId = 0;
-        position.exitGgvShares = 0;
-        position.exitAmountOfAssets128 = 0;
-        position.exitStvShares = 0;
     }
 
-    function getWithdrawableAmount(address _address) external view returns (uint256 ethAmount) {
-        return STETH.getPooledEthByShares(userPositions[_address].stethShares);
+    function getWithdrawableAmount(address _receiver) external view returns (uint256 ethAmount) {
+        address proxy = getStrategyProxyAddress(_receiver);
+        IERC20 boringVault = IERC20(TELLER.vault());
+        uint256 ggvShares = boringVault.balanceOf(proxy);
+
+        uint256 stv = WRAPPER.balanceOf(proxy);
+        uint256 amountOfAssets128 = BORING_QUEUE.previewAssetsOut(assetOut, uint128(ggvShares), DISCOUNT); //max
+        uint256 stethShares = STETH.getSharesByPooledEth(amountOfAssets128);
+
+        uint256 _eth = WRAPPER.withdrawableEth(proxy, stv, stethShares);
+
+        return _eth;
+    }
+
+    function withdrawalAmount(address _receiver) external view returns (uint256) {
+        address proxy = getStrategyProxyAddress(_receiver);
+        IERC20 boringVault = IERC20(TELLER.vault());
+        uint256 ggvShares = boringVault.balanceOf(proxy);
+
+        uint256 stv = WRAPPER.balanceOf(proxy);
+
+        return WRAPPER.previewRedeem(stv);
     }
 
     function finalizeWithdrawal(address _receiver, uint256 _amount) external {
         _onlyWrapper();
         if (address(0) == _receiver) _receiver = msg.sender;
         address proxy = _getOrCreateProxy(_receiver);
- 
-        UserPosition storage position = userPositions[_receiver];
 
-        // transfer only requested part of steth
         IStrategyProxy(proxy).call(
             address(STETH),
-            abi.encodeWithSelector(STETH.transfer.selector, _receiver, position.exitAmountOfAssets128)
+            abi.encodeWithSelector(STETH.approve.selector, address(WRAPPER), type(uint256).max)
         );
 
-        // transfer all STV
-        IStrategyProxy(proxy).call(
-            address(WRAPPER),
-            abi.encodeWithSelector(WRAPPER.transfer.selector, _receiver, position.exitStvShares)
-        );
-
-        //TODO: do we need to transfer of ggv leftovers?
-
-        position.ggvShares -= position.exitGgvShares;
-        position.stethShares -= position.exitStethShares;
-        position.stvShares -= position.exitStvShares;
+        UserPosition storage position = userPositions[_receiver];
+        uint256 stethShares = STETH.getSharesByPooledEth(STETH.balanceOf(proxy));
+        uint256 requestId = WRAPPER.requestWithdrawalQueue(proxy, _receiver, position.exitStvShares);
 
         position.exitRequestId = 0;
-        position.exitGgvShares = 0;
-        position.exitAmountOfAssets128 = 0;
 
          emit Claim(
              _receiver,
              address(STETH),
-             position.exitAmountOfAssets128,
              position.exitStethShares,
-             position.exitGgvShares,
              position.exitStvShares
          );
     }
