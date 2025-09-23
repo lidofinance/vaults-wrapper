@@ -5,10 +5,10 @@ import {AccessControlEnumerableUpgradeable} from "@openzeppelin/contracts-upgrad
 import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 import { ERC1967Utils } from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Utils.sol";
 import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
-import {WrapperBase} from "./WrapperBase.sol";
 import {IDashboard} from "./interfaces/IDashboard.sol";
 import {IVaultHub} from "./interfaces/IVaultHub.sol";
 import {ILazyOracle} from "./interfaces/ILazyOracle.sol";
+import {IWrapper} from "./interfaces/IWrapper.sol";
 
 /// @title Withdrawal Queue V3 for Staking Vault Wrapper
 /// @notice Handles withdrawal requests for stvToken holders
@@ -36,7 +36,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
     /// @dev return value for the `_findCheckpointHint` method in case of no result
     uint256 internal constant NOT_FOUND = 0;
 
-    WrapperBase public immutable WRAPPER;
+    IWrapper public immutable WRAPPER;
     ILazyOracle public immutable LAZY_ORACLE;
 
     /// @notice structure representing a request for withdrawal
@@ -140,7 +140,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
     error NoRequestsToFinalize();
 
     constructor(address _wrapper, address _lazyOracle, uint256 _maxAcceptableWQFinalizationTimeInSeconds) {
-        WRAPPER = WrapperBase(payable(_wrapper));
+        WRAPPER = IWrapper(payable(_wrapper));
         LAZY_ORACLE = ILazyOracle(_lazyOracle);
         MAX_ACCEPTABLE_WQ_FINALIZATION_TIME_IN_SECONDS = _maxAcceptableWQFinalizationTimeInSeconds;
 

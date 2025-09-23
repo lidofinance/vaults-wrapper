@@ -13,4 +13,5 @@ interface IWrapper {
     function transferFrom(address _from, address _to, uint256 _value) external returns (bool);
     function totalSupply() external view returns (uint256);
     function totalAssets() external view returns (uint256);
+    function burnSharesForWithdrawalQueue(uint256 _shares) external;
 }

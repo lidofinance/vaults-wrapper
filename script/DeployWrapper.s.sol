@@ -6,6 +6,7 @@ import {Factory} from "src/Factory.sol";
 import {WrapperBase} from "src/WrapperBase.sol";
 import {WrapperC} from "src/WrapperC.sol";
 import {IStETH} from "src/interfaces/IStETH.sol";
+import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
 
 contract DeployWrapper is Script {
     struct WrapperParams {
@@ -60,9 +61,20 @@ contract DeployWrapper is Script {
     }
 
     function run() external {
-        string memory factoryJsonPath = vm.envOr("FACTORY_JSON", string("deployments/wrapper-local.json"));
-        string memory paramsJsonPath = vm.envOr("WRAPPER_PARAMS_JSON", string("script/deploy-local-config.json"));
-        string memory outputJsonPath = vm.envOr("OUTPUT_INSTANCE_JSON", string("deployments/wrapper-instance.json"));
+        string memory factoryJsonPath = vm.envString("FACTORY_DEPLOYED_JSON");
+        string memory paramsJsonPath = vm.envString("WRAPPER_PARAMS_JSON");
+        string memory outputJsonPath = vm.envString("WRAPPER_DEPLOYED_JSON");
+
+        require(bytes(factoryJsonPath).length != 0, "FACTORY_DEPLOYED_JSON env var must be set and non-empty");
+        require(bytes(paramsJsonPath).length != 0, "WRAPPER_PARAMS_JSON env var must be set and non-empty");
+        require(bytes(outputJsonPath).length != 0, "WRAPPER_DEPLOYED_JSON env var must be set and non-empty");
+
+        if (!vm.isFile(factoryJsonPath)) {
+            revert(string(abi.encodePacked("FACTORY_DEPLOYED_JSON file does not exist at: ", factoryJsonPath)));
+        }
+        if (!vm.isFile(paramsJsonPath)) {
+            revert(string(abi.encodePacked("WRAPPER_PARAMS_JSON file does not exist at: ", paramsJsonPath)));
+        }
 
         address factoryAddr = _readFactoryAddress(factoryJsonPath);
         WrapperParams memory p = _readWrapperParams(paramsJsonPath);
@@ -81,6 +93,8 @@ contract DeployWrapper is Script {
         address dashboard;
         address payable wrapperProxy;
         address withdrawalQueueProxy;
+        address wrapperImpl;
+        address withdrawalQueueImpl;
         address strategy = address(0);
 
         if (p.wrapperType == uint256(Factory.WrapperType.NO_MINTING_NO_STRATEGY)) {
@@ -137,14 +151,111 @@ contract DeployWrapper is Script {
 
         vm.stopBroadcast();
 
+        // Read implementation addresses from proxies (OssifiableProxy exposes proxy__getImplementation())
+        (bool okW, bytes memory retW) = wrapperProxy.staticcall(abi.encodeWithSignature("proxy__getImplementation()"));
+        if (okW && retW.length >= 32) {
+            wrapperImpl = abi.decode(retW, (address));
+        }
+        (bool okQ, bytes memory retQ) = payable(withdrawalQueueProxy).staticcall(abi.encodeWithSignature("proxy__getImplementation()"));
+        if (okQ && retQ.length >= 32) {
+            withdrawalQueueImpl = abi.decode(retQ, (address));
+        }
+
         // write artifact
         string memory out = vm.serializeAddress("wrapper", "factory", factoryAddr);
         out = vm.serializeAddress("wrapper", "vault", vault);
         out = vm.serializeAddress("wrapper", "dashboard", dashboard);
         out = vm.serializeAddress("wrapper", "wrapperProxy", wrapperProxy);
+        out = vm.serializeAddress("wrapper", "wrapperImpl", wrapperImpl);
         out = vm.serializeAddress("wrapper", "withdrawalQueue", withdrawalQueueProxy);
+        out = vm.serializeAddress("wrapper", "withdrawalQueueImpl", withdrawalQueueImpl);
         out = vm.serializeUint("wrapper", "wrapperType", p.wrapperType);
         out = vm.serializeAddress("wrapper", "strategy", strategy);
+
+        // ------------------------------------------------------------------------------------
+        // Compute and save ABI-encoded constructor args for contract verification
+        // ------------------------------------------------------------------------------------
+        // Proxy constructor args: (address implementation, address admin, bytes data)
+        bytes memory wrapperProxyCtorArgs = abi.encode(
+            factoryView.DUMMY_IMPLEMENTATION(),
+            factoryAddr,
+            bytes("")
+        );
+        out = vm.serializeBytes("wrapper", "wrapperProxyCtorArgs", wrapperProxyCtorArgs);
+
+        // WithdrawalQueue proxy constructor args: (impl, admin, abi.encodeCall(WithdrawalQueue.initialize, (...)))
+        bytes memory wqInitData = abi.encodeCall(WithdrawalQueue.initialize, (p.nodeOperator, p.nodeOperator));
+        bytes memory withdrawalQueueProxyCtorArgs = abi.encode(
+            withdrawalQueueImpl,
+            factoryAddr,
+            wqInitData
+        );
+        out = vm.serializeBytes("wrapper", "withdrawalQueueProxyCtorArgs", withdrawalQueueProxyCtorArgs);
+
+        // Wrapper implementation constructor args depend on wrapper type
+        bytes memory wrapperImplCtorArgs;
+        if (p.wrapperType == uint256(Factory.WrapperType.NO_MINTING_NO_STRATEGY)) {
+            wrapperImplCtorArgs = abi.encode(
+                dashboard,
+                p.allowlistEnabled,
+                withdrawalQueueProxy
+            );
+        } else if (p.wrapperType == uint256(Factory.WrapperType.MINTING_NO_STRATEGY)) {
+            wrapperImplCtorArgs = abi.encode(
+                dashboard,
+                stethAddr,
+                p.allowlistEnabled,
+                p.reserveRatioGapBP,
+                withdrawalQueueProxy
+            );
+        } else if (p.wrapperType == uint256(Factory.WrapperType.LOOP_STRATEGY)) {
+            wrapperImplCtorArgs = abi.encode(
+                dashboard,
+                stethAddr,
+                p.allowlistEnabled,
+                strategy, // loop strategy addr
+                p.reserveRatioGapBP,
+                withdrawalQueueProxy
+            );
+        } else if (p.wrapperType == uint256(Factory.WrapperType.GGV_STRATEGY)) {
+            wrapperImplCtorArgs = abi.encode(
+                dashboard,
+                stethAddr,
+                p.allowlistEnabled,
+                strategy, // ggv strategy addr
+                p.reserveRatioGapBP,
+                withdrawalQueueProxy
+            );
+        }
+        out = vm.serializeBytes("wrapper", "wrapperImplCtorArgs", wrapperImplCtorArgs);
+
+        // WithdrawalQueue implementation constructor args: (wrapper, lazyOracle, maxFinalizationTime)
+        bytes memory withdrawalQueueImplCtorArgs = abi.encode(
+            wrapperProxy,
+            factoryView.LAZY_ORACLE(),
+            p.maxFinalizationTime
+        );
+        out = vm.serializeBytes("wrapper", "withdrawalQueueImplCtorArgs", withdrawalQueueImplCtorArgs);
+
+        // Strategy constructor args (if any)
+        if (strategy != address(0)) {
+            // Try reading STRATEGY_PROXY_IMPL via a staticcall to avoid importing the type
+            address wstethAddr = factoryView.WSTETH();
+            address strategyProxyImpl = address(0);
+            (bool okSpi, bytes memory retSpi) = strategy.staticcall(abi.encodeWithSignature("STRATEGY_PROXY_IMPL()"));
+            if (okSpi && retSpi.length >= 32) {
+                strategyProxyImpl = abi.decode(retSpi, (address));
+            }
+            bytes memory strategyCtorArgs = abi.encode(
+                strategyProxyImpl,
+                wrapperProxy,
+                stethAddr,
+                wstethAddr,
+                p.teller,
+                p.boringQueue
+            );
+            out = vm.serializeBytes("wrapper", "strategyCtorArgs", strategyCtorArgs);
+        }
         vm.writeJson(out, outputJsonPath);
 
         console2.log("Wrapper deployed: vault", vault);
