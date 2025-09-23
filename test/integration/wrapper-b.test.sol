@@ -10,6 +10,7 @@ import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
 import {Factory} from "src/Factory.sol";
 import {WrapperA} from "src/WrapperA.sol";
 import {WrapperB} from "src/WrapperB.sol";
+import {IVaultHub} from "src/interfaces/IVaultHub.sol";
 
 /**
  * @title WrapperBTest
@@ -19,6 +20,30 @@ contract WrapperBTest is WrapperBHarness {
 
     function setUp() public {
         _initializeCore();
+    }
+
+    function _ensureFreshness(WrapperContext memory ctx) internal {
+        // Ensure VaultHub record timestamp is set
+        uint256 recTs = IVaultHub(address(ctx.dashboard.VAULT_HUB())).vaultRecord(address(ctx.vault)).report.timestamp;
+        if (recTs == 0) {
+            core.applyVaultReport(address(ctx.vault), ctx.dashboard.totalValue(), 0, ctx.dashboard.liabilityShares(), 0, false);
+            recTs = IVaultHub(address(ctx.dashboard.VAULT_HUB())).vaultRecord(address(ctx.vault)).report.timestamp;
+        }
+
+        // Make LazyOracle.latestReportTimestamp equal to the record timestamp to satisfy _isReportFresh logic
+        vm.warp(recTs + 1);
+        vm.mockCall(
+            address(core.lazyOracle()),
+            abi.encodeWithSignature("latestReportTimestamp()"),
+            abi.encode(recTs)
+        );
+
+        // Also return true from VaultHub.isReportFresh for the specific vault used in this test context
+        vm.mockCall(
+            address(core.vaultHub()),
+            abi.encodeWithSignature("isReportFresh(address)", address(ctx.vault)),
+            abi.encode(true)
+        );
     }
 
     function test_single_user_mints_full_in_one_step() public {
@@ -48,8 +73,13 @@ contract WrapperBTest is WrapperBHarness {
         // Step 2: User mints all available stETH shares in one step
         //
 
+        _ensureFreshness(ctx);
+
         vm.prank(USER1);
         wrapperB(ctx).mintStethShares(user1ExpectedMintableStethShares);
+
+        vm.clearMockedCalls();
+
 
         // _assertUniversalInvariants("Step 2", ctx);
 
@@ -90,6 +120,7 @@ contract WrapperBTest is WrapperBHarness {
 
         uint256 user1StSharesPart1 = user1ExpectedMintableStethShares / 3;
 
+        _ensureFreshness(ctx);
         vm.prank(USER1);
         wrapperB(ctx).mintStethShares(user1StSharesPart1);
 
@@ -108,6 +139,7 @@ contract WrapperBTest is WrapperBHarness {
         // Step 3
         //
 
+        _ensureFreshness(ctx);
         vm.prank(USER1);
         wrapperB(ctx).mintStethShares(user1StSharesPart2);
 
@@ -161,6 +193,7 @@ contract WrapperBTest is WrapperBHarness {
 
         uint256 user1StSharesPart1 = user1ExpectedMintableStethShares / 3;
 
+        _ensureFreshness(ctx);
         vm.prank(USER1);
         wrapperB(ctx).mintStethShares(user1StSharesPart1);
 
@@ -177,6 +210,7 @@ contract WrapperBTest is WrapperBHarness {
 
         uint256 user2StSharesPart1 = user2ExpectedMintableStethShares / 3;
 
+        _ensureFreshness(ctx);
         vm.prank(USER2);
         wrapperB(ctx).mintStethShares(user2StSharesPart1);
 
@@ -193,6 +227,7 @@ contract WrapperBTest is WrapperBHarness {
 
         uint256 user1StSharesPart2 = user1ExpectedMintableStethShares - user1StSharesPart1;
 
+        _ensureFreshness(ctx);
         vm.prank(USER1);
         wrapperB(ctx).mintStethShares(user1StSharesPart2);
 
@@ -209,6 +244,7 @@ contract WrapperBTest is WrapperBHarness {
 
         uint256 user2StSharesPart2 = user2ExpectedMintableStethShares - user2StSharesPart1;
 
+        _ensureFreshness(ctx);
         vm.prank(USER2);
         wrapperB(ctx).mintStethShares(user2StSharesPart2);
 
@@ -234,6 +270,7 @@ contract WrapperBTest is WrapperBHarness {
         //
 
         uint256 user1Deposit = 200 ether;
+        _ensureFreshness(ctx);
         vm.prank(USER1);
         wrapperB(ctx).depositETH{value: user1Deposit}(USER1, address(0));
 
@@ -247,6 +284,7 @@ contract WrapperBTest is WrapperBHarness {
         reportVaultValueChangeNoFees(ctx, 100_00 - 100); // 99%
 
         uint256 user2Deposit = 10_000 wei;
+        _ensureFreshness(ctx);
         vm.prank(USER2);
         wrapperB(ctx).depositETH{value: user2Deposit}(USER2, address(0), 0);
 
@@ -266,6 +304,7 @@ contract WrapperBTest is WrapperBHarness {
         // Step 1: User1 deposits
         //
         uint256 user1Deposit = 10_000 wei;
+        _ensureFreshness(ctx);
         vm.prank(USER1);
         w.depositETH{value: user1Deposit}(USER1, address(0));
 
@@ -277,6 +316,7 @@ contract WrapperBTest is WrapperBHarness {
         // assertGt(ctx.dashboard.remainingMintingCapacityShares(0), 0, "Remaining minting capacity should be greater than 0");
 
         reportVaultValueChangeNoFees(ctx, 100_00 + 100); // +1%
+        _ensureFreshness(ctx);
         uint256 user1Rewards = user1Deposit * 100 / 10000;
         assertEq(w.previewRedeem(w.balanceOf(USER1)), user1Deposit + user1Rewards, "USER1 previewRedeem should be equal to user1Deposit + user1Rewards");
 

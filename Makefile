@@ -13,7 +13,8 @@ test-integration:
 	FOUNDRY_PROFILE=test CORE_DEPLOYED_JSON="$$CORE_DEPLOYED_JSON" forge test test/integration/**/*.test.sol -$(VERBOSITY) --fork-url "$$RPC_URL"
 
 test-integration-debug:
-	FOUNDRY_PROFILE=test forge test --match-test $(DEBUG_TEST) -$(VERBOSITY) --fork-url $(RPC_URL)
+	. .env 2>/dev/null || true; \
+	FOUNDRY_PROFILE=test CORE_DEPLOYED_JSON="$$CORE_DEPLOYED_JSON" forge test --match-test $(DEBUG_TEST) -$(VERBOSITY) --fork-url $${RPC_URL}
 	# FOUNDRY_PROFILE=test forge test test/integration/**/*.test.sol -vv --fork-url $(RPC_URL)
 
 test-unit:
@@ -184,6 +185,14 @@ start-fork:
 
 start-fork-no-size-limit:
 	anvil --chain-id 1 --auto-impersonate --port $(CORE_RPC_PORT) --disable-code-size-limit
+
+start-fork-from-rpc:
+	. .env 2>/dev/null || true; \
+	if [ -z "$$RPC_URL_TO_FORK" ]; then \
+		echo "RPC_URL_TO_FORK must be set"; \
+		exit 1; \
+	fi; \
+	anvil --fork-url "$$RPC_URL_TO_FORK" --auto-impersonate --port $(CORE_RPC_PORT)
 
 core-save-patch:
 	cd $(CORE_SUBDIR) && \
