@@ -1,16 +1,14 @@
-// SPDX-FileCopyrightText: 2025 Lido <info@lido.fi>
 // SPDX-License-Identifier: MIT
 pragma solidity >=0.8.25;
 
 import {AccessControlEnumerableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/extensions/AccessControlEnumerableUpgradeable.sol";
 import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
+import {ERC1967Utils} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Utils.sol";
 import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import {WrapperBase} from "./WrapperBase.sol";
 import {IDashboard} from "./interfaces/IDashboard.sol";
 import {IVaultHub} from "./interfaces/IVaultHub.sol";
 import {ILazyOracle} from "./interfaces/ILazyOracle.sol";
-import {console} from "forge-std/console.sol";
-
 
 /// @title Withdrawal Queue V3 for Staking Vault Wrapper
 /// @notice Handles withdrawal requests for stvToken holders
@@ -120,6 +118,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
         uint256 timestamp
     );
     event EmergencyExitActivated(uint256 timestamp);
+    event ImplementationUpgraded(address newImplementation);
 
     error ZeroAddress();
     error OnlyWrapperCan();
@@ -140,8 +139,8 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
     error InvalidEmergencyExitActivation();
     error NoRequestsToFinalize();
 
-    constructor(WrapperBase _wrapper, address _lazyOracle, uint256 _maxAcceptableWQFinalizationTimeInSeconds) {
-        WRAPPER = _wrapper;
+    constructor(address _wrapper, address _lazyOracle, uint256 _maxAcceptableWQFinalizationTimeInSeconds) {
+        WRAPPER = WrapperBase(payable(_wrapper));
         LAZY_ORACLE = ILazyOracle(_lazyOracle);
         MAX_ACCEPTABLE_WQ_FINALIZATION_TIME_IN_SECONDS = _maxAcceptableWQFinalizationTimeInSeconds;
 
@@ -226,7 +225,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
         if (!isEmergencyExitActivated()) {
             _requireNotPaused();
         }
-        
+
         IDashboard dashboard = IDashboard(WRAPPER.DASHBOARD());
         IVaultHub vaultHub = IVaultHub(dashboard.VAULT_HUB());
         if (!vaultHub.isReportFresh(WRAPPER.STAKING_VAULT())) revert ReportStale();
@@ -287,7 +286,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
             _requireNotPaused();
             _checkRole(FINALIZE_ROLE, msg.sender);
         }
-        
+
         // check report freshness
         IDashboard dashboard = IDashboard(WRAPPER.DASHBOARD());
         IVaultHub vaultHub = IVaultHub(dashboard.VAULT_HUB());
@@ -321,10 +320,10 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
                 eth = (shares * currentShareRate) / E27_PRECISION_BASE;
             }
 
-            
+
             if (
                 // stop if insufficient ETH to cover this request
-                eth > withdrawableValue || 
+                eth > withdrawableValue ||
                 // stop if not enough time has passed since the request was created
                 request.timestamp + MIN_WITHDRAWAL_DELAY_TIME_IN_SECONDS > block.timestamp ||
                 // stop if the request was created after the latest report was published, at least one oracle report is required
@@ -337,7 +336,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
             totalEthToFinalize += eth;
             totalSharesToBurn += shares;
             finalizedRequests++;
-        }        
+        }
 
         dashboard.withdraw(address(this), totalEthToFinalize);
         WRAPPER.burnSharesForWithdrawalQueue(totalSharesToBurn);
@@ -532,7 +531,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
     /// @notice Returns all withdrawal requests that belong to the `_owner` address
     /// @param _owner address to get requests for
     /// @return requestIds array of request ids
-    /// 
+    ///
     /// WARNING: This operation will copy the entire storage to memory, which can be quite expensive. This is designed
     /// to mostly be used by view accessors that are queried without any gas fees. Developers should keep in mind that
     /// this function has an unbounded cost, and using it as part of a state-changing function may render the function
@@ -547,7 +546,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
     /// @param _start start index
     /// @param _end end index
     /// @return requestIds array of request ids
-    /// 
+    ///
     /// WARNING: This operation will copy the entire storage to memory, which can be quite expensive. This is designed
     /// to mostly be used by view accessors that are queried without any gas fees. Developers should keep in mind that
     /// this function has an unbounded cost, and using it as part of a state-changing function may render the function
@@ -643,6 +642,15 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
     /// @notice Returns the last checkpoint index
     function getLastCheckpointIndex() public view returns (uint256) {
         return _getWithdrawalQueueStorage().lastCheckpointIndex;
+    }
+
+    /// @notice enacts implementation upgrade
+    /// @param newImplementation address of the new implementation contract
+    /// @dev can only be called by the WRAPPER
+    function upgradeTo(address newImplementation) external {
+        if (msg.sender != address(WRAPPER)) revert OnlyWrapperCan();
+        ERC1967Utils.upgradeToAndCall(newImplementation, new bytes(0));
+        emit ImplementationUpgraded(newImplementation);
     }
 
     /// @notice Receive ETH

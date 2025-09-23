@@ -52,7 +52,7 @@ interface IVaultHub is IAccessControl {
         uint96 liabilityShares;
         // ### 3rd and 4th slots
         /// @notice inOutDelta of the vault (all deposits - all withdrawals)
-        DoubleRefSlotCache.Int104WithCache[DOUBLE_CACHE_LENGTH] inOutDelta;
+        Int104WithCache[2] inOutDelta; // 2 is the constant DOUBLE_CACHE_LENGTH from RefSlotCache.sol
         // ### 5th slot
         /// @notice the minimal value that the reserve part of the locked can be
         uint128 minimalReserve;
@@ -74,6 +74,13 @@ interface IVaultHub is IAccessControl {
         uint48 timestamp;
     }
 
+    struct Int104WithCache {
+        int104 value;
+        int104 valueOnRefSlot;
+        uint48 refSlot;
+    }
+
+
     function CONNECT_DEPOSIT() external view returns (uint256);
 
     function fund(address vault) external payable;
@@ -92,7 +99,6 @@ interface IVaultHub is IAccessControl {
     function vaultRecord(address _vault) external view returns (VaultRecord memory);
     function maxLockableValue(address _vault) external view returns (uint256);
     function isReportFresh(address _vault) external view returns (bool);
-
     function transferVaultOwnership(address _vault, address _newOwner) external;
 
     function applyVaultReport(

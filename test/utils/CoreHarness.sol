@@ -12,7 +12,7 @@ import {IDashboard} from "src/interfaces/IDashboard.sol";
 import {IVaultHub as IVaultHubIntact} from "src/interfaces/IVaultHub.sol";
 import {IVaultFactory} from "src/interfaces/IVaultFactory.sol";
 import {IStakingVault} from "src/interfaces/IStakingVault.sol";
-
+import {IWstETH} from "../../src/interfaces/IWstETH.sol";
 
 interface IHashConsensus {
     function updateInitialEpoch(uint256 initialEpoch) external;
@@ -30,23 +30,24 @@ interface IVaultHub is IVaultHubIntact {
 }
 
 interface ILazyOracleMocked is ILazyOracle {
-    function updateReportData(
-        uint256 _vaultsDataTimestamp,
-        uint256 _vaultsDataRefSlot,
-        bytes32 _vaultsDataTreeRoot,
-        string memory _vaultsDataReportCid
-    ) external;
-    function mock__updateVaultData(address _vault, uint256 _totalValue, uint256 _cumulativeLidoFees, uint256 _liabilityShares, uint256 _maxLiabilityShares, uint256 _slashingReserve) external;
+        function mock__updateVaultData(
+        address _vault,
+        uint256 _totalValue,
+        uint256 _cumulativeLidoFees,
+        uint256 _liabilityShares,
+        uint256 _maxLiabilityShares,
+        uint256 _slashingReserve) external;
 }
 
 contract CoreHarness is Test {
     ILidoLocator public locator;
     IDashboard public dashboard;
     ILido public steth;
+    IWstETH public wsteth;
     IVaultHub public vaultHub;
     ILazyOracleMocked public lazyOracle;
 
-    uint256 public constant INITIAL_LIDO_SUBMISSION = 1_000_000 ether;
+    uint256 public constant INITIAL_LIDO_SUBMISSION = 15_000 ether;
     uint256 public constant CONNECT_DEPOSIT = 1 ether;
     uint256 public constant LIDO_TOTAL_BASIS_POINTS = 10000;
     uint256 public constant NODE_OPERATOR_FEE_RATE = 1_00; // 1% in basis points
@@ -78,11 +79,16 @@ contract CoreHarness is Test {
         steth = ILido(locator.lido());
         vm.label(address(steth), "Lido");
 
+        wsteth = IWstETH(locator.wstETH());
+        vm.label(address(wsteth), "WstETH");
+
         vm.prank(agent);
         steth.setMaxExternalRatioBP(LIDO_TOTAL_BASIS_POINTS);
 
-        vm.prank(agent);
-        steth.resume();
+        if (steth.isStopped()) {
+            vm.prank(agent);
+            steth.resume();
+        }
 
         // Need some ether in Lido to pass ShareLimitTooHigh check upon vault creation/connection
         steth.submit{value: INITIAL_LIDO_SUBMISSION}(address(this));
@@ -103,17 +109,7 @@ contract CoreHarness is Test {
         vm.label(address(dashboard), "Dashboard");
     }
 
-    function applyVaultReport(
-        address _stakingVault,
-        uint256 _totalValue,
-        uint256 _cumulativeLidoFees,
-        uint256 _liabilityShares,
-        uint256 _maxLiabilityShares,
-        uint256 _slashingReserve,
-        bool _onlyUpdateReportData
-    ) public {
-        uint256 reportTimestamp = block.timestamp;
-        uint256 refSlot = block.timestamp / 12; // Simulate a slot number based on timestamp (12 second slots)
+    function applyVaultReport(address _stakingVault, uint256 _totalValue, uint256 _cumulativeLidoFees, uint256 _liabilityShares, uint256 _slashingReserve, bool _onlyUpdateReportData) public {
         bytes32 treeRoot = bytes32(0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef);
         string memory reportCid = "dummy-cid";
 
@@ -126,15 +122,19 @@ contract CoreHarness is Test {
 
         vm.warp(block.timestamp + 1 minutes);
 
+        // Compute report time and ref slot AFTER advancing time to keep it fresh
+        uint256 reportTimestamp = block.timestamp;
+        uint256 refSlot = block.timestamp / 12; // Simulate a slot number based on timestamp (12 second slots)
+
         // Update report data with current timestamp to make it fresh
-        vm.startPrank(locator.accountingOracle());
+        vm.prank(locator.accountingOracle());
         lazyOracle.updateReportData(reportTimestamp, refSlot, treeRoot, reportCid);
-        vm.stopPrank();
 
         // TODO: remove _onlyUpdateReportData flag
         if (!_onlyUpdateReportData) {
+            uint256 maxLiabilityShares = vaultHub.vaultRecord(_stakingVault).maxLiabilityShares;
             console.log("Calling mock__updateVaultData with totalValue:", _totalValue);
-            lazyOracle.mock__updateVaultData(_stakingVault, _totalValue, _cumulativeLidoFees, _liabilityShares, _maxLiabilityShares, _slashingReserve);
+            lazyOracle.mock__updateVaultData(_stakingVault, _totalValue, _cumulativeLidoFees, _liabilityShares, maxLiabilityShares, _slashingReserve);
             console.log("After mock__updateVaultData, totalValue from vaultHub:", vaultHub.totalValue(_stakingVault));
         }
 

@@ -12,10 +12,11 @@ import {WithdrawalQueue} from "./WithdrawalQueue.sol";
 import {IVaultHub} from "./interfaces/IVaultHub.sol";
 import {IDashboard} from "./interfaces/IDashboard.sol";
 import {AllowList} from "./AllowList.sol";
+import {ProposalUpgradable} from "./ProposalUpgradable.sol";
 
 // TODO: move whitelist to a separate contract
 // TODO: likely we can get rid of the base and move all to WrapperA
-abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList {
+abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, ProposalUpgradable {
     using EnumerableSet for EnumerableSet.UintSet;
 
     // Custom errors
@@ -28,8 +29,10 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList {
     error NotWithdrawalQueue();
     error InvalidRequestType();
 
-    bytes32 public constant REQUEST_VALIDATOR_EXIT_ROLE = keccak256("REQUEST_VALIDATOR_EXIT_ROLE");
-    bytes32 public constant TRIGGER_VALIDATOR_WITHDRAWAL_ROLE = keccak256("TRIGGER_VALIDATOR_WITHDRAWAL_ROLE");
+    // keccak256("REQUEST_VALIDATOR_EXIT_ROLE")
+    bytes32 public immutable REQUEST_VALIDATOR_EXIT_ROLE = 0x2bbd6da7b06270fd63c039b4a14614f791d085d02c5a2e297591df95b05e4185;
+
+    bytes32 public immutable TRIGGER_VALIDATOR_WITHDRAWAL_ROLE = keccak256("TRIGGER_VALIDATOR_WITHDRAWAL_ROLE");
 
     uint256 public immutable DECIMALS = 27;
     uint256 public immutable ASSET_DECIMALS = 18;
@@ -40,6 +43,8 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList {
     IVaultHub public immutable VAULT_HUB;
     address public immutable STAKING_VAULT;
 
+    WithdrawalQueue public immutable WITHDRAWAL_QUEUE;
+
     enum WithdrawalType {
         WITHDRAWAL_QUEUE,
         STRATEGY
@@ -49,11 +54,12 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList {
         uint256 requestId;
         WithdrawalType requestType;
         address owner;
+        uint40 timestamp;
+        uint256 amount;
     }
 
     /// @custom:storage-location erc7201:wrapper.base.storage
     struct WrapperBaseStorage {
-        WithdrawalQueue withdrawalQueue;
         bool vaultDisconnected;
 
         WithdrawalRequest[] withdrawalRequests;
@@ -69,8 +75,8 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList {
         }
     }
 
-    function withdrawalQueue() public view returns (WithdrawalQueue) {
-        return _getWrapperBaseStorage().withdrawalQueue;
+    function withdrawalQueue() public view override returns (WithdrawalQueue)  {
+        return WITHDRAWAL_QUEUE;
     }
 
     function vaultDisconnected() public view returns (bool) {
@@ -91,19 +97,27 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList {
     event VaultDisconnected(address indexed initiator);
     event ConnectDepositClaimed(address indexed recipient, uint256 amount);
     event WithdrawalClaimed(
-        uint256 indexed requestId,
+        uint256 requestId,
         address indexed owner,
         address indexed receiver,
         uint256 amountOfETH
     );
+    event WithdrawalRequestCreated(
+        uint256 requestId,
+        address indexed user,
+        uint256 amount,
+        WithdrawalType requestType
+    );
 
     constructor(
         address _dashboard,
-        bool _allowListEnabled
+        bool _allowListEnabled,
+        address _withdrawalQueue
     ) AllowList(_allowListEnabled) {
         DASHBOARD = IDashboard(payable(_dashboard));
         VAULT_HUB = IVaultHub(DASHBOARD.VAULT_HUB());
         STAKING_VAULT = address(DASHBOARD.stakingVault());
+        WITHDRAWAL_QUEUE = WithdrawalQueue(payable(_withdrawalQueue));
 
         // Disable initializers since we only support proxy deployment
         _disableInitializers();
@@ -111,6 +125,7 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList {
 
     function initialize(
         address _owner,
+        address _upgradeConformer,
         string memory _name,
         string memory _symbol
     ) public virtual initializer {
@@ -119,6 +134,7 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList {
 
         _grantRole(DEFAULT_ADMIN_ROLE, _owner);
         _initializeAllowList(_owner);
+        _initializeProposalUpgradable(_owner, _upgradeConformer);
 
         // Initial vault balance must include the connect deposit
         // Minting shares for it to have clear shares math
@@ -171,13 +187,13 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList {
     }
 
     // TODO: get rid of this in favor of previewRedeem?
-    // function previewWithdraw(uint256 _assets) public view returns (uint256) {
-    //     uint256 supply = totalSupply();
-    //     if (supply == 0) {
-    //         return 0;
-    //     }
-    //     return Math.mulDiv(_assets, totalAssets(), supply, Math.Rounding.Ceil);
-    // }
+    function previewWithdraw(uint256 _assets) public view returns (uint256) {
+        uint256 supply = totalSupply();
+        if (supply == 0) {
+            return 0;
+        }
+        return Math.mulDiv(_assets, supply, totalAssets(), Math.Rounding.Ceil);
+    }
 
     function previewRedeem(uint256 _shares) external view returns (uint256) {
         return _convertToAssets(_shares);
@@ -230,7 +246,7 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList {
      * @param _recipient The address to receive the claimed ether
      */
     function claimWithdrawal(uint256 _requestId, address _recipient) external virtual {
-        WithdrawalQueue wq = withdrawalQueue();
+        WithdrawalQueue wq = WITHDRAWAL_QUEUE;
         WithdrawalQueue.WithdrawalRequestStatus memory status = wq.getWithdrawalStatus(_requestId);
 
         if (msg.sender != status.owner) revert NotOwner(msg.sender, status.owner);
@@ -242,14 +258,11 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList {
     }
 
     function burnSharesForWithdrawalQueue(uint256 _shares) external {
-        if (msg.sender != address(withdrawalQueue())) revert NotWithdrawalQueue();
+        if (msg.sender != address(WITHDRAWAL_QUEUE)) revert NotWithdrawalQueue();
         _burn(msg.sender, _shares);
     }
 
-    // TODO: remove this function
-    function setWithdrawalQueue(address _withdrawalQueue) external {
-        _getWrapperBaseStorage().withdrawalQueue = WithdrawalQueue(payable(_withdrawalQueue));
-    }
+    // withdrawal queue is immutable and set in constructor
 
     /// @notice Returns all withdrawal requests that belong to the `_owner` address
     /// @param _owner address to get requests for
@@ -275,6 +288,31 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList {
     function getWithdrawalRequestsLength(address _owner) external view returns (uint256) {
         WrapperBaseStorage storage $ = _getWrapperBaseStorage();
         return $.requestsByOwner[_owner].length();
+    }
+
+    function getWithdrawalRequest(uint256 requestId) external view returns(WithdrawalRequest memory) {
+        return _getWrapperBaseStorage().withdrawalRequests[requestId];
+    }
+
+    function _addWithdrawalRequest(
+        address _owner,
+        uint256 _ethAmount,
+        WithdrawalType _type
+    ) internal returns(uint256 requestId) {
+        WrapperBaseStorage storage $ = _getWrapperBaseStorage();
+        requestId = $.withdrawalRequests.length;
+        WithdrawalRequest memory request = WithdrawalRequest({
+            requestId: requestId,
+            requestType: _type,
+            owner: _owner,
+            timestamp: uint40(block.timestamp),
+            amount: _ethAmount
+        });
+
+        $.withdrawalRequests.push(request);
+        $.requestsByOwner[_owner].add(requestId);
+
+        emit WithdrawalRequestCreated(requestId,_owner, _ethAmount, request.requestType);
     }
 
     // =================================================================================
@@ -352,10 +390,8 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList {
 
     /// @notice Modifier to check role or Emergency Exit
     function _checkOnlyRoleOrEmergencyExit(bytes32 _role) internal view {
-        if (!_getWrapperBaseStorage().withdrawalQueue.isEmergencyExitActivated()) {
+        if (!WITHDRAWAL_QUEUE.isEmergencyExitActivated()) {
             _checkRole(_role, msg.sender);
         }
     }
-
-
 }

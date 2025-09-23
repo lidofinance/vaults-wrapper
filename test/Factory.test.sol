@@ -4,6 +4,13 @@ pragma solidity >=0.8.25;
 import {Test} from "forge-std/Test.sol";
 
 import {Factory} from "../src/Factory.sol";
+import {WrapperAFactory} from "src/factories/WrapperAFactory.sol";
+import {WrapperBFactory} from "src/factories/WrapperBFactory.sol";
+import {WrapperCFactory} from "src/factories/WrapperCFactory.sol";
+import {WithdrawalQueueFactory} from "src/factories/WithdrawalQueueFactory.sol";
+import {DummyImplementation} from "src/proxy/DummyImplementation.sol";
+import {LoopStrategyFactory} from "src/factories/LoopStrategyFactory.sol";
+import {GGVStrategyFactory} from "src/factories/GGVStrategyFactory.sol";
 import {WrapperBase} from "../src/WrapperBase.sol";
 import {WrapperA} from "../src/WrapperA.sol";
 import {WrapperC} from "../src/WrapperC.sol";
@@ -14,6 +21,7 @@ import {MockERC20} from "./mocks/MockERC20.sol";
 import {MockVaultHub} from "./mocks/MockVaultHub.sol";
 import {MockDashboard} from "./mocks/MockDashboard.sol";
 import {MockVaultFactory} from "./mocks/MockVaultFactory.sol";
+import {MockLazyOracle} from "./mocks/MockLazyOracle.sol";
 
 contract FactoryTest is Test {
     Factory public WrapperFactory;
@@ -21,6 +29,8 @@ contract FactoryTest is Test {
     MockVaultHub public vaultHub;
     MockVaultFactory public vaultFactory;
     MockERC20 public stETH;
+    MockERC20 public wstETH;
+    MockLazyOracle public lazyOracle;
 
     address public admin = address(0x1);
     address public nodeOperator = address(0x2);
@@ -47,8 +57,34 @@ contract FactoryTest is Test {
         stETH = new MockERC20("Staked Ether", "stETH");
         vm.label(address(stETH), "stETH");
 
-        // Deploy the Factory contract
-        WrapperFactory = new Factory(address(vaultFactory), address(stETH));
+        wstETH = new MockERC20("Wrapped Staked Ether", "wstETH");
+        vm.label(address(wstETH), "wstETH");
+
+        lazyOracle = new MockLazyOracle();
+
+        // Deploy dedicated implementation factories and the main Factory
+        WrapperAFactory waf = new WrapperAFactory();
+        WrapperBFactory wbf = new WrapperBFactory();
+        WrapperCFactory wcf = new WrapperCFactory();
+        WithdrawalQueueFactory wqf = new WithdrawalQueueFactory();
+        LoopStrategyFactory lsf = new LoopStrategyFactory();
+        GGVStrategyFactory ggvf = new GGVStrategyFactory();
+        address dummy = address(new DummyImplementation());
+
+        Factory.WrapperConfig memory a = Factory.WrapperConfig({
+            vaultFactory: address(vaultFactory),
+            steth: address(stETH),
+            wsteth: address(wstETH),
+            lazyOracle: address(lazyOracle),
+            wrapperAFactory: address(waf),
+            wrapperBFactory: address(wbf),
+            wrapperCFactory: address(wcf),
+            withdrawalQueueFactory: address(wqf),
+            loopStrategyFactory: address(lsf),
+            ggvStrategyFactory: address(ggvf),
+            dummyImplementation: dummy
+        });
+        WrapperFactory = new Factory(a);
     }
 
     function test_canCreateWrapper() public {
@@ -58,15 +94,14 @@ contract FactoryTest is Test {
             address dashboard,
             address payable wrapperProxy,
             address withdrawalQueueProxy
-        ) = WrapperFactory.createVaultWithWrapper{value: connectDeposit}(
+        ) = WrapperFactory.createVaultWithNoMintingNoStrategy{value: connectDeposit}(
                 nodeOperator,
                 nodeOperatorManager,
+                nodeOperator,
                 100, // 1% fee
                 3600, // 1 hour confirm expiry
-                Factory.WrapperConfiguration.NO_MINTING_NO_STRATEGY,
-                address(0), // no strategy for this test
-                false, // allowlist disabled
-                0 // reserve ratio gap
+                30 days,
+                false // allowlist disabled
             );
 
         WrapperBase wrapper = WrapperBase(wrapperProxy);
@@ -74,7 +109,7 @@ contract FactoryTest is Test {
 
         assertEq(address(wrapper.STAKING_VAULT()), address(vault));
         assertEq(address(wrapper.DASHBOARD()), address(dashboard));
-        assertEq(address(wrapper.withdrawalQueue()), address(withdrawalQueue));
+        assertEq(address(wrapper.WITHDRAWAL_QUEUE()), address(withdrawalQueue));
         // WrapperA doesn't have a STRATEGY field
 
         MockDashboard mockDashboard = MockDashboard(payable(dashboard));
@@ -97,15 +132,14 @@ contract FactoryTest is Test {
     function test_revertWithoutConnectDeposit() public {
         vm.startPrank(admin);
         vm.expectRevert("InsufficientFunds()");
-        WrapperFactory.createVaultWithWrapper(
+        WrapperFactory.createVaultWithNoMintingNoStrategy(
             nodeOperator,
             nodeOperatorManager,
+            nodeOperator,
             100, // 1% fee
             3600, // 1 hour confirm expiry
-            Factory.WrapperConfiguration.NO_MINTING_NO_STRATEGY,
-            address(0), // no strategy for this test
-            false, // allowlist disabled
-            0 // reserve ratio gap
+            30 days,
+            false // allowlist disabled
         );
     }
 
@@ -116,23 +150,24 @@ contract FactoryTest is Test {
             address dashboard,
             address payable wrapperProxy,
             address withdrawalQueueProxy
-        ) = WrapperFactory.createVaultWithWrapper{value: connectDeposit}(
+        ) = WrapperFactory.createVaultWithLoopStrategy{value: connectDeposit}(
                 nodeOperator,
                 nodeOperatorManager,
+                nodeOperator,
                 100, // 1% fee
                 3600, // 1 hour confirm expiry
-                Factory.WrapperConfiguration.MINTING_AND_STRATEGY,
-                strategyAddress, // strategy for this test
+                30 days,
                 false, // allowlist disabled
-                0 // reserve ratio gap
+                0, // reserve ratio gap
+                1 // loops
             );
 
         WrapperBase wrapper = WrapperBase(wrapperProxy);
         WithdrawalQueue withdrawalQueue = WithdrawalQueue(payable(withdrawalQueueProxy));
 
-        // Cast to WrapperC to access STRATEGY
         WrapperC wrapperC = WrapperC(payable(address(wrapper)));
-        assertEq(address(wrapperC.STRATEGY()), strategyAddress);
+        // Strategy is deployed internally for loop strategy
+        assertTrue(address(wrapperC.STRATEGY()) != address(0));
 
         MockDashboard mockDashboard = MockDashboard(payable(dashboard));
 
@@ -152,15 +187,14 @@ contract FactoryTest is Test {
             ,
             address payable wrapperProxy,
 
-        ) = WrapperFactory.createVaultWithWrapper{value: connectDeposit}(
+        ) = WrapperFactory.createVaultWithNoMintingNoStrategy{value: connectDeposit}(
                 nodeOperator,
                 nodeOperatorManager,
+                nodeOperator,
                 100, // 1% fee
                 3600, // 1 hour confirm expiry
-                Factory.WrapperConfiguration.NO_MINTING_NO_STRATEGY,
-                address(0), // no strategy
-                true, // allowlist enabled
-                0 // reserve ratio gap
+                30 days,
+                true // allowlist enabled
             );
 
         WrapperBase wrapper = WrapperBase(wrapperProxy);

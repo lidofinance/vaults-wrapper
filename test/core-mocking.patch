@@ -1,8 +1,8 @@
 diff --git a/contracts/0.8.25/vaults/LazyOracle.sol b/contracts/0.8.25/vaults/LazyOracle.sol
-index 8407d8c..c967981 100644
+index bd691bb..512c348 100644
 --- a/contracts/0.8.25/vaults/LazyOracle.sol
 +++ b/contracts/0.8.25/vaults/LazyOracle.sol
-@@ -336,6 +336,37 @@ contract LazyOracle is ILazyOracle, AccessControlEnumerableUpgradeable {
+@@ -337,6 +337,37 @@ contract LazyOracle is ILazyOracle, AccessControlEnumerableUpgradeable {
          );
      }
  
