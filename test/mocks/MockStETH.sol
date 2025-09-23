@@ -32,8 +32,24 @@ contract MockStETH is ERC20 {
             / totalShares; // denominator in shares
     }
     
-    function transferSharesFrom(address from, address to, uint256 amount) external returns (bool) { 
+    function transferSharesFrom(address from, address to, uint256 amount) external returns (bool) {
+        require(shares[from] >= amount, "Not enough shares");
+        
+        uint256 steth = getPooledEthByShares(amount);
+        uint256 allowance = allowance(from, msg.sender);
+        require(allowance >= steth, "Not enough allowance");
+        _approve(from, msg.sender, allowance - steth);
+
+
         shares[from] -= amount;
+        shares[to] += amount;
+        
+        return true;
+    }
+
+    function transferShares(address to, uint256 amount) external returns (bool) {
+        require(shares[msg.sender] >= amount, "Not enough shares");
+        shares[msg.sender] -= amount;
         shares[to] += amount;
         return true;
     }

@@ -16,8 +16,7 @@ contract GGVMockTest is Test {
 
     address public user1 = address(0x1);
     address public user2 = address(0x2);
-    address public operator = address(0x3);
-    address public admin = address(0x4);
+    address public admin = address(0x3);
 
     uint256 public constant initialBalance = 100 ether;
 
@@ -25,7 +24,6 @@ contract GGVMockTest is Test {
         vm.deal(user1, initialBalance);
         vm.deal(user2, initialBalance);
         vm.deal(admin, initialBalance);
-        vm.deal(operator, initialBalance);
 
         steth = new MockStETH();
         // give admin 10 steth for ggv rebase
@@ -44,7 +42,6 @@ contract GGVMockTest is Test {
     }
 
     function test_depositToGGV() public {
-
         vm.startPrank(user1);
         uint256 userStethShares = steth.submit{value: 1 ether}(address(0));
         assertEq(userStethShares, steth.sharesOf(user1));
@@ -56,9 +53,40 @@ contract GGVMockTest is Test {
         uint256 ggvUserAssets = vault.getAssetsByShares(ggvShares);
         vm.stopPrank();
 
-        vm.startPrank(admin); 
+        vm.startPrank(admin);
+        // add 1 steth to ggv balance for rebase     
         vault.rebase(1 ether);
         uint256 newGgvUserAssets = vault.getAssetsByShares(ggvShares);
         assertEq(newGgvUserAssets > ggvUserAssets, true);
+    }
+
+    function test_withdrawFromGGV() public {
+
+        // USER
+        vm.startPrank(user1);
+        // get steth
+        steth.submit{value: 1 ether}(address(0));
+        steth.approve(address(vault), type(uint256).max);
+        // deposit to ggv
+        uint256 userGgvShares = teller.deposit(steth, 1 ether, 0);
+        uint256 userStethSharesAfterDeposit = steth.sharesOf(user1);
+
+        // withdraw from ggv
+        GGVQueueMock.WithdrawAsset memory wa = queue.withdrawAssets(address(steth));     
+        uint256 previewAmountAssetsStethShares = queue.previewAssetsOut(address(steth), uint128(userGgvShares), wa.minDiscount);
+
+        vault.approve(address(queue), userGgvShares);
+        bytes32 requestId = queue.requestOnChainWithdraw(address(steth), uint128(userGgvShares), wa.minDiscount, type(uint24).max);
+        GGVQueueMock.OnChainWithdraw memory req = queue.mockGetRequestById(requestId);
+
+        GGVQueueMock.OnChainWithdraw[] memory requests = new GGVQueueMock.OnChainWithdraw[](1);
+        requests[0] = req;
+        // ADMIN SOLVER
+        vm.startPrank(admin);
+        queue.solveOnChainWithdraws(requests, new bytes(0), address(0));
+        uint256 userStethSharesAfterWithdrawSolve = steth.sharesOf(user1);
+
+        // user receives steth shares
+        assertEq(userStethSharesAfterWithdrawSolve - userStethSharesAfterDeposit, previewAmountAssetsStethShares);
     }
 }

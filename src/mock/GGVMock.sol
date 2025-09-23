@@ -139,6 +139,8 @@ contract GGVQueueMock is IBoringOnChainQueue{
     EnumerableSet.Bytes32Set private _withdrawRequests;
     uint96 public nonce = 1;
     mapping(address assetOut => WithdrawAsset) public _withdrawAssets;
+    mapping(bytes32 requestId => OnChainWithdraw) internal _helper_requestsById;
+    
 
 
     constructor(address __vault, address _steth, address __owner) {
@@ -146,6 +148,9 @@ contract GGVQueueMock is IBoringOnChainQueue{
         _vault = GGVVaultMock(__vault);
         steth = IStETH(_steth);
         ONE_SHARE = 10 ** 18;
+
+        // allow withdraws for steth by default
+        _updateWithdrawAsset(address(steth), 0, 0, 0, 500, 100); 
     }
 
 
@@ -169,7 +174,7 @@ contract GGVQueueMock is IBoringOnChainQueue{
 
     function updateWithdrawAsset(address assetOut, uint24 secondsToMaturity, uint24 minimumSecondsToDeadline, uint16 minDiscount, uint16 maxDiscount, uint96 minimumShares) external {
         require(msg.sender == _owner, "Only owner can update withdraw asset");
-        _withdrawAssets[assetOut] = WithdrawAsset(true, secondsToMaturity, minimumSecondsToDeadline, minDiscount, maxDiscount, minimumShares, type(uint256).max);
+       _updateWithdrawAsset(assetOut, secondsToMaturity, minimumSecondsToDeadline, minDiscount, maxDiscount, minimumShares);
     }
 
 
@@ -220,7 +225,11 @@ contract GGVQueueMock is IBoringOnChainQueue{
             secondsToDeadline: secondsToDeadline
         });
 
+
         requestId = keccak256(abi.encode(req));
+
+        // write to onchain storage for easier tests
+        _helper_requestsById[requestId] = req;
 
 
         _withdrawRequests.add(requestId);
@@ -233,6 +242,10 @@ contract GGVQueueMock is IBoringOnChainQueue{
     
     function getRequestIds() external view returns (bytes32[] memory){
         return _withdrawRequests.values();
+    }
+
+    function mockGetRequestById(bytes32 requestId) external view returns (OnChainWithdraw memory){
+        return _helper_requestsById[requestId];
     }
 
    function solveOnChainWithdraws(OnChainWithdraw[] calldata requests, bytes calldata, address)
@@ -326,6 +339,11 @@ contract GGVQueueMock is IBoringOnChainQueue{
         requestId = keccak256(abi.encode(request));
         bool removedFromSet = _withdrawRequests.remove(requestId);
         if (!removedFromSet) revert('request not found');
+    }
+
+    
+    function _updateWithdrawAsset(address assetOut, uint24 secondsToMaturity, uint24 minimumSecondsToDeadline, uint16 minDiscount, uint16 maxDiscount, uint96 minimumShares) internal {
+        _withdrawAssets[assetOut] = WithdrawAsset(true, secondsToMaturity, minimumSecondsToDeadline, minDiscount, maxDiscount, minimumShares, type(uint256).max);
     }
 
 
