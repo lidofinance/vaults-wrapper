@@ -1,5 +1,4 @@
-PRIVATE_KEY ?= 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
-DEPLOYER ?= 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
+.ONESHELL:
 
 CORE_RPC_PORT ?= 9123
 CORE_BRANCH ?= feat/testnet-2
@@ -8,18 +7,6 @@ NETWORK ?= local
 VERBOSITY ?= vv
 DEBUG_TEST ?= test_debug
 
-# RPC_URL ?= "http://localhost:9123"
-# RPC_URL ?= http://localhost:$(CORE_RPC_PORT)
-# Effective RPC URL: prefer env-provided RPC_URL if set, else fallback to localhost
-# RPC_FALLBACK := http://localhost:$(CORE_RPC_PORT)
-# RPC_URL_EFFECTIVE := $(if $(strip $(RPC_URL)),$(strip $(RPC_URL)),$(RPC_FALLBACK))
-# CORE_DEPLOYED_JSON ?= ./lido-core/deployed-$(NETWORK).json
-OUTPUT_JSON ?= ./deployments/wrapper-factory-$(NETWORK).json
-WRAPPER_PARAMS_JSON ?= ./script/deploy-$(NETWORK)-config.json
-OUTPUT_INSTANCE_JSON ?= ./deployments/wrapper-instance-$(NETWORK).json
-
-VAULT_FACTORY ?= 0x86A2EE8FAf9A840F7a2c64CA3d51209F9A02081D
-STETH ?= 0xf2A08B9C303496f7FF99Ce2d4A6b6efb65E0e752
 
 test-integration:
 	FOUNDRY_PROFILE=test forge test test/integration/**/*.test.sol -$(VERBOSITY) --fork-url $(RPC_URL)
@@ -40,11 +27,7 @@ deploy-factory:
 	VERIFY_FLAGS=""; \
 	if [ -n "$$PUBLISH_SOURCES" ]; then \
 		export ETHERSCAN_API_KEY="$${ETHERSCAN_API_KEY:-$${ETHERSCAN_TOKEN}}"; \
-		VERIFY_FLAGS="--verify --verifier etherscan --delay $${VERIFY_DELAY:-60} --retries $${VERIFY_RETRIES:-7}"; \
-	fi; \
-	SLOW_FLAG="--slow"; \
-	if [ -n "$$DISABLE_SLOW" ]; then \
-		SLOW_FLAG=""; \
+		VERIFY_FLAGS="--verify --verifier etherscan"; \
 	fi; \
 	OUTPUT_JSON=$(OUTPUT_JSON) \
 	forge script script/DeployWrapperFactory.s.sol:DeployWrapperFactory \
@@ -53,27 +36,99 @@ deploy-factory:
 		--private-key $${PRIVATE_KEY:-$(PRIVATE_KEY)} \
 		--sender $${DEPLOYER:-$(DEPLOYER)} \
 		$$VERIFY_FLAGS \
-		$$SLOW_FLAG \
+		--slow \
+		-vvvv \
 		--sig 'run()' \
 		--non-interactive
 
 deploy-wrapper-from-factory:
 	. .env 2>/dev/null || true; \
-	SLOW_FLAG="--slow"; \
-	if [ -n "$$DISABLE_SLOW" ]; then \
-		SLOW_FLAG=""; \
-	fi; \
 	FACTORY_JSON=$${FACTORY_JSON:-$(OUTPUT_JSON)} \
 	WRAPPER_PARAMS_JSON=$${WRAPPER_PARAMS_JSON:-$(WRAPPER_PARAMS_JSON)} \
-	OUTPUT_INSTANCE_JSON=$${OUTPUT_INSTANCE_JSON:-$(OUTPUT_INSTANCE_JSON)} \
 	forge script script/DeployWrapper.s.sol:DeployWrapper \
-		--rpc-url $${RPC_URL:-http://localhost:9123} \
+		--rpc-url $${RPC_URL} \
 		--broadcast \
 		--sender $${DEPLOYER:-$(DEPLOYER)} \
 		--private-key $${PRIVATE_KEY:-$(PRIVATE_KEY)} \
-		$$SLOW_FLAG \
+		--slow \
+		-vvvv \
 		--sig 'run()' \
 		--non-interactive
+
+
+publish-wrapper-sources:
+	. .env 2>/dev/null || true; \
+	if [ -z "$$ETHERSCAN_API_KEY" ] && [ -z "$$ETHERSCAN_TOKEN" ]; then \
+		echo "ETHERSCAN_API_KEY or ETHERSCAN_TOKEN must be set"; \
+		exit 1; \
+	fi; \
+	export ETHERSCAN_API_KEY="$${ETHERSCAN_API_KEY:-$${ETHERSCAN_TOKEN}}"; \
+	FILE=$${WRAPPER_DEPLOYED_JSON:-$${WRAPPER_DEPLOYED_JSON:-./deployments/wrapper-deployed-$${NETWORK:-$(NETWORK)}.json}}; \
+	if [ ! -f "$$FILE" ]; then \
+		echo "Wrapper artifact not found: $$FILE"; \
+		exit 1; \
+	fi; \
+		ADDR_WRAPPER=$$(jq -r '.wrapper // .wrapperProxy // .deployment.wrapper // empty' $$FILE 2>/dev/null); \
+		ADDR_WQ=$$(jq -r '.withdrawalQueue // .deployment.withdrawalQueue // empty' $$FILE 2>/dev/null); \
+		ADDR_WRAPPER_IMPL=$$(jq -r '.wrapperImpl // .deployment.wrapperImpl // empty' $$FILE 2>/dev/null); \
+		ADDR_WQ_IMPL=$$(jq -r '.withdrawalQueueImpl // .deployment.withdrawalQueueImpl // empty' $$FILE 2>/dev/null); \
+		ADDR_STRATEGY=$$(jq -r '.strategy // .deployment.strategy // empty' $$FILE 2>/dev/null); \
+		WRAPPER_PROXY_ARGS=$$(jq -r '.wrapperProxyCtorArgs // empty' $$FILE 2>/dev/null | sed 's/^null$$//'); \
+		WQ_PROXY_ARGS=$$(jq -r '.withdrawalQueueProxyCtorArgs // empty' $$FILE 2>/dev/null | sed 's/^null$$//'); \
+		WRAPPER_IMPL_ARGS=$$(jq -r '.wrapperImplCtorArgs // empty' $$FILE 2>/dev/null | sed 's/^null$$//'); \
+		WQ_IMPL_ARGS=$$(jq -r '.withdrawalQueueImplCtorArgs // empty' $$FILE 2>/dev/null | sed 's/^null$$//'); \
+		STRATEGY_ARGS=$$(jq -r '.strategyCtorArgs // empty' $$FILE 2>/dev/null | sed 's/^null$$//'); \
+	WRAPPER_TYPE=$$(jq -r '.wrapperType // .wrapper.wrapperType // empty' $$FILE 2>/dev/null); \
+	WRAPPER_CONTRACT=$${WRAPPER_IMPL_CONTRACT}; \
+	echo "Using artifact: $$FILE"; \
+	echo "Parsed addresses:"; \
+	echo "  wrapper proxy: $$ADDR_WRAPPER"; \
+	echo "  wrapper impl:  $$ADDR_WRAPPER_IMPL"; \
+	echo "  wq proxy:      $$ADDR_WQ"; \
+	echo "  wq impl:       $$ADDR_WQ_IMPL"; \
+	echo "  strategy:      $$ADDR_STRATEGY"; \
+	if [ -z "$$ADDR_WRAPPER" ] || [ "$$ADDR_WRAPPER" = "null" ] || \
+	   [ -z "$$ADDR_WQ" ] || [ "$$ADDR_WQ" = "null" ] || \
+	   [ -z "$$ADDR_WRAPPER_IMPL" ] || [ "$$ADDR_WRAPPER_IMPL" = "null" ] || \
+	   [ -z "$$ADDR_WQ_IMPL" ] || [ "$$ADDR_WQ_IMPL" = "null" ]; then \
+		echo "One or more required contract addresses are missing or null."; \
+		exit 1; \
+	fi; \
+	if [ -z "$$WRAPPER_CONTRACT" ]; then \
+		case "$$WRAPPER_TYPE" in \
+			"0") WRAPPER_CONTRACT="src/WrapperA.sol:WrapperA";; \
+			"1") WRAPPER_CONTRACT="src/WrapperB.sol:WrapperB";; \
+			"2"|"3") WRAPPER_CONTRACT="src/WrapperC.sol:WrapperC";; \
+			*) WRAPPER_CONTRACT="src/WrapperA.sol:WrapperA";; \
+		esac; \
+	fi; \
+		forge verify-contract $$ADDR_WRAPPER src/proxy/OssifiableProxy.sol:OssifiableProxy \
+			--verifier $${VERIFIER:-etherscan} $$( [ -n "$$VERIFIER_URL" ] && echo --verifier-url $${VERIFIER_URL} ) --rpc-url $${RPC_URL} \
+			$$( [ -n "$$WRAPPER_PROXY_ARGS" ] && echo --constructor-args "$$WRAPPER_PROXY_ARGS" ) \
+		--watch \
+		-vvvv || true; \
+		forge verify-contract $$ADDR_WQ src/proxy/OssifiableProxy.sol:OssifiableProxy \
+			--verifier $${VERIFIER:-etherscan} $$( [ -n "$$VERIFIER_URL" ] && echo --verifier-url $${VERIFIER_URL} ) --rpc-url $${RPC_URL} \
+			$$( [ -n "$$WQ_PROXY_ARGS" ] && echo --constructor-args "$$WQ_PROXY_ARGS" ) \
+		--watch \
+		-vvvv || true; \
+		forge verify-contract $$ADDR_WRAPPER_IMPL $$WRAPPER_CONTRACT \
+			--verifier $${VERIFIER:-etherscan} $$( [ -n "$$VERIFIER_URL" ] && echo --verifier-url $${VERIFIER_URL} ) --rpc-url $${RPC_URL} \
+			$$( [ -n "$$WRAPPER_IMPL_ARGS" ] && echo --constructor-args "$$WRAPPER_IMPL_ARGS" ) \
+		--watch \
+		-vvvv || true; \
+		forge verify-contract $$ADDR_WQ_IMPL src/WithdrawalQueue.sol:WithdrawalQueue \
+			--verifier $${VERIFIER:-etherscan} $$( [ -n "$$VERIFIER_URL" ] && echo --verifier-url $${VERIFIER_URL} ) --rpc-url $${RPC_URL} \
+			$$( [ -n "$$WQ_IMPL_ARGS" ] && echo --constructor-args "$$WQ_IMPL_ARGS" ) \
+		--watch \
+		-vvvv || true; \
+	if [ -n "$$ADDR_STRATEGY" ] && [ "$$ADDR_STRATEGY" != "0x0000000000000000000000000000000000000000" ] && [ "$$ADDR_STRATEGY" != "null" ]; then \
+			forge verify-contract $$ADDR_STRATEGY src/strategy/GGVStrategy.sol:GGVStrategy \
+				--verifier $${VERIFIER:-etherscan} $$( [ -n "$$VERIFIER_URL" ] && echo --verifier-url $${VERIFIER_URL} ) --rpc-url $${RPC_URL} \
+				$$( [ -n "$$STRATEGY_ARGS" ] && echo --constructor-args "$$STRATEGY_ARGS" ) \
+			--watch \
+			-vvvv || true; \
+	fi
 
 
 do-entire-flow-with-core-deploy:
@@ -84,13 +139,15 @@ do-entire-flow-with-core-deploy:
 	export CORE_DEPLOYED_JSON=$(CORE_DEPLOYED_JSON) && \
 	export OUTPUT_JSON=$(OUTPUT_JSON) && \
 	export WRAPPER_PARAMS_JSON=$(WRAPPER_PARAMS_JSON) && \
-	export OUTPUT_INSTANCE_JSON=$(OUTPUT_INSTANCE_JSON) && \
 	make core-deploy && \
 	rm -f $(CORE_SUBDIR)/deployed-$(NETWORK).json && \
 	mv $(CORE_SUBDIR)/deployed-local.json $(CORE_SUBDIR)/deployed-$(NETWORK).json && \
 	make harness-core && \
 	make deploy-factory && \
-	make deploy-wrapper-from-factory
+	make deploy-wrapper-from-factory && \
+	if [ -n "$$PUBLISH_SOURCES" ]; then \
+		make publish-wrapper-sources; \
+	fi
 
 # Requires entr util
 test-watch:
@@ -109,13 +166,13 @@ core-deploy:
 	cd $(CORE_SUBDIR) && \
 	NETWORK=local \
 	GENESIS_TIME=1639659600 \
-	DEPLOYER=$(DEPLOYER) \
 	GAS_PRIORITY_FEE=1 \
 	GAS_MAX_FEE=100 \
 	NETWORK_STATE_FILE="deployed-local.json" \
 	NETWORK_STATE_DEFAULTS_FILE="scripts/defaults/testnet-defaults.json" \
-	RPC_URL=$(RPC_URL) \
+	RPC_URL=http://localhost:$(CORE_RPC_PORT) \
 	SKIP_CONTRACT_SIZE=true SKIP_GAS_REPORT=true SKIP_INTERFACES_CHECK=true LOG_LEVEL=warn \
+	DEPLOYER=0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 \
 	bash scripts/dao-deploy.sh
 
 harness-core:
