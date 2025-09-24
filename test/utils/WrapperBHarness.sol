@@ -22,30 +22,6 @@ contract WrapperBHarness is WrapperAHarness {
         bool enableAllowlist,
         uint256 reserveRatioGapBP
     ) internal returns (WrapperContext memory) {
-        // If WRAPPER_DEPLOYED_JSON is provided, use pre-deployed addresses instead of deploying
-        string memory deployedPath = "";
-        try vm.envString("WRAPPER_DEPLOYED_JSON") returns (string memory p) {
-            deployedPath = p;
-        } catch {}
-
-        if (bytes(deployedPath).length != 0) {
-            string memory json = vm.readFile(deployedPath);
-            address wrapperAddress = vm.parseJsonAddress(json, "$.wrapperProxy");
-            address withdrawalQueueAddress = vm.parseJsonAddress(json, "$.withdrawalQueue");
-            address dashboardAddress = vm.parseJsonAddress(json, "$.dashboard");
-            address vaultAddress = vm.parseJsonAddress(json, "$.vault");
-
-            // Inform core harness about the dashboard used by this wrapper
-            core.setDashboard(dashboardAddress);
-
-            return WrapperContext({
-                wrapper: WrapperA(payable(wrapperAddress)),
-                withdrawalQueue: WithdrawalQueue(payable(withdrawalQueueAddress)),
-                dashboard: IDashboard(payable(dashboardAddress)),
-                vault: IStakingVault(vaultAddress)
-            });
-        }
-
         DeploymentConfig memory config = DeploymentConfig({
             configuration: Factory.WrapperType.MINTING_NO_STRATEGY,
             strategy: address(0),

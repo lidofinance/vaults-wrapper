@@ -90,6 +90,8 @@ contract WrapperAHarness is Test {
         vm.deal(NODE_OPERATOR, 1000 ether);
     }
 
+
+
     function _deployWrapperSystem(DeploymentConfig memory config) internal returns (WrapperContext memory) {
         address vault_;
         address dashboard_;
@@ -100,8 +102,22 @@ contract WrapperAHarness is Test {
 
         address vaultFactory = core.locator().vaultFactory();
         address lazyOracle = core.locator().lazyOracle();
-        FactoryHelper helper = new FactoryHelper();
-        Factory factory = helper.deployMainFactory(vaultFactory, address(steth), address(wsteth), lazyOracle);
+
+        // Decide whether to deploy a new wrapper Factory or use a pre-deployed one
+        Factory factory;
+        string memory factoryJsonPath = "";
+        try vm.envString("FACTORY_DEPLOYED_JSON") returns (string memory p) {
+            factoryJsonPath = p;
+        } catch {}
+
+        if (bytes(factoryJsonPath).length != 0) {
+            string memory deployedJson = vm.readFile(factoryJsonPath);
+            address existingFactory = vm.parseJsonAddress(deployedJson, "$.deployment.factory");
+            factory = Factory(existingFactory);
+        } else {
+            FactoryHelper helper = new FactoryHelper();
+            factory = helper.deployMainFactory(vaultFactory, address(steth), address(wsteth), lazyOracle);
+        }
 
         vm.startPrank(config.nodeOperator);
         if (config.configuration == Factory.WrapperType.NO_MINTING_NO_STRATEGY) {
@@ -155,6 +171,13 @@ contract WrapperAHarness is Test {
             revert("Invalid configuration");
         }
         vm.stopPrank();
+
+        console.log("Factory created wrapper system:");
+        console.log("  factory: %s", address(factory));
+        console.log("  wrapper: %s", wrapperAddress);
+        console.log("  dashboard: %s", dashboard_);
+        console.log("  vault: %s", vault_);
+        console.log("  withdrawalQueue: %s", withdrawalQueue_);
 
         // Apply initial vault report with current total value equal to connect deposit
         core.applyVaultReport(vault_, CONNECT_DEPOSIT, 0, 0, 0, false);
