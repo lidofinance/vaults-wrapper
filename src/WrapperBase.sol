@@ -147,6 +147,8 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
         _mint(address(this), _convertToShares(connectDeposit));
     }
 
+    function wrapperType() external pure virtual returns (string memory);
+
     // =================================================================================
     // CORE VAULT FUNCTIONS
     // =================================================================================

@@ -30,6 +30,10 @@ contract WrapperC is WrapperB {
         STRATEGY = IStrategy(_strategy);
     }
 
+    function wrapperType() external pure override virtual returns (string memory) {
+        return "WrapperC";
+    }
+
     /**
      * @notice Deposit native ETH and receive stvETH shares
      * @dev Funds the vault and mints shares to the receiver, then executes strategy

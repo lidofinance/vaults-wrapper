@@ -335,8 +335,10 @@ contract Factory {
     ) internal returns (address wrapperImpl) {
         if (_configuration == WrapperType.NO_MINTING_NO_STRATEGY) {
             wrapperImpl = WRAPPER_A_FACTORY.deploy(dashboard, _allowlistEnabled, withdrawalQueueProxy);
+            assert(keccak256(bytes(WrapperBase(payable(wrapperImpl)).wrapperType())) == keccak256(bytes("WrapperA")));
         } else if (_configuration == WrapperType.MINTING_NO_STRATEGY) {
             wrapperImpl = WRAPPER_B_FACTORY.deploy(dashboard, STETH, _allowlistEnabled, _reserveRatioGapBP, withdrawalQueueProxy);
+            assert(keccak256(bytes(WrapperBase(payable(wrapperImpl)).wrapperType())) == keccak256(bytes("WrapperB")));
         } else if (
             _configuration == WrapperType.LOOP_STRATEGY ||
             _configuration == WrapperType.GGV_STRATEGY
@@ -350,6 +352,7 @@ contract Factory {
                 _reserveRatioGapBP,
                 withdrawalQueueProxy
             );
+            assert(keccak256(bytes(WrapperBase(payable(wrapperImpl)).wrapperType())) == keccak256(bytes("WrapperC")));
         } else {
             revert InvalidConfiguration();
         }

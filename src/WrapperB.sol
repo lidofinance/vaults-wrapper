@@ -50,6 +50,10 @@ contract WrapperB is WrapperBase {
         WRAPPER_RR_BP = vaultRR + _reserveRatioGapBP;
     }
 
+    function wrapperType() external pure virtual override returns (string memory) {
+        return "WrapperB";
+    }
+
     //
     // Deposit and mint functions
     //

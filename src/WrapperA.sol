@@ -18,6 +18,10 @@ contract WrapperA is WrapperBase {
         address _withdrawalQueue
     ) WrapperBase(_dashboard, _allowListEnabled, _withdrawalQueue) {}
 
+    function wrapperType() public pure override returns (string memory) {
+        return "WrapperA";
+    }
+
     /**
      * @notice Deposit native ETH and receive stvETH shares
      * @dev Simple deposit with stvETH shares only
