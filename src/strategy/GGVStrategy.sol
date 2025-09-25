@@ -17,30 +17,24 @@ contract GGVStrategy is Strategy {
     uint16 public constant DISCOUNT = 1;
     uint16 public constant MINIMUM_MINT = 0;
 
-    event Execute(address indexed user, uint256 stvTokenAmount, uint256 stETHAmount, uint256 ggvShares);
+    // ==================== Events ====================
+
+    event Execute(address indexed user, uint256 stv, uint256 stethShares, uint256 ggvShares);
     event RequestWithdraw(address indexed user, uint256 shares);
-    event Claim(address indexed user, address indexed asset, uint256 shares, uint256 stv);
+    event Claim(address indexed user, address indexed asset, uint256 stv);
+
+    // ==================== Errors ====================
 
     error InvalidWrapper();
     error InvalidSender();
-    error InvalidEthAmount();
     error InvalidStethAmount();
     error InsufficientSurplus(uint256 _amount, uint256 _surplus);
     error AlreadyRequested();
     error TokenNotAllowed();
-    error DebtNotCleared();
-
-    /**
-     * @notice Thrown when an invalid zero value is passed
-     * @param name Name of the argument that was zero
-     */
     error ZeroArgument(string name);
 
     struct UserPosition {
-        address user;
-
         bytes32 exitRequestId;
-        uint256 exitStethShares;
         uint256 exitStvShares;
     }
 
@@ -50,10 +44,9 @@ contract GGVStrategy is Strategy {
         address _strategyProxyImplementation,
         address _wrapper,
         address _stETH,
-        address _wstETH,
         address _teller,
         address _boringQueue
-    ) Strategy(_wrapper, _stETH, _wstETH, _strategyProxyImplementation) {
+    ) Strategy(_wrapper, _stETH, _strategyProxyImplementation) {
         TELLER = ITellerWithMultiAssetSupport(_teller);
         BORING_QUEUE = IBoringOnChainQueue(_boringQueue);
     }
@@ -68,14 +61,14 @@ contract GGVStrategy is Strategy {
 
     /// @notice Executes the strategy
     /// @param _user The user to execute the strategy for
-    /// @param _stvShares The number of stv shares to execute
-    function execute(address _user, uint256 _stvShares, uint256 _stethShares) external {
+    /// @param _stethShares The number of steth shares to execute
+    function execute(address _user, uint256 _stv, uint256 _stethShares) external {
         _onlyWrapper();
 
         address proxy = _getOrCreateProxy(_user);
         uint256 stETHAmount = STETH.getPooledEthByShares(_stethShares);
 
-        WRAPPER.transfer(proxy, _stvShares);
+        WRAPPER.transfer(proxy, _stv);
 
         IStrategyProxy(proxy).call(
             address(WRAPPER),
@@ -91,11 +84,14 @@ contract GGVStrategy is Strategy {
         );
         uint256 ggvShares = abi.decode(data, (uint256));
 
-        emit Execute(_user, _stvShares, _stethShares, ggvShares);
+        emit Execute(_user, _stv, _stethShares, ggvShares);
     }
 
     /// @notice Requests a withdrawal of ggv shares from the strategy
-    function requestWithdrawByETH(address _user, uint256 _stethAmount) external returns (uint256 requestId)  {
+    /// @param _user The user to request a withdrawal for
+    /// @param _stethAmount The amount of stETH to withdraw
+    /// @return requestId The request id
+    function requestWithdrawByStETH(address _user, uint256 _stethAmount) external returns (uint256 requestId)  {
         _onlyWrapper();
 
         UserPosition storage position = userPositions[_user];
@@ -144,10 +140,12 @@ contract GGVStrategy is Strategy {
 
         UserPosition storage position = userPositions[msg.sender];
         address proxy = _getOrCreateProxy(msg.sender);
-        IStrategyProxy(proxy).call(
+        bytes memory data = IStrategyProxy(proxy).call(
             address(BORING_QUEUE),
             abi.encodeWithSelector(BORING_QUEUE.cancelOnChainWithdraw.selector, request)
         );
+        bytes32 requestId = abi.decode(data, (bytes32));
+        assert(requestId == position.exitRequestId);
 
         position.exitRequestId = 0;
     }
@@ -173,10 +171,6 @@ contract GGVStrategy is Strategy {
         if (address(0) == _receiver) _receiver = msg.sender;
         address proxy = _getOrCreateProxy(_receiver);
 
-        IStrategyProxy(proxy).call(
-            address(STETH),
-            abi.encodeWithSelector(STETH.approve.selector, address(WRAPPER), type(uint256).max)
-        );
 
         UserPosition storage position = userPositions[_receiver];
         position.exitRequestId = 0;
@@ -186,7 +180,6 @@ contract GGVStrategy is Strategy {
         emit Claim(
             _receiver,
             address(STETH),
-            position.exitStethShares,
             position.exitStvShares
         );
     }

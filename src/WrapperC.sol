@@ -49,7 +49,7 @@ contract WrapperC is WrapperB {
 
     function requestWithdrawalFromStrategy(uint256 _stethAmount) public returns (uint256 requestId) {
         requestId = _addWithdrawalRequest(msg.sender, _stethAmount, WithdrawalType.STRATEGY);
-        STRATEGY.requestWithdrawByETH(msg.sender, _stethAmount);
+        STRATEGY.requestWithdrawByStETH(msg.sender, _stethAmount);
     }
 
     function finalizeWithdrawal(uint256 _requestId) external {

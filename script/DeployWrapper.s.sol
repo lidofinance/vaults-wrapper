@@ -240,7 +240,6 @@ contract DeployWrapper is Script {
         // Strategy constructor args (if any)
         if (strategy != address(0)) {
             // Try reading STRATEGY_PROXY_IMPL via a staticcall to avoid importing the type
-            address wstethAddr = factoryView.WSTETH();
             address strategyProxyImpl = address(0);
             (bool okSpi, bytes memory retSpi) = strategy.staticcall(abi.encodeWithSignature("STRATEGY_PROXY_IMPL()"));
             if (okSpi && retSpi.length >= 32) {
@@ -250,7 +249,6 @@ contract DeployWrapper is Script {
                 strategyProxyImpl,
                 wrapperProxy,
                 stethAddr,
-                wstethAddr,
                 p.teller,
                 p.boringQueue
             );

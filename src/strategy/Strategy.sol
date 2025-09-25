@@ -6,21 +6,18 @@ import {IStETH} from "src/interfaces/IStETH.sol";
 import {IStrategy} from "src/interfaces/IStrategy.sol";
 import {IStrategyProxy} from "src/interfaces/IStrategyProxy.sol";
 import {WrapperC} from "src/WrapperC.sol";
-import {IWstETH} from "src/interfaces/IWstETH.sol";
 abstract contract Strategy is IStrategy {
 
     WrapperC public immutable WRAPPER;
     IStETH public immutable STETH;
-    IWstETH public immutable WSTETH;
     address public immutable STRATEGY_PROXY_IMPL;
 
     mapping(bytes32 salt => address proxy) public userStrategyProxy;
 
     error ZeroAddress();
 
-    constructor(address _wrapper, address _stETH, address _wstETH, address _strategyProxyImpl) {
+    constructor(address _wrapper, address _stETH, address _strategyProxyImpl) {
         STETH = IStETH(_stETH);
-        WSTETH = IWstETH(_wstETH);
         STRATEGY_PROXY_IMPL = _strategyProxyImpl;
         WRAPPER = WrapperC(payable(_wrapper));
     }
@@ -46,6 +43,10 @@ abstract contract Strategy is IStrategy {
 
         proxy = Clones.cloneDeterministic(STRATEGY_PROXY_IMPL, salt);
         IStrategyProxy(proxy).initialize(address(this));
+        IStrategyProxy(proxy).call(
+            address(STETH),
+            abi.encodeWithSelector(STETH.approve.selector, address(WRAPPER), type(uint256).max)
+        );
         userStrategyProxy[salt] = proxy;
 
         return proxy;

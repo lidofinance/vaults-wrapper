@@ -29,7 +29,6 @@ contract FactoryTest is Test {
     MockVaultHub public vaultHub;
     MockVaultFactory public vaultFactory;
     MockERC20 public stETH;
-    MockERC20 public wstETH;
     MockLazyOracle public lazyOracle;
 
     address public admin = address(0x1);
@@ -57,9 +56,6 @@ contract FactoryTest is Test {
         stETH = new MockERC20("Staked Ether", "stETH");
         vm.label(address(stETH), "stETH");
 
-        wstETH = new MockERC20("Wrapped Staked Ether", "wstETH");
-        vm.label(address(wstETH), "wstETH");
-
         lazyOracle = new MockLazyOracle();
 
         // Deploy dedicated implementation factories and the main Factory
@@ -74,7 +70,6 @@ contract FactoryTest is Test {
         Factory.WrapperConfig memory a = Factory.WrapperConfig({
             vaultFactory: address(vaultFactory),
             steth: address(stETH),
-            wsteth: address(wstETH),
             lazyOracle: address(lazyOracle),
             wrapperAFactory: address(waf),
             wrapperBFactory: address(wbf),
