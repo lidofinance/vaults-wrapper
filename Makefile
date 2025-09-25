@@ -52,6 +52,7 @@ deploy-wrapper-from-factory:
 	FACTORY_JSON=$${FACTORY_JSON:-$(OUTPUT_JSON)} \
 	WRAPPER_PARAMS_JSON=$${WRAPPER_PARAMS_JSON:-$(WRAPPER_PARAMS_JSON)} \
 	forge script script/DeployWrapper.s.sol:DeployWrapper \
+		BUMP_CORE_FACTORY_NONCE=$${BUMP_CORE_FACTORY_NONCE:-0} \
 		--rpc-url $${RPC_URL} \
 		--broadcast \
 		--sender $${DEPLOYER:-$(DEPLOYER)} \
