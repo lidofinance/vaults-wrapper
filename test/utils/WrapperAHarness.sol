@@ -44,7 +44,6 @@ contract WrapperAHarness is Test {
     // Test constants
     uint256 public constant WEI_ROUNDING_TOLERANCE = 1;
     uint256 public CONNECT_DEPOSIT;
-    uint256 public constant NODE_OPERATOR_FEE_RATE = 0; // 0%
     uint256 public constant CONFIRM_EXPIRY = 1 hours;
 
     uint256 public constant TOTAL_BASIS_POINTS = 100_00;
@@ -191,7 +190,8 @@ contract WrapperAHarness is Test {
     }
 
     function _deployWrapperA(
-        bool enableAllowlist
+        bool enableAllowlist,
+        uint256 nodeOperatorFeeBP
     ) internal returns (
         WrapperContext memory context
     ) {
@@ -203,7 +203,7 @@ contract WrapperAHarness is Test {
             nodeOperator: NODE_OPERATOR,
             nodeOperatorManager: NODE_OPERATOR,
             upgradeConformer: NODE_OPERATOR,
-            nodeOperatorFeeBP: NODE_OPERATOR_FEE_RATE,
+            nodeOperatorFeeBP: nodeOperatorFeeBP,
             confirmExpiry: CONFIRM_EXPIRY,
             maxFinalizationTime: 30 days,
             teller: address(0),

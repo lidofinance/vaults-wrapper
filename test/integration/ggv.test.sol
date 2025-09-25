@@ -82,7 +82,7 @@ contract GGVTest is WrapperCHarness {
 //        // Configure withdraw assets for stETH and wstETH on the mock queue
 //        solver = new MockBoringSolver(boringVault, address(boringOnChainQueue));
 
-        WrapperContext memory ctx = _deployWrapperC(false, address(strategy), 0, address(teller), address(boringOnChainQueue));
+        WrapperContext memory ctx = _deployWrapperC(false, 0, address(strategy), 0, address(teller), address(boringOnChainQueue));
         wrapper = WrapperC(payable(ctx.wrapper));
 
         strategy = IStrategy(wrapper.STRATEGY());
