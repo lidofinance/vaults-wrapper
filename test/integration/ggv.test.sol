@@ -78,6 +78,8 @@ contract GGVTest is WrapperCHarness {
 
     TableUtils.User[] public logUsers;
 
+    WrapperContext public  ctx;
+
     address public user1StrategyProxy;
     address public user2StrategyProxy;
 
@@ -96,7 +98,7 @@ contract GGVTest is WrapperCHarness {
         teller = GGVMockTeller(address(boringVault.TELLER()));
         boringOnChainQueue = GGVQueueMock(address(boringVault.BORING_QUEUE()));
 
-        WrapperContext memory ctx = _deployWrapperC(false, address(strategy), 0, address(teller), address(boringOnChainQueue));
+        ctx = _deployWrapperC(false, address(strategy), 0, address(teller), address(boringOnChainQueue));
         wrapper = WrapperC(payable(ctx.wrapper));
 
         strategy = IStrategy(wrapper.STRATEGY());
@@ -357,6 +359,128 @@ contract GGVTest is WrapperCHarness {
         assertEq(_amountStethUserAfter, _amountStethStrategyBefore);
 
         _log.printUsers("[USER] Recovery ERC20", logUsers);
+    }
+
+    function test_rebase_scenario() public {
+        // APR_Vault = 5%, APR_steth = 4%
+        uint256 depositAmount = 1 ether;
+        uint256 targetStethRate = 1.04 ether; // 4% rebase
+        uint256 vaultProfit = depositAmount * 5 / 100; // 0.05 ether profit
+
+        logUsers.push(TableUtils.User(USER1, "user1"));
+        logUsers.push(TableUtils.User(user1StrategyProxy, "user1_proxy"));
+        logUsers.push(TableUtils.User(address(wrapper), "wrapper"));
+        logUsers.push(TableUtils.User(address(wrapper.WITHDRAWAL_QUEUE()), "wq"));
+
+        _log.printUsers("[SCENARIO] Initial State", logUsers);
+
+        // 1. Initial Deposit
+        vm.prank(USER1);
+        wrapper.depositETH{value: depositAmount}(USER1);
+
+        _log.printUsers("[SCENARIO] After Deposit (1 ETH)", logUsers);
+
+        // 2. Simulate Rebases
+        console.log("\n[SCENARIO] Simulating Rebases (Vault +5%, stETH +4%)");
+
+        // a) Vault Rebase (simulated via mock report)
+        uint256 currentLiabilityShares = wrapper.DASHBOARD().liabilityShares();
+        uint256 currentTotalAssets = wrapper.totalAssets();
+
+        core.applyVaultReport(
+            address(ctx.vault),
+            currentTotalAssets + vaultProfit,
+            0,
+            currentLiabilityShares,
+            0,
+            false
+        );
+        // Apply 4% increase to core (stETH share ratio)
+        uint256 currentTotalEth = steth.totalSupply();
+        uint256 ethProfit = currentTotalEth * 4 / 100;
+        core.increaseBufferedEther(ethProfit);
+
+        assertEq(steth.getPooledEthByShares(1e18) / 1e16, targetStethRate / 1e16, "stETH rate did not update to 1.04");
+
+        _log.printUsers("[SCENARIO] After report", logUsers);
+
+        // 3. Request withdrawal (full amount, based on appreciated value)
+        uint256 totalGgvShares = boringVault.balanceOf(user1StrategyProxy);
+        uint256 withdrawalStethAmount = boringOnChainQueue.previewAssetsOut(
+            address(steth),
+            uint128(totalGgvShares),
+            ggvStrategy.DISCOUNT()
+        );
+        console.log("\n[SCENARIO] Requesting withdrawal based on new appreciated assets:", withdrawalStethAmount);
+
+        vm.prank(USER1);
+        uint256 requestId = wrapper.requestWithdrawalFromStrategy(withdrawalStethAmount);
+
+        _log.printUsers("[SCENARIO] After Request Withdrawal", logUsers);
+
+        // 4. Solve GGV requests (Simulate GGV Solver)
+        console.log("\n[SCENARIO] Step 4. Solve GGV requests");
+
+        GGVStrategy.UserPosition memory position = ggvStrategy.getUserPosition(USER1);
+        bytes32 ggvRequestId = position.exitRequestId;
+
+        IBoringOnChainQueue.OnChainWithdraw memory req = GGVQueueMock(address(boringOnChainQueue)).mockGetRequestById(ggvRequestId);
+        IBoringOnChainQueue.OnChainWithdraw[] memory requests = new IBoringOnChainQueue.OnChainWithdraw[](1);
+        requests[0] = req;
+
+        vm.warp(block.timestamp + req.secondsToMaturity + 1); // Перематываем время
+        boringOnChainQueue.solveOnChainWithdraws(requests, new bytes(0), address(0));
+
+        _log.printUsers("After GGV Solver", logUsers);
+
+        // 5. User Finalizes Withdrawal (Wrapper side)
+        console.log("\n[SCENARIO] Step 5. Finalize Wrapper withdrawal");
+        uint256[] memory requestIds = wrapper.getWithdrawalRequests(USER1);
+        assertEq(requestIds.length, 1, "Wrapper requests should be one before finalize");
+
+        vm.startPrank(USER1);
+        for (uint256 i = 0; i < requestIds.length; i++) {
+            wrapper.finalizeWithdrawal(requestIds[i]);
+        }
+        vm.stopPrank();
+
+        _log.printUsers("After User Finalizes Wrapper", logUsers);
+
+        // 6. Node Operator Finalizes WQ (Node Operator side)
+        console.log("\n[SCENARIO] Step 6. Finalize WQ (Node Operator)");
+        // Добавляем ETH в StakingVault, чтобы WQ мог забрать средства
+        vm.deal(address(ctx.vault), 10 ether);
+        _finalizeWQ(1);
+
+        _log.printUsers("After WQ Finalized", logUsers);
+
+        // 7. User Claims ETH
+        console.log("\n[SCENARIO] Step 7. Claim final ETH");
+        uint256 userBalanceBeforeClaim = USER1.balance;
+
+        vm.prank(USER1);
+        wrapper.claimWithdrawal(1, address(0));
+
+        uint256 ethClaimed = USER1.balance - userBalanceBeforeClaim;
+        console.log("ETH Claimed:", ethClaimed);
+
+        _log.printUsers("After User Claims ETH", logUsers);
+
+        // 8. Recover Surplus stETH (если есть)
+        uint256 surplusStETH = steth.balanceOf(user1StrategyProxy);
+        if (surplusStETH > 0) {
+            uint256 stethBalance = steth.sharesOf(user1StrategyProxy); // Баланс на прокси
+            uint256 stethDebt = wrapper.getStethShares(user1StrategyProxy); // Долг перед Wrapper
+            uint256 surplusInShares = stethBalance > stethDebt ? stethBalance - stethDebt : 0;
+            uint256 maxAmount = steth.getPooledEthByShares(surplusInShares);
+
+            console.log("\n[SCENARIO] Step 8. Recover Surplus stETH:", maxAmount);
+            vm.prank(USER1);
+            ggvStrategy.recoverERC20(address(steth), USER1, maxAmount);
+        }
+
+        _log.printUsers("After Recovery", logUsers);
+
     }
 
     function _finalizeWQ(uint256 _maxRequest) public {

@@ -229,4 +229,33 @@ contract CoreHarness is Test {
         // Best-effort: do not revert if cannot match ratio exactly on pre-deployed core
 
     }
+
+    function increaseBufferedEther(uint256 _amount) external  {
+        //bufferedEtherAndDepositedValidators
+        bytes32 BUFFERED_ETHER_SLOT = 0xa84c096ee27e195f25d7b6c7c2a03229e49f1a2a5087e57ce7d7127707942fe3;
+
+        // 1. Загружаем текущее 256-битное значение слота
+        bytes32 storageWord = vm.load(address(steth), BUFFERED_ETHER_SLOT);
+
+        // 2. Извлекаем depositedValidators (Высокие 128 бит)
+        // Shift right by 128 bits
+        uint256 depositedValidators = uint256(storageWord) >> 128;
+
+        // 3. Извлекаем currentBufferedEther (Низкие 128 бит)
+        // Mask off the high 128 bits
+        uint256 currentBufferedEther = uint256(uint128(uint256(storageWord)));
+
+        // 4. Рассчитываем новое значение bufferedEther
+        uint256 newBufferedEther = currentBufferedEther + _amount;
+
+        // 5. Собираем новое 256-битное слово
+        // [depositedValidators (128) | newBufferedEther (128)]
+        bytes32 newStorageWord = bytes32(depositedValidators << 128 | newBufferedEther);
+
+        // 6. Записываем новое слово в хранилище Lido
+        vm.store(address(steth), BUFFERED_ETHER_SLOT, newStorageWord);
+
+        console.log("Buffered Ether increased by:", _amount);
+        console.log("New Total Pooled Ether (stETH.totalSupply()):", steth.totalSupply());
+    }
 }

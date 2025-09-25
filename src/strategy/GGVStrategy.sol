@@ -114,7 +114,7 @@ contract GGVStrategy is Strategy {
 
         uint256 ggvShares = Math.mulDiv(totalGgvShares, _stethAmount, totalStethFromGgv);
         uint256 stethSharesToBurn = STETH.getSharesByPooledEth(_stethAmount);
-        uint256 calculatedExitStvShares = WRAPPER.withdrawableStv(proxy, stethSharesToBurn);
+        uint256 calculatedExitStvShares = WRAPPER.withdrawableStv(proxy, _stethAmount);
         uint256 userStvBalance = WRAPPER.balanceOf(proxy);
 
         uint256 exitStvShares = Math.min(calculatedExitStvShares, userStvBalance);

@@ -52,7 +52,7 @@ library TableUtils {
         console.log();
         console.log();
         console.log(title);
-        console.log(unicode"───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────");
+        console.log(unicode"───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────");
         printColumnHeaders(self);
     }
 
@@ -66,10 +66,11 @@ library TableUtils {
                 padLeft("debt_steth", 20),
                 padLeft("ggv", 20),
                 padLeft("ggvStethOut", 20),
-                padLeft("stETH", 20)
+                padLeft("stETH", 20),
+                padLeft("stethShares", 20)
             )
         );
-        console.log(unicode"───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────");
+        console.log(unicode"───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────");
     }
 
     function printUsers(Context storage self, string memory title, User[] memory _addresses) internal {
@@ -81,7 +82,7 @@ library TableUtils {
 
         uint256 stethShareRate = self.steth.getPooledEthByShares(1e18);
 
-        console.log(unicode"───────────────────────────────────");
+        console.log(unicode"─────────────────────────────────────────────────");
         console.log("  stETH Share Rate:", formatETH(stethShareRate));
         console.log("wrapper totalSupply", formatETH(self.wrapper.totalSupply()));
         console.log("wrapper totalAssets", formatETH(self.wrapper.totalAssets()));
@@ -100,6 +101,7 @@ library TableUtils {
         uint256 ggv = self.boringVault.balanceOf(_user);
         uint256 ggvStethOut = self.boringQueue.previewAssetsOut(address(self.steth), uint128(ggv), self.discount);
         uint256 steth = self.steth.balanceOf(_user);
+        uint256 stethShares = self.steth.sharesOf(_user);
 
         console.log(
             string.concat(
@@ -110,7 +112,8 @@ library TableUtils {
                 padLeft(vm.toString(debtSteth), 20),
                 padLeft(vm.toString(ggv), 20),
                 padLeft(vm.toString(ggvStethOut), 20),
-                padLeft(vm.toString(steth), 20)
+                padLeft(vm.toString(steth), 20),
+                padLeft(vm.toString(stethShares), 20)
             )
         );
     }
