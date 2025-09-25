@@ -178,8 +178,6 @@ contract GGVStrategy is Strategy {
             abi.encodeWithSelector(STETH.approve.selector, address(WRAPPER), type(uint256).max)
         );
 
-
-
         UserPosition storage position = userPositions[_receiver];
         position.exitRequestId = 0;
 
@@ -209,9 +207,10 @@ contract GGVStrategy is Strategy {
             uint256 stethBalance = STETH.sharesOf(proxy);
             uint256 stethDebt = WRAPPER.getStethShares(proxy);
 
-            uint256 surplus = stethBalance > stethDebt ? stethBalance - stethDebt : 0;
-            if (_amount > surplus) {
-                revert InsufficientSurplus(_amount, surplus);
+            uint256 surplusInShares = stethBalance > stethDebt ? stethBalance - stethDebt : 0;
+            uint256 amountInShares = STETH.getSharesByPooledEth(_amount);
+            if (amountInShares > surplusInShares) {
+                revert InsufficientSurplus(amountInShares, surplusInShares);
             }
         }
 

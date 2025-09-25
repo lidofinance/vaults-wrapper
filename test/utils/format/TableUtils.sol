@@ -72,7 +72,9 @@ library TableUtils {
         console.log(unicode"───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────");
     }
 
-    function printUsers(Context storage self, User[] memory _addresses) internal {
+    function printUsers(Context storage self, string memory title, User[] memory _addresses) internal {
+        printHeader(self, title);
+
         for (uint256 i = 0; i < _addresses.length; i++) {
             printUserRow(self, _addresses[i].name, _addresses[i].user);
         }
