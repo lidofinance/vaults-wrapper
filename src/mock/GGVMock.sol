@@ -140,8 +140,18 @@ contract GGVQueueMock is IBoringOnChainQueue{
     uint96 public nonce = 1;
     mapping(address assetOut => WithdrawAsset) public _withdrawAssets;
     mapping(bytes32 requestId => OnChainWithdraw) internal _helper_requestsById;
-    
 
+    event OnChainWithdrawRequested(
+        bytes32 indexed requestId,
+        address indexed user,
+        address indexed assetOut,
+        uint96 nonce,
+        uint128 amountOfShares,
+        uint128 amountOfAssets,
+        uint40 creationTime,
+        uint24 secondsToMaturity,
+        uint24 secondsToDeadline
+    );
 
     constructor(address __vault, address _steth, address __owner) {
         _owner = __owner;
@@ -235,7 +245,19 @@ contract GGVQueueMock is IBoringOnChainQueue{
         _withdrawRequests.add(requestId);
         nonce++;
 
-        _decrementWithdrawCapacity(assetOut, amountOfShares);   
+        _decrementWithdrawCapacity(assetOut, amountOfShares);
+
+        emit OnChainWithdrawRequested(
+            requestId,
+            msg.sender,
+            assetOut,
+            requestNonce,
+            amountOfShares,
+            amountOfAssets128,
+            timeNow,
+            withdrawAsset.secondsToMaturity,
+            secondsToDeadline
+        );
 
         return requestId;
     }

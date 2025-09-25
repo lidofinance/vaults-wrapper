@@ -3,11 +3,12 @@ pragma solidity >=0.8.25;
 
 import {Test, console} from "forge-std/Test.sol";
 
+import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+
 import {ITellerWithMultiAssetSupport} from "src/interfaces/ggv/ITellerWithMultiAssetSupport.sol";
 import {IBoringOnChainQueue} from "src/interfaces/ggv/IBoringOnChainQueue.sol";
 import {IBoringSolver} from "src/interfaces/ggv/IBoringSolver.sol";
-import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
 import {CoreHarness} from "test/utils/CoreHarness.sol";
 import {WrapperCHarness} from "test/utils/WrapperCHarness.sol";
@@ -25,10 +26,11 @@ import {MockTeller} from "src/mock/ggv/MockTeller.sol";
 import {MockBoringVault} from "src/mock/ggv/MockBoringVault.sol";
 import {MockBoringOnChainQueue} from "src/mock/ggv/MockBoringOnChainQueue.sol";
 
-import {console} from "forge-std/console.sol";
-
 import {ILazyOracleMocked} from "test/utils/CoreHarness.sol";
 import {MockBoringSolver} from "../../src/mock/ggv/MockBoringSolver.sol";
+
+import {TableUtils} from "../utils/format/TableUtils.sol";
+import {GGVVaultMock, GGVMockTeller,GGVQueueMock} from "src/mock/GGVMock.sol";
 
 interface IAuthority {
     function setUserRole(address user, uint8 role, bool enabled) external;
@@ -46,6 +48,10 @@ interface IAccountant {
 }
 
 contract GGVTest is WrapperCHarness {
+    using TableUtils for TableUtils.Context;
+    TableUtils.Context private _log;
+
+    address public constant ADMIN = address(0x1337);
 
     uint8 public constant OWNER_ROLE = 8;
     uint8 public constant MULTISIG_ROLE = 9;
@@ -57,15 +63,20 @@ contract GGVTest is WrapperCHarness {
 //    IBoringOnChainQueue public boringOnChainQueue;
 //    IBoringSolver public solver;
 
-    ITellerWithMultiAssetSupport public teller = ITellerWithMultiAssetSupport(0x0baAb6db8d694E1511992b504476ef4073fe614B);
-    IBoringOnChainQueue public boringOnChainQueue = IBoringOnChainQueue(0xe39682c3C44b73285A2556D4869041e674d1a6B7);
-    IBoringSolver public solver = IBoringSolver(0xAC20dba743CDCd883f6E5309954C05b76d41e080);
+    ITellerWithMultiAssetSupport public teller ;
+    IBoringOnChainQueue public boringOnChainQueue;
+    IBoringSolver public solver;
 
     WrapperC public wrapper;
     ILazyOracleMocked public lazyOracle;
     WithdrawalQueue public withdrawalQueue;
 
+    GGVStrategy public ggvStrategy;
+    GGVVaultMock public boringVault;
+
     address WSTETH = address(0); // unused with mocks
+
+    TableUtils.User[] public logUsers;
 
     //allowed
     //0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0 wsteth
@@ -76,11 +87,11 @@ contract GGVTest is WrapperCHarness {
     function setUp() public {
         _initializeCore();
 
-//        address boringVault = address(new MockBoringVault());
-//        teller = ITellerWithMultiAsse2tSupport(address(new MockTeller(boringVault)));
-//        boringOnChainQueue = new MockBoringOnChainQueue(boringVault);
-//        // Configure withdraw assets for stETH and wstETH on the mock queue
-//        solver = new MockBoringSolver(boringVault, address(boringOnChainQueue));
+        vm.deal(ADMIN, 100_000 ether);
+
+        boringVault = new GGVVaultMock(ADMIN, address(steth));
+        teller = GGVMockTeller(address(boringVault.TELLER()));
+        boringOnChainQueue = GGVQueueMock(address(boringVault.BORING_QUEUE()));
 
         WrapperContext memory ctx = _deployWrapperC(false, address(strategy), 0, address(teller), address(boringOnChainQueue));
         wrapper = WrapperC(payable(ctx.wrapper));
@@ -89,11 +100,26 @@ contract GGVTest is WrapperCHarness {
 
         console.log("wrapper", address(wrapper));
         console.log("strategy", address(strategy));
-
         console.log("wrapper setup finished");
 
+        ggvStrategy = GGVStrategy(address(strategy));
+
+        _log.init(
+            address(wrapper),
+            address(boringVault),
+            address(steth),
+            address(boringOnChainQueue),
+            ggvStrategy.DISCOUNT()
+        );
+
+
+        vm.startPrank(ADMIN);
+        steth.submit{value: 10 ether}(ADMIN);
+        steth.approve(address(boringVault), type(uint256).max);
+        vm.stopPrank();
+
         // Skip external GGV mainnet setup when using local mocks
-        _setupGGV();
+//        _setupGGV();
     }
 
     function _setupGGV() public {
@@ -122,17 +148,6 @@ contract GGVTest is WrapperCHarness {
             0
         );
 
-        teller.updateAssetData(ERC20(address(core.wsteth())), true, true, 0);
-        accountant.setRateProviderData(ERC20(address(core.wsteth())), true, address(0));
-        boringOnChainQueue.updateWithdrawAsset(
-            address(core.wsteth()),
-            0,
-            604800,
-            1,
-            9,
-            0
-        );
-
         console.log("setup GGV finished\n");
     }
 
@@ -145,42 +160,74 @@ contract GGVTest is WrapperCHarness {
 
         console.log("user1StETHAmount", user1StETHAmount);
     }
-
+    
     function test_happy_path() public {
-        GGVStrategy ggvStrategy = GGVStrategy(address(strategy));
-        ERC20 boringVault = ERC20(ggvStrategy.TELLER().vault());
+        
+        address strategyProxy = ggvStrategy.getStrategyProxyAddress(USER1);
+        vm.label(strategyProxy, "User strategy proxy");
+
+        address strategyProxy2 = ggvStrategy.getStrategyProxyAddress(USER2);
+        vm.label(strategyProxy2, "User strategy proxy");
 
         uint256 depositAmount = 1 ether;
 
-        console.log("\n[USER] Step1. Deposit");
-        console.log("deposit amount: %s", depositAmount);
-        console.log("user balance before: %s", USER1.balance);
+        logUsers.push(TableUtils.User(USER1, "user1"));
+        logUsers.push(TableUtils.User(strategyProxy, "user1_proxy"));
+//        logUsers.push(TableUtils.User(USER2, "user2"));
+//        logUsers.push(TableUtils.User(strategyProxy2, "user2_proxy"));
+        logUsers.push(TableUtils.User(address(wrapper), "wrapper"));
+        logUsers.push(TableUtils.User(address(wrapper.WITHDRAWAL_QUEUE()), "wq"));
 
+        _log.printHeader("[USER] Before Deposit");
+        _log.printUsers(logUsers);
 
         vm.prank(USER1);
         wrapper.depositETH{value: depositAmount}(USER1);
-        uint256 user1StETHAmount = core.steth().balanceOf(USER1); // Would need to calculate separately
-        address strategyProxy = ggvStrategy.getStrategyProxyAddress(USER1);
+
+//        vm.prank(USER2);
+//        wrapper.depositETH{value: depositAmount}(USER2);
+
+        vm.startPrank(ADMIN);
+//        boringVault.rebase(1 ether);
+        vm.stopPrank();
+
+        _log.printHeader("[USER] After Deposit");
+        _log.printUsers(logUsers);
+
         uint256 ggvShares = boringVault.balanceOf(strategyProxy);
+        assertEq(core.steth().balanceOf(USER1), 0, "Invalid steth balance");
+
+        // ================= user request withdraw =================
 
         //share lock period is 1 day
-        //
-        //  Request withdraw
-        //
         vm.warp(block.timestamp + 86400);
-        console.log("\n[USER] Step2. Request withdraw");
-        console.log("ggv shares: %s", ggvShares);
+
+        _log.printHeader("[USER] Request withdraw");
+        _log.printUsers(logUsers);
+
+        // add 1 steth to ggv balance for rebase
+//        vm.prank(ADMIN);
+//        boringVault.rebase(1 ether);
+
+        uint256 withdrawalStethAmount1 = boringOnChainQueue.previewAssetsOut(address(steth), uint128(ggvShares), ggvStrategy.DISCOUNT());
+        console.log("boringVault.balanceOf(strategyProxy)", boringVault.balanceOf(strategyProxy));
+        console.log("withdrawalStethAmount1", withdrawalStethAmount1);
 
         uint256 withdrawalAmount = ggvStrategy.withdrawalAmount(USER1);
         console.log("withdrawalAmount", withdrawalAmount);
+
+        uint256 withdrawalStethAmount = boringOnChainQueue.previewAssetsOut(address(steth), uint128(ggvShares), ggvStrategy.DISCOUNT());
+        console.log("withdrawalStethAmount2", withdrawalStethAmount);
 
         uint256 totalStvShares = wrapper.balanceOf(strategyProxy);
         uint256 userTotalEth = wrapper.previewRedeem(totalStvShares);
         uint256 totalGgvShares = boringVault.balanceOf(strategyProxy);
         uint256 exitGgvShares = Math.mulDiv(totalGgvShares, withdrawalAmount, userTotalEth);
 
+        uint96 queueNonce = boringOnChainQueue.nonce();
+
         vm.prank(USER1);
-        uint256 requestId = wrapper.requestWithdrawalFromStrategy(withdrawalAmount);
+        uint256 requestId = wrapper.requestWithdrawalFromStrategy(withdrawalStethAmount);
         // bytes32 ggvRequestId = ggvStrategy.userPositions(USER1).exitRequestId;
 
 
@@ -194,46 +241,42 @@ contract GGVTest is WrapperCHarness {
         GGVStrategy.UserPosition memory position = ggvStrategy.getUserPosition(USER1);
 
         uint40 timeNow = uint40(block.timestamp);
-        MockBoringOnChainQueue.WithdrawAsset memory _assetSteth = boringOnChainQueue.withdrawAssets(address(core.steth()));
+        MockBoringOnChainQueue.WithdrawAsset memory _assetSteth = boringOnChainQueue.withdrawAssets(address(steth));
         uint24 secondsToMaturity = _assetSteth.secondsToMaturity;
         uint24 secondsToDeadline = type(uint24).max;
-        uint128 assetsOut = uint128(boringOnChainQueue.previewAssetsOut(address(core.steth()), uint128(ggvShares), 1));
+        uint128 assetsOut = uint128(boringOnChainQueue.previewAssetsOut(address(steth), uint128(ggvShares), ggvStrategy.DISCOUNT()));
 
         IBoringOnChainQueue.OnChainWithdraw[] memory requests = new IBoringOnChainQueue.OnChainWithdraw[](1);
         requests[0] = IBoringOnChainQueue.OnChainWithdraw({
-            nonce: boringOnChainQueue.nonce()-1,
+            nonce: queueNonce,
             user: address(strategyProxy),
-            assetOut: address(core.steth()),
+            assetOut: address(steth),
             amountOfShares: uint128(exitGgvShares),
             amountOfAssets: assetsOut,
             creationTime: timeNow,
             secondsToMaturity: secondsToMaturity,
             secondsToDeadline: secondsToDeadline
         });
-        console.log("requests[0]");
-        console.logBytes32(keccak256(abi.encode(requests[0])));
 
         // ================= BoringSolver sends assets and solves =================
 
         vm.warp(block.timestamp + secondsToMaturity + 1);
 
         // Fund solver with enough stETH and approve queue to pull them
-        vm.startPrank(USER2);
-        steth.submit{value: 50 ether}(address(0));
-        uint256 u2StEth = steth.balanceOf(USER2);
-        steth.transfer(address(solver), u2StEth);
-        vm.stopPrank();
+//        vm.startPrank(USER2);
+//        steth.submit{value: 50 ether}(address(0));
+//        uint256 u2StEth = steth.balanceOf(USER2);
+//        steth.transfer(address(solver), u2StEth);
+//        vm.stopPrank();
+//
+//        vm.prank(address(solver));
+//        steth.approve(address(boringOnChainQueue), type(uint256).max);
 
-        vm.prank(address(solver));
-        steth.approve(address(boringOnChainQueue), type(uint256).max);
+//        solver.boringRedeemSolve(requests, address(teller), true);
+        boringOnChainQueue.solveOnChainWithdraws(requests, new bytes(0), address(0));
 
-        solver.boringRedeemSolve(requests, address(teller), true);
-
-        uint256 user1WstethBalance = core.wsteth().balanceOf(strategyProxy);
-        uint256 stethAmount = core.wsteth().getStETHByWstETH(user1WstethBalance);
-
-        assertEq(core.wsteth().balanceOf(USER1), 0);
-        assertEq(core.wsteth().balanceOf(strategyProxy), user1WstethBalance);
+        _log.printHeader("After Boring Solver");
+        _log.printUsers(logUsers);
 
         // ================= Claim request =================
 
@@ -259,32 +302,17 @@ contract GGVTest is WrapperCHarness {
         requestIds = wrapper.getWithdrawalRequests(USER1);
         assertEq(requestIds.length, 0, "Wrapper requests should be zero after finalize");
 
-        // ================= [USER] Step5. Create withdrawal request in WQ =================
-        console.log("\n[USER] Step5. Create withdrawal request in WQ");
+        _log.printHeader("After user finalize withdrawal");
+        _log.printUsers(logUsers);
 
-//        vm.startPrank(USER1);
-//        uint256 withdrawableStv = wrapper.withdrawableStv(USER1, steth.sharesOf(USER1));
-//
-//        console.log("withdrawableStv", withdrawableStv);
-//        uint256 userStvBal = wrapper.balanceOf(USER1);
-//        console.log("wrapper balance", userStvBal);
-//        console.log("steth shares", steth.sharesOf(USER1));
-//        console.log("strategyProxy wrapper shares", wrapper.balanceOf(strategyProxy));
-//        console.log("strategyProxy wrapper shares", wrapper.balanceOf(strategyProxy));
-//
-//        // Cap to user balance to avoid InsufficientSharesLocked
-//        uint256 stvToWithdraw = withdrawableStv > userStvBal ? userStvBal : withdrawableStv;
-//
-//        uint256 stethSharesToBurn = wrapper.stethSharesForWithdrawal(USER1, stvToWithdraw);
-//        // Grant ample allowance for share transfer and potential rounding
-//        steth.approve(address(wrapper), type(uint256).max);
-//        requestId = wrapper.requestWithdrawal(stvToWithdraw);
-//        vm.stopPrank();
 
         // ================= [NODE OPERATOR] Step5. Finalize withdrawal request in WQ =================
         console.log("\n[NODE OPERATOR] Step5. Finalize withdrawal request in WQ");
 
         _finalizeWQ(1);
+
+        _log.printHeader("After NO finalize withdrawal requests");
+        _log.printUsers(logUsers);
 
         // ================= [NODE OPERATOR] Step5. Finalize withdrawal request in WQ =================
         console.log("\n[USER ACTION]Step6. Claim request id");
@@ -295,7 +323,15 @@ contract GGVTest is WrapperCHarness {
         vm.prank(USER1);
         wrapper.claimWithdrawal(1, address(0));
 
-        console.log("user balance after claim", USER1.balance);
+        _log.printHeader("[USER] Claim withdrawal request");
+        _log.printUsers(logUsers);
+
+        uint256 surplus = steth.balanceOf(strategyProxy);
+        vm.prank(USER1);
+        ggvStrategy.recoverERC20(address(steth), USER1, surplus);
+
+        _log.printHeader("[USER] Recovery ERC20");
+        _log.printUsers(logUsers);
     }
 
     function _finalizeWQ(uint256 _maxRequest) public {
