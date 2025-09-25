@@ -22,29 +22,6 @@ contract WrapperBTest is WrapperBHarness {
         _initializeCore();
     }
 
-    function _ensureFreshness(WrapperContext memory ctx) internal {
-        // Ensure VaultHub record timestamp is set
-        uint256 recTs = IVaultHub(address(ctx.dashboard.VAULT_HUB())).vaultRecord(address(ctx.vault)).report.timestamp;
-        if (recTs == 0) {
-            core.applyVaultReport(address(ctx.vault), ctx.dashboard.totalValue(), 0, ctx.dashboard.liabilityShares(), 0, false);
-            recTs = IVaultHub(address(ctx.dashboard.VAULT_HUB())).vaultRecord(address(ctx.vault)).report.timestamp;
-        }
-
-        // Make LazyOracle.latestReportTimestamp equal to the record timestamp to satisfy _isReportFresh logic
-        vm.warp(recTs + 1);
-        vm.mockCall(
-            address(core.lazyOracle()),
-            abi.encodeWithSignature("latestReportTimestamp()"),
-            abi.encode(recTs)
-        );
-
-        // Also return true from VaultHub.isReportFresh for the specific vault used in this test context
-        vm.mockCall(
-            address(core.vaultHub()),
-            abi.encodeWithSignature("isReportFresh(address)", address(ctx.vault)),
-            abi.encode(true)
-        );
-    }
 
     function test_single_user_mints_full_in_one_step() public {
         WrapperContext memory ctx = _deployWrapperB(false, 0);

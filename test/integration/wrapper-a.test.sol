@@ -26,18 +26,18 @@ contract WrapperATest is WrapperAHarness {
      */
     function test_custom_deployment_with_allowlist() public {
         // Deploy wrapper with allowlist enabled
-        (WrapperA customWrapper, WithdrawalQueue customQueue, IDashboard customDashboard, IStakingVault customVault) = _deployWrapperA(true);
+        WrapperContext memory custom = _deployWrapperA(true);
 
         // Verify the custom wrapper was deployed with allowlist enabled
-        assertTrue(customWrapper.ALLOW_LIST_ENABLED(), "Custom wrapper should have allowlist enabled");
+        assertTrue(custom.wrapper.ALLOW_LIST_ENABLED(), "Custom wrapper should have allowlist enabled");
 
         // Deploy another wrapper without allowlist to compare
-        (WrapperA defaultWrapper, WithdrawalQueue defaultQueue, , ) = _deployWrapperA(false);
+        WrapperContext memory def = _deployWrapperA(false);
 
         // Verify the wrappers are different instances
-        assertTrue(address(customWrapper) != address(defaultWrapper), "Custom wrapper should be different from default");
-        assertTrue(address(customQueue) != address(defaultQueue), "Custom queue should be different from default");
-        assertFalse(defaultWrapper.ALLOW_LIST_ENABLED(), "Default wrapper should not have allowlist enabled");
+        assertTrue(address(custom.wrapper) != address(def.wrapper), "Custom wrapper should be different from default");
+        assertTrue(address(custom.withdrawalQueue) != address(def.withdrawalQueue), "Custom queue should be different from default");
+        assertFalse(def.wrapper.ALLOW_LIST_ENABLED(), "Default wrapper should not have allowlist enabled");
     }
 
     /**
@@ -56,7 +56,7 @@ contract WrapperATest is WrapperAHarness {
     // TODO: fix
     function xtest_happy_path() public {
         // Deploy wrapper system for this test
-        (WrapperA wrapper, WithdrawalQueue withdrawalQueue, IDashboard dashboard, IStakingVault vault) = _deployWrapperA(false);
+        WrapperContext memory ctx = _deployWrapperA(false);
 
         //
         // Step 1: User1 deposits
@@ -64,27 +64,27 @@ contract WrapperATest is WrapperAHarness {
 
         uint256 user1Deposit = 1 ether;
         vm.prank(USER1);
-        wrapper.depositETH{value: user1Deposit}(USER1, address(0));
+        ctx.wrapper.depositETH{value: user1Deposit}(USER1, address(0));
 
         uint256 wrapperConnectDepositStvShares = CONNECT_DEPOSIT * EXTRA_BASE;
         uint256 expectedUser1StvShares = user1Deposit * EXTRA_BASE;
 
-        assertEq(wrapper.totalAssets(), user1Deposit + CONNECT_DEPOSIT, "Wrapper total assets should be equal to user deposit plus CONNECT_DEPOSIT");
-        assertEq(wrapper.totalSupply(), wrapperConnectDepositStvShares + expectedUser1StvShares, "Wrapper total supply should be equal to user deposit plus CONNECT_DEPOSIT");
+        assertEq(ctx.wrapper.totalAssets(), user1Deposit + CONNECT_DEPOSIT, "Wrapper total assets should be equal to user deposit plus CONNECT_DEPOSIT");
+        assertEq(ctx.wrapper.totalSupply(), wrapperConnectDepositStvShares + expectedUser1StvShares, "Wrapper total supply should be equal to user deposit plus CONNECT_DEPOSIT");
 
-        assertEq(wrapper.balanceOf(address(wrapper)), wrapperConnectDepositStvShares, "Wrapper balance should be equal to wrapperConnectDepositStvShares");
-        assertEq(wrapper.balanceOf(USER1), expectedUser1StvShares, "Wrapper balance of USER1 should be equal to user deposit");
-        assertEq(wrapper.previewRedeem(wrapper.balanceOf(USER1)), user1Deposit, "Preview redeem should be equal to user deposit");
+        assertEq(ctx.wrapper.balanceOf(address(ctx.wrapper)), wrapperConnectDepositStvShares, "Wrapper balance should be equal to wrapperConnectDepositStvShares");
+        assertEq(ctx.wrapper.balanceOf(USER1), expectedUser1StvShares, "Wrapper balance of USER1 should be equal to user deposit");
+        assertEq(ctx.wrapper.previewRedeem(ctx.wrapper.balanceOf(USER1)), user1Deposit, "Preview redeem should be equal to user deposit");
 
         // No stETH should be minted for User1 in WrapperA
         assertEq(steth.balanceOf(USER1), 0, "stETH balance of USER1 should be zero - no minting in WrapperA");
         assertEq(steth.sharesOf(USER1), 0, "stETH shares balance of USER1 should be zero - no minting in WrapperA");
 
-        assertEq(address(vault).balance, CONNECT_DEPOSIT + user1Deposit, "Vault's balance should be equal to CONNECT_DEPOSIT + user1Deposit");
-        assertEq(dashboard.totalValue(), address(vault).balance, "Vault's total value should be equal to its balance");
-        assertEq(dashboard.locked(), CONNECT_DEPOSIT, "Vault's locked should be equal to CONNECT_DEPOSIT only");
-        assertEq(dashboard.withdrawableValue(), user1Deposit, "Vault's withdrawable value should be user deposit");
-        assertEq(dashboard.liabilityShares(), 0, "Vault's liability shares should be zero - no minting");
+        assertEq(address(ctx.vault).balance, CONNECT_DEPOSIT + user1Deposit, "Vault's balance should be equal to CONNECT_DEPOSIT + user1Deposit");
+        assertEq(ctx.dashboard.totalValue(), address(ctx.vault).balance, "Vault's total value should be equal to its balance");
+        assertEq(ctx.dashboard.locked(), CONNECT_DEPOSIT, "Vault's locked should be equal to CONNECT_DEPOSIT only");
+        assertEq(ctx.dashboard.withdrawableValue(), user1Deposit, "Vault's withdrawable value should be user deposit");
+        assertEq(ctx.dashboard.liabilityShares(), 0, "Vault's liability shares should be zero - no minting");
 
         //
         // Step 2: First update the report to reflect the current vault balance (with deposits)
@@ -92,8 +92,8 @@ contract WrapperATest is WrapperAHarness {
         //
 
         vm.warp(block.timestamp + 1 days);
-        core.applyVaultReport(address(vault), address(vault).balance, 0, 0, 0, false);
-        assertEq(dashboard.totalValue(), address(vault).balance, "Vault's total value should be equal to its balance");
+        core.applyVaultReport(address(ctx.vault), address(ctx.vault).balance, 0, 0, 0, false);
+        assertEq(ctx.dashboard.totalValue(), address(ctx.vault).balance, "Vault's total value should be equal to its balance");
 
         //
         // Step 3: Apply 2% increase to vault (outperforming core's 1% increase)
@@ -106,15 +106,15 @@ contract WrapperATest is WrapperAHarness {
         uint256 baseValue = CONNECT_DEPOSIT + user1Deposit;
         uint256 vaultValue1Pct = baseValue * 101 / 100;
         vm.warp(block.timestamp + 1 days);
-        core.applyVaultReport(address(vault), vaultValue1Pct, 0, 0, 0, false);
+        core.applyVaultReport(address(ctx.vault), vaultValue1Pct, 0, 0, 0, false);
 
         // Verify vault updated
-        assertEq(dashboard.totalValue(), vaultValue1Pct, "Vault's total value should reflect 1% increase");
+        assertEq(ctx.dashboard.totalValue(), vaultValue1Pct, "Vault's total value should reflect 1% increase");
         // Allow for small rounding differences in total assets calculation
-        assertApproxEqAbs(wrapper.totalAssets(), vaultValue1Pct, 0.01 ether, "Wrapper total assets should approximately reflect vault's 1% increase");
+        assertApproxEqAbs(ctx.wrapper.totalAssets(), vaultValue1Pct, 0.01 ether, "Wrapper total assets should approximately reflect vault's 1% increase");
 
         // User1's shares should now be worth more due to vault outperformance
-        uint256 user1RedeemValue = wrapper.previewRedeem(wrapper.balanceOf(USER1));
+        uint256 user1RedeemValue = ctx.wrapper.previewRedeem(ctx.wrapper.balanceOf(USER1));
         // Use approximate equality for small precision differences
         assertApproxEqAbs(user1RedeemValue, user1Deposit * 101 / 100, 0.01 ether, "User1 redeem value should approximately reflect 1% increase");
 
@@ -127,90 +127,90 @@ contract WrapperATest is WrapperAHarness {
 
         uint256 user2Deposit = 1 ether;
         vm.prank(USER2);
-        wrapper.depositETH{value: user2Deposit}(USER2, address(0));
+        ctx.wrapper.depositETH{value: user2Deposit}(USER2, address(0));
 
         // After vault outperformance, User2 should get shares at the new exchange rate
-        uint256 expectedUser2StvShares = wrapper.previewDeposit(user2Deposit);
+        uint256 expectedUser2StvShares = ctx.wrapper.previewDeposit(user2Deposit);
 
-        assertEq(wrapper.balanceOf(USER2), expectedUser2StvShares, "Wrapper balance of USER2 should match previewDeposit calculation");
-        assertEq(wrapper.previewRedeem(wrapper.balanceOf(USER2)), user2Deposit, "Preview redeem should be equal to user deposit");
+        assertEq(ctx.wrapper.balanceOf(USER2), expectedUser2StvShares, "Wrapper balance of USER2 should match previewDeposit calculation");
+        assertEq(ctx.wrapper.previewRedeem(ctx.wrapper.balanceOf(USER2)), user2Deposit, "Preview redeem should be equal to user deposit");
 
         // No stETH should be minted for User2 either
         assertEq(steth.balanceOf(USER2), 0, "stETH balance of USER2 should be zero - no minting in WrapperA");
         assertEq(steth.sharesOf(USER2), 0, "stETH shares balance of USER2 should be zero - no minting in WrapperA");
 
-        assertEq(wrapper.totalSupply(), wrapperConnectDepositStvShares + expectedUser1StvShares + expectedUser2StvShares, "Wrapper total supply should include all shares");
+        assertEq(ctx.wrapper.totalSupply(), wrapperConnectDepositStvShares + expectedUser1StvShares + expectedUser2StvShares, "Wrapper total supply should include all shares");
 
         //
         // Step 5: User1 withdraws half of their stvShares
         //
 
-        uint256 user1StvShares = wrapper.balanceOf(USER1);
+        uint256 user1StvShares = ctx.wrapper.balanceOf(USER1);
         uint256 user1SharesToWithdraw = user1StvShares / 2;
-        uint256 user1ExpectedEthWithdrawn = wrapper.previewRedeem(user1SharesToWithdraw);
+        uint256 user1ExpectedEthWithdrawn = ctx.wrapper.previewRedeem(user1SharesToWithdraw);
 
         vm.prank(USER1);
-        uint256 requestId = wrapper.requestWithdrawal(user1SharesToWithdraw);
+        uint256 requestId = ctx.wrapper.requestWithdrawal(user1SharesToWithdraw);
 
         // Verify withdrawal request was created
-        assertEq(wrapper.balanceOf(address(withdrawalQueue)), user1SharesToWithdraw, "Wrapper balance of withdrawalQueue should be equal to user1SharesToWithdraw");
-        assertEq(wrapper.balanceOf(USER1), user1StvShares - user1SharesToWithdraw, "Wrapper balance of USER1 should be reduced");
+        assertEq(ctx.wrapper.balanceOf(address(ctx.withdrawalQueue)), user1SharesToWithdraw, "Wrapper balance of withdrawalQueue should be equal to user1SharesToWithdraw");
+        assertEq(ctx.wrapper.balanceOf(USER1), user1StvShares - user1SharesToWithdraw, "Wrapper balance of USER1 should be reduced");
 
         // User cannot claim before finalization
         vm.expectRevert("RequestNotFoundOrNotFinalized(1)");
         vm.prank(USER1);
-        wrapper.claimWithdrawal(requestId, USER1);
+        ctx.wrapper.claimWithdrawal(requestId, USER1);
 
         // Update report data with current timestamp to make it fresh
-        core.applyVaultReport(address(vault), wrapper.totalAssets(), 0, 0, 0, false);
+        core.applyVaultReport(address(ctx.vault), ctx.wrapper.totalAssets(), 0, 0, 0, false);
 
         // Node operator finalizes the withdrawal
         vm.prank(NODE_OPERATOR);
-        withdrawalQueue.finalize(requestId);
+        ctx.withdrawalQueue.finalize(requestId);
 
-        WithdrawalQueue.WithdrawalRequestStatus memory status = withdrawalQueue.getWithdrawalStatus(requestId);
+        WithdrawalQueue.WithdrawalRequestStatus memory status = ctx.withdrawalQueue.getWithdrawalStatus(requestId);
         assertTrue(status.isFinalized, "Withdrawal request should be finalized");
         assertEq(status.amountOfAssets, user1ExpectedEthWithdrawn, "Withdrawal request amount should match previewRedeem");
         assertEq(status.amountOfShares, user1SharesToWithdraw, "Withdrawal request shares should match user1SharesToWithdraw");
 
         // Deal ETH to withdrawal queue for the claim (simulating validator exit)
-        vm.deal(address(withdrawalQueue), address(withdrawalQueue).balance + user1ExpectedEthWithdrawn);
+        vm.deal(address(ctx.withdrawalQueue), address(ctx.withdrawalQueue).balance + user1ExpectedEthWithdrawn);
 
         // User1 claims their withdrawal
         uint256 user1EthBalanceBeforeClaim = USER1.balance;
         vm.prank(USER1);
-        wrapper.claimWithdrawal(requestId, USER1);
+        ctx.wrapper.claimWithdrawal(requestId, USER1);
 
         assertEq(USER1.balance, user1EthBalanceBeforeClaim + user1ExpectedEthWithdrawn, "USER1 ETH balance should increase by the withdrawn amount");
 
-        status = withdrawalQueue.getWithdrawalStatus(requestId);
+        status = ctx.withdrawalQueue.getWithdrawalStatus(requestId);
         assertTrue(status.isClaimed, "Withdrawal request should be claimed after claimWithdrawal");
 
         //
         // Step 6: User1 deposits again
         //
 
-        uint256 user1PreviewRedeemBefore = wrapper.previewRedeem(wrapper.balanceOf(USER1));
+        uint256 user1PreviewRedeemBefore = ctx.wrapper.previewRedeem(ctx.wrapper.balanceOf(USER1));
 
         vm.prank(USER1);
-        wrapper.depositETH{value: user1Deposit}(USER1, address(0));
+        ctx.wrapper.depositETH{value: user1Deposit}(USER1, address(0));
 
-        assertEq(wrapper.previewRedeem(wrapper.balanceOf(USER1)), user1PreviewRedeemBefore + user1Deposit, "Wrapper preview redeem should increase by user1Deposit");
+        assertEq(ctx.wrapper.previewRedeem(ctx.wrapper.balanceOf(USER1)), user1PreviewRedeemBefore + user1Deposit, "Wrapper preview redeem should increase by user1Deposit");
 
         // Verify still no stETH minting throughout the entire flow
         assertEq(steth.balanceOf(USER1), 0, "stETH balance of USER1 should remain zero throughout");
         assertEq(steth.balanceOf(USER2), 0, "stETH balance of USER2 should remain zero throughout");
-        assertEq(dashboard.liabilityShares(), 0, "Vault should have no liability shares - no minting occurred");
+        assertEq(ctx.dashboard.liabilityShares(), 0, "Vault should have no liability shares - no minting occurred");
     }
 
     function test_initial_state() public {
         // Deploy wrapper system for this test
-        (WrapperA wrapper, WithdrawalQueue withdrawalQueue, IDashboard dashboard, IStakingVault vault) = _deployWrapperA(false);
+        WrapperContext memory ctx2 = _deployWrapperA(false);
 
         // Verify initial state for WrapperA (no minting, no strategy)
-        assertEq(wrapper.totalAssets(), CONNECT_DEPOSIT, "Initial total assets should be CONNECT_DEPOSIT");
-        assertEq(wrapper.totalSupply(), CONNECT_DEPOSIT * EXTRA_BASE, "Initial total supply should be CONNECT_DEPOSIT * EXTRA_BASE");
-        assertEq(dashboard.liabilityShares(), 0, "Should have no liability shares initially");
-        assertEq(dashboard.locked(), CONNECT_DEPOSIT, "Should have CONNECT_DEPOSIT locked");
+        assertEq(ctx2.wrapper.totalAssets(), CONNECT_DEPOSIT, "Initial total assets should be CONNECT_DEPOSIT");
+        assertEq(ctx2.wrapper.totalSupply(), CONNECT_DEPOSIT * EXTRA_BASE, "Initial total supply should be CONNECT_DEPOSIT * EXTRA_BASE");
+        assertEq(ctx2.dashboard.liabilityShares(), 0, "Should have no liability shares initially");
+        assertEq(ctx2.dashboard.locked(), CONNECT_DEPOSIT, "Should have CONNECT_DEPOSIT locked");
     }
 }
