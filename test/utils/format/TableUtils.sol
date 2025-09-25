@@ -79,7 +79,10 @@ library TableUtils {
             printUserRow(self, _addresses[i].name, _addresses[i].user);
         }
 
+        uint256 stethShareRate = self.steth.getPooledEthByShares(1e18);
+
         console.log(unicode"───────────────────────────────────");
+        console.log("  stETH Share Rate:", formatETH(stethShareRate));
         console.log("wrapper totalSupply", formatETH(self.wrapper.totalSupply()));
         console.log("wrapper totalAssets", formatETH(self.wrapper.totalAssets()));
     }

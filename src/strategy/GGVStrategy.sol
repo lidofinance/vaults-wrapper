@@ -51,16 +51,21 @@ contract GGVStrategy is Strategy {
         BORING_QUEUE = IBoringOnChainQueue(_boringQueue);
     }
 
+    /// @notice The strategy id
     function strategyId() public pure override returns (bytes32) {
         return keccak256("strategy.ggv.v1");
     }
 
+    /// @notice Gets the user position
+    /// @param _user The user to get the position for
+    /// @return The user position
     function getUserPosition(address _user) external view returns (UserPosition memory) {
         return userPositions[_user];
     }
 
     /// @notice Executes the strategy
     /// @param _user The user to execute the strategy for
+    /// @param _stv The number of stv shares to execute
     /// @param _stethShares The number of steth shares to execute
     function execute(address _user, uint256 _stv, uint256 _stethShares) external {
         _onlyWrapper();
@@ -108,8 +113,8 @@ contract GGVStrategy is Strategy {
         if (_stethAmount > totalStethFromGgv) revert InvalidStethAmount();
 
         uint256 ggvShares = Math.mulDiv(totalGgvShares, _stethAmount, totalStethFromGgv);
-
-        uint256 calculatedExitStvShares = WRAPPER.withdrawableStv(proxy, _stethAmount);
+        uint256 stethSharesToBurn = STETH.getSharesByPooledEth(_stethAmount);
+        uint256 calculatedExitStvShares = WRAPPER.withdrawableStv(proxy, stethSharesToBurn);
         uint256 userStvBalance = WRAPPER.balanceOf(proxy);
 
         uint256 exitStvShares = Math.min(calculatedExitStvShares, userStvBalance);
