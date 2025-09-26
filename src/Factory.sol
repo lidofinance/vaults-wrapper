@@ -337,7 +337,7 @@ contract Factory {
             wrapperImpl = WRAPPER_A_FACTORY.deploy(dashboard, _allowlistEnabled, withdrawalQueueProxy);
             assert(keccak256(bytes(WrapperBase(payable(wrapperImpl)).wrapperType())) == keccak256(bytes("WrapperA")));
         } else if (_configuration == WrapperType.MINTING_NO_STRATEGY) {
-            wrapperImpl = WRAPPER_B_FACTORY.deploy(dashboard, STETH, _allowlistEnabled, _reserveRatioGapBP, withdrawalQueueProxy);
+            wrapperImpl = WRAPPER_B_FACTORY.deploy(dashboard, _allowlistEnabled, _reserveRatioGapBP, withdrawalQueueProxy);
             assert(keccak256(bytes(WrapperBase(payable(wrapperImpl)).wrapperType())) == keccak256(bytes("WrapperB")));
         } else if (
             _configuration == WrapperType.LOOP_STRATEGY ||
@@ -346,7 +346,6 @@ contract Factory {
             if (_strategy == address(0)) revert InvalidConfiguration();
             wrapperImpl = WRAPPER_C_FACTORY.deploy(
                 dashboard,
-                STETH,
                 _allowlistEnabled,
                 _strategy,
                 _reserveRatioGapBP,

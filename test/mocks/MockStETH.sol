@@ -2,6 +2,7 @@
 pragma solidity >=0.8.25;
 
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
 contract MockStETH is ERC20 {
     uint256 private totalShares;
@@ -30,6 +31,10 @@ contract MockStETH is ERC20 {
         return _sharesAmount
             * totalPooledEth // numerator in ether
             / totalShares; // denominator in shares
+    }
+
+    function getPooledEthBySharesRoundUp(uint256 _sharesAmount) public view returns (uint256) {
+        return Math.mulDiv(_sharesAmount, totalPooledEth, totalShares, Math.Rounding.Ceil);
     }
     
     function transferSharesFrom(address from, address to, uint256 amount) external returns (bool) {

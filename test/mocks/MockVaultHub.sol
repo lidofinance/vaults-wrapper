@@ -3,19 +3,27 @@ pragma solidity >=0.8.25;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {MockERC20} from "./MockERC20.sol";
+import {MockStETH} from "./MockStETH.sol";
 import {IVaultHub} from "src/interfaces/IVaultHub.sol";
 import {IStakingVault} from "../../src/interfaces/IStakingVault.sol";
 
-contract MockVaultHub { // TODO: maybe inherit IVaultHub
+contract MockVaultHub {
+    // TODO: maybe inherit IVaultHub
+
 
     uint256 public immutable RESERVE_RATIO_BP = 25_00;
     uint256 internal immutable TOTAL_BASIS_POINTS = 100_00;
+    MockStETH public immutable LIDO;
 
     mapping(address => uint256) public vaultBalances;
     mapping(address => uint256) public vaultLiabilityShares;
     address public stethToken;
 
-    constructor() {}
+    constructor() {
+        LIDO = new MockStETH();
+    }
+
+    receive() external payable {}
 
     function mintShares(address _vault, address _recipient, uint256 _amountOfShares) external {
         vaultLiabilityShares[_vault] += _amountOfShares;
@@ -66,6 +74,13 @@ contract MockVaultHub { // TODO: maybe inherit IVaultHub
         IStakingVault(_vault).withdraw(_recipient, _amount);
     }
 
+    function rebalance(address _vault, uint256 _shares) external {
+        uint256 valueToRebalance = LIDO.getPooledEthBySharesRoundUp(_shares);
+        vaultLiabilityShares[_vault] -= _shares;
+        vaultBalances[_vault] -= valueToRebalance;
+        IStakingVault(_vault).withdraw(address(this), valueToRebalance);
+    }
+
     function totalValue(address _vault) external view returns (uint256) {
         return vaultBalances[_vault];
     }
@@ -97,6 +112,10 @@ contract MockVaultHub { // TODO: maybe inherit IVaultHub
         }
     }
 
+    function mock_increaseLiability(address _vault, uint256 _amount) external {
+        vaultLiabilityShares[_vault] += _amount;
+    }
+
     function triggerValidatorWithdrawals(
         address /* _vault */,
         bytes calldata /* _pubkeys */,
@@ -125,7 +144,6 @@ contract MockVaultHub { // TODO: maybe inherit IVaultHub
     //         payable(_refundRecipient).transfer(msg.value);
     //     }
     }
-
 
     /**
      * @notice Test-only function to simulate validator exits making funds withdrawable

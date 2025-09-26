@@ -158,7 +158,8 @@ contract GGVStrategy is Strategy {
         uint256 amountOfAssets128 = BORING_QUEUE.previewAssetsOut(assetOut, uint128(ggvShares), DISCOUNT); //max
         uint256 stethShares = STETH.getSharesByPooledEth(amountOfAssets128);
 
-        uint256 _eth = WRAPPER.withdrawableEth(proxy, stv, stethShares);
+        // TODO: fix this
+        uint256 _eth = WRAPPER.withdrawableEth(proxy, stethShares);
 
         return _eth;
     }

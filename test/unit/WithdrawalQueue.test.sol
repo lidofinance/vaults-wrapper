@@ -51,6 +51,7 @@ contract WithdrawalQueueTest is Test {
 
         // Deploy dashboard
         dashboard = new MockDashboard(
+            address(0), // stETH not needed for this test
             address(vaultHub),
             address(stakingVault),
             admin

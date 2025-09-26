@@ -324,8 +324,8 @@ contract WrapperBTest is WrapperBHarness {
         assertEq(w.mintableStethShares(USER1), _calc_fair_st_shares(user1Rewards) + 1, "USER1 mintable stETH shares should be equal to 0");
 
         // assertEq(ctx.dashboard.withdrawableValue(), user1Rewards, "Dashboard's withdrawable value should be equal to user1Rewards");
-        assertEq(w.withdrawableEth(USER1, w.balanceOf(USER1), 0), user1Rewards, "USER1 withdrawable eth should be equal to user1Rewards");
-        assertEq(w.withdrawableEth(USER1, w.balanceOf(USER1), expectedUser1MintedStShares), w.previewRedeem(w.balanceOf(USER1)), "USER1 withdrawable eth should be equal to user1Deposit + user1Rewards");
+        assertEq(w.withdrawableEth(USER1, 0), user1Rewards, "USER1 withdrawable eth should be equal to user1Rewards");
+        assertEq(w.withdrawableEth(USER1, expectedUser1MintedStShares), w.previewRedeem(w.balanceOf(USER1)), "USER1 withdrawable eth should be equal to user1Deposit + user1Rewards");
 
         // assertEq(w.stethSharesForWithdrawal(USER1, w.balanceOf(USER1)), expectedUser1MintedStShares, "USER1 stSharesForWithdrawal should be equal to expectedUser1MintedStShares");
 
@@ -381,7 +381,7 @@ contract WrapperBTest is WrapperBHarness {
         // Step 2.1: User1 tries to withdraw stv corresponding to 1 wei but RequestAmountTooSmall
         //
 
-        uint256 u1StethShares = w.getStethShares(USER1);
+        uint256 u1StethShares = w.mintedStethSharesOf(USER1);
         console.log("u1StethShares", u1StethShares);
 
         uint256 stvFor1Wei = w.previewWithdraw(1 wei);

@@ -35,7 +35,7 @@ contract MockStakingVault {
     }
 
     function withdraw(address recipient, uint256 amount) external {
-        require(msg.sender == nodeOperator, "Not node operator");
+        // require(msg.sender == nodeOperator, "Not node operator");
         (bool success, ) = recipient.call{value: amount}("");
         require(success, "Transfer failed");
     }

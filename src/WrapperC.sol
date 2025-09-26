@@ -21,16 +21,15 @@ contract WrapperC is WrapperB {
 
     constructor(
         address _dashboard,
-        address _stETH,
         bool _allowListEnabled,
         address _strategy,
         uint256 _reserveRatioGapBP,
         address _withdrawalQueue
-    ) WrapperB(_dashboard, _stETH, _allowListEnabled, _reserveRatioGapBP, _withdrawalQueue) {
+    ) WrapperB(_dashboard, _allowListEnabled, _reserveRatioGapBP, _withdrawalQueue) {
         STRATEGY = IStrategy(_strategy);
     }
 
-    function wrapperType() external pure override virtual returns (string memory) {
+    function wrapperType() external pure virtual override returns (string memory) {
         return "WrapperC";
     }
 
@@ -42,7 +41,7 @@ contract WrapperC is WrapperB {
      * @return stvShares Amount of stvETH shares minted
      */
     function depositETH(address _receiver, address _referral) public payable override returns (uint256 stvShares) {
-        uint256 targetStethShares = _calcTargetStethSharesAmount(msg.value);
+        uint256 targetStethShares = _calcStethSharesToMintForAssets(msg.value);
         stvShares = _deposit(address(STRATEGY), _referral);
         STRATEGY.execute(_receiver, stvShares, targetStethShares);
     }
@@ -67,19 +66,21 @@ contract WrapperC is WrapperB {
         return STRATEGY.getWithdrawableAmount(_address);
     }
 
-
     /// @notice Requests a withdrawal of the specified amount of stvETH shares from the strategy
     /// @param _owner The address that owns the stvETH shares
     /// @param _receiver The address to receive the stETH
     /// @param _stvShares The amount of stvETH shares to withdraw
     /// @return requestId The ID of the created withdrawal request
-    function requestWithdrawalQueue(address _owner, address _receiver, uint256 _stvShares) external returns (uint256 requestId) {
+    function requestWithdrawalQueue(
+        address _owner,
+        address _receiver,
+        uint256 _stvShares
+    ) external returns (uint256 requestId) {
         if (msg.sender != address(STRATEGY)) revert InvalidSender();
-        requestId = _requestWithdrawalQueue(_owner, _receiver,_stvShares);
+        requestId = _requestWithdrawalQueue(_owner, _receiver, _stvShares, 0);
     }
 
     function getRequest(uint256 requestId) external returns (WithdrawalRequest memory) {
         return _getWrapperBaseStorage().withdrawalRequests[requestId];
     }
-
 }
