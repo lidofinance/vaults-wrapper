@@ -14,8 +14,7 @@ import {IDashboard} from "./interfaces/IDashboard.sol";
 import {AllowList} from "./AllowList.sol";
 import {ProposalUpgradable} from "./ProposalUpgradable.sol";
 
-// TODO: move whitelist to a separate contract
-// TODO: likely we can get rid of the base and move all to WrapperA
+
 abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, ProposalUpgradable {
     using EnumerableSet for EnumerableSet.UintSet;
 

@@ -119,6 +119,10 @@ contract WrapperB is WrapperBase {
         (uint256 stvWithdrawableWithoutBurning, ) = _calcWithdrawableWithoutBurning(_address);
 
         uint256 stvRequiringBurning = Math.saturatingSub(_stv, stvWithdrawableWithoutBurning);
+        uint256 stvBackedBySteth = Math.saturatingSub(balance, stvWithdrawableWithoutBurning);
+
+        // TODO: Ceil or Floor?
+        stethShares = Math.mulDiv(stvRequiringBurning, _getStethShares(_address), stvBackedBySteth, Math.Rounding.Ceil);
 
         uint256 stvBackedBySteth = Math.saturatingSub(balance, stvWithdrawableWithoutBurning);
 

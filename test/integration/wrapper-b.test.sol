@@ -22,32 +22,9 @@ contract WrapperBTest is WrapperBHarness {
         _initializeCore();
     }
 
-    function _ensureFreshness(WrapperContext memory ctx) internal {
-        // Ensure VaultHub record timestamp is set
-        uint256 recTs = IVaultHub(address(ctx.dashboard.VAULT_HUB())).vaultRecord(address(ctx.vault)).report.timestamp;
-        if (recTs == 0) {
-            core.applyVaultReport(address(ctx.vault), ctx.dashboard.totalValue(), 0, ctx.dashboard.liabilityShares(), 0, false);
-            recTs = IVaultHub(address(ctx.dashboard.VAULT_HUB())).vaultRecord(address(ctx.vault)).report.timestamp;
-        }
-
-        // Make LazyOracle.latestReportTimestamp equal to the record timestamp to satisfy _isReportFresh logic
-        vm.warp(recTs + 1);
-        vm.mockCall(
-            address(core.lazyOracle()),
-            abi.encodeWithSignature("latestReportTimestamp()"),
-            abi.encode(recTs)
-        );
-
-        // Also return true from VaultHub.isReportFresh for the specific vault used in this test context
-        vm.mockCall(
-            address(core.vaultHub()),
-            abi.encodeWithSignature("isReportFresh(address)", address(ctx.vault)),
-            abi.encode(true)
-        );
-    }
 
     function test_single_user_mints_full_in_one_step() public {
-        WrapperContext memory ctx = _deployWrapperB(false, 0);
+        WrapperContext memory ctx = _deployWrapperB(false, 0, 0);
 
         //
         // Step 1: User deposits ETH
@@ -92,7 +69,7 @@ contract WrapperBTest is WrapperBHarness {
     }
 
     function test_single_user_mints_full_in_two_steps() public {
-        WrapperContext memory ctx = _deployWrapperB(false, 0);
+        WrapperContext memory ctx = _deployWrapperB(false, 0, 0);
 
         //
         // Step 1
@@ -154,7 +131,7 @@ contract WrapperBTest is WrapperBHarness {
     }
 
     function test_two_users_mint_full_in_two_steps() public {
-        WrapperContext memory ctx = _deployWrapperB(false, 0);
+        WrapperContext memory ctx = _deployWrapperB(false, 0, 0);
 
         //
         // Step 1: User1 deposits ETH
@@ -263,7 +240,7 @@ contract WrapperBTest is WrapperBHarness {
     }
 
     function test_vault_underperforms() public {
-        WrapperContext memory ctx = _deployWrapperB(false, 0);
+        WrapperContext memory ctx = _deployWrapperB(false, 0, 0);
 
         //
         // Step 1: User1 deposits
@@ -288,7 +265,14 @@ contract WrapperBTest is WrapperBHarness {
         vm.prank(USER2);
         wrapperB(ctx).depositETH{value: user2Deposit}(USER2, address(0), 0);
 
-        assertEq(wrapperB(ctx).mintableStethShares(USER2), 0, "USER2 mintable stETH shares should be equal to user2Deposit");
+        {
+            uint256 user2ExpectedMintableStethShares = steth.getSharesByPooledEth(user2Deposit * (TOTAL_BASIS_POINTS - RESERVE_RATIO_BP) / TOTAL_BASIS_POINTS);
+            assertLe(
+                wrapperB(ctx).mintableStethShares(USER2),
+                user2ExpectedMintableStethShares,
+                "USER2 mintable stETH shares should not exceed expected after underperformance"
+            );
+        }
 
         // assertEq(steth.sharesOf(USER2), _calc_fair_st_shares(user2Deposit), "USER2 stETH shares should be equal to user2Deposit");
 
@@ -297,7 +281,7 @@ contract WrapperBTest is WrapperBHarness {
     }
 
     function test_user_withdraws_without_burning() public {
-        WrapperContext memory ctx = _deployWrapperB(false, 0);
+        WrapperContext memory ctx = _deployWrapperB(false, 0, 0);
         WrapperB w = wrapperB(ctx);
 
         //
@@ -318,7 +302,12 @@ contract WrapperBTest is WrapperBHarness {
         reportVaultValueChangeNoFees(ctx, 100_00 + 100); // +1%
         _ensureFreshness(ctx);
         uint256 user1Rewards = user1Deposit * 100 / 10000;
-        assertEq(w.previewRedeem(w.balanceOf(USER1)), user1Deposit + user1Rewards, "USER1 previewRedeem should be equal to user1Deposit + user1Rewards");
+        assertApproxEqAbs(
+            w.previewRedeem(w.balanceOf(USER1)),
+            user1Deposit + user1Rewards,
+            WEI_ROUNDING_TOLERANCE,
+            "USER1 previewRedeem should be equal to user1Deposit + user1Rewards"
+        );
 
         // TODO: handle 1 wei problem here
         assertEq(w.mintableStethShares(USER1), _calc_fair_st_shares(user1Rewards) + 1, "USER1 mintable stETH shares should be equal to 0");

@@ -44,7 +44,6 @@ contract WrapperAHarness is Test {
     // Test constants
     uint256 public constant WEI_ROUNDING_TOLERANCE = 1;
     uint256 public CONNECT_DEPOSIT;
-    uint256 public constant NODE_OPERATOR_FEE_RATE = 0; // 0%
     uint256 public constant CONFIRM_EXPIRY = 1 hours;
 
     uint256 public constant TOTAL_BASIS_POINTS = 100_00;
@@ -191,12 +190,10 @@ contract WrapperAHarness is Test {
     }
 
     function _deployWrapperA(
-        bool enableAllowlist
+        bool enableAllowlist,
+        uint256 nodeOperatorFeeBP
     ) internal returns (
-        WrapperA wrapper_,
-        WithdrawalQueue withdrawalQueue_,
-        IDashboard dashboard_,
-        IStakingVault vault_
+        WrapperContext memory context
     ) {
         DeploymentConfig memory config = DeploymentConfig({
             configuration: Factory.WrapperType.NO_MINTING_NO_STRATEGY,
@@ -206,21 +203,16 @@ contract WrapperAHarness is Test {
             nodeOperator: NODE_OPERATOR,
             nodeOperatorManager: NODE_OPERATOR,
             upgradeConformer: NODE_OPERATOR,
-            nodeOperatorFeeBP: NODE_OPERATOR_FEE_RATE,
+            nodeOperatorFeeBP: nodeOperatorFeeBP,
             confirmExpiry: CONFIRM_EXPIRY,
             maxFinalizationTime: 30 days,
             teller: address(0),
             boringQueue: address(0)
         });
 
-        WrapperContext memory context = _deployWrapperSystem(config);
+        context = _deployWrapperSystem(config);
 
-        wrapper_ = context.wrapper;
-        withdrawalQueue_ = context.withdrawalQueue;
-        vault_ = context.vault;
-        dashboard_ = context.dashboard;
-
-        return (wrapper_, withdrawalQueue_, dashboard_, vault_);
+        return context;
     }
 
     function _checkInitialState(WrapperContext memory ctx) internal virtual {
@@ -260,6 +252,42 @@ contract WrapperAHarness is Test {
         uint256 totalValue = ctx.dashboard.totalValue();
         totalValue = totalValue * _factorBp / 10000;
         core.applyVaultReport(address(ctx.vault), totalValue, 0, 0, 0, false);
+    }
+
+    /**
+     * @notice Ensure the core report freshness checks pass for the given context
+     * Aligns LazyOracle.latestReportTimestamp and VaultHub.isReportFresh with the
+     * current vault record so tests can proceed with minting/withdrawing flows.
+     */
+    function _ensureFreshness(WrapperContext memory ctx) internal {
+        // Ensure VaultHub record timestamp is set
+        uint256 recTs = IVaultHub(address(ctx.dashboard.VAULT_HUB())).vaultRecord(address(ctx.vault)).report.timestamp;
+        if (recTs == 0) {
+            core.applyVaultReport(
+                address(ctx.vault),
+                ctx.dashboard.totalValue(),
+                0,
+                ctx.dashboard.liabilityShares(),
+                0,
+                false
+            );
+            recTs = IVaultHub(address(ctx.dashboard.VAULT_HUB())).vaultRecord(address(ctx.vault)).report.timestamp;
+        }
+
+        // Make LazyOracle.latestReportTimestamp equal to the record timestamp to satisfy _isReportFresh logic
+        vm.warp(recTs + 1);
+        vm.mockCall(
+            address(core.lazyOracle()),
+            abi.encodeWithSignature("latestReportTimestamp()"),
+            abi.encode(recTs)
+        );
+
+        // Also return true from VaultHub.isReportFresh for the specific vault used in this test context
+        vm.mockCall(
+            address(core.vaultHub()),
+            abi.encodeWithSignature("isReportFresh(address)", address(ctx.vault)),
+            abi.encode(true)
+        );
     }
 
     // TODO: add after report invariants

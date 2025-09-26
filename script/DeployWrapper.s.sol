@@ -86,6 +86,30 @@ contract DeployWrapper is Script {
         console2.log("Lido getTotalShares:", totalShares);
         require(totalShares > 100000, "Lido totalShares must be > 100000");
 
+        // Optional: bump core VaultFactory nonce on local fork to avoid CREATE address collision when deploying Dashboard.
+        // This is useful if, on your fork, the core VaultFactory’s “creation nonce” is not aligned with the real chain’s history.
+        // This misalignment is common on forks: the RPC eth_getTransactionCount for contracts is often 0, and many fork providers don’t restore the contract-creation nonce correctly.
+        // Enabled by setting BUMP_CORE_FACTORY_NONCE to a non-zero value in the environment.
+        uint256 bumpFlag = vm.envOr("BUMP_CORE_FACTORY_NONCE", uint256(0));
+        if (bumpFlag != 0) {
+            address coreVaultFactory = address(factoryView.VAULT_FACTORY());
+            uint64 nonce = vm.getNonce(coreVaultFactory);
+            // Find the next pair of nonces where both predicted CREATE addresses are free of code
+            for (uint64 i = 0; i < 64; i++) {
+                address predictedFirst = vm.computeCreateAddress(coreVaultFactory, uint256(nonce));
+                address predictedSecond = vm.computeCreateAddress(coreVaultFactory, uint256(nonce) + 1);
+                if (predictedFirst.code.length == 0 && predictedSecond.code.length == 0) {
+                    break;
+                }
+                nonce++;
+            }
+            // Apply the new nonce if it changed
+            if (nonce != vm.getNonce(coreVaultFactory)) {
+                vm.setNonce(coreVaultFactory, nonce);
+                console2.log("Bumped core VaultFactory nonce to", uint256(nonce));
+            }
+        }
+
         vm.startBroadcast();
         Factory factory = Factory(factoryAddr);
 

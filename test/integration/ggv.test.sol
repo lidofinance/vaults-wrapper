@@ -98,7 +98,7 @@ contract GGVTest is WrapperCHarness {
         teller = GGVMockTeller(address(boringVault.TELLER()));
         boringOnChainQueue = GGVQueueMock(address(boringVault.BORING_QUEUE()));
 
-        ctx = _deployWrapperC(false, address(strategy), 0, address(teller), address(boringOnChainQueue));
+        ctx = _deployWrapperC(false, 0, address(strategy), 0, address(teller), address(boringOnChainQueue));
         wrapper = WrapperC(payable(ctx.wrapper));
 
         strategy = IStrategy(wrapper.STRATEGY());
@@ -165,7 +165,7 @@ contract GGVTest is WrapperCHarness {
 
         console.log("user1StETHAmount", user1StETHAmount);
     }
-    
+
     function test_happy_path() public {
         uint256 depositAmount = 1 ether;
 

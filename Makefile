@@ -8,9 +8,23 @@ VERBOSITY ?= vv
 DEBUG_TEST ?= test_debug
 
 
+test-integration-a:
+	. .env 2>/dev/null || true; \
+	FOUNDRY_PROFILE=test \
+	CORE_DEPLOYED_JSON="$$CORE_DEPLOYED_JSON" \
+	forge test \
+		test/integration/wrapper-a.test.sol \
+		-$(VERBOSITY) \
+		--fork-url "$$RPC_URL"
+
 test-integration-b:
 	. .env 2>/dev/null || true; \
-	FOUNDRY_PROFILE=test CORE_DEPLOYED_JSON="$$CORE_DEPLOYED_JSON" forge test test/integration/wrapper-b.test.sol -$(VERBOSITY) --fork-url "$$RPC_URL"
+	FOUNDRY_PROFILE=test \
+	CORE_DEPLOYED_JSON="$$CORE_DEPLOYED_JSON" \
+	forge test \
+		test/integration/wrapper-b.test.sol \
+		-$(VERBOSITY) \
+		--fork-url "$$RPC_URL"
 
 test-integration:
 	. .env 2>/dev/null || true; \
@@ -47,11 +61,16 @@ deploy-factory:
 		--sig 'run()' \
 		--non-interactive
 
+# Usage: make deploy-wrapper-from-factory PARAMS_JSON=./myparams.json
 deploy-wrapper-from-factory:
 	. .env 2>/dev/null || true; \
-	FACTORY_JSON=$${FACTORY_JSON:-$(OUTPUT_JSON)} \
-	WRAPPER_PARAMS_JSON=$${WRAPPER_PARAMS_JSON:-$(WRAPPER_PARAMS_JSON)} \
+	if [ ! -f "$$PARAMS_JSON" ]; then \
+		echo "Error: PARAMS_JSON must be set and point to an existing file (e.g. make deploy-wrapper-from-factory PARAMS_JSON=./myparams.json)"; \
+		exit 1; \
+	fi; \
+	export WRAPPER_PARAMS_JSON="$$PARAMS_JSON"; \
 	forge script script/DeployWrapper.s.sol:DeployWrapper \
+		BUMP_CORE_FACTORY_NONCE=$${BUMP_CORE_FACTORY_NONCE:-0} \
 		--rpc-url $${RPC_URL} \
 		--broadcast \
 		--sender $${DEPLOYER:-$(DEPLOYER)} \

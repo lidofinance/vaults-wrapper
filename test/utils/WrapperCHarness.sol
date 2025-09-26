@@ -22,6 +22,7 @@ contract WrapperCHarness is WrapperBHarness {
 
     function _deployWrapperC(
         bool enableAllowlist,
+        uint256 nodeOperatorFeeBP,
         address strategy_,
         uint256 reserveRatioGapBP,
         address _teller,
@@ -35,7 +36,7 @@ contract WrapperCHarness is WrapperBHarness {
             nodeOperator: NODE_OPERATOR,
             nodeOperatorManager: NODE_OPERATOR,
             upgradeConformer: NODE_OPERATOR,
-            nodeOperatorFeeBP: NODE_OPERATOR_FEE_RATE,
+            nodeOperatorFeeBP: nodeOperatorFeeBP,
             confirmExpiry: CONFIRM_EXPIRY,
             maxFinalizationTime: 30 days,
             teller: _teller,

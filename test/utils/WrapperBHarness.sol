@@ -20,6 +20,7 @@ contract WrapperBHarness is WrapperAHarness {
 
     function _deployWrapperB(
         bool enableAllowlist,
+        uint256 nodeOperatorFeeBP,
         uint256 reserveRatioGapBP
     ) internal returns (WrapperContext memory) {
         DeploymentConfig memory config = DeploymentConfig({
@@ -30,7 +31,7 @@ contract WrapperBHarness is WrapperAHarness {
             nodeOperator: NODE_OPERATOR,
             nodeOperatorManager: NODE_OPERATOR,
             upgradeConformer: NODE_OPERATOR,
-            nodeOperatorFeeBP: NODE_OPERATOR_FEE_RATE,
+            nodeOperatorFeeBP: nodeOperatorFeeBP,
             confirmExpiry: CONFIRM_EXPIRY,
             maxFinalizationTime: 30 days,
             teller: address(0),
