@@ -54,8 +54,18 @@ contract DeployWrapper is Script {
             p.loops = vm.parseJsonUint(json, "$.loops");
         }
         if (p.wrapperType == uint256(Factory.WrapperType.GGV_STRATEGY)) {
-            p.teller = vm.parseJsonAddress(json, "$.teller");
-            p.boringQueue = vm.parseJsonAddress(json, "$.boringQueue");
+            address ggvTeller = address(0);
+            address ggvQueue = address(0);
+            try vm.parseJsonAddress(json, "$.ggv.teller") returns (address t) {
+                ggvTeller = t;
+            } catch {}
+            try vm.parseJsonAddress(json, "$.ggv.boringOnChainQueue") returns (address q) {
+                ggvQueue = q;
+            } catch {}
+            require(ggvTeller != address(0), "ggv.teller must be set");
+            require(ggvQueue != address(0), "ggv.boringOnChainQueue must be set");
+            p.teller = ggvTeller;
+            p.boringQueue = ggvQueue;
         }
         p.value = vm.parseJsonUint(json, "$.value");
     }

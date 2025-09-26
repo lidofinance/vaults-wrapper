@@ -156,6 +156,21 @@ publish-wrapper-sources:
 	fi
 
 
+deploy-ggv-mocks:
+	. .env 2>/dev/null || true; \
+	OUTPUT_JSON=$${GGV_MOCKS_DEPLOYED_JSON:-deployments/ggv-mocks-$${NETWORK:-$(NETWORK)}.json}; \
+	forge script script/DeployGGVMocks.s.sol:DeployGGVMocks \
+		--rpc-url $${RPC_URL} \
+		--broadcast \
+		--sender $${DEPLOYER:-$(DEPLOYER)} \
+		--private-key $${PRIVATE_KEY:-$(PRIVATE_KEY)} \
+		-vvvv \
+		--sig 'run()' \
+		--non-interactive \
+		--json; \
+	echo "Mocks written to $$OUTPUT_JSON (see logs for exact path if overridden)"
+
+
 do-entire-flow-with-core-deploy:
 	export NETWORK=$(NETWORK) && \
 	export RPC_URL=$(RPC_URL) && \
