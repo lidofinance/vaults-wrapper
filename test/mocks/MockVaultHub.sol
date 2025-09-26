@@ -31,7 +31,7 @@ contract MockVaultHub { // TODO: maybe inherit IVaultHub
         return (vaultBalances[_vault] * (TOTAL_BASIS_POINTS - RESERVE_RATIO_BP)) / TOTAL_BASIS_POINTS;
     }
 
-    function vaultConnection(address _vault) external pure returns (IVaultHub.VaultConnection memory) {
+    function vaultConnection(address /* _vault */) external pure returns (IVaultHub.VaultConnection memory) {
         return IVaultHub.VaultConnection({
             owner: address(0),
             shareLimit: 0,
@@ -70,7 +70,7 @@ contract MockVaultHub { // TODO: maybe inherit IVaultHub
         return vaultBalances[_vault];
     }
 
-    function withdrawableValue(address _vault) external pure returns (uint256) {
+    function withdrawableValue(address /* _vault */) external pure returns (uint256) {
         return 0; // Dummy implementation - returns 0 for testing
     }
 
@@ -78,7 +78,7 @@ contract MockVaultHub { // TODO: maybe inherit IVaultHub
         return vaultLiabilityShares[_vault];
     }
 
-    function requestValidatorExit(address _vault, bytes calldata _pubkeys) external {
+    function requestValidatorExit(address /* _vault */, bytes calldata /* _pubkeys */) external {
         // Mock implementation - just emit an event or do nothing
         // In real implementation, this would request node operators to exit validators
     }
@@ -98,10 +98,10 @@ contract MockVaultHub { // TODO: maybe inherit IVaultHub
     }
 
     function triggerValidatorWithdrawals(
-        address _vault,
-        bytes calldata _pubkeys,
-        uint64[] calldata _amounts,
-        address _refundRecipient
+        address /* _vault */,
+        bytes calldata /* _pubkeys */,
+        uint64[] calldata /* _amounts */,
+        address /* _refundRecipient */
     ) external payable {
     //     // Mock implementation - simulate validator withdrawals
     //     // In real implementation, this would trigger EIP-7002 withdrawals
@@ -130,7 +130,7 @@ contract MockVaultHub { // TODO: maybe inherit IVaultHub
     /**
      * @notice Test-only function to simulate validator exits making funds withdrawable
      */
-    function simulateValidatorExits(address _vault, uint256 _amount) external {
+    function simulateValidatorExits(address /* _vault */, uint256 /* _amount */) external {
         // vaultWithdrawableBalances[_vault] += _amount;
         // // Also increase the contract's actual balance to allow for withdrawals
         // payable(address(this)).transfer(_amount);
@@ -140,11 +140,11 @@ contract MockVaultHub { // TODO: maybe inherit IVaultHub
         return 1 ether;
     }
 
-    function transferVaultOwnership(address _vault, address _newOwner) external pure {
+    function transferVaultOwnership(address /* _vault */, address /* _newOwner */) external pure {
         revert("Not implemented");
     }
 
-    function isReportFresh(address _vault) external pure returns (bool) {
+    function isReportFresh(address /* _vault */) external pure returns (bool) {
         return true;
     }
 
