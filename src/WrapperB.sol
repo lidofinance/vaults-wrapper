@@ -18,6 +18,10 @@ import {IStETH} from "./interfaces/IStETH.sol";
 contract WrapperB is WrapperBase {
     using EnumerableSet for EnumerableSet.UintSet;
 
+    event StethSharesMinted(address indexed account, uint256 stethShares);
+    event StethSharesBurned(address indexed account, uint256 stethShares);
+    event StethSharesRebalanced(address indexed account, uint256 stethShares);
+
     error InsufficientMintingCapacity();
     error InsufficientStethShares();
     error InsufficientBalance();
@@ -290,6 +294,8 @@ contract WrapperB is WrapperBase {
         WrapperBStorage storage $ = _getWrapperBStorage();
         $.totalMintedStethShares += _stethShares;
         $.mintedStethShares[_account] += _stethShares;
+
+        emit StethSharesMinted(_account, _stethShares);
     }
 
     /**
@@ -315,6 +321,8 @@ contract WrapperB is WrapperBase {
 
         $.totalMintedStethShares -= _stethShares;
         $.mintedStethShares[_account] -= _stethShares;
+
+        emit StethSharesBurned(_account, _stethShares);
     }
 
     /**
@@ -439,6 +447,8 @@ contract WrapperB is WrapperBase {
 
         _rebalanceMintedStethShares(msg.sender, _stethShares);
         if (remainingStethShares > 0) DASHBOARD.rebalanceVaultWithShares(remainingStethShares);
+
+        emit StethSharesRebalanced(msg.sender, _stethShares);
     }
 
     function _rebalanceMintedStethShares(address _account, uint256 _stethShares) internal {
