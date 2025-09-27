@@ -353,24 +353,24 @@ contract WrapperB is WrapperBase {
         );
     }
 
-    function _calcStethSharesToMintForAssets(uint256 _assets) public view returns (uint256 stethShares) {
+    function _calcStethSharesToMintForAssets(uint256 _assets) internal view returns (uint256 stethShares) {
         stethShares = STETH.getSharesByPooledEth(_calcUnreservedAssetsPart(_assets));
     }
 
-    function _calcStethSharesToMintForStv(uint256 _stv) public view returns (uint256 stethShares) {
+    function _calcStethSharesToMintForStv(uint256 _stv) internal view returns (uint256 stethShares) {
         stethShares = _calcStethSharesToMintForAssets(_convertToAssets(_stv));
     }
 
     /**
      * @dev Use the ceiling rounding to ensure enough assets are locked
      */
-    function _calcAssetsToLockForStethShares(uint256 _stethShares) public view returns (uint256 assetsToLock) {
+    function _calcAssetsToLockForStethShares(uint256 _stethShares) internal view returns (uint256 assetsToLock) {
         if (_stethShares == 0) return 0;
         uint256 steth = STETH.getPooledEthBySharesRoundUp(_stethShares);
         assetsToLock = Math.mulDiv(steth, TOTAL_BASIS_POINTS, TOTAL_BASIS_POINTS - WRAPPER_RR_BP, Math.Rounding.Ceil);
     }
 
-    function _calcStvToLockForStethShares(uint256 _stethShares) public view returns (uint256 stvToLock) {
+    function _calcStvToLockForStethShares(uint256 _stethShares) internal view returns (uint256 stvToLock) {
         uint256 assetsToLock = _calcAssetsToLockForStethShares(_stethShares);
         stvToLock = _convertToShares(assetsToLock, Math.Rounding.Ceil);
     }
