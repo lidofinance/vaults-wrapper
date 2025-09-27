@@ -71,10 +71,12 @@ contract MockDashboard is AccessControlEnumerable {
     // Mock implementation for minting stETH
     function mintShares(address to, uint256 amount) external {
         VAULT_HUB.mock_increaseLiability(STAKING_VAULT, amount);
+        VAULT_HUB.mintShares(STAKING_VAULT, to, amount);
     }
 
     function burnShares(uint256 amount) external {
-        // Mock implementation
+        STETH.transferSharesFrom(msg.sender, address(VAULT_HUB), amount);
+        VAULT_HUB.burnShares(STAKING_VAULT, amount);
     }
 
     function remainingMintingCapacityShares(uint256 /* vaultId */) external pure returns (uint256) {

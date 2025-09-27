@@ -17,7 +17,6 @@ contract MockVaultHub {
 
     mapping(address => uint256) public vaultBalances;
     mapping(address => uint256) public vaultLiabilityShares;
-    address public stethToken;
 
     constructor() {
         LIDO = new MockStETH();
@@ -30,9 +29,7 @@ contract MockVaultHub {
         require(vaultLiabilityShares[_vault] <= maxLockableValue(_vault), "Vault liability exceeds max lockable value");
 
         // Mint stETH tokens to the recipient (simulating the vault minting stETH)
-        if (stethToken != address(0)) {
-            MockERC20(stethToken).mint(_recipient, _amountOfShares);
-        }
+        LIDO.mock_mint(_recipient, _amountOfShares);
     }
 
     function maxLockableValue(address _vault) public view returns (uint256) {
@@ -52,10 +49,6 @@ contract MockVaultHub {
             reservationFeeBP: uint16(RESERVE_RATIO_BP),
             isBeaconDepositsManuallyPaused: false
         });
-    }
-
-    function setStethToken(address _stethToken) external {
-        stethToken = _stethToken;
     }
 
     function burnShares(address from, uint256 amount) external {
