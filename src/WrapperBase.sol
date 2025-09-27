@@ -122,6 +122,15 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
         string memory _name,
         string memory _symbol
     ) public virtual initializer {
+        _initializeWrapperBase(_owner, _upgradeConformer, _name, _symbol);
+    }
+
+    function _initializeWrapperBase(
+        address _owner,
+        address _upgradeConformer,
+        string memory _name,
+        string memory _symbol
+    ) internal {
         __ERC20_init(_name, _symbol);
         __AccessControlEnumerable_init();
 

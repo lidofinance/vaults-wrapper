@@ -60,6 +60,18 @@ contract WrapperB is WrapperBase {
         WRAPPER_RR_BP = vaultRR + _reserveRatioGapBP;
     }
 
+    function initialize(
+        address _owner,
+        address _upgradeConformer,
+        string memory _name,
+        string memory _symbol
+    ) public override initializer {
+        _initializeWrapperBase(_owner, _upgradeConformer, _name, _symbol);
+
+        // Approve max stETH to the Dashboard for burning
+        STETH.approve(address(DASHBOARD), type(uint256).max);
+    }
+
     function wrapperType() external pure virtual override returns (string memory) {
         return "WrapperB";
     }
