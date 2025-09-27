@@ -87,11 +87,13 @@ contract MockStETH is ERC20 {
         return sharesToMint;
     }
 
-    function mock_mint(address _recipient, uint256 _amountOfShares) external {
+    function mock_mintExternalShares(address _recipient, uint256 _amountOfShares) external {
         require(_amountOfShares != 0, "MINT_ZERO_AMOUNT_OF_SHARES");
+        uint256 pooledEther = getPooledEthByShares(_amountOfShares);
+
         shares[_recipient] += _amountOfShares;
         totalShares += _amountOfShares;
-        totalPooledEth += getPooledEthByShares(_amountOfShares);
+        totalPooledEth += pooledEther;
     }
 
     function mock_setTotalPooled(uint256 _pooledEthAmount, uint256 _sharesAmount) external {
