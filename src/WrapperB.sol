@@ -488,7 +488,7 @@ contract WrapperB is WrapperBase {
         if (mintedStethShares == 0) return;
 
         uint256 stvToLock = _calcStvToLockForStethShares(mintedStethShares);
-        if (stvToLock < balanceOf(_from)) revert InsufficientReservedBalance();
+        if (balanceOf(_from) < stvToLock) revert InsufficientReservedBalance();
     }
 
     // TODO: transfer with debt? do we need it?
