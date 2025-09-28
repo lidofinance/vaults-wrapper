@@ -23,5 +23,8 @@ interface ILazyOracle {
         bytes32[] calldata _proof
     ) external;
     function latestReportTimestamp() external view returns (uint256);
-    function latestReportData() external view returns (uint256 timestamp, uint256 refSlot, bytes32 treeRoot, string memory reportCid);
+    function latestReportData()
+        external
+        view
+        returns (uint256 timestamp, uint256 refSlot, bytes32 treeRoot, string memory reportCid);
 }

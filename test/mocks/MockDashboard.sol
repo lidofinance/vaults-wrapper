@@ -8,6 +8,7 @@ import {IStakingVault} from "../../src/interfaces/IStakingVault.sol";
 contract MockDashboard is AccessControlEnumerable {
     MockVaultHub public immutable VAULT_HUB;
     address public immutable STAKING_VAULT;
+
     event DashboardFunded(address sender, uint256 amount);
 
     uint256 public locked;
@@ -31,7 +32,7 @@ contract MockDashboard is AccessControlEnumerable {
     function withdrawableValue() external view returns (uint256) {
         return address(STAKING_VAULT).balance - locked;
     }
-    
+
     function maxLockableValue() external view returns (uint256) {
         return VAULT_HUB.totalValue(STAKING_VAULT);
     }
@@ -68,7 +69,7 @@ contract MockDashboard is AccessControlEnumerable {
     function totalMintingCapacityShares() external pure returns (uint256) {
         return 1000 ether; // Mock large capacity
     }
-    
+
     function reserveRatioBP() external pure returns (uint256) {
         return 500; // 5% reserve ratio for testing
     }
@@ -77,11 +78,10 @@ contract MockDashboard is AccessControlEnumerable {
         // Mock implementation
     }
 
-    function triggerValidatorWithdrawals(
-        bytes calldata pubkeys,
-        uint64[] calldata amounts,
-        address refundRecipient
-    ) external payable {
+    function triggerValidatorWithdrawals(bytes calldata pubkeys, uint64[] calldata amounts, address refundRecipient)
+        external
+        payable
+    {
         // Mock implementation
     }
 

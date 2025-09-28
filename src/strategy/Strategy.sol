@@ -7,8 +7,8 @@ import {IWstETH} from "src/interfaces/IWstETH.sol";
 import {IStrategy} from "src/interfaces/IStrategy.sol";
 import {IStrategyProxy} from "src/interfaces/IStrategyProxy.sol";
 import {WrapperC} from "src/WrapperC.sol";
-abstract contract Strategy is IStrategy {
 
+abstract contract Strategy is IStrategy {
     WrapperC public immutable WRAPPER;
     IStETH public immutable STETH;
     IWstETH public immutable WSTETH;
@@ -47,8 +47,7 @@ abstract contract Strategy is IStrategy {
         proxy = Clones.cloneDeterministic(STRATEGY_PROXY_IMPL, salt);
         IStrategyProxy(proxy).initialize(address(this));
         IStrategyProxy(proxy).call(
-            address(STETH),
-            abi.encodeWithSelector(STETH.approve.selector, address(WRAPPER), type(uint256).max)
+            address(STETH), abi.encodeWithSelector(STETH.approve.selector, address(WRAPPER), type(uint256).max)
         );
         userStrategyProxy[salt] = proxy;
 

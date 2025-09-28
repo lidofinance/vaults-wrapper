@@ -6,17 +6,10 @@ pragma solidity >= 0.5.0;
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 interface IStETH is IERC20 {
-    event TransferShares(
-        address indexed from,
-        address indexed to,
-        uint256 sharesValue
-    );
+    event TransferShares(address indexed from, address indexed to, uint256 sharesValue);
 
     event SharesBurnt(
-        address indexed account,
-        uint256 preRebaseTokenAmount,
-        uint256 postRebaseTokenAmount,
-        uint256 sharesAmount
+        address indexed account, uint256 preRebaseTokenAmount, uint256 postRebaseTokenAmount, uint256 sharesAmount
     );
 
     function name() external pure returns (string memory);
@@ -38,5 +31,7 @@ interface IStETH is IERC20 {
     function getPooledEthByShares(uint256 _sharesAmount) external view returns (uint256);
     function getPooledEthBySharesRoundUp(uint256 _sharesAmount) external view returns (uint256 etherAmount);
     function transferShares(address _recipient, uint256 _sharesAmount) external returns (uint256);
-    function transferSharesFrom(address _sender, address _recipient, uint256 _sharesAmount) external returns (uint256);
+    function transferSharesFrom(address _sender, address _recipient, uint256 _sharesAmount)
+        external
+        returns (uint256);
 }

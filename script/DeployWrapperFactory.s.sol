@@ -13,8 +13,7 @@ import {GGVStrategyFactory} from "src/factories/GGVStrategyFactory.sol";
 import {DummyImplementation} from "src/proxy/DummyImplementation.sol";
 
 import {ILidoLocator} from "src/interfaces/ILidoLocator.sol";
-import {IVaultFactory} from "src/interfaces/IVaultFactory.sol";
-import {ILido} from "src/interfaces/ILido.sol";
+
 
 contract DeployWrapperFactory is Script {
     struct CoreAddresses {
@@ -41,12 +40,13 @@ contract DeployWrapperFactory is Script {
         // REQUIRED: CORE_DEPLOYED_JSON (path to Lido core deployed json, like CoreHarness)
         // OPTIONAL: FACTORY_DEPLOYED_JSON
         string memory deployedJsonPath = vm.envString("CORE_DEPLOYED_JSON");
-        string memory outputJsonPath = vm.envOr("FACTORY_DEPLOYED_JSON", string(string.concat("deployments/wrapper-", vm.toString(block.chainid), ".json")));
+        string memory outputJsonPath = vm.envOr(
+            "FACTORY_DEPLOYED_JSON", string(string.concat("deployments/wrapper-", vm.toString(block.chainid), ".json"))
+        );
 
         if (!vm.isFile(deployedJsonPath)) {
             revert(string(abi.encodePacked("CORE_DEPLOYED_JSON file does not exist at: ", deployedJsonPath)));
         }
-
 
         CoreAddresses memory core = _readCoreFromJson(deployedJsonPath);
 
@@ -126,10 +126,9 @@ contract DeployWrapperFactory is Script {
         Factory factory = new Factory(cfg);
         vm.stopBroadcast();
 
-        string memory outputJsonPath = string(string.concat("deployments/wrapper-", vm.toString(block.chainid), ".json"));
+        string memory outputJsonPath =
+            string(string.concat("deployments/wrapper-", vm.toString(block.chainid), ".json"));
         string memory out = vm.serializeAddress("deployment", "factory", address(factory));
         vm.writeJson(out, outputJsonPath);
     }
 }
-
-

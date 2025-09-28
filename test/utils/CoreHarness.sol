@@ -11,7 +11,6 @@ import {ILazyOracle} from "src/interfaces/ILazyOracle.sol";
 import {IDashboard} from "src/interfaces/IDashboard.sol";
 import {IVaultHub as IVaultHubIntact} from "src/interfaces/IVaultHub.sol";
 import {IVaultFactory} from "src/interfaces/IVaultFactory.sol";
-import {IStakingVault} from "src/interfaces/IStakingVault.sol";
 import {IWstETH} from "../../src/interfaces/IWstETH.sol";
 
 interface IHashConsensus {
@@ -30,13 +29,14 @@ interface IVaultHub is IVaultHubIntact {
 }
 
 interface ILazyOracleMocked is ILazyOracle {
-        function mock__updateVaultData(
+    function mock__updateVaultData(
         address _vault,
         uint256 _totalValue,
         uint256 _cumulativeLidoFees,
         uint256 _liabilityShares,
         uint256 _maxLiabilityShares,
-        uint256 _slashingReserve) external;
+        uint256 _slashingReserve
+    ) external;
 }
 
 contract CoreHarness is Test {
@@ -102,15 +102,14 @@ contract CoreHarness is Test {
 
         if (steth.isStopped()) {
             vm.prank(agent);
-            try steth.resume() {
-            } catch {}
+            try steth.resume() {} catch {}
         }
 
         // Ensure Lido has sufficient shares; on Hoodi it's already funded. Only top up if low.
         uint256 totalShares = steth.getTotalShares();
         if (totalShares < 100000) {
-            try steth.submit{value: INITIAL_LIDO_SUBMISSION}(address(this)) {
-            } catch {
+            try steth.submit{value: INITIAL_LIDO_SUBMISSION}(address(this)) {}
+            catch {
                 // ignore stake limit or other constraints on pre-deployed core
             }
         }
@@ -123,7 +122,6 @@ contract CoreHarness is Test {
 
         dashboard = IDashboard(payable(address(0))); // Will be set by DefiWrapper
         vm.label(address(dashboard), "Dashboard");
-
     }
 
     function setDashboard(address _dashboard) external {
@@ -131,7 +129,14 @@ contract CoreHarness is Test {
         vm.label(address(dashboard), "Dashboard");
     }
 
-    function applyVaultReport(address _stakingVault, uint256 _totalValue, uint256 _cumulativeLidoFees, uint256 _liabilityShares, uint256 _slashingReserve, bool _onlyUpdateReportData) public {
+    function applyVaultReport(
+        address _stakingVault,
+        uint256 _totalValue,
+        uint256 _cumulativeLidoFees,
+        uint256 _liabilityShares,
+        uint256 _slashingReserve,
+        bool _onlyUpdateReportData
+    ) public {
         bytes32 treeRoot = bytes32(0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef);
         string memory reportCid = "dummy-cid";
 
@@ -156,19 +161,14 @@ contract CoreHarness is Test {
             console.log("Calling mock__updateVaultData with totalValue:", _totalValue);
             vm.prank(locator.accounting());
             try lazyOracle.updateVaultData(
-                _stakingVault,
-                _totalValue,
-                _cumulativeLidoFees,
-                _liabilityShares,
-                _slashingReserve,
-                new bytes32[](0)
+                _stakingVault, _totalValue, _cumulativeLidoFees, _liabilityShares, _slashingReserve, new bytes32[](0)
             ) {
                 console.log("After updateVaultData, totalValue from vaultHub:", vaultHub.totalValue(_stakingVault));
             } catch {
                 // If proof checks enforced, fall back to mock when available
                 address ao = locator.accountingOracle();
                 vm.prank(ao);
-                (bool ok, ) = address(lazyOracle).call(
+                (bool ok,) = address(lazyOracle).call(
                     abi.encodeWithSelector(
                         ILazyOracleMocked.mock__updateVaultData.selector,
                         _stakingVault,
@@ -180,7 +180,9 @@ contract CoreHarness is Test {
                     )
                 );
                 if (ok) {
-                    console.log("After mock__updateVaultData, totalValue from vaultHub:", vaultHub.totalValue(_stakingVault));
+                    console.log(
+                        "After mock__updateVaultData, totalValue from vaultHub:", vaultHub.totalValue(_stakingVault)
+                    );
                 }
             }
         }
@@ -196,7 +198,7 @@ contract CoreHarness is Test {
         transferredAmount = _stakingVault.balance;
         if (transferredAmount > 0) {
             vm.prank(_stakingVault);
-            (bool sent, ) = BEACON_CHAIN.call{value: transferredAmount}("");
+            (bool sent,) = BEACON_CHAIN.call{value: transferredAmount}("");
             require(sent, "ETH send to beacon chain failed");
         }
         return transferredAmount;
@@ -208,7 +210,7 @@ contract CoreHarness is Test {
      */
     function mockValidatorExitReturnETH(address _stakingVault, uint256 _ethAmount) external {
         vm.prank(BEACON_CHAIN);
-        (bool success, ) = _stakingVault.call{value: _ethAmount}("");
+        (bool success,) = _stakingVault.call{value: _ethAmount}("");
         require(success, "ETH return from beacon chain failed");
     }
 
@@ -227,10 +229,9 @@ contract CoreHarness is Test {
         }
 
         // Best-effort: do not revert if cannot match ratio exactly on pre-deployed core
-
     }
 
-    function increaseBufferedEther(uint256 _amount) external  {
+    function increaseBufferedEther(uint256 _amount) external {
         //bufferedEtherAndDepositedValidators
         bytes32 BUFFERED_ETHER_SLOT = 0xa84c096ee27e195f25d7b6c7c2a03229e49f1a2a5087e57ce7d7127707942fe3;
 

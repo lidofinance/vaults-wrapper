@@ -1,14 +1,8 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity >=0.8.25;
 
-import {Test, console} from "forge-std/Test.sol";
-
 import {WrapperBHarness} from "test/utils/WrapperBHarness.sol";
-import {WrapperA} from "src/WrapperA.sol";
 import {WrapperC} from "src/WrapperC.sol";
-import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
-import {IDashboard} from "src/interfaces/IDashboard.sol";
-import {IStakingVault} from "src/interfaces/IStakingVault.sol";
 import {IStrategy} from "src/interfaces/IStrategy.sol";
 import {Factory} from "src/Factory.sol";
 
@@ -17,7 +11,6 @@ import {Factory} from "src/Factory.sol";
  * @notice Helper contract for integration tests that provides common setup for WrapperC (minting with strategy)
  */
 contract WrapperCHarness is WrapperBHarness {
-
     IStrategy public strategy;
 
     function _deployWrapperC(
@@ -59,7 +52,7 @@ contract WrapperCHarness is WrapperBHarness {
             holders[i] = holders_[i];
         }
         holders[i++] = address(strategy);
-//        holders[i++] = address(strategy.LENDER_MOCK());
+        //        holders[i++] = address(strategy.LENDER_MOCK());
         return holders;
     }
 

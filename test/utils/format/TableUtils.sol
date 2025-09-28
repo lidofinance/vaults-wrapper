@@ -20,7 +20,6 @@ interface IWrapper {
 library TableUtils {
     Vm private constant vm = Vm(address(uint160(uint256(keccak256("hevm cheat code")))));
 
-
     struct Context {
         IWrapper wrapper;
         IERC20 boringVault;
@@ -52,15 +51,17 @@ library TableUtils {
         self.discount = _discount;
     }
 
-    function printHeader(Context storage self, string memory title) internal {
+    function printHeader(Context storage self, string memory title) internal pure {
         console.log();
         console.log();
         console.log(title);
-        console.log(unicode"───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────");
+        console.log(
+            unicode"───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────"
+        );
         printColumnHeaders(self);
     }
 
-    function printColumnHeaders(Context storage self) internal {
+    function printColumnHeaders(Context storage self) internal pure {
         console.log(
             string.concat(
                 padRight("user", 16),
@@ -75,7 +76,9 @@ library TableUtils {
                 padLeft("stethShares", 20)
             )
         );
-        console.log(unicode"───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────");
+        console.log(
+            unicode"───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────"
+        );
     }
 
     function printUsers(Context storage self, string memory title, User[] memory _addresses) internal {
@@ -93,12 +96,7 @@ library TableUtils {
         console.log("wrapper totalAssets", formatETH(self.wrapper.totalAssets()));
     }
 
-    function printUserRow(
-        Context storage self,
-        string memory userName,
-        address _user
-    ) internal {
-
+    function printUserRow(Context storage self, string memory userName, address _user) internal view {
         uint256 balance = _user.balance;
         uint256 stv = self.wrapper.balanceOf(_user);
         uint256 assets = self.wrapper.previewRedeem(stv);
@@ -131,52 +129,48 @@ library TableUtils {
 
     function formatWithDecimals(uint256 amount, uint256 decimals) internal pure returns (string memory) {
         if (amount == 0) return "0.00";
-        
+
         uint256 divisor = 10 ** decimals;
         uint256 integerPart = amount / divisor;
         uint256 fractionalPart = amount % divisor;
-        
+
         // Для 2 знаков после запятой берем первые 2 цифры дробной части
         uint256 scaledFractional = fractionalPart / (divisor / 100);
-        
-        return string.concat(
-            vm.toString(integerPart),
-            ".",
-            padWithZeros(vm.toString(scaledFractional), 2)
-        );
+
+        return string.concat(vm.toString(integerPart), ".", padWithZeros(vm.toString(scaledFractional), 2));
     }
 
     function padWithZeros(string memory str, uint256 length) internal pure returns (string memory) {
         bytes memory strBytes = bytes(str);
         if (strBytes.length >= length) return str;
-        
+
         bytes memory result = new bytes(length);
         uint256 i;
-        
+
         // Заполняем нулями слева
         for (i = 0; i < length - strBytes.length; i++) {
-            result[i] = '0';
+            result[i] = "0";
         }
-        
+
         // Добавляем исходную строку
         for (uint256 j = 0; j < strBytes.length; j++) {
             result[i + j] = strBytes[j];
         }
-        
+
         return string(result);
     }
 
     function padRight(string memory str, uint256 length) internal pure returns (string memory) {
         bytes memory strBytes = bytes(str);
         if (strBytes.length >= length) return str;
-        
+
         bytes memory result = new bytes(length);
         uint256 i;
         for (i = 0; i < strBytes.length; i++) {
             result[i] = strBytes[i];
         }
         for (; i < length; i++) {
-            result[i] = ' ';
+            result[i] = " ";
         }
         return string(result);
     }
@@ -184,12 +178,12 @@ library TableUtils {
     function padLeft(string memory str, uint256 length) internal pure returns (string memory) {
         bytes memory strBytes = bytes(str);
         if (strBytes.length >= length) return str;
-        
+
         bytes memory result = new bytes(length);
         uint256 padding = length - strBytes.length;
         uint256 i;
         for (i = 0; i < padding; i++) {
-            result[i] = ' ';
+            result[i] = " ";
         }
         for (uint256 j = 0; j < strBytes.length; j++) {
             result[i + j] = strBytes[j];

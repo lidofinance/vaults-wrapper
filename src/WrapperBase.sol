@@ -14,7 +14,6 @@ import {IDashboard} from "./interfaces/IDashboard.sol";
 import {AllowList} from "./AllowList.sol";
 import {ProposalUpgradable} from "./ProposalUpgradable.sol";
 
-
 abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, ProposalUpgradable {
     using EnumerableSet for EnumerableSet.UintSet;
 
@@ -29,7 +28,8 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
     error InvalidRequestType();
 
     // keccak256("REQUEST_VALIDATOR_EXIT_ROLE")
-    bytes32 public immutable REQUEST_VALIDATOR_EXIT_ROLE = 0x2bbd6da7b06270fd63c039b4a14614f791d085d02c5a2e297591df95b05e4185;
+    bytes32 public immutable REQUEST_VALIDATOR_EXIT_ROLE =
+        0x2bbd6da7b06270fd63c039b4a14614f791d085d02c5a2e297591df95b05e4185;
 
     bytes32 public immutable TRIGGER_VALIDATOR_WITHDRAWAL_ROLE = keccak256("TRIGGER_VALIDATOR_WITHDRAWAL_ROLE");
 
@@ -60,13 +60,13 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
     /// @custom:storage-location erc7201:wrapper.base.storage
     struct WrapperBaseStorage {
         bool vaultDisconnected;
-
         WithdrawalRequest[] withdrawalRequests;
         mapping(address => EnumerableSet.UintSet) requestsByOwner;
     }
 
     // keccak256(abi.encode(uint256(keccak256("wrapper.base.storage")) - 1)) & ~bytes32(uint256(0xff))
-    bytes32 private constant WRAPPER_BASE_STORAGE_LOCATION = 0x8405b42399982e28cdd42aed39df9522715c70c841209124c7b936e15fd30300;
+    bytes32 private constant WRAPPER_BASE_STORAGE_LOCATION =
+        0x8405b42399982e28cdd42aed39df9522715c70c841209124c7b936e15fd30300;
 
     function _getWrapperBaseStorage() internal pure returns (WrapperBaseStorage storage $) {
         assembly {
@@ -74,7 +74,7 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
         }
     }
 
-    function withdrawalQueue() public view override returns (WithdrawalQueue)  {
+    function withdrawalQueue() public view override returns (WithdrawalQueue) {
         return WITHDRAWAL_QUEUE;
     }
 
@@ -86,33 +86,15 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
     event ValidatorExitRequested(bytes pubkeys);
     event ValidatorWithdrawalsTriggered(bytes pubkeys, uint64[] amounts);
     event Deposit(
-        address indexed sender,
-        address indexed receiver,
-        address indexed referral,
-        uint256 assets,
-        uint256 stvETHShares
+        address indexed sender, address indexed receiver, address indexed referral, uint256 assets, uint256 stvETHShares
     );
 
     event VaultDisconnected(address indexed initiator);
     event ConnectDepositClaimed(address indexed recipient, uint256 amount);
-    event WithdrawalClaimed(
-        uint256 requestId,
-        address indexed owner,
-        address indexed receiver,
-        uint256 amountOfETH
-    );
-    event WithdrawalRequestCreated(
-        uint256 requestId,
-        address indexed user,
-        uint256 amount,
-        WithdrawalType requestType
-    );
+    event WithdrawalClaimed(uint256 requestId, address indexed owner, address indexed receiver, uint256 amountOfETH);
+    event WithdrawalRequestCreated(uint256 requestId, address indexed user, uint256 amount, WithdrawalType requestType);
 
-    constructor(
-        address _dashboard,
-        bool _allowListEnabled,
-        address _withdrawalQueue
-    ) AllowList(_allowListEnabled) {
+    constructor(address _dashboard, bool _allowListEnabled, address _withdrawalQueue) AllowList(_allowListEnabled) {
         DASHBOARD = IDashboard(payable(_dashboard));
         VAULT_HUB = IVaultHub(DASHBOARD.VAULT_HUB());
         STAKING_VAULT = address(DASHBOARD.stakingVault());
@@ -122,12 +104,11 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
         _disableInitializers();
     }
 
-    function initialize(
-        address _owner,
-        address _upgradeConformer,
-        string memory _name,
-        string memory _symbol
-    ) public virtual initializer {
+    function initialize(address _owner, address _upgradeConformer, string memory _name, string memory _symbol)
+        public
+        virtual
+        initializer
+    {
         __ERC20_init(_name, _symbol);
         __AccessControlEnumerable_init();
 
@@ -278,7 +259,11 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
     /// @param _start start index
     /// @param _end end index
     /// @return requestIds array of request ids
-    function getWithdrawalRequests(address _owner, uint256 _start, uint256 _end) external view returns (uint256[] memory requestIds) {
+    function getWithdrawalRequests(address _owner, uint256 _start, uint256 _end)
+        external
+        view
+        returns (uint256[] memory requestIds)
+    {
         WrapperBaseStorage storage $ = _getWrapperBaseStorage();
         return $.requestsByOwner[_owner].values(_start, _end);
     }
@@ -291,15 +276,14 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
         return $.requestsByOwner[_owner].length();
     }
 
-    function getWithdrawalRequest(uint256 requestId) external view returns(WithdrawalRequest memory) {
+    function getWithdrawalRequest(uint256 requestId) external view returns (WithdrawalRequest memory) {
         return _getWrapperBaseStorage().withdrawalRequests[requestId];
     }
 
-    function _addWithdrawalRequest(
-        address _owner,
-        uint256 _ethAmount,
-        WithdrawalType _type
-    ) internal returns(uint256 requestId) {
+    function _addWithdrawalRequest(address _owner, uint256 _ethAmount, WithdrawalType _type)
+        internal
+        returns (uint256 requestId)
+    {
         WrapperBaseStorage storage $ = _getWrapperBaseStorage();
         requestId = $.withdrawalRequests.length;
         WithdrawalRequest memory request = WithdrawalRequest({
@@ -313,7 +297,7 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
         $.withdrawalRequests.push(request);
         $.requestsByOwner[_owner].add(requestId);
 
-        emit WithdrawalRequestCreated(requestId,_owner, _ethAmount, request.requestType);
+        emit WithdrawalRequestCreated(requestId, _owner, _ethAmount, request.requestType);
     }
 
     // =================================================================================
@@ -368,23 +352,19 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
         depositETH(msg.sender, address(0));
     }
 
-    function requestValidatorExit(
-        bytes calldata _pubkeys
-    ) external {
+    function requestValidatorExit(bytes calldata _pubkeys) external {
         _checkOnlyRoleOrEmergencyExit(REQUEST_VALIDATOR_EXIT_ROLE);
         DASHBOARD.requestValidatorExit(_pubkeys);
     }
-
 
     // =================================================================================
     // EMERGENCY WITHDRAWAL FUNCTIONS
     // =================================================================================
 
-    function triggerValidatorWithdrawals(
-        bytes calldata _pubkeys,
-        uint64[] calldata _amounts,
-        address _refundRecipient
-    ) external payable {
+    function triggerValidatorWithdrawals(bytes calldata _pubkeys, uint64[] calldata _amounts, address _refundRecipient)
+        external
+        payable
+    {
         _checkOnlyRoleOrEmergencyExit(TRIGGER_VALIDATOR_WITHDRAWAL_ROLE);
         DASHBOARD.triggerValidatorWithdrawals{value: msg.value}(_pubkeys, _amounts, _refundRecipient);
     }

@@ -11,11 +11,7 @@ interface IVaultFactory {
 
     // Events
     event VaultCreated(address indexed vault);
-    event DashboardCreated(
-        address indexed dashboard,
-        address indexed vault,
-        address indexed admin
-    );
+    event DashboardCreated(address indexed dashboard, address indexed vault, address indexed admin);
 
     // Errors
     error ZeroArgument(string argument);

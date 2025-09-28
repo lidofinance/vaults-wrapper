@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >=0.8.25;
 
-import {IERC20} from '@openzeppelin/contracts/token/ERC20/IERC20.sol';
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
 import {ITellerWithMultiAssetSupport} from "src/interfaces/ggv/ITellerWithMultiAssetSupport.sol";
@@ -11,10 +11,7 @@ import {IStrategyProxy} from "src/interfaces/IStrategyProxy.sol";
 
 import {IWstETH} from "src/interfaces/IWstETH.sol";
 
-import {console} from "forge-std/Test.sol";
-
 contract GGVStrategy is Strategy {
-
     ITellerWithMultiAssetSupport public immutable TELLER;
     IBoringOnChainQueue public immutable BORING_QUEUE;
 
@@ -44,7 +41,7 @@ contract GGVStrategy is Strategy {
 
     mapping(address user => UserPosition) public userPositions;
 
-    constructor (
+    constructor(
         address _strategyProxyImplementation,
         address _wrapper,
         address _stETH,
@@ -81,16 +78,13 @@ contract GGVStrategy is Strategy {
         WRAPPER.transfer(proxy, _stv);
 
         IStrategyProxy(proxy).call(
-            address(WRAPPER),
-            abi.encodeWithSelector(WRAPPER.mintStethShares.selector, _stethShares)
+            address(WRAPPER), abi.encodeWithSelector(WRAPPER.mintStethShares.selector, _stethShares)
         );
         IStrategyProxy(proxy).call(
-            address(STETH),
-            abi.encodeWithSelector(STETH.approve.selector, address(TELLER.vault()), stETHAmount)
+            address(STETH), abi.encodeWithSelector(STETH.approve.selector, address(TELLER.vault()), stETHAmount)
         );
         bytes memory data = IStrategyProxy(proxy).call(
-            address(TELLER),
-            abi.encodeWithSelector(TELLER.deposit.selector, address(STETH), stETHAmount, MINIMUM_MINT)
+            address(TELLER), abi.encodeWithSelector(TELLER.deposit.selector, address(STETH), stETHAmount, MINIMUM_MINT)
         );
         uint256 ggvShares = abi.decode(data, (uint256));
 
@@ -101,7 +95,7 @@ contract GGVStrategy is Strategy {
     /// @param _user The user to request a withdrawal for
     /// @param _stethAmount The amount of stETH to withdraw
     /// @return requestId The request id
-    function requestWithdrawByStETH(address _user, uint256 _stethAmount) external returns (uint256 requestId)  {
+    function requestWithdrawByStETH(address _user, uint256 _stethAmount) external returns (uint256 requestId) {
         _onlyWrapper();
 
         UserPosition storage position = userPositions[_user];
@@ -126,13 +120,18 @@ contract GGVStrategy is Strategy {
         uint256 exitStvShares = Math.min(calculatedExitStvShares, userStvBalance);
 
         IStrategyProxy(proxy).call(
-            address(boringVault),
-            abi.encodeWithSelector(boringVault.approve.selector, address(BORING_QUEUE), ggvShares)
+            address(boringVault), abi.encodeWithSelector(boringVault.approve.selector, address(BORING_QUEUE), ggvShares)
         );
 
         bytes memory data = IStrategyProxy(proxy).call(
             address(BORING_QUEUE),
-            abi.encodeWithSelector(BORING_QUEUE.requestOnChainWithdraw.selector, address(WSTETH), uint128(ggvShares), DISCOUNT, type(uint24).max)
+            abi.encodeWithSelector(
+                BORING_QUEUE.requestOnChainWithdraw.selector,
+                address(WSTETH),
+                uint128(ggvShares),
+                DISCOUNT,
+                type(uint24).max
+            )
         );
         bytes32 ggvRequestId = abi.decode(data, (bytes32));
 
@@ -140,7 +139,7 @@ contract GGVStrategy is Strategy {
         position.exitStvShares = exitStvShares;
 
         emit RequestWithdraw(_user, ggvShares);
-        
+
         return uint256(ggvRequestId);
     }
 
@@ -152,8 +151,7 @@ contract GGVStrategy is Strategy {
         UserPosition storage position = userPositions[msg.sender];
         address proxy = _getOrCreateProxy(msg.sender);
         bytes memory data = IStrategyProxy(proxy).call(
-            address(BORING_QUEUE),
-            abi.encodeWithSelector(BORING_QUEUE.cancelOnChainWithdraw.selector, request)
+            address(BORING_QUEUE), abi.encodeWithSelector(BORING_QUEUE.cancelOnChainWithdraw.selector, request)
         );
         bytes32 requestId = abi.decode(data, (bytes32));
         assert(requestId == position.exitRequestId);
@@ -173,21 +171,15 @@ contract GGVStrategy is Strategy {
         position.exitRequestId = 0;
 
         uint256 wstethAmount = WSTETH.balanceOf(proxy);
-        bytes memory unwrapData = IStrategyProxy(proxy).call(
-            address(WSTETH),
-            abi.encodeWithSelector(WSTETH.unwrap.selector, wstethAmount)
-        );
+        bytes memory unwrapData =
+            IStrategyProxy(proxy).call(address(WSTETH), abi.encodeWithSelector(WSTETH.unwrap.selector, wstethAmount));
         uint256 stethAmount = abi.decode(unwrapData, (uint256));
-        uint256 stethShares  = STETH.getSharesByPooledEth(stethAmount);
+        uint256 stethShares = STETH.getSharesByPooledEth(stethAmount);
 
         uint256 stv = WRAPPER.withdrawableStv(proxy, stethShares);
         uint256 requestId = WRAPPER.requestWithdrawalQueue(proxy, _receiver, stv);
 
-        emit Claim(
-            _receiver,
-            address(STETH),
-            position.exitStvShares
-        );
+        emit Claim(_receiver, address(STETH), position.exitStvShares);
     }
 
     /// @notice Recovers ERC20 tokens from the strategy
@@ -213,14 +205,7 @@ contract GGVStrategy is Strategy {
             }
         }
 
-        IStrategyProxy(proxy).call(
-            _token,
-            abi.encodeWithSelector(
-                IERC20.transfer.selector,
-                _recipient,
-                _amount
-            )
-        );
+        IStrategyProxy(proxy).call(_token, abi.encodeWithSelector(IERC20.transfer.selector, _recipient, _amount));
     }
 
     function _onlyWrapper() internal view {

@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >=0.8.25;
 
-import {AccessControlEnumerableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/extensions/AccessControlEnumerableUpgradeable.sol";
+import {AccessControlEnumerableUpgradeable} from
+    "@openzeppelin/contracts-upgradeable/access/extensions/AccessControlEnumerableUpgradeable.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
-import { ERC1967Utils } from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Utils.sol";
-import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
-
+import {ERC1967Utils} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Utils.sol";
 
 import {WithdrawalQueue} from "./WithdrawalQueue.sol";
 
@@ -33,7 +32,6 @@ abstract contract ProposalUpgradable is Initializable, AccessControlEnumerableUp
     bytes32 public constant UPGRADE_CONFORMER = keccak256("UPGRADE_CONFORMER");
     bytes32 public constant UPGRADE_PROPOSER = keccak256("UPGRADE_PROPOSER");
 
-
     struct WrapperUpgradePayload {
         address newImplementation;
         address newWqImplementation;
@@ -51,7 +49,8 @@ abstract contract ProposalUpgradable is Initializable, AccessControlEnumerableUp
 
     // TODO: verify this constant
     // keccak256(abi.encode(uint256(keccak256("wrapper.upgrade.storage")) - 1)) & ~bytes32(uint256(0xff))
-    bytes32 private constant PROPOSAL_UPGRADABLE_STORAGE_LOCATION = 0xb7c4e3fdabcc2bda791137ff0285a25f08943f4abbae909e94df75d1cf8e7900;
+    bytes32 private constant PROPOSAL_UPGRADABLE_STORAGE_LOCATION =
+        0xb7c4e3fdabcc2bda791137ff0285a25f08943f4abbae909e94df75d1cf8e7900;
 
     function _getProposalUpgradableStorage() private pure returns (ProposalUpgradableStorage storage $) {
         assembly {
@@ -59,21 +58,20 @@ abstract contract ProposalUpgradable is Initializable, AccessControlEnumerableUp
         }
     }
 
-
     function _initializeProposalUpgradable(address _proposer, address _conformer) internal onlyInitializing {
         _grantRole(UPGRADE_PROPOSER, _proposer);
         _setRoleAdmin(UPGRADE_CONFORMER, UPGRADE_CONFORMER);
-        if(_conformer != address(0))
+        if (_conformer != address(0)) {
             _grantRole(UPGRADE_CONFORMER, _conformer);
+        }
     }
 
     // =================================================================================
     // View functions
     // =================================================================================
 
-    function getCurrentUpgradeProposal() external view returns  (ProposalUpgradableStorage memory) {
-        ProposalUpgradableStorage storage $ = _getProposalUpgradableStorage();
-        return $;
+    function getCurrentUpgradeProposal() external pure returns (ProposalUpgradableStorage memory) {
+        return _getProposalUpgradableStorage();
     }
 
     // =================================================================================
@@ -85,8 +83,8 @@ abstract contract ProposalUpgradable is Initializable, AccessControlEnumerableUp
 
         bytes32 proposalHash = _hashUpgradePayload(_payload);
         ProposalUpgradableStorage storage $ = _getProposalUpgradableStorage();
-        
-        if($.proposalHash == proposalHash) {
+
+        if ($.proposalHash == proposalHash) {
             revert AlreadyProposed();
         }
 
@@ -101,20 +99,19 @@ abstract contract ProposalUpgradable is Initializable, AccessControlEnumerableUp
     function cancelUpgradeProposal() external {
         _checkRole(UPGRADE_PROPOSER, msg.sender);
 
-       ProposalUpgradableStorage storage $ = _getProposalUpgradableStorage();
+        ProposalUpgradableStorage storage $ = _getProposalUpgradableStorage();
 
-        if($.proposalHash == bytes32(0)) {
+        if ($.proposalHash == bytes32(0)) {
             revert NoMatchingProposal();
         }
 
-        if($.confirmationTimestamp != 0) {
+        if ($.confirmationTimestamp != 0) {
             revert AlreadyConfirmed();
         }
 
-
         emit WrapperUpgradeCancelled($.proposalHash);
         $.proposalHash = bytes32(0);
-    } 
+    }
 
     function confirmUpgrade(WrapperUpgradePayload calldata _payload) external {
         _checkRole(UPGRADE_CONFORMER, msg.sender);
@@ -132,7 +129,6 @@ abstract contract ProposalUpgradable is Initializable, AccessControlEnumerableUp
         if ($.confirmationTimestamp != 0) {
             revert AlreadyConfirmed();
         }
-
 
         $.confirmationTimestamp = uint64(block.timestamp);
 
@@ -163,7 +159,6 @@ abstract contract ProposalUpgradable is Initializable, AccessControlEnumerableUp
         $.proposalHash = bytes32(0);
         $.confirmationTimestamp = 0;
 
-
         // First upgrade the withdrawal queue
         withdrawalQueue().upgradeTo(_payload.newWqImplementation);
         // Then upgrade the wrapper itself
@@ -176,20 +171,19 @@ abstract contract ProposalUpgradable is Initializable, AccessControlEnumerableUp
     // Virtual Functions
     // =================================================================================
 
-     function withdrawalQueue() virtual public view returns (WithdrawalQueue);
+    function withdrawalQueue() public view virtual returns (WithdrawalQueue);
 
-     // Override this function to add custom upgrade checks
-     function _canUpgrade() virtual internal view returns (bool) {
-         return true;
-     }
+    // Override this function to add custom upgrade checks
+    function _canUpgrade() internal view virtual returns (bool) {
+        return true;
+    }
 
     // =================================================================================
     // Internal functions
     // =================================================================================
 
-
     function _beforeUpgrade() internal view {
-        if(!_canUpgrade()) {
+        if (!_canUpgrade()) {
             revert UpgradeNotAllowed();
         }
     }
@@ -197,5 +191,4 @@ abstract contract ProposalUpgradable is Initializable, AccessControlEnumerableUp
     function _hashUpgradePayload(WrapperUpgradePayload calldata _payload) internal pure returns (bytes32) {
         return keccak256(abi.encode(_payload));
     }
-
 }

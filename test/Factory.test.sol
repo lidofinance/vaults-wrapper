@@ -89,20 +89,16 @@ contract FactoryTest is Test {
 
     function test_canCreateWrapper() public {
         vm.startPrank(admin);
-        (
-            address vault,
-            address dashboard,
-            address payable wrapperProxy,
-            address withdrawalQueueProxy
-        ) = WrapperFactory.createVaultWithNoMintingNoStrategy{value: connectDeposit}(
-                nodeOperator,
-                nodeOperatorManager,
-                nodeOperator,
-                100, // 1% fee
-                3600, // 1 hour confirm expiry
-                30 days,
-                false // allowlist disabled
-            );
+        (address vault, address dashboard, address payable wrapperProxy, address withdrawalQueueProxy) = WrapperFactory
+            .createVaultWithNoMintingNoStrategy{value: connectDeposit}(
+            nodeOperator,
+            nodeOperatorManager,
+            nodeOperator,
+            100, // 1% fee
+            3600, // 1 hour confirm expiry
+            30 days,
+            false // allowlist disabled
+        );
 
         WrapperBase wrapper = WrapperBase(wrapperProxy);
         WithdrawalQueue withdrawalQueue = WithdrawalQueue(payable(withdrawalQueueProxy));
@@ -121,12 +117,7 @@ contract FactoryTest is Test {
             )
         );
 
-        assertFalse(
-            mockDashboard.hasRole(
-                mockDashboard.DEFAULT_ADMIN_ROLE(),
-                address(WrapperFactory)
-            )
-        );
+        assertFalse(mockDashboard.hasRole(mockDashboard.DEFAULT_ADMIN_ROLE(), address(WrapperFactory)));
     }
 
     function test_revertWithoutConnectDeposit() public {
@@ -145,22 +136,18 @@ contract FactoryTest is Test {
 
     function test_canCreateWithStrategy() public {
         vm.startPrank(admin);
-        (
-            address vault,
-            address dashboard,
-            address payable wrapperProxy,
-            address withdrawalQueueProxy
-        ) = WrapperFactory.createVaultWithLoopStrategy{value: connectDeposit}(
-                nodeOperator,
-                nodeOperatorManager,
-                nodeOperator,
-                100, // 1% fee
-                3600, // 1 hour confirm expiry
-                30 days,
-                false, // allowlist disabled
-                0, // reserve ratio gap
-                1 // loops
-            );
+        (address vault, address dashboard, address payable wrapperProxy, address withdrawalQueueProxy) = WrapperFactory
+            .createVaultWithLoopStrategy{value: connectDeposit}(
+            nodeOperator,
+            nodeOperatorManager,
+            nodeOperator,
+            100, // 1% fee
+            3600, // 1 hour confirm expiry
+            30 days,
+            false, // allowlist disabled
+            0, // reserve ratio gap
+            1 // loops
+        );
 
         WrapperBase wrapper = WrapperBase(wrapperProxy);
         WithdrawalQueue withdrawalQueue = WithdrawalQueue(payable(withdrawalQueueProxy));
@@ -171,34 +158,24 @@ contract FactoryTest is Test {
 
         MockDashboard mockDashboard = MockDashboard(payable(dashboard));
 
-        assertTrue(
-            mockDashboard.hasRole(mockDashboard.MINT_ROLE(), address(wrapper))
-        );
+        assertTrue(mockDashboard.hasRole(mockDashboard.MINT_ROLE(), address(wrapper)));
 
-        assertTrue(
-            mockDashboard.hasRole(mockDashboard.BURN_ROLE(), address(wrapper))
-        );
+        assertTrue(mockDashboard.hasRole(mockDashboard.BURN_ROLE(), address(wrapper)));
     }
 
     function test_allowlistEnabled() public {
         vm.startPrank(admin);
-        (
-            ,
-            ,
-            address payable wrapperProxy,
-
-        ) = WrapperFactory.createVaultWithNoMintingNoStrategy{value: connectDeposit}(
-                nodeOperator,
-                nodeOperatorManager,
-                nodeOperator,
-                100, // 1% fee
-                3600, // 1 hour confirm expiry
-                30 days,
-                true // allowlist enabled
-            );
+        (,, address payable wrapperProxy,) = WrapperFactory.createVaultWithNoMintingNoStrategy{value: connectDeposit}(
+            nodeOperator,
+            nodeOperatorManager,
+            nodeOperator,
+            100, // 1% fee
+            3600, // 1 hour confirm expiry
+            30 days,
+            true // allowlist enabled
+        );
 
         WrapperBase wrapper = WrapperBase(wrapperProxy);
         assertTrue(wrapper.ALLOW_LIST_ENABLED());
     }
-
 }
