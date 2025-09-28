@@ -14,7 +14,6 @@ import {DummyImplementation} from "src/proxy/DummyImplementation.sol";
 
 import {ILidoLocator} from "src/interfaces/ILidoLocator.sol";
 
-
 contract DeployWrapperFactory is Script {
     struct CoreAddresses {
         address locator;

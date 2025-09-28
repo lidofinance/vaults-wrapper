@@ -227,13 +227,6 @@ contract GGVTest is WrapperCHarness {
         uint256 shareRate1 = steth.getPooledEthByShares(1e18);
         assertTrue(shareRate1 == 1 ether, "Started share rate is not 1:1");
 
-        // Apply 1% increase to core (stETH share ratio)
-//        uint256 currentTotalEth1 = steth.totalSupply();
-//        uint256 ethProfit1 = currentTotalEth1 * 1 / 100;
-        //        core.increaseBufferedEther(ethProfit1);
-        //        uint256 shareRate2 = steth.getPooledEthByShares(1e18);
-        //        assertTrue(shareRate2 > shareRate1, "shareRate2 is invalid");
-
         logUsers.push(TableUtils.User(USER1, "user1"));
         logUsers.push(TableUtils.User(user1StrategyProxy, "user1_proxy"));
         logUsers.push(TableUtils.User(address(wrapper), "wrapper"));
