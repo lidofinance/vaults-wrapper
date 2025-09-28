@@ -3,6 +3,7 @@ pragma solidity >=0.8.25;
 
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {IStETH} from "src/interfaces/IStETH.sol";
+import {IWstETH} from "src/interfaces/IWstETH.sol";
 import {IStrategy} from "src/interfaces/IStrategy.sol";
 import {IStrategyProxy} from "src/interfaces/IStrategyProxy.sol";
 import {WrapperC} from "src/WrapperC.sol";
@@ -10,14 +11,16 @@ abstract contract Strategy is IStrategy {
 
     WrapperC public immutable WRAPPER;
     IStETH public immutable STETH;
+    IWstETH public immutable WSTETH;
     address public immutable STRATEGY_PROXY_IMPL;
 
     mapping(bytes32 salt => address proxy) public userStrategyProxy;
 
     error ZeroAddress();
 
-    constructor(address _wrapper, address _stETH, address _strategyProxyImpl) {
+    constructor(address _wrapper, address _stETH, address _wstETH, address _strategyProxyImpl) {
         STETH = IStETH(_stETH);
+        WSTETH = IWstETH(_wstETH);
         STRATEGY_PROXY_IMPL = _strategyProxyImpl;
         WRAPPER = WrapperC(payable(_wrapper));
     }

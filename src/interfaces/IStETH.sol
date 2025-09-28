@@ -24,6 +24,7 @@ interface IStETH is IERC20 {
     function decimals() external pure returns (uint8);
     function totalSupply() external view returns (uint256);
     function getTotalPooledEther() external view returns (uint256);
+    function submit(address _referral) external payable returns (uint256);
     function balanceOf(address _account) external view returns (uint256);
     function transfer(address _recipient, uint256 _amount) external returns (bool);
     function allowance(address _owner, address _spender) external view returns (uint256);

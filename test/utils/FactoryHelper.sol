@@ -47,6 +47,7 @@ contract FactoryHelper {
         Factory.WrapperConfig memory a = Factory.WrapperConfig({
             vaultFactory: _vaultFactory,
             steth: _steth,
+            wsteth: _wsteth,
             lazyOracle: _lazyOracle,
             wrapperAFactory: WRAPPER_A_FACTORY,
             wrapperBFactory: WRAPPER_B_FACTORY,
@@ -80,9 +81,10 @@ contract FactoryHelper {
     function deployGGVStrategy(
         address _wrapper,
         address _steth,
+        address _wsteth,
         address _teller,
         address _boringQueue
     ) external returns (address impl) {
-        impl = GGVStrategyFactory(GGV_STRATEGY_FACTORY).deploy(_wrapper, _steth, _teller, _boringQueue);
+        impl = GGVStrategyFactory(GGV_STRATEGY_FACTORY).deploy(_wrapper, _steth, _wsteth, _teller, _boringQueue);
     }
 }

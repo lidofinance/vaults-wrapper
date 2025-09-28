@@ -6,6 +6,7 @@ import {Vm} from "forge-std/Vm.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import {IStETH} from "src/interfaces/IStETH.sol";
+import {IWstETH} from "src/interfaces/IWstETH.sol";
 import {IBoringOnChainQueue} from "src/interfaces/ggv/IBoringOnChainQueue.sol";
 
 interface IWrapper {
@@ -24,6 +25,7 @@ library TableUtils {
         IWrapper wrapper;
         IERC20 boringVault;
         IStETH steth;
+        IWstETH wsteth;
         IBoringOnChainQueue boringQueue;
         uint16 discount;
     }
@@ -38,12 +40,14 @@ library TableUtils {
         address _wrapper,
         address _boringVault,
         address _steth,
+        address _wsteth,
         address _boringQueue,
         uint16 _discount
     ) internal {
         self.wrapper = IWrapper(_wrapper);
         self.boringVault = IERC20(_boringVault);
         self.steth = IStETH(_steth);
+        self.wsteth = IWstETH(_wsteth);
         self.boringQueue = IBoringOnChainQueue(_boringQueue);
         self.discount = _discount;
     }
@@ -63,9 +67,10 @@ library TableUtils {
                 padLeft("balance", 14),
                 padLeft("stv", 14),
                 padLeft("eth", 14),
-                padLeft("debt_steth", 20),
+                padLeft("debt.stethShares", 20),
                 padLeft("ggv", 20),
-                padLeft("ggvStethOut", 20),
+                padLeft("ggv.stETHOut", 20),
+                padLeft("wstETH", 20),
                 padLeft("stETH", 20),
                 padLeft("stethShares", 20)
             )
@@ -100,6 +105,7 @@ library TableUtils {
         uint256 debtSteth = self.wrapper.getStethShares(_user);
         uint256 ggv = self.boringVault.balanceOf(_user);
         uint256 ggvStethOut = self.boringQueue.previewAssetsOut(address(self.steth), uint128(ggv), self.discount);
+        uint256 wsteth = self.wsteth.balanceOf(_user);
         uint256 steth = self.steth.balanceOf(_user);
         uint256 stethShares = self.steth.sharesOf(_user);
 
@@ -112,6 +118,7 @@ library TableUtils {
                 padLeft(vm.toString(debtSteth), 20),
                 padLeft(vm.toString(ggv), 20),
                 padLeft(vm.toString(ggvStethOut), 20),
+                padLeft(vm.toString(wsteth), 20),
                 padLeft(vm.toString(steth), 20),
                 padLeft(vm.toString(stethShares), 20)
             )

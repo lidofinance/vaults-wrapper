@@ -25,6 +25,7 @@ contract Factory {
     struct WrapperConfig {
         address vaultFactory;
         address steth;
+        address wsteth;
         address lazyOracle;
         address wrapperAFactory;
         address wrapperBFactory;
@@ -36,6 +37,7 @@ contract Factory {
     }
     IVaultFactory public immutable VAULT_FACTORY;
     address public immutable STETH;
+    address public immutable WSTETH;
     address public immutable LAZY_ORACLE;
     WrapperAFactory public immutable WRAPPER_A_FACTORY;
     WrapperBFactory public immutable WRAPPER_B_FACTORY;
@@ -65,6 +67,7 @@ contract Factory {
     constructor(WrapperConfig memory a) {
         VAULT_FACTORY = IVaultFactory(a.vaultFactory);
         STETH = a.steth;
+        WSTETH = a.wsteth;
         LAZY_ORACLE = a.lazyOracle;
         WRAPPER_A_FACTORY = WrapperAFactory(a.wrapperAFactory);
         WRAPPER_B_FACTORY = WrapperBFactory(a.wrapperBFactory);
@@ -304,7 +307,7 @@ contract Factory {
             _maxFinalizationTime
         );
 
-        address ggvStrategy = GGV_STRATEGY_FACTORY.deploy(_wrapperProxy, STETH  , _teller, _boringQueue);
+        address ggvStrategy = GGV_STRATEGY_FACTORY.deploy(_wrapperProxy, STETH, WSTETH, _teller, _boringQueue);
 
         WrapperBase wrapper = _deployAndInitWrapper(
             WrapperType.GGV_STRATEGY,

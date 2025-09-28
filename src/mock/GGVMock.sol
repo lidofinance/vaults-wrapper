@@ -7,6 +7,9 @@ import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet
 import {ITellerWithMultiAssetSupport} from "src/interfaces/ggv/ITellerWithMultiAssetSupport.sol";
 import {IBoringOnChainQueue} from "src/interfaces/ggv/IBoringOnChainQueue.sol";
 import {IStETH} from "src/interfaces/IStETH.sol";
+import {IWstETH} from "src/interfaces/IWstETH.sol";
+
+import {console} from "forge-std/Test.sol";
 
 library BorrowedMath {
     uint256 internal constant MAX_UINT256 = 2**256 - 1;
@@ -46,7 +49,7 @@ contract GGVMockTeller is ITellerWithMultiAssetSupport {
     mapping(ERC20 asset => Asset) public assets;
 
 
-    constructor(address _owner, address __vault, address _steth) {
+    constructor(address _owner, address __vault, address _steth, address _wsteth) {
         owner = _owner;
         _vault = GGVVaultMock(__vault);
         steth = IStETH(_steth);
@@ -54,7 +57,8 @@ contract GGVMockTeller is ITellerWithMultiAssetSupport {
         // eq to 10 ** vault.decimals()
         ONE_SHARE = 10 ** 18;
 
-        _updateAssetData(ERC20(address(steth)), true, true, 0);
+        _updateAssetData(ERC20(_steth), true, true, 0);
+        _updateAssetData(ERC20(_wsteth), true, true, 0);
     }
 
     function deposit(ERC20 depositAsset, uint256 depositAmount, uint256 minimumMint) external returns (uint256 shares){
@@ -85,9 +89,6 @@ contract GGVMockTeller is ITellerWithMultiAssetSupport {
     
 
     function _updateAssetData(ERC20 asset, bool allowDeposits, bool allowWithdraws, uint16 sharePremium) internal {
-        if(address(asset) != address(steth)) {
-            revert("Asset not supported");
-        }
         assets[asset] = Asset(allowDeposits, allowWithdraws, sharePremium);
     }
 
@@ -134,7 +135,7 @@ contract GGVQueueMock is IBoringOnChainQueue{
     address public immutable _owner;
     GGVVaultMock public immutable _vault;
     IStETH public immutable steth;
-
+    IWstETH public immutable wsteth;
 
     EnumerableSet.Bytes32Set private _withdrawRequests;
     uint96 public nonce = 1;
@@ -153,14 +154,16 @@ contract GGVQueueMock is IBoringOnChainQueue{
         uint24 secondsToDeadline
     );
 
-    constructor(address __vault, address _steth, address __owner) {
+    constructor(address __vault, address _steth, address _wsteth, address __owner) {
         _owner = __owner;
         _vault = GGVVaultMock(__vault);
         steth = IStETH(_steth);
+        wsteth = IWstETH(_wsteth);
         ONE_SHARE = 10 ** 18;
 
         // allow withdraws for steth by default
-        _updateWithdrawAsset(address(steth), 0, 0, 0, 500, 100); 
+        _updateWithdrawAsset(_steth, 0, 0, 0, 500, 100);
+        _updateWithdrawAsset(_wsteth, 0, 0, 0, 500, 100);
     }
 
 
@@ -187,26 +190,25 @@ contract GGVQueueMock is IBoringOnChainQueue{
        _updateWithdrawAsset(assetOut, secondsToMaturity, minimumSecondsToDeadline, minDiscount, maxDiscount, minimumShares);
     }
 
-
-
-
     function setWithdrawCapacity(address assetOut, uint256 withdrawCapacity) external {
        require(msg.sender == _owner, "Only owner can update withdraw asset");
         _withdrawAssets[assetOut].withdrawCapacity = withdrawCapacity;
     }
     
 
-    function requestOnChainWithdraw(address assetOut, uint128 amountOfShares, uint16 discount, uint24 secondsToDeadline) external returns (bytes32 requestId){
-        WithdrawAsset memory withdrawAsset = _withdrawAssets[assetOut];
+    function requestOnChainWithdraw(address _assetOut, uint128 amountOfShares, uint16 discount, uint24 secondsToDeadline) external returns (bytes32 requestId){
+        WithdrawAsset memory withdrawAsset = _withdrawAssets[_assetOut];
         _beforeNewRequest(withdrawAsset, amountOfShares, discount, secondsToDeadline);
 
         // hardcode for steth only
-        if( assetOut != address(steth)) {
-            revert("Only steth supported");
+        if(_assetOut != address(steth) && _assetOut != address(wsteth)) {
+            revert("Only steth and wsteth supported");
         }
 
+        ERC20 assetOut = ERC20(_assetOut);
+
         uint128 amountOfAssets = uint128(_vault.getAssetsByShares(amountOfShares));
-        if( amountOfAssets > steth.sharesOf(address(_vault))) {
+        if( amountOfAssets > assetOut.balanceOf(address(_vault))) {
             revert("Not enough assets in vault");
         }
 
@@ -221,13 +223,13 @@ contract GGVQueueMock is IBoringOnChainQueue{
         }
 
 
-        uint128 amountOfAssets128 = previewAssetsOut(assetOut, amountOfShares, discount);
+        uint128 amountOfAssets128 = previewAssetsOut(_assetOut, amountOfShares, discount);
 
         uint40 timeNow = uint40(block.timestamp); // Safe to cast to uint40 as it won't overflow for 10s of thousands of years
         OnChainWithdraw memory req = OnChainWithdraw({
             nonce: requestNonce,
             user: msg.sender,
-            assetOut: assetOut,
+            assetOut: _assetOut,
             amountOfShares: amountOfShares,
             amountOfAssets: amountOfAssets128,
             creationTime: timeNow,
@@ -241,16 +243,15 @@ contract GGVQueueMock is IBoringOnChainQueue{
         // write to onchain storage for easier tests
         _helper_requestsById[requestId] = req;
 
-
         _withdrawRequests.add(requestId);
         nonce++;
 
-        _decrementWithdrawCapacity(assetOut, amountOfShares);
+        _decrementWithdrawCapacity(_assetOut, amountOfShares);
 
         emit OnChainWithdrawRequested(
             requestId,
             msg.sender,
-            assetOut,
+            _assetOut,
             requestNonce,
             amountOfShares,
             amountOfAssets128,
@@ -288,7 +289,7 @@ contract GGVQueueMock is IBoringOnChainQueue{
             totalShares += requests[i].amountOfShares;
             _dequeueOnChainWithdraw(requests[i]);
             //emit OnChainWithdrawSolved(requestId, requests[i].user, block.timestamp);
-            _vault.burnSharesReturnAssets(requests[i].amountOfShares, requests[i].amountOfAssets, requests[i].user);
+            _vault.burnSharesReturnAssets(solveAsset, requests[i].amountOfShares, requests[i].amountOfAssets, requests[i].user);
         }
     }
 
@@ -304,8 +305,9 @@ contract GGVQueueMock is IBoringOnChainQueue{
         view
         returns (uint128 amountOfAssets128)
     {
-        require(assetOut == address(steth), "Only steth supported");
-
+        if (assetOut != address(steth) && assetOut != address(wsteth)) {
+            revert("Only steth and wsteth supported");
+        }
 
         //uint256 price = accountant.getRateInQuoteSafe(ERC20(assetOut));
         // assets(steth shares) per 1 share
@@ -314,11 +316,19 @@ contract GGVQueueMock is IBoringOnChainQueue{
         price = BorrowedMath.mulDivDown(price, 1e4 - discount, 1e4);
         // shares * (price == assets * ONE_SHARE ) / one _share
         uint256 amountOfAssets = BorrowedMath.mulDivDown(uint256(amountOfShares),price, ONE_SHARE);
+
+        uint256 amountOfTokens;
+        if (assetOut == address(steth)) {
+            // FIX: CONVERT SHARES -> STETH TOKENS using current dynamic share rate (1.04)
+            amountOfTokens = steth.getPooledEthByShares(amountOfAssets);
+        } else { // wstETH case
+            // Mock simplification: wstETH is static, so we return the shares amount as the token amount.
+            amountOfTokens = amountOfAssets;
+        }
+
         if (amountOfAssets > type(uint128).max) revert('overflow');
 
-        
-
-        amountOfAssets128 = uint128(amountOfAssets);
+        amountOfAssets128 = uint128(amountOfTokens);
     } 
 
     event NonPure();
@@ -363,13 +373,9 @@ contract GGVQueueMock is IBoringOnChainQueue{
         if (!removedFromSet) revert('request not found');
     }
 
-    
     function _updateWithdrawAsset(address assetOut, uint24 secondsToMaturity, uint24 minimumSecondsToDeadline, uint16 minDiscount, uint16 maxDiscount, uint96 minimumShares) internal {
         _withdrawAssets[assetOut] = WithdrawAsset(true, secondsToMaturity, minimumSecondsToDeadline, minDiscount, maxDiscount, minimumShares, type(uint256).max);
     }
-
-
-
 }
 
 contract GGVVaultMock is ERC20  {
@@ -377,16 +383,18 @@ contract GGVVaultMock is ERC20  {
     ITellerWithMultiAssetSupport public immutable TELLER;
     GGVQueueMock public immutable BORING_QUEUE;
     IStETH public immutable steth;
+    IWstETH public immutable wsteth;
 
     // steth shares as base vault asset
     // real ggv uses weth but it should be okay to peg it to steth shares for mock
     uint256 public _totalAssets;
 
-    constructor(address _owner, address _steth) ERC20("GGVVaultMock", "tGGV")  {
+    constructor(address _owner, address _steth, address _wsteth) ERC20("GGVVaultMock", "tGGV")  {
         owner = _owner;
-        TELLER = ITellerWithMultiAssetSupport(address(new GGVMockTeller(_owner, address(this), _steth)));
-        BORING_QUEUE = new GGVQueueMock(address(this), _steth, _owner);
+        TELLER = ITellerWithMultiAssetSupport(address(new GGVMockTeller(_owner, address(this), _steth, _wsteth)));
+        BORING_QUEUE = new GGVQueueMock(address(this), _steth, _wsteth, _owner);
         steth = IStETH(_steth);
+        wsteth = IWstETH(_wsteth);
 
         // Mint some initial tokens to the dead address to avoid zero totalSupply issues
         _mint(address(0xdead), 1e18);
@@ -414,23 +422,20 @@ contract GGVVaultMock is ERC20  {
        return BorrowedMath.mulDivDown(shares, _totalAssets, totalSupply());
     }
 
-
     function depositByTeller( address asset,uint256 shares,uint256 assets, address user) external  {
         require(msg.sender == address(TELLER), "Only teller can call depositByTeller");
-        
-        
         require(asset == address(steth), "Only steth asset supported");
-        steth.transferSharesFrom(user, address(this), assets);
+        steth.transferFrom(user, address(this), assets);
 
         _mint(user, shares);
         _totalAssets += assets;
     }
 
-    function burnSharesReturnAssets(uint256 shares, uint256 assets, address user) external {
+    function burnSharesReturnAssets(ERC20 assetOut, uint256 shares, uint256 assets, address user) external {
         require(msg.sender == address(BORING_QUEUE), "Only queue can call burnShares");
         _burn(address(BORING_QUEUE), shares);
         _totalAssets -= assets;
-        steth.transferShares(user, assets);
+        assetOut.transfer(user, assets);
     }
 
 }

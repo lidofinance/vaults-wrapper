@@ -5,14 +5,14 @@ import {Test, console} from "forge-std/Test.sol";
 
 import {GGVVaultMock, GGVMockTeller,GGVQueueMock} from "src/mock/GGVMock.sol";
 import {MockStETH} from "test/mocks/MockStETH.sol";
-
-
+import {MockWstETH} from "test/mocks/MockWstETH.sol";
 
 contract GGVMockTest is Test {
     GGVVaultMock public vault;
     GGVMockTeller public teller;
     GGVQueueMock public queue;
     MockStETH public steth;
+    MockWstETH public wsteth;
 
     address public user1 = address(0x1);
     address public user2 = address(0x2);
@@ -26,12 +26,13 @@ contract GGVMockTest is Test {
         vm.deal(admin, initialBalance);
 
         steth = new MockStETH();
+        wsteth = new MockWstETH(address(steth));
         // give admin 10 steth for ggv rebase
         vm.prank(admin);
         steth.submit{value: 10 ether}(admin);
         
     
-        vault = new GGVVaultMock(admin, address(steth));
+        vault = new GGVVaultMock(admin, address(steth), address(wsteth));
         teller = GGVMockTeller(address(vault.TELLER()));
         queue = GGVQueueMock(address(vault.BORING_QUEUE()));
 

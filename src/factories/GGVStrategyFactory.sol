@@ -5,9 +5,9 @@ import {GGVStrategy} from "src/strategy/GGVStrategy.sol";
 import {StrategyProxy} from "src/strategy/StrategyProxy.sol";
 
 contract GGVStrategyFactory {
-    function deploy(address _wrapper, address _steth, address _teller, address _boringQueue) external returns (address impl) {
+    function deploy(address _wrapper, address _steth, address _wsteth, address _teller, address _boringQueue) external returns (address impl) {
         address strategyProxyImpl = address(new StrategyProxy());
-        impl = address(new GGVStrategy(strategyProxyImpl, _wrapper, _steth, _teller, _boringQueue));
+        impl = address(new GGVStrategy(strategyProxyImpl, _wrapper, _steth, _wsteth, _teller, _boringQueue));
     }
 }
 
