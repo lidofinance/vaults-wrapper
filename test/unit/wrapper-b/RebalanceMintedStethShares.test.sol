@@ -35,6 +35,17 @@ contract RebalanceMintedStethSharesTest is Test, SetupWrapperB {
         wrapper.rebalanceMintedStethShares(10 ** 18);
     }
 
+    function test_RebalanceMintedStethShares_RevertOnStaleReport() public {
+        uint256 sharesToMint = wrapper.mintingCapacitySharesOf(address(this)) / 4;
+        wrapper.mintStethShares(sharesToMint);
+
+        // Set report as stale
+        dashboard.VAULT_HUB().mock_setReportFreshness(dashboard.STAKING_VAULT(), false);
+
+        vm.expectRevert(WrapperB.VaultReportStale.selector);
+        wrapper.rebalanceMintedStethShares(sharesToMint);
+    }
+
     function test_RebalanceMintedStethShares_EmitsCorrectEvent() public {
         uint256 sharesToMint = wrapper.mintingCapacitySharesOf(address(this)) / 4;
         wrapper.mintStethShares(sharesToMint);

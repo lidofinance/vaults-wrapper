@@ -25,6 +25,9 @@ contract MockDashboard is AccessControlEnumerable {
         VAULT_HUB = MockVaultHub(payable(_vaultHub));
         STAKING_VAULT = _stakingVault; // Mock staking vault address
         _grantRole(DEFAULT_ADMIN_ROLE, _admin);
+
+        // Set default report freshness to true
+        VAULT_HUB.mock_setReportFreshness(STAKING_VAULT, true);
     }
 
     function fund() external payable {

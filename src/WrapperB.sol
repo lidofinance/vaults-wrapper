@@ -30,6 +30,7 @@ contract WrapperB is WrapperBase {
     error ZeroArgument();
     error MintingForThanTargetStSharesShareIsNotAllowed();
     error TodoError();
+    error VaultReportStale();
 
     uint256 public immutable WRAPPER_RR_BP; // vault's reserve ratio plus gap for wrapper
 
@@ -455,6 +456,7 @@ contract WrapperB is WrapperBase {
      */
     function rebalanceMintedStethShares(uint256 _stethShares) public {
         if (_stethShares > mintedStethSharesOf(msg.sender)) revert InsufficientMintedShares();
+        if (!VAULT_HUB.isReportFresh(STAKING_VAULT)) revert VaultReportStale();
 
         uint256 exceedingStethShares = totalExceedingMintedStethShares();
         uint256 remainingStethShares = Math.saturatingSub(_stethShares, exceedingStethShares);

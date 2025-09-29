@@ -17,6 +17,7 @@ contract MockVaultHub {
 
     mapping(address => uint256) public vaultBalances;
     mapping(address => uint256) public vaultLiabilityShares;
+    mapping(address => bool) public vaultReportFreshness;
 
     constructor() {
         LIDO = new MockStETH();
@@ -155,11 +156,15 @@ contract MockVaultHub {
         revert("Not implemented");
     }
 
-    function isReportFresh(address /* _vault */) external pure returns (bool) {
-        return true;
+    function isReportFresh(address _vault) external view returns (bool) {
+        return vaultReportFreshness[_vault];
     }
 
     function mock_setVaultBalance(address _vault, uint256 _balance) external {
         vaultBalances[_vault] = _balance;
+    }
+
+    function mock_setReportFreshness(address _vault, bool _isFresh) external {
+        vaultReportFreshness[_vault] = _isFresh;
     }
 }
