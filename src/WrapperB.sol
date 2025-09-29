@@ -136,7 +136,7 @@ contract WrapperB is WrapperBase {
         uint256 mintedStethSharesAfter = mintedStethShares - _stethSharesToBurn;
         uint256 minLockedAssetsAfter = _calcAssetsToLockForStethShares(mintedStethSharesAfter);
         uint256 currentAssets = effectiveAssetsOf(_account);
-        ethAmount = currentAssets - minLockedAssetsAfter;
+        ethAmount = Math.saturatingSub(currentAssets, minLockedAssetsAfter);
     }
 
     /**
