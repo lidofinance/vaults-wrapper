@@ -454,11 +454,13 @@ contract WrapperB is WrapperBase {
      * @dev Second, if there are remaining liability shares, rebalances Staking Vault
      */
     function rebalanceMintedStethShares(uint256 _stethShares) public {
+        if (_stethShares > mintedStethSharesOf(msg.sender)) revert InsufficientMintedShares();
+
         uint256 exceedingStethShares = totalExceedingMintedStethShares();
         uint256 remainingStethShares = Math.saturatingSub(_stethShares, exceedingStethShares);
 
-        _rebalanceMintedStethShares(msg.sender, _stethShares);
         if (remainingStethShares > 0) DASHBOARD.rebalanceVaultWithShares(remainingStethShares);
+        _rebalanceMintedStethShares(msg.sender, _stethShares);
 
         emit StethSharesRebalanced(msg.sender, _stethShares);
     }
