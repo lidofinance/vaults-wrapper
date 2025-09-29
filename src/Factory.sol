@@ -1,11 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >=0.8.25;
 
-import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {WrapperBase} from "./WrapperBase.sol";
-import {WrapperA} from "./WrapperA.sol";
-import {WrapperB} from "./WrapperB.sol";
-import {WrapperC} from "./WrapperC.sol";
 import {WithdrawalQueue} from "./WithdrawalQueue.sol";
 import {WrapperAFactory} from "./factories/WrapperAFactory.sol";
 import {WrapperBFactory} from "./factories/WrapperBFactory.sol";
@@ -14,7 +10,6 @@ import {WithdrawalQueueFactory} from "./factories/WithdrawalQueueFactory.sol";
 import {LoopStrategyFactory} from "./factories/LoopStrategyFactory.sol";
 import {GGVStrategyFactory} from "./factories/GGVStrategyFactory.sol";
 import {OssifiableProxy} from "./proxy/OssifiableProxy.sol";
-import {DummyImplementation} from "./proxy/DummyImplementation.sol";
 
 import {IVaultFactory} from "./interfaces/IVaultFactory.sol";
 import {IDashboard} from "./interfaces/IDashboard.sol";
@@ -25,6 +20,7 @@ contract Factory {
     struct WrapperConfig {
         address vaultFactory;
         address steth;
+        address wsteth;
         address lazyOracle;
         address wrapperAFactory;
         address wrapperBFactory;
@@ -34,8 +30,10 @@ contract Factory {
         address ggvStrategyFactory;
         address dummyImplementation;
     }
+
     IVaultFactory public immutable VAULT_FACTORY;
     address public immutable STETH;
+    address public immutable WSTETH;
     address public immutable LAZY_ORACLE;
     WrapperAFactory public immutable WRAPPER_A_FACTORY;
     WrapperBFactory public immutable WRAPPER_B_FACTORY;
@@ -65,6 +63,7 @@ contract Factory {
     constructor(WrapperConfig memory a) {
         VAULT_FACTORY = IVaultFactory(a.vaultFactory);
         STETH = a.steth;
+        WSTETH = a.wsteth;
         LAZY_ORACLE = a.lazyOracle;
         WRAPPER_A_FACTORY = WrapperAFactory(a.wrapperAFactory);
         WRAPPER_B_FACTORY = WrapperBFactory(a.wrapperBFactory);
@@ -89,22 +88,13 @@ contract Factory {
     )
         external
         payable
-        returns (
-            address vault,
-            address dashboard,
-            address payable wrapperProxy,
-            address withdrawalQueueProxy
-        )
+        returns (address vault, address dashboard, address payable wrapperProxy, address withdrawalQueueProxy)
     {
         IDashboard _dashboard;
         address payable _wrapperProxy;
         address _withdrawalQueueProxy;
         (vault, dashboard, _dashboard, _wrapperProxy, _withdrawalQueueProxy) = _setupVaultAndProxies(
-            _nodeOperator,
-            _nodeOperatorManager,
-            _nodeOperatorFeeBP,
-            _confirmExpiry,
-            _maxFinalizationTime
+            _nodeOperator, _nodeOperatorManager, _nodeOperatorFeeBP, _confirmExpiry, _maxFinalizationTime
         );
 
         address usedStrategy = _strategy;
@@ -123,7 +113,9 @@ contract Factory {
             _upgradeConformer
         );
 
-        _configureAndFinalize(_dashboard, wrapper, _wrapperProxy, _withdrawalQueueProxy, vault, _configuration, usedStrategy);
+        _configureAndFinalize(
+            _dashboard, wrapper, _wrapperProxy, _withdrawalQueueProxy, vault, _configuration, usedStrategy
+        );
 
         return (vault, dashboard, _wrapperProxy, _withdrawalQueueProxy);
     }
@@ -143,22 +135,13 @@ contract Factory {
     )
         external
         payable
-        returns (
-            address vault,
-            address dashboard,
-            address payable wrapperProxy,
-            address withdrawalQueueProxy
-        )
+        returns (address vault, address dashboard, address payable wrapperProxy, address withdrawalQueueProxy)
     {
         IDashboard _dashboard;
         address payable _wrapperProxy;
         address _withdrawalQueueProxy;
         (vault, dashboard, _dashboard, _wrapperProxy, _withdrawalQueueProxy) = _setupVaultAndProxies(
-            _nodeOperator,
-            _nodeOperatorManager,
-            _nodeOperatorFeeBP,
-            _confirmExpiry,
-            _maxFinalizationTime
+            _nodeOperator, _nodeOperatorManager, _nodeOperatorFeeBP, _confirmExpiry, _maxFinalizationTime
         );
 
         WrapperBase wrapper = _deployAndInitWrapper(
@@ -172,7 +155,15 @@ contract Factory {
             _upgradeConformer
         );
 
-        _configureAndFinalize(_dashboard, wrapper, _wrapperProxy, _withdrawalQueueProxy, vault, WrapperType.NO_MINTING_NO_STRATEGY, address(0));
+        _configureAndFinalize(
+            _dashboard,
+            wrapper,
+            _wrapperProxy,
+            _withdrawalQueueProxy,
+            vault,
+            WrapperType.NO_MINTING_NO_STRATEGY,
+            address(0)
+        );
 
         return (vault, dashboard, _wrapperProxy, _withdrawalQueueProxy);
     }
@@ -189,22 +180,13 @@ contract Factory {
     )
         external
         payable
-        returns (
-            address vault,
-            address dashboard,
-            address payable wrapperProxy,
-            address withdrawalQueueProxy
-        )
+        returns (address vault, address dashboard, address payable wrapperProxy, address withdrawalQueueProxy)
     {
         IDashboard _dashboard;
         address payable _wrapperProxy;
         address _withdrawalQueueProxy;
         (vault, dashboard, _dashboard, _wrapperProxy, _withdrawalQueueProxy) = _setupVaultAndProxies(
-            _nodeOperator,
-            _nodeOperatorManager,
-            _nodeOperatorFeeBP,
-            _confirmExpiry,
-            _maxFinalizationTime
+            _nodeOperator, _nodeOperatorManager, _nodeOperatorFeeBP, _confirmExpiry, _maxFinalizationTime
         );
 
         WrapperBase wrapper = _deployAndInitWrapper(
@@ -218,7 +200,15 @@ contract Factory {
             _upgradeConformer
         );
 
-        _configureAndFinalize(_dashboard, wrapper, _wrapperProxy, _withdrawalQueueProxy, vault, WrapperType.MINTING_NO_STRATEGY, address(0));
+        _configureAndFinalize(
+            _dashboard,
+            wrapper,
+            _wrapperProxy,
+            _withdrawalQueueProxy,
+            vault,
+            WrapperType.MINTING_NO_STRATEGY,
+            address(0)
+        );
 
         return (vault, dashboard, _wrapperProxy, _withdrawalQueueProxy);
     }
@@ -236,22 +226,13 @@ contract Factory {
     )
         external
         payable
-        returns (
-            address vault,
-            address dashboard,
-            address payable wrapperProxy,
-            address withdrawalQueueProxy
-        )
+        returns (address vault, address dashboard, address payable wrapperProxy, address withdrawalQueueProxy)
     {
         IDashboard _dashboard;
         address payable _wrapperProxy;
         address _withdrawalQueueProxy;
         (vault, dashboard, _dashboard, _wrapperProxy, _withdrawalQueueProxy) = _setupVaultAndProxies(
-            _nodeOperator,
-            _nodeOperatorManager,
-            _nodeOperatorFeeBP,
-            _confirmExpiry,
-            _maxFinalizationTime
+            _nodeOperator, _nodeOperatorManager, _nodeOperatorFeeBP, _confirmExpiry, _maxFinalizationTime
         );
 
         address loopStrategy = LOOP_STRATEGY_FACTORY.deploy(STETH, address(_wrapperProxy), _loops);
@@ -267,7 +248,9 @@ contract Factory {
             _upgradeConformer
         );
 
-        _configureAndFinalize(_dashboard, wrapper, _wrapperProxy, _withdrawalQueueProxy, vault, WrapperType.LOOP_STRATEGY, loopStrategy);
+        _configureAndFinalize(
+            _dashboard, wrapper, _wrapperProxy, _withdrawalQueueProxy, vault, WrapperType.LOOP_STRATEGY, loopStrategy
+        );
 
         return (vault, dashboard, _wrapperProxy, _withdrawalQueueProxy);
     }
@@ -286,25 +269,16 @@ contract Factory {
     )
         external
         payable
-        returns (
-            address vault,
-            address dashboard,
-            address payable wrapperProxy,
-            address withdrawalQueueProxy
-        )
+        returns (address vault, address dashboard, address payable wrapperProxy, address withdrawalQueueProxy)
     {
         IDashboard _dashboard;
         address payable _wrapperProxy;
         address _withdrawalQueueProxy;
         (vault, dashboard, _dashboard, _wrapperProxy, _withdrawalQueueProxy) = _setupVaultAndProxies(
-            _nodeOperator,
-            _nodeOperatorManager,
-            _nodeOperatorFeeBP,
-            _confirmExpiry,
-            _maxFinalizationTime
+            _nodeOperator, _nodeOperatorManager, _nodeOperatorFeeBP, _confirmExpiry, _maxFinalizationTime
         );
 
-        address ggvStrategy = GGV_STRATEGY_FACTORY.deploy(_wrapperProxy, STETH  , _teller, _boringQueue);
+        address ggvStrategy = GGV_STRATEGY_FACTORY.deploy(_wrapperProxy, STETH, WSTETH, _teller, _boringQueue);
 
         WrapperBase wrapper = _deployAndInitWrapper(
             WrapperType.GGV_STRATEGY,
@@ -317,7 +291,9 @@ contract Factory {
             _upgradeConformer
         );
 
-        _configureAndFinalize(_dashboard, wrapper, _wrapperProxy, _withdrawalQueueProxy, vault, WrapperType.GGV_STRATEGY, ggvStrategy);
+        _configureAndFinalize(
+            _dashboard, wrapper, _wrapperProxy, _withdrawalQueueProxy, vault, WrapperType.GGV_STRATEGY, ggvStrategy
+        );
 
         return (vault, dashboard, _wrapperProxy, _withdrawalQueueProxy);
     }
@@ -334,20 +310,13 @@ contract Factory {
             wrapperImpl = WRAPPER_A_FACTORY.deploy(dashboard, _allowlistEnabled, withdrawalQueueProxy);
             assert(keccak256(bytes(WrapperBase(payable(wrapperImpl)).wrapperType())) == keccak256(bytes("WrapperA")));
         } else if (_configuration == WrapperType.MINTING_NO_STRATEGY) {
-            wrapperImpl = WRAPPER_B_FACTORY.deploy(dashboard, STETH, _allowlistEnabled, _reserveRatioGapBP, withdrawalQueueProxy);
+            wrapperImpl =
+                WRAPPER_B_FACTORY.deploy(dashboard, STETH, _allowlistEnabled, _reserveRatioGapBP, withdrawalQueueProxy);
             assert(keccak256(bytes(WrapperBase(payable(wrapperImpl)).wrapperType())) == keccak256(bytes("WrapperB")));
-        } else if (
-            _configuration == WrapperType.LOOP_STRATEGY ||
-            _configuration == WrapperType.GGV_STRATEGY
-        ) {
+        } else if (_configuration == WrapperType.LOOP_STRATEGY || _configuration == WrapperType.GGV_STRATEGY) {
             if (_strategy == address(0)) revert InvalidConfiguration();
             wrapperImpl = WRAPPER_C_FACTORY.deploy(
-                dashboard,
-                STETH,
-                _allowlistEnabled,
-                _strategy,
-                _reserveRatioGapBP,
-                withdrawalQueueProxy
+                dashboard, STETH, _allowlistEnabled, _strategy, _reserveRatioGapBP, withdrawalQueueProxy
             );
             assert(keccak256(bytes(WrapperBase(payable(wrapperImpl)).wrapperType())) == keccak256(bytes("WrapperC")));
         } else {
@@ -361,14 +330,17 @@ contract Factory {
         uint256 _nodeOperatorFeeBP,
         uint256 _confirmExpiry,
         uint256 _maxFinalizationTime
-    ) internal returns (
-        address vault,
-        address dashboard,
-        IDashboard _dashboard,
-        address payable wrapperProxy,
-        address withdrawalQueueProxy
-    ) {
-        (vault, dashboard) = VAULT_FACTORY.createVaultWithDashboard{ value: msg.value }(
+    )
+        internal
+        returns (
+            address vault,
+            address dashboard,
+            IDashboard _dashboard,
+            address payable wrapperProxy,
+            address withdrawalQueueProxy
+        )
+    {
+        (vault, dashboard) = VAULT_FACTORY.createVaultWithDashboard{value: msg.value}(
             address(this),
             _nodeOperator,
             _nodeOperatorManager,
@@ -381,7 +353,11 @@ contract Factory {
 
         wrapperProxy = payable(address(new OssifiableProxy(DUMMY_IMPLEMENTATION, address(this), bytes(""))));
         address wqImpl = WITHDRAWAL_QUEUE_FACTORY.deploy(address(wrapperProxy), LAZY_ORACLE, _maxFinalizationTime);
-        withdrawalQueueProxy = address(new OssifiableProxy(wqImpl, address(this), abi.encodeCall(WithdrawalQueue.initialize, (_nodeOperator, _nodeOperator))));
+        withdrawalQueueProxy = address(
+            new OssifiableProxy(
+                wqImpl, address(this), abi.encodeCall(WithdrawalQueue.initialize, (_nodeOperator, _nodeOperator))
+            )
+        );
     }
 
     function _deployAndInitWrapper(
@@ -395,15 +371,12 @@ contract Factory {
         address _upgradeConformer
     ) internal returns (WrapperBase wrapper) {
         address wrapperImpl = _deployWrapper(
-            _configuration,
-            dashboard,
-            _allowlistEnabled,
-            _reserveRatioGapBP,
-            withdrawalQueueProxy,
-            _strategy
+            _configuration, dashboard, _allowlistEnabled, _reserveRatioGapBP, withdrawalQueueProxy, _strategy
         );
 
-        OssifiableProxy(wrapperProxy).proxy__upgradeToAndCall(wrapperImpl, abi.encodeCall(WrapperBase.initialize, (address(this), _upgradeConformer, NAME, SYMBOL)));
+        OssifiableProxy(wrapperProxy).proxy__upgradeToAndCall(
+            wrapperImpl, abi.encodeCall(WrapperBase.initialize, (address(this), _upgradeConformer, NAME, SYMBOL))
+        );
         wrapper = WrapperBase(payable(address(wrapperProxy)));
     }
 
@@ -430,13 +403,6 @@ contract Factory {
         _dashboard.grantRole(_dashboard.DEFAULT_ADMIN_ROLE(), msg.sender);
         _dashboard.revokeRole(_dashboard.DEFAULT_ADMIN_ROLE(), address(this));
 
-        emit VaultWrapperCreated(
-            vault,
-            address(wrapper),
-            withdrawalQueueProxy,
-            _strategy,
-            _configuration
-        );
+        emit VaultWrapperCreated(vault, address(wrapper), withdrawalQueueProxy, _strategy, _configuration);
     }
-
 }

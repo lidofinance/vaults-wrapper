@@ -9,12 +9,11 @@ contract ProposalUpgradableHarness is ProposalUpgradable {
     bool private canUpgrade;
 
     event UpgradeInitialized();
-    
 
-    constructor(){
+    constructor() {
         _disableInitializers();
     }
-    
+
     function initialize(address owner, address proposer, address conformer, address _wqContract) public initializer {
         __AccessControlEnumerable_init();
         _grantRole(DEFAULT_ADMIN_ROLE, owner);
@@ -23,16 +22,16 @@ contract ProposalUpgradableHarness is ProposalUpgradable {
         canUpgrade = true;
     }
 
-    function initializeUpgrade() public{
+    function initializeUpgrade() public {
         emit UpgradeInitialized();
     }
 
-    function withdrawalQueue() override public view returns (WithdrawalQueue) {
+    function withdrawalQueue() public view override returns (WithdrawalQueue) {
         return WithdrawalQueue(payable(wqContract));
     }
 
     function _canUpgrade() internal view override returns (bool) {
-       return canUpgrade;
+        return canUpgrade;
     }
 
     function setCanUpgrade(bool _value) public {

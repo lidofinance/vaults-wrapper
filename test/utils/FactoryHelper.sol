@@ -1,14 +1,8 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity >=0.8.25;
 
-import {Factory} from "src/Factory.sol";
-import {WrapperBase} from "src/WrapperBase.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
-import {WrapperA} from "src/WrapperA.sol";
-import {WrapperB} from "src/WrapperB.sol";
-import {WrapperC} from "src/WrapperC.sol";
-import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
-import {GGVStrategy} from "src/strategy/GGVStrategy.sol";
+import {Factory} from "src/Factory.sol";
 import {WrapperAFactory} from "src/factories/WrapperAFactory.sol";
 import {WrapperBFactory} from "src/factories/WrapperBFactory.sol";
 import {WrapperCFactory} from "src/factories/WrapperCFactory.sol";
@@ -18,7 +12,6 @@ import {LoopStrategyFactory} from "src/factories/LoopStrategyFactory.sol";
 import {GGVStrategyFactory} from "src/factories/GGVStrategyFactory.sol";
 
 contract FactoryHelper {
-
     address public immutable DUMMY_IMPLEMENTATION;
     address public immutable WRAPPER_A_FACTORY;
     address public immutable WRAPPER_B_FACTORY;
@@ -40,13 +33,12 @@ contract FactoryHelper {
     /// @notice Deploy main Factory with freshly deployed impl factories
     function deployMainFactory(address _vaultFactory, address _steth, address _wsteth, address _lazyOracle)
         external
-        returns (
-            Factory factory
-        )
+        returns (Factory factory)
     {
         Factory.WrapperConfig memory a = Factory.WrapperConfig({
             vaultFactory: _vaultFactory,
             steth: _steth,
+            wsteth: _wsteth,
             lazyOracle: _lazyOracle,
             wrapperAFactory: WRAPPER_A_FACTORY,
             wrapperBFactory: WRAPPER_B_FACTORY,
@@ -64,11 +56,7 @@ contract FactoryHelper {
     /// @param _wrapper Address of the wrapper (WrapperC proxy or implementation)
     /// @param _loops Number of leverage loops
     /// @return impl Address of the deployed LoopStrategy
-    function deployLoopStrategy(
-        address _steth,
-        address _wrapper,
-        uint256 _loops
-    ) external returns (address impl) {
+    function deployLoopStrategy(address _steth, address _wrapper, uint256 _loops) external returns (address impl) {
         impl = LoopStrategyFactory(LOOP_STRATEGY_FACTORY).deploy(_steth, _wrapper, _loops);
     }
 
@@ -77,12 +65,10 @@ contract FactoryHelper {
     /// @param _teller Address of GGV Teller contract
     /// @param _boringQueue Address of Boring On-Chain Queue
     /// @return impl Address of the deployed GGVStrategy
-    function deployGGVStrategy(
-        address _wrapper,
-        address _steth,
-        address _teller,
-        address _boringQueue
-    ) external returns (address impl) {
-        impl = GGVStrategyFactory(GGV_STRATEGY_FACTORY).deploy(_wrapper, _steth, _teller, _boringQueue);
+    function deployGGVStrategy(address _wrapper, address _steth, address _wsteth, address _teller, address _boringQueue)
+        external
+        returns (address impl)
+    {
+        impl = GGVStrategyFactory(GGV_STRATEGY_FACTORY).deploy(_wrapper, _steth, _wsteth, _teller, _boringQueue);
     }
 }

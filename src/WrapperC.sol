@@ -30,7 +30,7 @@ contract WrapperC is WrapperB {
         STRATEGY = IStrategy(_strategy);
     }
 
-    function wrapperType() external pure override virtual returns (string memory) {
+    function wrapperType() external pure virtual override returns (string memory) {
         return "WrapperC";
     }
 
@@ -68,13 +68,15 @@ contract WrapperC is WrapperB {
     /// @param _receiver The address to receive the stETH
     /// @param _stvShares The amount of stvETH shares to withdraw
     /// @return requestId The ID of the created withdrawal request
-    function requestWithdrawalQueue(address _owner, address _receiver, uint256 _stvShares) external returns (uint256 requestId) {
+    function requestWithdrawalQueue(address _owner, address _receiver, uint256 _stvShares)
+        external
+        returns (uint256 requestId)
+    {
         if (msg.sender != address(STRATEGY)) revert InvalidSender();
-        requestId = _requestWithdrawalQueue(_owner, _receiver,_stvShares);
+        requestId = _requestWithdrawalQueue(_owner, _receiver, _stvShares);
     }
 
-    function getRequest(uint256 requestId) external returns (WithdrawalRequest memory) {
+    function getRequest(uint256 requestId) external view returns (WithdrawalRequest memory) {
         return _getWrapperBaseStorage().withdrawalRequests[requestId];
     }
-
 }

@@ -13,14 +13,13 @@ import {GGVStrategyFactory} from "src/factories/GGVStrategyFactory.sol";
 import {DummyImplementation} from "src/proxy/DummyImplementation.sol";
 
 import {ILidoLocator} from "src/interfaces/ILidoLocator.sol";
-import {IVaultFactory} from "src/interfaces/IVaultFactory.sol";
-import {ILido} from "src/interfaces/ILido.sol";
 
 contract DeployWrapperFactory is Script {
     struct CoreAddresses {
         address locator;
         address vaultFactory;
         address steth;
+        address wsteth;
         address lazyOracle;
     }
 
@@ -31,6 +30,7 @@ contract DeployWrapperFactory is Script {
         ILidoLocator locator = ILidoLocator(core.locator);
         core.vaultFactory = locator.vaultFactory();
         core.steth = address(locator.lido());
+        core.wsteth = address(locator.wstETH());
         core.lazyOracle = locator.lazyOracle();
     }
 
@@ -39,12 +39,13 @@ contract DeployWrapperFactory is Script {
         // REQUIRED: CORE_DEPLOYED_JSON (path to Lido core deployed json, like CoreHarness)
         // OPTIONAL: FACTORY_DEPLOYED_JSON
         string memory deployedJsonPath = vm.envString("CORE_DEPLOYED_JSON");
-        string memory outputJsonPath = vm.envOr("FACTORY_DEPLOYED_JSON", string(string.concat("deployments/wrapper-", vm.toString(block.chainid), ".json")));
+        string memory outputJsonPath = vm.envOr(
+            "FACTORY_DEPLOYED_JSON", string(string.concat("deployments/wrapper-", vm.toString(block.chainid), ".json"))
+        );
 
         if (!vm.isFile(deployedJsonPath)) {
             revert(string(abi.encodePacked("CORE_DEPLOYED_JSON file does not exist at: ", deployedJsonPath)));
         }
-
 
         CoreAddresses memory core = _readCoreFromJson(deployedJsonPath);
 
@@ -63,6 +64,7 @@ contract DeployWrapperFactory is Script {
         Factory.WrapperConfig memory cfg = Factory.WrapperConfig({
             vaultFactory: core.vaultFactory,
             steth: core.steth,
+            wsteth: core.wsteth,
             lazyOracle: core.lazyOracle,
             wrapperAFactory: address(waf),
             wrapperBFactory: address(wbf),
@@ -82,6 +84,7 @@ contract DeployWrapperFactory is Script {
         root = vm.serializeAddress("core", "locator", core.locator);
         root = vm.serializeAddress("core", "vaultFactory", core.vaultFactory);
         root = vm.serializeAddress("core", "steth", core.steth);
+        root = vm.serializeAddress("core", "wsteth", core.wsteth);
         root = vm.serializeAddress("core", "lazyOracle", core.lazyOracle);
 
         string memory facs = "";
@@ -122,10 +125,9 @@ contract DeployWrapperFactory is Script {
         Factory factory = new Factory(cfg);
         vm.stopBroadcast();
 
-        string memory outputJsonPath = string(string.concat("deployments/wrapper-", vm.toString(block.chainid), ".json"));
+        string memory outputJsonPath =
+            string(string.concat("deployments/wrapper-", vm.toString(block.chainid), ".json"));
         string memory out = vm.serializeAddress("deployment", "factory", address(factory));
         vm.writeJson(out, outputJsonPath);
     }
 }
-
-

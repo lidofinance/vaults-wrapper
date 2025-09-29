@@ -3,9 +3,6 @@ pragma solidity >=0.8.25;
 
 import "forge-std/Script.sol";
 
-import {ILidoLocator} from "src/interfaces/ILidoLocator.sol";
-import {ILido} from "src/interfaces/ILido.sol";
-
 interface IHashConsensus {
     function updateInitialEpoch(uint256 initialEpoch) external;
 }
@@ -38,10 +35,14 @@ contract HarnessCore is Script {
         }
 
         // 1) Impersonate agent on local Anvil
-        _cast(_arr6("cast","rpc","anvil_impersonateAccount", vm.toString(a.agent), "--rpc-url", rpcUrl));
+        _cast(_arr6("cast", "rpc", "anvil_impersonateAccount", vm.toString(a.agent), "--rpc-url", rpcUrl));
 
         // 1.1) Fund agent to cover value + gas
-        _cast(_arr7("cast","rpc","anvil_setBalance", vm.toString(a.agent), "0x3635C9ADC5DEA0000000", "--rpc-url", rpcUrl)); // ~256,000 ETH
+        _cast(
+            _arr7(
+                "cast", "rpc", "anvil_setBalance", vm.toString(a.agent), "0x3635C9ADC5DEA0000000", "--rpc-url", rpcUrl
+            )
+        ); // ~256,000 ETH
 
         // 2) (optional) updateInitialEpoch(1) on HashConsensus — skipped by default
         // This call may revert depending on current core state/permissions. Enable if needed.
@@ -56,53 +57,79 @@ contract HarnessCore is Script {
         // ));
 
         // 3) Lido.setMaxExternalRatioBP(10000) (best-effort; ok if already 10000)
-        _cast(_arr10(
-            "cast","send",
-            "--from", vm.toString(a.agent),
-            "--unlocked",
-            vm.toString(a.steth),
-            "setMaxExternalRatioBP(uint256)",
-            "10000",
-            "--rpc-url", rpcUrl
-        ));
+        _cast(
+            _arr10(
+                "cast",
+                "send",
+                "--from",
+                vm.toString(a.agent),
+                "--unlocked",
+                vm.toString(a.steth),
+                "setMaxExternalRatioBP(uint256)",
+                "10000",
+                "--rpc-url",
+                rpcUrl
+            )
+        );
 
         // 4) Resume pool ops, lift staking limit, and resume staking (best-effort)
-        _cast(_arr9(
-            "cast","send",
-            "--from", vm.toString(a.agent),
-            "--unlocked",
-            vm.toString(a.steth),
-            "resume()",
-            "--rpc-url", rpcUrl
-        ));
-        _cast(_arr9(
-            "cast","send",
-            "--from", vm.toString(a.agent),
-            "--unlocked",
-            vm.toString(a.steth),
-            "removeStakingLimit()",
-            "--rpc-url", rpcUrl
-        ));
-        _cast(_arr9(
-            "cast","send",
-            "--from", vm.toString(a.agent),
-            "--unlocked",
-            vm.toString(a.steth),
-            "resumeStaking()",
-            "--rpc-url", rpcUrl
-        ));
+        _cast(
+            _arr9(
+                "cast",
+                "send",
+                "--from",
+                vm.toString(a.agent),
+                "--unlocked",
+                vm.toString(a.steth),
+                "resume()",
+                "--rpc-url",
+                rpcUrl
+            )
+        );
+        _cast(
+            _arr9(
+                "cast",
+                "send",
+                "--from",
+                vm.toString(a.agent),
+                "--unlocked",
+                vm.toString(a.steth),
+                "removeStakingLimit()",
+                "--rpc-url",
+                rpcUrl
+            )
+        );
+        _cast(
+            _arr9(
+                "cast",
+                "send",
+                "--from",
+                vm.toString(a.agent),
+                "--unlocked",
+                vm.toString(a.steth),
+                "resumeStaking()",
+                "--rpc-url",
+                rpcUrl
+            )
+        );
 
         // 5) Lido.submit(agent) with value initialSubmit (best-effort)
-        _cast(_arr12(
-            "cast","send",
-            "--from", vm.toString(a.agent),
-            "--unlocked",
-            "--value", vm.toString(initialSubmit),
-            vm.toString(a.steth),
-            "submit(address)",
-            vm.toString(a.agent),
-            "--rpc-url", rpcUrl
-        ));
+        _cast(
+            _arr12(
+                "cast",
+                "send",
+                "--from",
+                vm.toString(a.agent),
+                "--unlocked",
+                "--value",
+                vm.toString(initialSubmit),
+                vm.toString(a.steth),
+                "submit(address)",
+                vm.toString(a.agent),
+                "--rpc-url",
+                rpcUrl
+            )
+        );
 
         console2.log("Harnessed core via impersonation:");
         console2.log(" locator:", a.locator);
@@ -149,30 +176,214 @@ contract HarnessCore is Script {
         return (true, abi.decode(ret, (address)));
     }
 
-    function _arr6(string memory a,string memory b,string memory c,string memory d,string memory e,string memory f) private pure returns (string[] memory r){
-        r = new string[](6); r[0]=a;r[1]=b;r[2]=c;r[3]=d;r[4]=e;r[5]=f;
+    function _arr6(string memory a, string memory b, string memory c, string memory d, string memory e, string memory f)
+        private
+        pure
+        returns (string[] memory r)
+    {
+        r = new string[](6);
+        r[0] = a;
+        r[1] = b;
+        r[2] = c;
+        r[3] = d;
+        r[4] = e;
+        r[5] = f;
     }
-    function _arr9(string memory a,string memory b,string memory c,string memory d,string memory e,string memory f,string memory g,string memory h,string memory i) private pure returns (string[] memory r){
-        r = new string[](9); r[0]=a;r[1]=b;r[2]=c;r[3]=d;r[4]=e;r[5]=f;r[6]=g;r[7]=h;r[8]=i;
+
+    function _arr9(
+        string memory a,
+        string memory b,
+        string memory c,
+        string memory d,
+        string memory e,
+        string memory f,
+        string memory g,
+        string memory h,
+        string memory i
+    ) private pure returns (string[] memory r) {
+        r = new string[](9);
+        r[0] = a;
+        r[1] = b;
+        r[2] = c;
+        r[3] = d;
+        r[4] = e;
+        r[5] = f;
+        r[6] = g;
+        r[7] = h;
+        r[8] = i;
     }
-    function _arr10(string memory a,string memory b,string memory c,string memory d,string memory e,string memory f,string memory g,string memory h,string memory i,string memory j) private pure returns (string[] memory r){
-        r = new string[](10); r[0]=a;r[1]=b;r[2]=c;r[3]=d;r[4]=e;r[5]=f;r[6]=g;r[7]=h;r[8]=i;r[9]=j;
+
+    function _arr10(
+        string memory a,
+        string memory b,
+        string memory c,
+        string memory d,
+        string memory e,
+        string memory f,
+        string memory g,
+        string memory h,
+        string memory i,
+        string memory j
+    ) private pure returns (string[] memory r) {
+        r = new string[](10);
+        r[0] = a;
+        r[1] = b;
+        r[2] = c;
+        r[3] = d;
+        r[4] = e;
+        r[5] = f;
+        r[6] = g;
+        r[7] = h;
+        r[8] = i;
+        r[9] = j;
     }
-    function _arr12(string memory a,string memory b,string memory c,string memory d,string memory e,string memory f,string memory g,string memory h,string memory i,string memory j,string memory k,string memory l) private pure returns (string[] memory r){
-        r = new string[](12); r[0]=a;r[1]=b;r[2]=c;r[3]=d;r[4]=e;r[5]=f;r[6]=g;r[7]=h;r[8]=i;r[9]=j;r[10]=k;r[11]=l;
+
+    function _arr12(
+        string memory a,
+        string memory b,
+        string memory c,
+        string memory d,
+        string memory e,
+        string memory f,
+        string memory g,
+        string memory h,
+        string memory i,
+        string memory j,
+        string memory k,
+        string memory l
+    ) private pure returns (string[] memory r) {
+        r = new string[](12);
+        r[0] = a;
+        r[1] = b;
+        r[2] = c;
+        r[3] = d;
+        r[4] = e;
+        r[5] = f;
+        r[6] = g;
+        r[7] = h;
+        r[8] = i;
+        r[9] = j;
+        r[10] = k;
+        r[11] = l;
     }
-    function _arr7(string memory a,string memory b,string memory c,string memory d,string memory e,string memory f,string memory g) private pure returns (string[] memory r){
-        r = new string[](7); r[0]=a;r[1]=b;r[2]=c;r[3]=d;r[4]=e;r[5]=f;r[6]=g;
+
+    function _arr7(
+        string memory a,
+        string memory b,
+        string memory c,
+        string memory d,
+        string memory e,
+        string memory f,
+        string memory g
+    ) private pure returns (string[] memory r) {
+        r = new string[](7);
+        r[0] = a;
+        r[1] = b;
+        r[2] = c;
+        r[3] = d;
+        r[4] = e;
+        r[5] = f;
+        r[6] = g;
     }
-    function _arr13(string memory a,string memory b,string memory c,string memory d,string memory e,string memory f,string memory g,string memory h,string memory i,string memory j,string memory k,string memory l,string memory m) private pure returns (string[] memory r){
-        r = new string[](13); r[0]=a;r[1]=b;r[2]=c;r[3]=d;r[4]=e;r[5]=f;r[6]=g;r[7]=h;r[8]=i;r[9]=j;r[10]=k;r[11]=l;r[12]=m;
+
+    function _arr13(
+        string memory a,
+        string memory b,
+        string memory c,
+        string memory d,
+        string memory e,
+        string memory f,
+        string memory g,
+        string memory h,
+        string memory i,
+        string memory j,
+        string memory k,
+        string memory l,
+        string memory m
+    ) private pure returns (string[] memory r) {
+        r = new string[](13);
+        r[0] = a;
+        r[1] = b;
+        r[2] = c;
+        r[3] = d;
+        r[4] = e;
+        r[5] = f;
+        r[6] = g;
+        r[7] = h;
+        r[8] = i;
+        r[9] = j;
+        r[10] = k;
+        r[11] = l;
+        r[12] = m;
     }
-    function _arr14(string memory a,string memory b,string memory c,string memory d,string memory e,string memory f,string memory g,string memory h,string memory i,string memory j,string memory k,string memory l,string memory m,string memory n) private pure returns (string[] memory r){
-        r = new string[](14); r[0]=a;r[1]=b;r[2]=c;r[3]=d;r[4]=e;r[5]=f;r[6]=g;r[7]=h;r[8]=i;r[9]=j;r[10]=k;r[11]=l;r[12]=m;r[13]=n;
+
+    function _arr14(
+        string memory a,
+        string memory b,
+        string memory c,
+        string memory d,
+        string memory e,
+        string memory f,
+        string memory g,
+        string memory h,
+        string memory i,
+        string memory j,
+        string memory k,
+        string memory l,
+        string memory m,
+        string memory n
+    ) private pure returns (string[] memory r) {
+        r = new string[](14);
+        r[0] = a;
+        r[1] = b;
+        r[2] = c;
+        r[3] = d;
+        r[4] = e;
+        r[5] = f;
+        r[6] = g;
+        r[7] = h;
+        r[8] = i;
+        r[9] = j;
+        r[10] = k;
+        r[11] = l;
+        r[12] = m;
+        r[13] = n;
     }
-    function _arr16(string memory a,string memory b,string memory c,string memory d,string memory e,string memory f,string memory g,string memory h,string memory i,string memory j,string memory k,string memory l,string memory m,string memory n,string memory o,string memory p) private pure returns (string[] memory r){
-        r = new string[](16); r[0]=a;r[1]=b;r[2]=c;r[3]=d;r[4]=e;r[5]=f;r[6]=g;r[7]=h;r[8]=i;r[9]=j;r[10]=k;r[11]=l;r[12]=m;r[13]=n;r[14]=o;r[15]=p;
+
+    function _arr16(
+        string memory a,
+        string memory b,
+        string memory c,
+        string memory d,
+        string memory e,
+        string memory f,
+        string memory g,
+        string memory h,
+        string memory i,
+        string memory j,
+        string memory k,
+        string memory l,
+        string memory m,
+        string memory n,
+        string memory o,
+        string memory p
+    ) private pure returns (string[] memory r) {
+        r = new string[](16);
+        r[0] = a;
+        r[1] = b;
+        r[2] = c;
+        r[3] = d;
+        r[4] = e;
+        r[5] = f;
+        r[6] = g;
+        r[7] = h;
+        r[8] = i;
+        r[9] = j;
+        r[10] = k;
+        r[11] = l;
+        r[12] = m;
+        r[13] = n;
+        r[14] = o;
+        r[15] = p;
     }
 }
-
-

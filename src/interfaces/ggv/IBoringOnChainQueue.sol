@@ -48,19 +48,34 @@ interface IBoringOnChainQueue {
 
     function withdrawAssets(address assetOut) external view returns (WithdrawAsset memory);
     function setWithdrawCapacity(address assetOut, uint256 withdrawCapacity) external;
-    function updateWithdrawAsset(address assetOut, uint24 secondsToMaturity, uint24 minimumSecondsToDeadline, uint16 minDiscount, uint16 maxDiscount, uint96 minimumShares) external;
+    function updateWithdrawAsset(
+        address assetOut,
+        uint24 secondsToMaturity,
+        uint24 minimumSecondsToDeadline,
+        uint16 minDiscount,
+        uint16 maxDiscount,
+        uint96 minimumShares
+    ) external;
 
-    function requestOnChainWithdraw(address assetOut, uint128 amountOfShares, uint16 discount, uint24 secondsToDeadline) external returns (bytes32 requestId);
+    function requestOnChainWithdraw(address assetOut, uint128 amountOfShares, uint16 discount, uint24 secondsToDeadline)
+        external
+        returns (bytes32 requestId);
     function cancelOnChainWithdraw(OnChainWithdraw memory request) external returns (bytes32 requestId);
-    function replaceOnChainWithdraw(OnChainWithdraw memory oldRequest, uint16 discount, uint24 secondsToDeadline) external returns (bytes32 oldRequestId, bytes32 newRequestId);
+    function replaceOnChainWithdraw(OnChainWithdraw memory oldRequest, uint16 discount, uint24 secondsToDeadline)
+        external
+        returns (bytes32 oldRequestId, bytes32 newRequestId);
     function owner() external view returns (address);
     function authority() external view returns (address);
     function boringVault() external view returns (address);
     function accountant() external view returns (address);
 
     function getRequestIds() external view returns (bytes32[] memory);
-    function solveOnChainWithdraws(OnChainWithdraw[] calldata requests, bytes calldata solveData, address solver) external;
+    function solveOnChainWithdraws(OnChainWithdraw[] calldata requests, bytes calldata solveData, address solver)
+        external;
 
-    function previewAssetsOut(address assetOut, uint128 amountOfShares, uint16 discount) external view returns (uint128 amountOfAssets);
+    function previewAssetsOut(address assetOut, uint128 amountOfShares, uint16 discount)
+        external
+        view
+        returns (uint128 amountOfAssets);
     function nonce() external view returns (uint96);
 }

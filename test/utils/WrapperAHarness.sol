@@ -11,15 +11,8 @@ import {ILido} from "src/interfaces/ILido.sol";
 import {IWstETH} from "src/interfaces/IWstETH.sol";
 
 import {WrapperA} from "src/WrapperA.sol";
-import {WrapperBase} from "src/WrapperBase.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
-import {IVaultFactory} from "src/interfaces/IVaultFactory.sol";
 import {Factory} from "src/Factory.sol";
-import {WrapperAFactory} from "src/factories/WrapperAFactory.sol";
-import {WrapperBFactory} from "src/factories/WrapperBFactory.sol";
-import {WrapperCFactory} from "src/factories/WrapperCFactory.sol";
-import {WithdrawalQueueFactory} from "src/factories/WithdrawalQueueFactory.sol";
-import {DummyImplementation} from "src/proxy/DummyImplementation.sol";
 import {FactoryHelper} from "test/utils/FactoryHelper.sol";
 
 /**
@@ -61,7 +54,7 @@ contract WrapperAHarness is Test {
         address upgradeConformer;
         uint256 nodeOperatorFeeBP;
         uint256 confirmExpiry;
-            uint256 maxFinalizationTime;
+        uint256 maxFinalizationTime;
         address teller;
         address boringQueue;
     }
@@ -88,8 +81,6 @@ contract WrapperAHarness is Test {
         vm.deal(USER3, 100_000 ether);
         vm.deal(NODE_OPERATOR, 1000 ether);
     }
-
-
 
     function _deployWrapperSystem(DeploymentConfig memory config) internal returns (WrapperContext memory) {
         address vault_;
@@ -120,7 +111,9 @@ contract WrapperAHarness is Test {
 
         vm.startPrank(config.nodeOperator);
         if (config.configuration == Factory.WrapperType.NO_MINTING_NO_STRATEGY) {
-            (vault_, dashboard_, wrapperAddress, withdrawalQueue_) = factory.createVaultWithNoMintingNoStrategy{value: CONNECT_DEPOSIT}(
+            (vault_, dashboard_, wrapperAddress, withdrawalQueue_) = factory.createVaultWithNoMintingNoStrategy{
+                value: CONNECT_DEPOSIT
+            }(
                 config.nodeOperator,
                 config.nodeOperatorManager,
                 config.upgradeConformer,
@@ -130,7 +123,9 @@ contract WrapperAHarness is Test {
                 config.enableAllowlist
             );
         } else if (config.configuration == Factory.WrapperType.MINTING_NO_STRATEGY) {
-            (vault_, dashboard_, wrapperAddress, withdrawalQueue_) = factory.createVaultWithMintingNoStrategy{value: CONNECT_DEPOSIT}(
+            (vault_, dashboard_, wrapperAddress, withdrawalQueue_) = factory.createVaultWithMintingNoStrategy{
+                value: CONNECT_DEPOSIT
+            }(
                 config.nodeOperator,
                 config.nodeOperatorManager,
                 config.upgradeConformer,
@@ -142,7 +137,9 @@ contract WrapperAHarness is Test {
             );
         } else if (config.configuration == Factory.WrapperType.LOOP_STRATEGY) {
             uint256 loops = 1;
-            (vault_, dashboard_, wrapperAddress, withdrawalQueue_) = factory.createVaultWithLoopStrategy{value: CONNECT_DEPOSIT}(
+            (vault_, dashboard_, wrapperAddress, withdrawalQueue_) = factory.createVaultWithLoopStrategy{
+                value: CONNECT_DEPOSIT
+            }(
                 config.nodeOperator,
                 config.nodeOperatorManager,
                 config.upgradeConformer,
@@ -154,7 +151,9 @@ contract WrapperAHarness is Test {
                 loops
             );
         } else if (config.configuration == Factory.WrapperType.GGV_STRATEGY) {
-            (vault_, dashboard_, wrapperAddress, withdrawalQueue_) = factory.createVaultWithGGVStrategy{value: CONNECT_DEPOSIT}(
+            (vault_, dashboard_, wrapperAddress, withdrawalQueue_) = factory.createVaultWithGGVStrategy{
+                value: CONNECT_DEPOSIT
+            }(
                 config.nodeOperator,
                 config.nodeOperatorManager,
                 config.upgradeConformer,
@@ -194,12 +193,10 @@ contract WrapperAHarness is Test {
         return ctx;
     }
 
-    function _deployWrapperA(
-        bool enableAllowlist,
-        uint256 nodeOperatorFeeBP
-    ) internal returns (
-        WrapperContext memory context
-    ) {
+    function _deployWrapperA(bool enableAllowlist, uint256 nodeOperatorFeeBP)
+        internal
+        returns (WrapperContext memory context)
+    {
         DeploymentConfig memory config = DeploymentConfig({
             configuration: Factory.WrapperType.NO_MINTING_NO_STRATEGY,
             strategy: address(0),
@@ -222,11 +219,21 @@ contract WrapperAHarness is Test {
 
     function _checkInitialState(WrapperContext memory ctx) internal virtual {
         // Basic checks common to all wrappers
-        assertEq(ctx.dashboard.reserveRatioBP(), RESERVE_RATIO_BP, "Reserve ratio should match RESERVE_RATIO_BP constant");
+        assertEq(
+            ctx.dashboard.reserveRatioBP(), RESERVE_RATIO_BP, "Reserve ratio should match RESERVE_RATIO_BP constant"
+        );
         assertEq(ctx.wrapper.EXTRA_DECIMALS_BASE(), EXTRA_BASE, "EXTRA_DECIMALS_BASE should match EXTRA_BASE constant");
 
-        assertEq(ctx.wrapper.totalSupply(), CONNECT_DEPOSIT * EXTRA_BASE, "Total stvETH supply should be equal to CONNECT_DEPOSIT");
-        assertEq(ctx.wrapper.balanceOf(address(ctx.wrapper)), CONNECT_DEPOSIT * EXTRA_BASE, "Wrapper stvETH balance should be equal to CONNECT_DEPOSIT");
+        assertEq(
+            ctx.wrapper.totalSupply(),
+            CONNECT_DEPOSIT * EXTRA_BASE,
+            "Total stvETH supply should be equal to CONNECT_DEPOSIT"
+        );
+        assertEq(
+            ctx.wrapper.balanceOf(address(ctx.wrapper)),
+            CONNECT_DEPOSIT * EXTRA_BASE,
+            "Wrapper stvETH balance should be equal to CONNECT_DEPOSIT"
+        );
 
         assertEq(ctx.wrapper.balanceOf(NODE_OPERATOR), 0, "stvETH balance of NODE_OPERATOR should be zero");
         assertEq(steth.balanceOf(NODE_OPERATOR), 0, "stETH balance of node operator should be zero");
@@ -248,7 +255,6 @@ contract WrapperAHarness is Test {
         _assertUniversalInvariants("Initial state", ctx);
     }
 
-
     /**
      * @notice Report a vault value change without fees
      * @param _factorBp The factor by which the vault value should be changed (10_000 = 100%)
@@ -269,23 +275,14 @@ contract WrapperAHarness is Test {
         uint256 recTs = IVaultHub(address(ctx.dashboard.VAULT_HUB())).vaultRecord(address(ctx.vault)).report.timestamp;
         if (recTs == 0) {
             core.applyVaultReport(
-                address(ctx.vault),
-                ctx.dashboard.totalValue(),
-                0,
-                ctx.dashboard.liabilityShares(),
-                0,
-                false
+                address(ctx.vault), ctx.dashboard.totalValue(), 0, ctx.dashboard.liabilityShares(), 0, false
             );
             recTs = IVaultHub(address(ctx.dashboard.VAULT_HUB())).vaultRecord(address(ctx.vault)).report.timestamp;
         }
 
         // Make LazyOracle.latestReportTimestamp equal to the record timestamp to satisfy _isReportFresh logic
         vm.warp(recTs + 1);
-        vm.mockCall(
-            address(core.lazyOracle()),
-            abi.encodeWithSignature("latestReportTimestamp()"),
-            abi.encode(recTs)
-        );
+        vm.mockCall(address(core.lazyOracle()), abi.encodeWithSignature("latestReportTimestamp()"), abi.encode(recTs));
 
         // Also return true from VaultHub.isReportFresh for the specific vault used in this test context
         vm.mockCall(
@@ -312,7 +309,6 @@ contract WrapperAHarness is Test {
     }
 
     function _assertUniversalInvariants(string memory _context, WrapperContext memory _ctx) internal virtual {
-
         assertEq(
             _ctx.wrapper.previewRedeem(_ctx.wrapper.totalSupply()),
             _ctx.wrapper.totalAssets(),
@@ -338,12 +334,13 @@ contract WrapperAHarness is Test {
                 totalPreviewRedeem += _ctx.wrapper.previewRedeem(_ctx.wrapper.balanceOf(holders[i]));
             }
             uint256 totalAssets = _ctx.wrapper.totalAssets();
-            uint256 diff = totalPreviewRedeem > totalAssets
-                ? totalPreviewRedeem - totalAssets
-                : totalAssets - totalPreviewRedeem;
+            uint256 diff =
+                totalPreviewRedeem > totalAssets ? totalPreviewRedeem - totalAssets : totalAssets - totalPreviewRedeem;
             assertTrue(
                 diff <= 1,
-                _contextMsg(_context, "Sum of previewRedeem of all holders should equal totalAssets (within 1 wei accuracy)")
+                _contextMsg(
+                    _context, "Sum of previewRedeem of all holders should equal totalAssets (within 1 wei accuracy)"
+                )
             );
         }
 
@@ -359,7 +356,10 @@ contract WrapperAHarness is Test {
                 totalStethBalance,
                 totalMintedSteth,
                 holders.length * WEI_ROUNDING_TOLERANCE,
-                _contextMsg(_context, "Sum of all stETH balances (users + wrapper) should approximately equal stETH minted for liability shares")
+                _contextMsg(
+                    _context,
+                    "Sum of all stETH balances (users + wrapper) should approximately equal stETH minted for liability shares"
+                )
             );
         }
     }

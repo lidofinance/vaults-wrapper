@@ -5,7 +5,6 @@ pragma solidity >=0.8.0;
 
 import {IAccessControlEnumerable} from "@openzeppelin/contracts/access/extensions/IAccessControlEnumerable.sol";
 
-
 import {IStakingVault} from "./IStakingVault.sol";
 
 interface IDashboard is IAccessControlEnumerable {
@@ -35,10 +34,20 @@ interface IDashboard is IAccessControlEnumerable {
     event ERC20Recovered(address indexed to, address indexed token, uint256 amount);
     event ERC721Recovered(address indexed to, address indexed token, uint256 tokenId);
     event ConfirmExpirySet(address indexed sender, uint256 oldConfirmExpiry, uint256 newConfirmExpiry);
-    event RoleMemberConfirmed(address indexed member, bytes32 indexed role, uint256 confirmTimestamp, uint256 expiryTimestamp, bytes data);
+    event RoleMemberConfirmed(
+        address indexed member, bytes32 indexed role, uint256 confirmTimestamp, uint256 expiryTimestamp, bytes data
+    );
     event NodeOperatorFeeSet(address indexed sender, uint256 oldNodeOperatorFeeRate, uint256 newNodeOperatorFeeRate);
-    event NodeOperatorFeeRecipientSet(address indexed sender, address oldNodeOperatorFeeRecipient, address newNodeOperatorFeeRecipient);
-    event NodeOperatorFeeDisbursed(address indexed recipient, uint256 amount, VaultConnection vaultConnection, Report feePeriodStartReport, Report feePeriodEndReport);
+    event NodeOperatorFeeRecipientSet(
+        address indexed sender, address oldNodeOperatorFeeRecipient, address newNodeOperatorFeeRecipient
+    );
+    event NodeOperatorFeeDisbursed(
+        address indexed recipient,
+        uint256 amount,
+        VaultConnection vaultConnection,
+        Report feePeriodStartReport,
+        Report feePeriodEndReport
+    );
 
     // ==================== Errors ====================
     error ExceedsWithdrawable(uint256 amount, uint256 withdrawableValue);
@@ -176,8 +185,12 @@ interface IDashboard is IAccessControlEnumerable {
     function pauseBeaconChainDeposits() external;
     function resumeBeaconChainDeposits() external;
     function requestValidatorExit(bytes calldata _pubkeys) external;
-    function triggerValidatorWithdrawals(bytes calldata _pubkeys, uint64[] calldata _amounts, address _refundRecipient) external payable;
-    function unguaranteedDepositToBeaconChain(IStakingVault.Deposit[] calldata _deposits) external returns (uint256 totalAmount);
+    function triggerValidatorWithdrawals(bytes calldata _pubkeys, uint64[] calldata _amounts, address _refundRecipient)
+        external
+        payable;
+    function unguaranteedDepositToBeaconChain(IStakingVault.Deposit[] calldata _deposits)
+        external
+        returns (uint256 totalAmount);
 
     // ==================== PDG Operations ====================
     // function proveUnknownValidatorsToPDG(IPredepositGuarantee.ValidatorWitness[] calldata _witnesses) external;

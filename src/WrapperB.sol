@@ -2,7 +2,6 @@
 pragma solidity >=0.8.25;
 
 import {WrapperBase} from "./WrapperBase.sol";
-import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 
@@ -34,7 +33,8 @@ contract WrapperB is WrapperBase {
     }
 
     // keccak256(abi.encode(uint256(keccak256("wrapper.b.storage")) - 1)) & ~bytes32(uint256(0xff))
-    bytes32 private constant WRAPPER_B_STORAGE_LOCATION = 0x68280b7606a1a98bf19dd7ad4cb88029b355c2c81a554f53b998c73f934e4400;
+    bytes32 private constant WRAPPER_B_STORAGE_LOCATION =
+        0x68280b7606a1a98bf19dd7ad4cb88029b355c2c81a554f53b998c73f934e4400;
 
     constructor(
         address _dashboard,
@@ -69,7 +69,11 @@ contract WrapperB is WrapperBase {
         stv = depositETH(_receiver, _referral, targetStethShares);
     }
 
-    function depositETH(address _receiver, address _referral, uint256 _stethSharesToMint) public payable returns (uint256 stv) {
+    function depositETH(address _receiver, address _referral, uint256 _stethSharesToMint)
+        public
+        payable
+        returns (uint256 stv)
+    {
         stv = _deposit(_receiver, _referral);
 
         uint256 maxStethShares = _calcYetMintableStethShares(_receiver);
@@ -86,13 +90,16 @@ contract WrapperB is WrapperBase {
     //
     // Withdrawal functions
     //
-
-    function withdrawableEth(address _address, uint256 _stv, uint256 _stethSharesToBurn) public view returns (uint256 ethAmount) {
+    function withdrawableEth(address _address, uint256 _stv, uint256 _stethSharesToBurn)
+        public
+        view
+        returns (uint256 ethAmount)
+    {
         (, uint256 userEthWithdrawableWithoutBurning) = _calcWithdrawableWithoutBurning(_address);
         uint256 userEthRequiringBurning = _convertToAssets(_stv) - userEthWithdrawableWithoutBurning;
 
-        ethAmount = userEthWithdrawableWithoutBurning +
-            Math.mulDiv(_stethSharesToBurn, userEthRequiringBurning, _getStethShares(_address), Math.Rounding.Floor);
+        ethAmount = userEthWithdrawableWithoutBurning
+            + Math.mulDiv(_stethSharesToBurn, userEthRequiringBurning, _getStethShares(_address), Math.Rounding.Floor);
     }
 
     function withdrawableStv(address _address, uint256 _stethSharesToBurn) public view returns (uint256 stv) {
@@ -116,7 +123,7 @@ contract WrapperB is WrapperBase {
         uint256 balance = balanceOf(_address);
         if (balance == 0) return 0; // TODO: revert here?
 
-        (uint256 stvWithdrawableWithoutBurning, ) = _calcWithdrawableWithoutBurning(_address);
+        (uint256 stvWithdrawableWithoutBurning,) = _calcWithdrawableWithoutBurning(_address);
 
         uint256 stvRequiringBurning = Math.saturatingSub(_stv, stvWithdrawableWithoutBurning);
         uint256 stvBackedBySteth = Math.saturatingSub(balance, stvWithdrawableWithoutBurning);
@@ -160,7 +167,10 @@ contract WrapperB is WrapperBase {
         return _requestWithdrawalQueue(msg.sender, msg.sender, _stv);
     }
 
-    function _requestWithdrawalQueue(address _owner, address _receiver, uint256 _stv) internal returns (uint256 requestId) {
+    function _requestWithdrawalQueue(address _owner, address _receiver, uint256 _stv)
+        internal
+        returns (uint256 requestId)
+    {
         if (_stv == 0) revert WrapperBase.ZeroStvShares();
 
         // TODO: move min max withdrawal amount check from WQ here?
@@ -185,9 +195,9 @@ contract WrapperB is WrapperBase {
     //
     // Calculation helpers
     //
-
     function _calcTargetStethSharesAmount(uint256 _eth) internal view returns (uint256 stethShares) {
-        uint256 notReservedEth = Math.mulDiv(_eth, TOTAL_BASIS_POINTS - WRAPPER_RR_BP, TOTAL_BASIS_POINTS, Math.Rounding.Floor);
+        uint256 notReservedEth =
+            Math.mulDiv(_eth, TOTAL_BASIS_POINTS - WRAPPER_RR_BP, TOTAL_BASIS_POINTS, Math.Rounding.Floor);
         stethShares = STETH.getSharesByPooledEth(notReservedEth);
     }
 
@@ -205,7 +215,6 @@ contract WrapperB is WrapperBase {
     //
     // ERC20 overrides
     //
-
     function _update(address _from, address _to, uint256 _value) internal override {
         // TODO: maybe add workaround for _from == address(0) because ERC20 minting is _update from address(0)
         _updateStShares(_from, _to, _value);
@@ -215,7 +224,6 @@ contract WrapperB is WrapperBase {
     //
     //
     //
-
     function _updateStShares(address _from, address _to, uint256 _stvToMove) internal {
         // if (_from == address(0) || _to == address(0) || _stvSharesMoved == 0) revert ZeroArgument();
 
@@ -247,7 +255,9 @@ contract WrapperB is WrapperBase {
         if (totalStShares == 0) {
             newStShares = _stethShares;
         } else {
-            newStShares = Math.mulDiv(vaultStethShares, totalStShares, vaultStethShares - _stethShares, Math.Rounding.Floor) - totalStShares;
+            newStShares = Math.mulDiv(
+                vaultStethShares, totalStShares, vaultStethShares - _stethShares, Math.Rounding.Floor
+            ) - totalStShares;
         }
 
         $.totalStShares += newStShares;
@@ -273,14 +283,18 @@ contract WrapperB is WrapperBase {
     function _getStShares(address _address) internal view returns (uint256 stShares) {
         stShares = _getWrapperBStorage().stShares[_address];
     }
+
     function _getStethShares(address _address) internal view returns (uint256 stethShares) {
         uint256 totalStShares = _getWrapperBStorage().totalStShares;
         if (totalStShares == 0) return 0;
         return Math.mulDiv(_getStShares(_address), DASHBOARD.liabilityShares(), totalStShares, Math.Rounding.Floor);
-
     }
 
-    function _getPartCorrespondingToStShares(uint256 _stShares, uint256 _assets, address _address) internal view returns (uint256 assets) {
+    function _getPartCorrespondingToStShares(uint256 _stShares, uint256 _assets, address _address)
+        internal
+        view
+        returns (uint256 assets)
+    {
         assets = Math.mulDiv(_stShares, _assets, _getStShares(_address), Math.Rounding.Floor);
     }
 
@@ -293,5 +307,4 @@ contract WrapperB is WrapperBase {
             $.slot := WRAPPER_B_STORAGE_LOCATION
         }
     }
-
 }

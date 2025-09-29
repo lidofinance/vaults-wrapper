@@ -2,12 +2,12 @@
 pragma solidity >=0.8.25;
 
 import {WrapperA} from "src/WrapperA.sol";
-import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
 
 contract WrapperAFactory {
-    function deploy(address _dashboard, bool _allowlistEnabled, address _withdrawalQueue) external returns (address impl) {
+    function deploy(address _dashboard, bool _allowlistEnabled, address _withdrawalQueue)
+        external
+        returns (address impl)
+    {
         impl = address(new WrapperA(_dashboard, _allowlistEnabled, _withdrawalQueue));
     }
 }
-
-

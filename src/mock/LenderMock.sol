@@ -20,7 +20,7 @@ contract LenderMock {
 
         require(IERC20(STETH).transferFrom(msg.sender, address(this), _stethAmount), "stETH transfer failed");
 
-        (bool sent, ) = msg.sender.call{value: ethAmount}("");
+        (bool sent,) = msg.sender.call{value: ethAmount}("");
         require(sent, "ETH transfer failed");
     }
 

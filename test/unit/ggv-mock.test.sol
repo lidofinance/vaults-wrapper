@@ -1,18 +1,20 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >=0.8.25;
 
-import {Test, console} from "forge-std/Test.sol";
+import {Test} from "forge-std/Test.sol";
 
-import {GGVVaultMock, GGVMockTeller,GGVQueueMock} from "src/mock/GGVMock.sol";
+import {GGVVaultMock} from "src/mock/ggv/GGVVaultMock.sol";
+import {GGVMockTeller} from "src/mock/ggv/GGVMockTeller.sol";
+import {GGVQueueMock} from "src/mock/ggv/GGVQueueMock.sol";
 import {MockStETH} from "test/mocks/MockStETH.sol";
-
-
+import {MockWstETH} from "test/mocks/MockWstETH.sol";
 
 contract GGVMockTest is Test {
     GGVVaultMock public vault;
     GGVMockTeller public teller;
     GGVQueueMock public queue;
     MockStETH public steth;
+    MockWstETH public wsteth;
 
     address public user1 = address(0x1);
     address public user2 = address(0x2);
@@ -26,19 +28,18 @@ contract GGVMockTest is Test {
         vm.deal(admin, initialBalance);
 
         steth = new MockStETH();
+        wsteth = new MockWstETH(address(steth));
         // give admin 10 steth for ggv rebase
         vm.prank(admin);
         steth.submit{value: 10 ether}(admin);
-        
-    
-        vault = new GGVVaultMock(admin, address(steth));
+
+        vault = new GGVVaultMock(admin, address(steth), address(wsteth));
         teller = GGVMockTeller(address(vault.TELLER()));
         queue = GGVQueueMock(address(vault.BORING_QUEUE()));
 
         // approve admin's steth for ggv rebase
         vm.prank(admin);
         steth.approve(address(vault), type(uint256).max);
-
     }
 
     function test_depositToGGV() public {
@@ -54,14 +55,13 @@ contract GGVMockTest is Test {
         vm.stopPrank();
 
         vm.startPrank(admin);
-        // add 1 steth to ggv balance for rebase     
+        // add 1 steth to ggv balance for rebase
         vault.rebase(1 ether);
         uint256 newGgvUserAssets = vault.getAssetsByShares(ggvShares);
         assertEq(newGgvUserAssets > ggvUserAssets, true);
     }
 
     function test_withdrawFromGGV() public {
-
         // USER
         vm.startPrank(user1);
         // get steth
@@ -72,11 +72,13 @@ contract GGVMockTest is Test {
         uint256 userStethSharesAfterDeposit = steth.sharesOf(user1);
 
         // withdraw from ggv
-        GGVQueueMock.WithdrawAsset memory wa = queue.withdrawAssets(address(steth));     
-        uint256 previewAmountAssetsStethShares = queue.previewAssetsOut(address(steth), uint128(userGgvShares), wa.minDiscount);
+        GGVQueueMock.WithdrawAsset memory wa = queue.withdrawAssets(address(steth));
+        uint256 previewAmountAssetsStethShares =
+            queue.previewAssetsOut(address(steth), uint128(userGgvShares), wa.minDiscount);
 
         vault.approve(address(queue), userGgvShares);
-        bytes32 requestId = queue.requestOnChainWithdraw(address(steth), uint128(userGgvShares), wa.minDiscount, type(uint24).max);
+        bytes32 requestId =
+            queue.requestOnChainWithdraw(address(steth), uint128(userGgvShares), wa.minDiscount, type(uint24).max);
         GGVQueueMock.OnChainWithdraw memory req = queue.mockGetRequestById(requestId);
 
         GGVQueueMock.OnChainWithdraw[] memory requests = new GGVQueueMock.OnChainWithdraw[](1);

@@ -29,6 +29,7 @@ contract FactoryTest is Test {
     MockVaultHub public vaultHub;
     MockVaultFactory public vaultFactory;
     MockERC20 public stETH;
+    MockERC20 public wstETH;
     MockLazyOracle public lazyOracle;
 
     address public admin = address(0x1);
@@ -56,6 +57,9 @@ contract FactoryTest is Test {
         stETH = new MockERC20("Staked Ether", "stETH");
         vm.label(address(stETH), "stETH");
 
+        wstETH = new MockERC20("Wrapped Staked Ether", "wstETH");
+        vm.label(address(wstETH), "wstETH");
+
         lazyOracle = new MockLazyOracle();
 
         // Deploy dedicated implementation factories and the main Factory
@@ -70,6 +74,7 @@ contract FactoryTest is Test {
         Factory.WrapperConfig memory a = Factory.WrapperConfig({
             vaultFactory: address(vaultFactory),
             steth: address(stETH),
+            wsteth: address(wstETH),
             lazyOracle: address(lazyOracle),
             wrapperAFactory: address(waf),
             wrapperBFactory: address(wbf),
@@ -84,20 +89,16 @@ contract FactoryTest is Test {
 
     function test_canCreateWrapper() public {
         vm.startPrank(admin);
-        (
-            address vault,
-            address dashboard,
-            address payable wrapperProxy,
-            address withdrawalQueueProxy
-        ) = WrapperFactory.createVaultWithNoMintingNoStrategy{value: connectDeposit}(
-                nodeOperator,
-                nodeOperatorManager,
-                nodeOperator,
-                100, // 1% fee
-                3600, // 1 hour confirm expiry
-                30 days,
-                false // allowlist disabled
-            );
+        (address vault, address dashboard, address payable wrapperProxy, address withdrawalQueueProxy) = WrapperFactory
+            .createVaultWithNoMintingNoStrategy{value: connectDeposit}(
+            nodeOperator,
+            nodeOperatorManager,
+            nodeOperator,
+            100, // 1% fee
+            3600, // 1 hour confirm expiry
+            30 days,
+            false // allowlist disabled
+        );
 
         WrapperBase wrapper = WrapperBase(wrapperProxy);
         WithdrawalQueue withdrawalQueue = WithdrawalQueue(payable(withdrawalQueueProxy));
@@ -116,12 +117,7 @@ contract FactoryTest is Test {
             )
         );
 
-        assertFalse(
-            mockDashboard.hasRole(
-                mockDashboard.DEFAULT_ADMIN_ROLE(),
-                address(WrapperFactory)
-            )
-        );
+        assertFalse(mockDashboard.hasRole(mockDashboard.DEFAULT_ADMIN_ROLE(), address(WrapperFactory)));
     }
 
     function test_revertWithoutConnectDeposit() public {
@@ -140,22 +136,18 @@ contract FactoryTest is Test {
 
     function test_canCreateWithStrategy() public {
         vm.startPrank(admin);
-        (
-            address vault,
-            address dashboard,
-            address payable wrapperProxy,
-            address withdrawalQueueProxy
-        ) = WrapperFactory.createVaultWithLoopStrategy{value: connectDeposit}(
-                nodeOperator,
-                nodeOperatorManager,
-                nodeOperator,
-                100, // 1% fee
-                3600, // 1 hour confirm expiry
-                30 days,
-                false, // allowlist disabled
-                0, // reserve ratio gap
-                1 // loops
-            );
+        (address vault, address dashboard, address payable wrapperProxy, address withdrawalQueueProxy) = WrapperFactory
+            .createVaultWithLoopStrategy{value: connectDeposit}(
+            nodeOperator,
+            nodeOperatorManager,
+            nodeOperator,
+            100, // 1% fee
+            3600, // 1 hour confirm expiry
+            30 days,
+            false, // allowlist disabled
+            0, // reserve ratio gap
+            1 // loops
+        );
 
         WrapperBase wrapper = WrapperBase(wrapperProxy);
         WithdrawalQueue withdrawalQueue = WithdrawalQueue(payable(withdrawalQueueProxy));
@@ -166,34 +158,24 @@ contract FactoryTest is Test {
 
         MockDashboard mockDashboard = MockDashboard(payable(dashboard));
 
-        assertTrue(
-            mockDashboard.hasRole(mockDashboard.MINT_ROLE(), address(wrapper))
-        );
+        assertTrue(mockDashboard.hasRole(mockDashboard.MINT_ROLE(), address(wrapper)));
 
-        assertTrue(
-            mockDashboard.hasRole(mockDashboard.BURN_ROLE(), address(wrapper))
-        );
+        assertTrue(mockDashboard.hasRole(mockDashboard.BURN_ROLE(), address(wrapper)));
     }
 
     function test_allowlistEnabled() public {
         vm.startPrank(admin);
-        (
-            ,
-            ,
-            address payable wrapperProxy,
-
-        ) = WrapperFactory.createVaultWithNoMintingNoStrategy{value: connectDeposit}(
-                nodeOperator,
-                nodeOperatorManager,
-                nodeOperator,
-                100, // 1% fee
-                3600, // 1 hour confirm expiry
-                30 days,
-                true // allowlist enabled
-            );
+        (,, address payable wrapperProxy,) = WrapperFactory.createVaultWithNoMintingNoStrategy{value: connectDeposit}(
+            nodeOperator,
+            nodeOperatorManager,
+            nodeOperator,
+            100, // 1% fee
+            3600, // 1 hour confirm expiry
+            30 days,
+            true // allowlist enabled
+        );
 
         WrapperBase wrapper = WrapperBase(wrapperProxy);
         assertTrue(wrapper.ALLOW_LIST_ENABLED());
     }
-
 }

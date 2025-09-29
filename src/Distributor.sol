@@ -12,7 +12,7 @@ contract Distributor is AccessControlEnumerable {
     using EnumerableSet for EnumerableSet.AddressSet;
 
     bytes32 public constant MANAGER_ROLE = keccak256("distributor.MANAGER_ROLE");
-    
+
     /// @notice Merkle root of the distribution
     bytes32 public root;
 
@@ -74,7 +74,8 @@ contract Distributor is AccessControlEnumerable {
         returns (uint256 amount)
     {
         if (root == bytes32(0)) revert RootNotSet();
-        if (!MerkleProof.verifyCalldata(
+        if (
+            !MerkleProof.verifyCalldata(
                 _proof, root, keccak256(bytes.concat(keccak256(abi.encode(_recipient, _token, _amount))))
             )
         ) revert InvalidProof();
@@ -93,9 +94,8 @@ contract Distributor is AccessControlEnumerable {
     event TokenAdded(address indexed token);
     event Claimed(address indexed recipient, address indexed token, uint256 amount);
     event MerkleRootUpdated(
-        bytes32 oldRoot, bytes32 newRoot, 
-        string oldCid, string newCid, 
-        uint256 oldBlock, uint256 newBlock);
+        bytes32 oldRoot, bytes32 newRoot, string oldCid, string newCid, uint256 oldBlock, uint256 newBlock
+    );
 
     error AlreadyProcessed();
     error InvalidProof();

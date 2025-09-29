@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >=0.8.25;
 
-import {AccessControlEnumerableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/extensions/AccessControlEnumerableUpgradeable.sol";
+import {AccessControlEnumerableUpgradeable} from
+    "@openzeppelin/contracts-upgradeable/access/extensions/AccessControlEnumerableUpgradeable.sol";
 import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 import {ERC1967Utils} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Utils.sol";
 import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
@@ -101,21 +102,15 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
     }
 
     // keccak256(abi.encode(uint256(keccak256("wrapper.storage.WithdrawalQueue")) - 1)) & ~bytes32(uint256(0xff))
-    bytes32 private constant WithdrawalQueueStorageLocation = 0xff0bcb2d6a043ff95a84af574799a6cec022695552f02c53d70e4e5aa1e06100;
+    bytes32 private constant WithdrawalQueueStorageLocation =
+        0xff0bcb2d6a043ff95a84af574799a6cec022695552f02c53d70e4e5aa1e06100;
 
     event Initialized(address indexed admin);
     event WithdrawalRequested(
-        uint256 indexed requestId,
-        address indexed owner,
-        uint256 amountOfAssets,
-        uint256 amountOfShares
+        uint256 indexed requestId, address indexed owner, uint256 amountOfAssets, uint256 amountOfShares
     );
     event WithdrawalsFinalized(
-        uint256 indexed from,
-        uint256 indexed to,
-        uint256 amountOfETHLocked,
-        uint256 sharesToBurn,
-        uint256 timestamp
+        uint256 indexed from, uint256 indexed to, uint256 amountOfETHLocked, uint256 sharesToBurn, uint256 timestamp
     );
     event EmergencyExitActivated(uint256 timestamp);
     event ImplementationUpgraded(address newImplementation);
@@ -129,10 +124,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
     error RequestAlreadyClaimed(uint256 requestId);
     error RequestNotFoundOrNotFinalized(uint256 requestId);
     error RequestIdsNotSorted();
-    error ArraysLengthMismatch(
-        uint256 firstArrayLength,
-        uint256 secondArrayLength
-    );
+    error ArraysLengthMismatch(uint256 firstArrayLength, uint256 secondArrayLength);
     error ReportStale();
     error CantSendValueRecipientMayHaveReverted();
     error InvalidHint(uint256 hint);
@@ -238,10 +230,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
         }
     }
 
-    function requestWithdrawal(uint256 _stvShares, address _owner)
-        public
-        returns (uint256 requestId)
-    {
+    function requestWithdrawal(uint256 _stvShares, address _owner) public returns (uint256 requestId) {
         if (!isEmergencyExitActivated()) {
             _requireNotPaused();
         }
@@ -278,10 +267,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
 
     /// @notice Finalize withdrawal requests
     /// @param _maxRequests the maximum number of requests to finalize
-    function finalize(uint256 _maxRequests)
-        external
-        returns (uint256 finalizedRequests)
-    {
+    function finalize(uint256 _maxRequests) external returns (uint256 finalizedRequests) {
         if (!isEmergencyExitActivated()) {
             _requireNotPaused();
             _checkRole(FINALIZE_ROLE, msg.sender);
@@ -320,14 +306,12 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
                 eth = (shares * currentShareRate) / E27_PRECISION_BASE;
             }
 
-
             if (
                 // stop if insufficient ETH to cover this request
-                eth > withdrawableValue ||
                 // stop if not enough time has passed since the request was created
-                request.timestamp + MIN_WITHDRAWAL_DELAY_TIME_IN_SECONDS > block.timestamp ||
                 // stop if the request was created after the latest report was published, at least one oracle report is required
-                request.timestamp > LAZY_ORACLE.latestReportTimestamp()
+                eth > withdrawableValue || request.timestamp + MIN_WITHDRAWAL_DELAY_TIME_IN_SECONDS > block.timestamp
+                    || request.timestamp > LAZY_ORACLE.latestReportTimestamp()
             ) {
                 break;
             }
@@ -349,16 +333,16 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
 
         // Create checkpoint with ShareRate
         uint256 lastCheckpointIndex = $.lastCheckpointIndex + 1;
-        $.checkpoints[lastCheckpointIndex] = Checkpoint({
-            fromRequestId: firstRequestIdToFinalize,
-            shareRate: currentShareRate
-        });
+        $.checkpoints[lastCheckpointIndex] =
+            Checkpoint({fromRequestId: firstRequestIdToFinalize, shareRate: currentShareRate});
 
         $.lastCheckpointIndex = uint96(lastCheckpointIndex);
         $.lastFinalizedRequestId = uint96(lastFinalizedRequestId);
         $.totalLockedAssets += uint96(totalEthToFinalize);
 
-        emit WithdrawalsFinalized(firstRequestIdToFinalize, lastFinalizedRequestId, totalEthToFinalize, totalSharesToBurn, block.timestamp);
+        emit WithdrawalsFinalized(
+            firstRequestIdToFinalize, lastFinalizedRequestId, totalEthToFinalize, totalSharesToBurn, block.timestamp
+        );
     }
 
     /// @notice Calculate current share rate of the vault
@@ -403,11 +387,10 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
         // some dust (1-2 wei per request) will be accumulated upon claiming
         $.totalLockedAssets -= uint96(ethWithDiscount);
 
-        (bool success, ) = _recipient.call{value: ethWithDiscount}("");
+        (bool success,) = _recipient.call{value: ethWithDiscount}("");
         if (!success) revert CantSendValueRecipientMayHaveReverted();
 
         return ethWithDiscount;
-
 
         // return _claim(_requestId, checkpoint, recipient);
     }
@@ -552,7 +535,11 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
     /// this function has an unbounded cost, and using it as part of a state-changing function may render the function
     /// uncallable if the set grows to a point where copying to memory consumes too much gas to fit in a block.
     ///
-    function getWithdrawalRequests(address _owner, uint256 _start, uint256 _end) external view returns (uint256[] memory requestIds) {
+    function getWithdrawalRequests(address _owner, uint256 _start, uint256 _end)
+        external
+        view
+        returns (uint256[] memory requestIds)
+    {
         return _getWithdrawalQueueStorage().requestsByOwner[_owner].values(_start, _end);
     }
 
@@ -680,7 +667,9 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
     /// @dev can only be called if Withdrawal Queue is stuck
     function activateEmergencyExit() external {
         WithdrawalQueueStorage storage $ = _getWithdrawalQueueStorage();
-        if ($.emergencyExitActivationTimestamp > 0 || !isWithdrawalQueueStuck()) revert InvalidEmergencyExitActivation();
+        if ($.emergencyExitActivationTimestamp > 0 || !isWithdrawalQueueStuck()) {
+            revert InvalidEmergencyExitActivation();
+        }
 
         $.emergencyExitActivationTimestamp = uint40(block.timestamp);
 
@@ -707,7 +696,11 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
     /// @param _requestId request id
     /// @param _hint checkpoint hint
     /// @return amount of claimable ether
-    function _calculateClaimableEther(WithdrawalRequest storage _request, uint256 _requestId, uint256 _hint) internal view returns (uint256) {
+    function _calculateClaimableEther(WithdrawalRequest storage _request, uint256 _requestId, uint256 _hint)
+        internal
+        view
+        returns (uint256)
+    {
         if (_hint == 0) revert InvalidHint(_hint);
 
         WithdrawalQueueStorage storage $ = _getWithdrawalQueueStorage();

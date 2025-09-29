@@ -8,5 +8,5 @@ interface IStrategy {
     function requestWithdrawByStETH(address _user, uint256 _ethAmount) external returns (uint256 requestId);
     function finalizeWithdrawal(address _receiver, uint256 stETHAmount) external;
 
-    function getStrategyProxyAddress(address user) external  view returns (address proxy);
+    function getStrategyProxyAddress(address user) external view returns (address proxy);
 }

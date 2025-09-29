@@ -4,6 +4,7 @@ pragma solidity >= 0.5.0;
 import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
 
 uint256 constant DOUBLE_CACHE_LENGTH = 2;
+
 library DoubleRefSlotCache {
     struct Int104WithCache {
         int104 value;
@@ -11,6 +12,7 @@ library DoubleRefSlotCache {
         uint48 refSlot;
     }
 }
+
 interface IVaultHub is IAccessControl {
     struct VaultConnection {
         // ### 1st slot
@@ -37,8 +39,8 @@ interface IVaultHub is IAccessControl {
         uint16 reservationFeeBP;
         /// @notice if true, vault owner manually paused the beacon chain deposits
         bool isBeaconDepositsManuallyPaused;
-        /// 24 bits gap
     }
+    /// 24 bits gap
 
     struct VaultRecord {
         // ### 1st slot
@@ -80,7 +82,6 @@ interface IVaultHub is IAccessControl {
         uint48 refSlot;
     }
 
-
     function CONNECT_DEPOSIT() external view returns (uint256);
 
     function fund(address vault) external payable;
@@ -111,7 +112,6 @@ interface IVaultHub is IAccessControl {
         uint256 _reportSlashingReserve
     ) external;
 
-
     // -----------------------------
     //           ERRORS
     // -----------------------------
@@ -138,10 +138,7 @@ interface IVaultHub is IAccessControl {
 
     error AlreadyHealthy(address vault);
     error VaultMintingCapacityExceeded(
-        address vault,
-        uint256 totalValue,
-        uint256 liabilityShares,
-        uint256 newRebalanceThresholdBP
+        address vault, uint256 totalValue, uint256 liabilityShares, uint256 newRebalanceThresholdBP
     );
     error InsufficientSharesToBurn(address vault, uint256 amount);
     error ShareLimitExceeded(address vault, uint256 expectedSharesAfterMint, uint256 shareLimit);

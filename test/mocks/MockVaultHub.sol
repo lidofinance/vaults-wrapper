@@ -1,13 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >=0.8.25;
 
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {MockERC20} from "./MockERC20.sol";
 import {IVaultHub} from "src/interfaces/IVaultHub.sol";
 import {IStakingVault} from "../../src/interfaces/IStakingVault.sol";
 
 contract MockVaultHub { // TODO: maybe inherit IVaultHub
-
     uint256 public immutable RESERVE_RATIO_BP = 25_00;
     uint256 internal immutable TOTAL_BASIS_POINTS = 100_00;
 
@@ -31,6 +29,7 @@ contract MockVaultHub { // TODO: maybe inherit IVaultHub
         return (vaultBalances[_vault] * (TOTAL_BASIS_POINTS - RESERVE_RATIO_BP)) / TOTAL_BASIS_POINTS;
     }
 
+    // solhint-disable-next-line no-unused-vars
     function vaultConnection(address _vault) external pure returns (IVaultHub.VaultConnection memory) {
         return IVaultHub.VaultConnection({
             owner: address(0),
@@ -55,6 +54,7 @@ contract MockVaultHub { // TODO: maybe inherit IVaultHub
     }
 
     event VaultHubFunded(address sender, address vault, uint256 amount);
+
     function fund(address _vault) external payable {
         emit VaultHubFunded(msg.sender, _vault, msg.value);
         vaultBalances[_vault] += msg.value;
@@ -103,29 +103,28 @@ contract MockVaultHub { // TODO: maybe inherit IVaultHub
         uint64[] calldata _amounts,
         address _refundRecipient
     ) external payable {
-    //     // Mock implementation - simulate validator withdrawals
-    //     // In real implementation, this would trigger EIP-7002 withdrawals
+        //     // Mock implementation - simulate validator withdrawals
+        //     // In real implementation, this would trigger EIP-7002 withdrawals
 
-    //     // For testing, we can simulate that validators were exited and funds are now available
-    //     uint256 totalWithdrawn = 0;
-    //     for (uint256 i = 0; i < _amounts.length; i++) {
-    //         if (_amounts[i] == 0) {
-    //             // Full withdrawal (32 ETH per validator)
-    //             totalWithdrawn += 32 ether;
-    //         } else {
-    //             totalWithdrawn += _amounts[i];
-    //         }
-    //     }
+        //     // For testing, we can simulate that validators were exited and funds are now available
+        //     uint256 totalWithdrawn = 0;
+        //     for (uint256 i = 0; i < _amounts.length; i++) {
+        //         if (_amounts[i] == 0) {
+        //             // Full withdrawal (32 ETH per validator)
+        //             totalWithdrawn += 32 ether;
+        //         } else {
+        //             totalWithdrawn += _amounts[i];
+        //         }
+        //     }
 
-    //     // Add withdrawn funds to withdrawable balance
-    //     vaultWithdrawableBalances[_vault] += totalWithdrawn;
+        //     // Add withdrawn funds to withdrawable balance
+        //     vaultWithdrawableBalances[_vault] += totalWithdrawn;
 
-    //     // Refund excess fee
-    //     if (msg.value > 0 && _refundRecipient != address(0)) {
-    //         payable(_refundRecipient).transfer(msg.value);
-    //     }
+        //     // Refund excess fee
+        //     if (msg.value > 0 && _refundRecipient != address(0)) {
+        //         payable(_refundRecipient).transfer(msg.value);
+        //     }
     }
-
 
     /**
      * @notice Test-only function to simulate validator exits making funds withdrawable

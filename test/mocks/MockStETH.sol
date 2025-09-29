@@ -8,42 +8,35 @@ contract MockStETH is ERC20 {
     uint256 private totalPooledEth;
     mapping(address => uint256) private shares;
 
-
     constructor() ERC20("Mock stETH", "stETH") {
         totalShares = 1e18;
         totalPooledEth = 1e18;
     }
 
-    // 
+    //
     // simple shares
     //
-
     function getSharesByPooledEth(uint256 _ethAmount) public view returns (uint256) {
-        return _ethAmount
-            * totalShares // denominator in shares
+        return _ethAmount * totalShares // denominator in shares
             / totalPooledEth; // numerator in ether
     }
 
-
     function getPooledEthByShares(uint256 _sharesAmount) public view returns (uint256) {
-      
-        return _sharesAmount
-            * totalPooledEth // numerator in ether
+        return _sharesAmount * totalPooledEth // numerator in ether
             / totalShares; // denominator in shares
     }
-    
+
     function transferSharesFrom(address from, address to, uint256 amount) external returns (bool) {
         require(shares[from] >= amount, "Not enough shares");
-        
+
         uint256 steth = getPooledEthByShares(amount);
         uint256 allowance = allowance(from, msg.sender);
         require(allowance >= steth, "Not enough allowance");
         _approve(from, msg.sender, allowance - steth);
 
-
         shares[from] -= amount;
         shares[to] += amount;
-        
+
         return true;
     }
 
@@ -53,7 +46,7 @@ contract MockStETH is ERC20 {
         shares[to] += amount;
         return true;
     }
-    
+
     function sharesOf(address account) external view returns (uint256) {
         return shares[account];
     }
@@ -73,7 +66,6 @@ contract MockStETH is ERC20 {
         return true;
     }
 
-    
     function submit(address) external payable returns (uint256) {
         uint256 sharesToMint = getPooledEthByShares(msg.value);
         shares[msg.sender] += sharesToMint;
@@ -86,7 +78,4 @@ contract MockStETH is ERC20 {
         totalPooledEth = _pooledEthAmount;
         totalShares = _sharesAmount;
     }
-
-
-
 }
