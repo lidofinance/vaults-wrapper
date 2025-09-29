@@ -2,7 +2,6 @@
 pragma solidity >=0.8.25;
 
 import {IVaultFactory} from "../../src/interfaces/IVaultFactory.sol";
-
 import {MockDashboard} from "./MockDashboard.sol";
 import {MockStakingVault} from "./MockStakingVault.sol";
 
@@ -37,12 +36,12 @@ contract MockVaultFactory is IVaultFactory {
             revert InsufficientFunds();
         }
         vault = address(new MockStakingVault());
-        dashboard = address(new MockDashboard(VAULT_HUB, vault, _admin));
-
+        dashboard = address(new MockDashboard(address(0), VAULT_HUB, vault, _admin));
+        
         // Send the connect deposit to the vault to simulate the real factory behavior
-        (bool success,) = vault.call{value: msg.value}("");
+        (bool success, ) = vault.call{value: msg.value}("");
         require(success, "Transfer to vault failed");
-
+        
         return (vault, dashboard);
     }
 
@@ -56,7 +55,7 @@ contract MockVaultFactory is IVaultFactory {
     ) external payable returns (address vault, address dashboard) {
         require(msg.value == 0 ether, "invalid value sent");
         vault = address(new MockStakingVault());
-        dashboard = address(new MockDashboard(VAULT_HUB, vault, _admin));
+        dashboard = address(new MockDashboard(address(0), VAULT_HUB, vault, _admin));
         return (vault, dashboard);
     }
 }

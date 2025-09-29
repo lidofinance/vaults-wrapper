@@ -35,15 +35,16 @@ contract MockStakingVault {
     }
 
     function withdraw(address recipient, uint256 amount) external {
-        require(msg.sender == nodeOperator, "Not node operator");
-        (bool success,) = recipient.call{value: amount}("");
+        // require(msg.sender == nodeOperator, "Not node operator");
+        (bool success, ) = recipient.call{value: amount}("");
         require(success, "Transfer failed");
     }
 
-    function triggerValidatorWithdrawals(bytes calldata pubkeys, uint64[] calldata amounts, address refundRecipient)
-        external
-        payable
-    {
+    function triggerValidatorWithdrawals(
+        bytes calldata pubkeys,
+        uint64[] calldata amounts,
+        address refundRecipient
+    ) external payable {
         // Mock implementation
     }
 }

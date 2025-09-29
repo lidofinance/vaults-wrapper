@@ -285,7 +285,7 @@ contract GGVTest is WrapperCHarness {
         IBoringOnChainQueue.OnChainWithdraw[] memory requests = new IBoringOnChainQueue.OnChainWithdraw[](1);
         requests[0] = req;
 
-        vm.warp(block.timestamp + req.secondsToMaturity + 1); // Перематываем время
+        vm.warp(block.timestamp + req.secondsToMaturity + 1);
         boringOnChainQueue.solveOnChainWithdraws(requests, new bytes(0), address(0));
 
         _log.printUsers("After GGV Solver", logUsers);
@@ -326,8 +326,8 @@ contract GGVTest is WrapperCHarness {
         // 8. Recover Surplus stETH (если есть)
         uint256 surplusStETH = steth.balanceOf(user1StrategyProxy);
         if (surplusStETH > 0) {
-            uint256 stethBalance = steth.sharesOf(user1StrategyProxy); // Баланс на прокси
-            uint256 stethDebt = wrapper.getStethShares(user1StrategyProxy); // Долг перед Wrapper
+            uint256 stethBalance = steth.sharesOf(user1StrategyProxy);
+            uint256 stethDebt = wrapper.mintedStethSharesOf(user1StrategyProxy);
             uint256 surplusInShares = stethBalance > stethDebt ? stethBalance - stethDebt : 0;
             uint256 maxAmount = steth.getPooledEthByShares(surplusInShares);
 

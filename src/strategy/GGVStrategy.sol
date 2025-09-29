@@ -196,7 +196,7 @@ contract GGVStrategy is Strategy {
 
         if (_token == address(STETH)) {
             uint256 stethBalance = STETH.sharesOf(proxy);
-            uint256 stethDebt = WRAPPER.getStethShares(proxy);
+            uint256 stethDebt = WRAPPER.mintedStethSharesOf(proxy);
 
             uint256 surplusInShares = stethBalance > stethDebt ? stethBalance - stethDebt : 0;
             uint256 amountInShares = STETH.getSharesByPooledEth(_amount);

@@ -9,6 +9,7 @@ import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 
 import {WithdrawalQueue} from "./WithdrawalQueue.sol";
+import {IStETH} from "./interfaces/IStETH.sol";
 import {IVaultHub} from "./interfaces/IVaultHub.sol";
 import {IDashboard} from "./interfaces/IDashboard.sol";
 import {AllowList} from "./AllowList.sol";
@@ -26,6 +27,8 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
     error NotOwner(address caller, address owner);
     error NotWithdrawalQueue();
     error InvalidRequestType();
+    error NotEnoughToRebalance();
+    error UnassignedLiabilityOnVault();
 
     // keccak256("REQUEST_VALIDATOR_EXIT_ROLE")
     bytes32 public immutable REQUEST_VALIDATOR_EXIT_ROLE =
@@ -38,6 +41,7 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
     uint256 public immutable EXTRA_DECIMALS_BASE = 10 ** (DECIMALS - ASSET_DECIMALS);
     uint256 public immutable TOTAL_BASIS_POINTS = 100_00;
 
+    IStETH public immutable STETH;
     IDashboard public immutable DASHBOARD;
     IVaultHub public immutable VAULT_HUB;
     address public immutable STAKING_VAULT;
@@ -93,22 +97,34 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
     event ConnectDepositClaimed(address indexed recipient, uint256 amount);
     event WithdrawalClaimed(uint256 requestId, address indexed owner, address indexed receiver, uint256 amountOfETH);
     event WithdrawalRequestCreated(uint256 requestId, address indexed user, uint256 amount, WithdrawalType requestType);
+    event UnassignedLiabilityRebalanced(uint256 stethShares, uint256 ethAmount);
 
     constructor(address _dashboard, bool _allowListEnabled, address _withdrawalQueue) AllowList(_allowListEnabled) {
         DASHBOARD = IDashboard(payable(_dashboard));
         VAULT_HUB = IVaultHub(DASHBOARD.VAULT_HUB());
         STAKING_VAULT = address(DASHBOARD.stakingVault());
         WITHDRAWAL_QUEUE = WithdrawalQueue(payable(_withdrawalQueue));
+        STETH = IStETH(payable(DASHBOARD.STETH()));
 
         // Disable initializers since we only support proxy deployment
         _disableInitializers();
     }
 
-    function initialize(address _owner, address _upgradeConformer, string memory _name, string memory _symbol)
-        public
-        virtual
-        initializer
-    {
+    function initialize(
+        address _owner,
+        address _upgradeConformer,
+        string memory _name,
+        string memory _symbol
+    ) public virtual initializer {
+        _initializeWrapperBase(_owner, _upgradeConformer, _name, _symbol);
+    }
+
+    function _initializeWrapperBase(
+        address _owner,
+        address _upgradeConformer,
+        string memory _name,
+        string memory _symbol
+    ) internal {
         __ERC20_init(_name, _symbol);
         __AccessControlEnumerable_init();
 
@@ -124,7 +140,7 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
         assert(initialVaultBalance >= connectDeposit);
 
         // TODO: need to mint because NO must be able to withdraw CONNECT_DEPOSIT and rewards accumulated on it
-        _mint(address(this), _convertToShares(connectDeposit));
+        _mint(address(this), _convertToShares(connectDeposit, Math.Rounding.Floor));
     }
 
     function wrapperType() external pure virtual returns (string memory);
@@ -133,24 +149,58 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
     // CORE VAULT FUNCTIONS
     // =================================================================================
 
+    /**
+     * @notice Total assets managed by the wrapper
+     * @return Total assets (18 decimals)
+     * @dev Don't subtract CONNECT_DEPOSIT because we mint tokens for it
+     */
     function totalAssets() public view returns (uint256) {
-        return DASHBOARD.maxLockableValue(); // don't subtract CONNECT_DEPOSIT because we mint stShares for it
+        return DASHBOARD.maxLockableValue();
+    }
+
+    /**
+     * @notice Assets owned by an account
+     * @param _account The account to query
+     * @return assets Amount of account assets (18 decimals)
+     * @dev Overridable method to include other assets if needed
+     */
+    function assetsOf(address _account) public view returns (uint256 assets) {
+        assets = _getAssetsShare(balanceOf(_account), totalAssets());
+    }
+
+    /**
+     * @notice Total effective assets managed by the wrapper
+     * @return assets Total effective assets (18 decimals)
+     * @dev Overridable method to include other assets if needed
+     */
+    function totalEffectiveAssets() public view virtual returns (uint256 assets) {
+        assets = totalAssets(); /* plus other assets if any */
+    }
+
+    /**
+     * @notice Effective assets owned by an account
+     * @param _account The account to query
+     * @return Amount of effective assets (18 decimals)
+     * @dev Overridable method to include other assets if needed
+     */
+    function effectiveAssetsOf(address _account) public view virtual returns (uint256) {
+        return assetsOf(_account); /* plus other assets if any */
     }
 
     function decimals() public pure override returns (uint8) {
         return uint8(DECIMALS);
     }
 
-    function _convertToShares(uint256 _assetsE18) internal view returns (uint256) {
+    function _convertToShares(uint256 _assetsE18, Math.Rounding rounding) internal view returns (uint256 shares) {
         uint256 supplyE27 = totalSupply();
         if (supplyE27 == 0) {
             return _assetsE18 * EXTRA_DECIMALS_BASE; // 1:1 for the first deposit
         }
-        return Math.mulDiv(_assetsE18, supplyE27, totalAssets(), Math.Rounding.Floor);
+        shares = Math.mulDiv(_assetsE18, supplyE27, totalEffectiveAssets(), rounding);
     }
 
-    function _convertToAssets(uint256 _shares) internal view returns (uint256) {
-        return _getAssetsShare(_shares, totalAssets());
+    function _convertToAssets(uint256 _shares) internal view returns (uint256 assets) {
+        assets = _getAssetsShare(_shares, totalEffectiveAssets());
     }
 
     function _getAssetsShare(uint256 _shares, uint256 _assets) internal view returns (uint256) {
@@ -165,7 +215,7 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
     }
 
     function previewDeposit(uint256 _assets) public view returns (uint256) {
-        return _convertToShares(_assets);
+        return _convertToShares(_assets, Math.Rounding.Floor);
     }
 
     // TODO: get rid of this in favor of previewRedeem?
@@ -174,7 +224,7 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
         if (supply == 0) {
             return 0;
         }
-        return Math.mulDiv(_assets, supply, totalAssets(), Math.Rounding.Ceil);
+        return Math.mulDiv(_assets, supply, totalEffectiveAssets(), Math.Rounding.Ceil);
     }
 
     function previewRedeem(uint256 _shares) external view returns (uint256) {
@@ -219,6 +269,86 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
     }
 
     // =================================================================================
+    // LIABILITY
+    // =================================================================================
+
+    /**
+     * @notice Total liability stETH shares issued to the vault
+     * @return liabilityShares Total liability stETH shares (18 decimals)
+     */
+    function totalLiabilityShares() external view returns (uint256) {
+        return DASHBOARD.liabilityShares();
+    }
+
+    /**
+     * @notice Total liability stETH shares that are not assigned to any users
+     * @return unassignedLiabilityShares Total unassign liability stETH shares (18 decimals)
+     * @dev Overridable method to get unassigned liability shares
+     * @dev Should exclude individually minted stETH shares (if any)
+     */
+    function totalUnassignedLiabilityShares() public view virtual returns (uint256 unassignedLiabilityShares) {
+        unassignedLiabilityShares = DASHBOARD.liabilityShares(); /* minus individually minted stETH shares */
+    }
+
+    /**
+     * @notice Rebalance unassigned liability by repaying it with assets held by the vault
+     * @param _stethShares Amount of stETH shares to rebalance (18 decimals)
+     * @dev Only unassigned liability can be rebalanced with this method, not individual liability
+     * @dev Can be called by anyone if there is any unassigned liability
+     * @dev Required fresh oracle report before calling
+     */
+    function rebalanceUnassignedLiability(uint256 _stethShares) external {
+        _checkOnlyUnassignedLiabilityRebalance(_stethShares);
+        DASHBOARD.rebalanceVaultWithShares(_stethShares);
+
+        emit UnassignedLiabilityRebalanced(_stethShares, 0);
+    }
+
+    /**
+     * @notice Rebalance unassigned liability by repaying it with external ether
+     * @dev Only unassigned liability can be rebalanced with this method, not individual liability
+     * @dev Can be called by anyone if there is any unassigned liability
+     * @dev This function accepts ETH and uses it to rebalance unassigned liability
+     * @dev Required fresh oracle report before calling
+     */
+    function rebalanceUnassignedLiabilityWithEther() external payable {
+        uint256 stethShares = STETH.getSharesByPooledEth(msg.value);
+        _checkOnlyUnassignedLiabilityRebalance(stethShares);
+        DASHBOARD.rebalanceVaultWithEther{value: msg.value}(msg.value);
+
+        emit UnassignedLiabilityRebalanced(stethShares, msg.value);
+    }
+
+    /**
+     * @dev Checks if only unassigned liability will be rebalanced, not individual liability
+     */
+    function _checkOnlyUnassignedLiabilityRebalance(uint256 _stethShares) internal view {
+        uint256 unassignedLiabilityShares = totalUnassignedLiabilityShares();
+
+        if (_stethShares == 0) revert NotEnoughToRebalance();
+        if (unassignedLiabilityShares < _stethShares) revert NotEnoughToRebalance();
+    }
+
+    /**
+     * @dev Checks if there are no unassigned liability shares
+     */
+    function _checkNoUnassignedLiability() internal view {
+        if (totalUnassignedLiabilityShares() > 0) revert UnassignedLiabilityOnVault();
+    }
+
+    // =================================================================================
+    // ERC20 OVERRIDES
+    // =================================================================================
+
+    /**
+     * @dev Overridden method from ERC20 to prevent updates if there are unassigned liability
+     */
+    function _update(address _from, address _to, uint256 _value) internal virtual override {
+        _checkNoUnassignedLiability();
+        super._update(_from, _to, _value);
+    }
+
+    // =================================================================================
     // WITHDRAWAL SYSTEM
     // =================================================================================
 
@@ -259,11 +389,11 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
     /// @param _start start index
     /// @param _end end index
     /// @return requestIds array of request ids
-    function getWithdrawalRequests(address _owner, uint256 _start, uint256 _end)
-        external
-        view
-        returns (uint256[] memory requestIds)
-    {
+    function getWithdrawalRequests(
+        address _owner,
+        uint256 _start,
+        uint256 _end
+    ) external view returns (uint256[] memory requestIds) {
         WrapperBaseStorage storage $ = _getWrapperBaseStorage();
         return $.requestsByOwner[_owner].values(_start, _end);
     }
@@ -280,10 +410,11 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
         return _getWrapperBaseStorage().withdrawalRequests[requestId];
     }
 
-    function _addWithdrawalRequest(address _owner, uint256 _ethAmount, WithdrawalType _type)
-        internal
-        returns (uint256 requestId)
-    {
+    function _addWithdrawalRequest(
+        address _owner,
+        uint256 _ethAmount,
+        WithdrawalType _type
+    ) internal returns (uint256 requestId) {
         WrapperBaseStorage storage $ = _getWrapperBaseStorage();
         requestId = $.withdrawalRequests.length;
         WithdrawalRequest memory request = WithdrawalRequest({
@@ -361,10 +492,11 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
     // EMERGENCY WITHDRAWAL FUNCTIONS
     // =================================================================================
 
-    function triggerValidatorWithdrawals(bytes calldata _pubkeys, uint64[] calldata _amounts, address _refundRecipient)
-        external
-        payable
-    {
+    function triggerValidatorWithdrawals(
+        bytes calldata _pubkeys,
+        uint64[] calldata _amounts,
+        address _refundRecipient
+    ) external payable {
         _checkOnlyRoleOrEmergencyExit(TRIGGER_VALIDATOR_WITHDRAWAL_ROLE);
         DASHBOARD.triggerValidatorWithdrawals{value: msg.value}(_pubkeys, _amounts, _refundRecipient);
     }
