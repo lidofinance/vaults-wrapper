@@ -50,7 +50,7 @@ contract GGVMockTeller is ITellerWithMultiAssetSupport {
         owner = _owner;
         _vault = GGVVaultMock(__vault);
         steth = IStETH(_steth);
-        
+
         // eq to 10 ** vault.decimals()
         ONE_SHARE = 10 ** 18;
 
@@ -82,7 +82,7 @@ contract GGVMockTeller is ITellerWithMultiAssetSupport {
         
     }
 
-    
+
 
     function _updateAssetData(ERC20 asset, bool allowDeposits, bool allowWithdraws, uint16 sharePremium) internal {
         if(address(asset) != address(steth)) {
@@ -107,7 +107,7 @@ contract GGVMockTeller is ITellerWithMultiAssetSupport {
       return address(_vault);
     }
 
-    // STUBS    
+    // STUBS
 
     function accountant() external view  returns (address){
       return address(this);
@@ -122,14 +122,14 @@ contract GGVMockTeller is ITellerWithMultiAssetSupport {
     function bulkWithdraw(ERC20, uint256, uint256, address) external returns (uint256) {
         emit NonPure();
         revert('not implemented');
-    }   
+    }
 
 
 }
 
 contract GGVQueueMock is IBoringOnChainQueue{
     using EnumerableSet for EnumerableSet.Bytes32Set;
-    
+
     uint256 internal immutable ONE_SHARE;
     address public immutable _owner;
     GGVVaultMock public immutable _vault;
@@ -184,7 +184,7 @@ contract GGVQueueMock is IBoringOnChainQueue{
        require(msg.sender == _owner, "Only owner can update withdraw asset");
         _withdrawAssets[assetOut].withdrawCapacity = withdrawCapacity;
     }
-    
+
 
     function requestOnChainWithdraw(address assetOut, uint128 amountOfShares, uint16 discount, uint24 secondsToDeadline) external returns (bytes32 requestId){
         WithdrawAsset memory withdrawAsset = _withdrawAssets[assetOut];
@@ -239,7 +239,7 @@ contract GGVQueueMock is IBoringOnChainQueue{
 
         return requestId;
     }
-    
+
     function getRequestIds() external view returns (bytes32[] memory){
         return _withdrawRequests.values();
     }
@@ -248,7 +248,7 @@ contract GGVQueueMock is IBoringOnChainQueue{
         return _helper_requestsById[requestId];
     }
 
-   function solveOnChainWithdraws(OnChainWithdraw[] calldata requests, bytes calldata, address)
+    function solveOnChainWithdraws(OnChainWithdraw[] calldata requests, bytes calldata, address)
         external
     {
 
@@ -294,10 +294,10 @@ contract GGVQueueMock is IBoringOnChainQueue{
         uint256 amountOfAssets = BorrowedMath.mulDivDown(uint256(amountOfShares),price, ONE_SHARE);
         if (amountOfAssets > type(uint128).max) revert('overflow');
 
-        
+
 
         amountOfAssets128 = uint128(amountOfAssets);
-    } 
+    }
 
     event NonPure();
     function replaceOnChainWithdraw(OnChainWithdraw memory, uint16, uint24) external returns (bytes32, bytes32) {
@@ -341,7 +341,7 @@ contract GGVQueueMock is IBoringOnChainQueue{
         if (!removedFromSet) revert('request not found');
     }
 
-    
+
     function _updateWithdrawAsset(address assetOut, uint24 secondsToMaturity, uint24 minimumSecondsToDeadline, uint16 minDiscount, uint16 maxDiscount, uint96 minimumShares) internal {
         _withdrawAssets[assetOut] = WithdrawAsset(true, secondsToMaturity, minimumSecondsToDeadline, minDiscount, maxDiscount, minimumShares, type(uint256).max);
     }
@@ -382,7 +382,7 @@ contract GGVVaultMock is ERC20  {
         steth.transferShares(msg.sender, stethSharesToRebaseWith);
         _totalAssets -= stethSharesToRebaseWith;
     }
-    
+
 
     function getSharesByAssets(uint256 assets) public view returns (uint256) {
        return BorrowedMath.mulDivDown(assets, totalSupply(), _totalAssets);

@@ -181,12 +181,17 @@ contract WrapperAHarness is Test {
         // Apply initial vault report with current total value equal to connect deposit
         core.applyVaultReport(vault_, CONNECT_DEPOSIT, 0, 0, 0, false);
 
-        return WrapperContext({
+        WrapperContext memory ctx = WrapperContext({
             wrapper: WrapperA(payable(wrapperAddress)),
             withdrawalQueue: WithdrawalQueue(payable(withdrawalQueue_)),
             dashboard: IDashboard(payable(dashboard_)),
             vault: IStakingVault(vault_)
         });
+
+        // Ensure report freshness immediately after deployment so tests can proceed
+        _ensureFreshness(ctx);
+
+        return ctx;
     }
 
     function _deployWrapperA(

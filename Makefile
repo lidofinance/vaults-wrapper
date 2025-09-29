@@ -26,6 +26,16 @@ test-integration-b:
 		-$(VERBOSITY) \
 		--fork-url "$$RPC_URL"
 
+
+test-integration-ggv:
+	. .env 2>/dev/null || true; \
+	FOUNDRY_PROFILE=test \
+	CORE_DEPLOYED_JSON="$$CORE_DEPLOYED_JSON" \
+	forge test \
+		test/integration/ggv.test.sol \
+		-$(VERBOSITY) \
+		--fork-url "$$RPC_URL"
+
 test-integration:
 	. .env 2>/dev/null || true; \
 	FOUNDRY_PROFILE=test CORE_DEPLOYED_JSON="$$CORE_DEPLOYED_JSON" forge test test/integration/**/*.test.sol -$(VERBOSITY) --fork-url "$$RPC_URL"

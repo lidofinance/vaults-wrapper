@@ -123,9 +123,6 @@ contract WrapperB is WrapperBase {
 
         // TODO: Ceil or Floor?
         stethShares = Math.mulDiv(stvRequiringBurning, _getStethShares(_address), stvBackedBySteth, Math.Rounding.Ceil);
-
-        // TODO: Ceil or Floor?
-        stethShares = Math.mulDiv(stvRequiringBurning, _getStethShares(_address), balance, Math.Rounding.Ceil);
     }
 
     function mintableStethShares(address _address) external view returns (uint256 stethShares) {

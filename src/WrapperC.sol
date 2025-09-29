@@ -47,9 +47,9 @@ contract WrapperC is WrapperB {
         STRATEGY.execute(_receiver, stvShares, targetStethShares);
     }
 
-    function requestWithdrawalFromStrategy(uint256 _ethAmount) public returns (uint256 requestId) {
-        requestId = _addWithdrawalRequest(msg.sender, _ethAmount, WithdrawalType.STRATEGY);
-        STRATEGY.requestWithdrawByETH(msg.sender, _ethAmount);
+    function requestWithdrawalFromStrategy(uint256 _stethAmount) public returns (uint256 requestId) {
+        requestId = _addWithdrawalRequest(msg.sender, _stethAmount, WithdrawalType.STRATEGY);
+        STRATEGY.requestWithdrawByStETH(msg.sender, _stethAmount);
     }
 
     function finalizeWithdrawal(uint256 _requestId) external {
@@ -62,11 +62,6 @@ contract WrapperC is WrapperB {
 
         STRATEGY.finalizeWithdrawal(request.owner, request.amount);
     }
-
-    function getWithdrawableAmount(address _address) external view returns (uint256 ethAmount) {
-        return STRATEGY.getWithdrawableAmount(_address);
-    }
-
 
     /// @notice Requests a withdrawal of the specified amount of stvETH shares from the strategy
     /// @param _owner The address that owns the stvETH shares
