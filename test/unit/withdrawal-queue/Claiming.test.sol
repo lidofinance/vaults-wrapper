@@ -1,29 +1,19 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >=0.8.25;
 
-import {Test, console} from "forge-std/Test.sol";
+import {Test} from "forge-std/Test.sol";
 import {SetupWithdrawalQueue} from "./SetupWithdrawalQueue.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
 
 contract ClaimingTest is Test, SetupWithdrawalQueue {
     function setUp() public override {
         super.setUp();
+
+        // Deposit initial ETH to wrapper for withdrawals
         wrapper.depositETH{value: 100_000 ether}();
     }
 
     // Basic Claiming
-
-    function _requestWithdrawalAndFinalize(uint256 _stvAmount) internal returns (uint256 requestId) {
-        requestId = wrapper.requestWithdrawal(_stvAmount);
-        _finalizeRequests(1);
-    }
-
-    function _finalizeRequests(uint256 _maxRequests) internal {
-        lazyOracle.mock__updateLatestReportTimestamp(block.timestamp);
-        vm.warp(block.timestamp + MIN_WITHDRAWAL_DELAY_TIME + 1);
-        vm.prank(finalizeRoleHolder);
-        withdrawalQueue.finalize(_maxRequests);
-    }
 
     function test_ClaimWithdrawal_SuccessfulClaim() public {
         // Create and finalize a request

@@ -97,4 +97,18 @@ abstract contract SetupWithdrawalQueue is Test {
         // Initialize wrapper
         wrapper.initialize(owner, address(0), "Test", "stvETH");
     }
+
+    // Helper function to create and finalize a withdrawal request
+
+    function _requestWithdrawalAndFinalize(uint256 _stvAmount) internal returns (uint256 requestId) {
+        requestId = wrapper.requestWithdrawal(_stvAmount);
+        _finalizeRequests(1);
+    }
+
+    function _finalizeRequests(uint256 _maxRequests) internal {
+        lazyOracle.mock__updateLatestReportTimestamp(block.timestamp);
+        vm.warp(block.timestamp + MIN_WITHDRAWAL_DELAY_TIME + 1);
+        vm.prank(finalizeRoleHolder);
+        withdrawalQueue.finalize(_maxRequests);
+    }
 }
