@@ -72,7 +72,7 @@ contract WrapperC is WrapperB {
         returns (uint256 requestId)
     {
         if (msg.sender != address(STRATEGY)) revert InvalidSender();
-        requestId = _requestWithdrawalQueue(_owner, _receiver, _stvShares, 0);
+        requestId = _requestWithdrawalQueue(_owner, _receiver, _stvShares, 0, 0);
     }
 
     function getRequest(uint256 requestId) external view returns (WithdrawalRequest memory) {

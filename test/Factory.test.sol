@@ -97,6 +97,7 @@ contract FactoryTest is Test {
             100, // 1% fee
             3600, // 1 hour confirm expiry
             30 days,
+            1 days,
             false // allowlist disabled
         );
 
@@ -130,6 +131,7 @@ contract FactoryTest is Test {
             100, // 1% fee
             3600, // 1 hour confirm expiry
             30 days,
+            1 days,
             false // allowlist disabled
         );
     }
@@ -144,6 +146,7 @@ contract FactoryTest is Test {
             100, // 1% fee
             3600, // 1 hour confirm expiry
             30 days,
+            1 days,
             false, // allowlist disabled
             0, // reserve ratio gap
             1 // loops
@@ -172,6 +175,7 @@ contract FactoryTest is Test {
             100, // 1% fee
             3600, // 1 hour confirm expiry
             30 days,
+            1 days,
             true // allowlist enabled
         );
 

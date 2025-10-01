@@ -90,7 +90,11 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
     event ValidatorExitRequested(bytes pubkeys);
     event ValidatorWithdrawalsTriggered(bytes pubkeys, uint64[] amounts);
     event Deposit(
-        address indexed sender, address indexed receiver, address indexed referral, uint256 assets, uint256 stvETHShares
+        address indexed sender,
+        address indexed receiver,
+        address indexed referral,
+        uint256 assets,
+        uint256 stvETHShares
     );
 
     event VaultDisconnected(address indexed initiator);
@@ -175,6 +179,16 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
      */
     function totalEffectiveAssets() public view virtual returns (uint256 assets) {
         assets = totalAssets(); /* plus other assets if any */
+    }
+
+    /**
+     * @notice Amount of minted stETH exceeding the Staking Vault's liability
+     * @return steth Amount of exceeding stETH (18 decimals)
+     * @dev May occur if rebalancing happens on the Staking Vault bypassing the Wrapper
+     * @dev Overridable method to support stETH shares minting
+     */
+    function totalExceedingMintedSteth() public view virtual returns (uint256 steth) {
+        steth = 0;
     }
 
     /**
@@ -358,20 +372,36 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
      * @param _recipient The address to receive the claimed ether
      */
     function claimWithdrawal(uint256 _requestId, address _recipient) external virtual {
-        WithdrawalQueue wq = WITHDRAWAL_QUEUE;
-        WithdrawalQueue.WithdrawalRequestStatus memory status = wq.getWithdrawalStatus(_requestId);
-
-        if (msg.sender != status.owner) revert NotOwner(msg.sender, status.owner);
-        if (_recipient == address(0)) _recipient = msg.sender;
-
-        uint256 ethClaimed = wq.claimWithdrawal(_requestId, _recipient);
-
+        uint256 ethClaimed = WITHDRAWAL_QUEUE.claimWithdrawal(_requestId, msg.sender, _recipient);
         emit WithdrawalClaimed(_requestId, msg.sender, _recipient, ethClaimed);
     }
 
-    function burnSharesForWithdrawalQueue(uint256 _shares) external {
-        if (msg.sender != address(WITHDRAWAL_QUEUE)) revert NotWithdrawalQueue();
-        _burn(msg.sender, _shares);
+    /**
+     * @notice Claim multiple finalized withdrawal requests
+     * @param _requestIds The array of withdrawal request IDs to claim
+     * @param _hints The array of checkpoint hints for each request
+     * @param _recipient The address to receive the claimed ether
+     */
+    function claimWithdrawals(
+        uint256[] calldata _requestIds,
+        uint256[] calldata _hints,
+        address _recipient
+    ) external virtual {
+        uint256[] memory claimedEth = WITHDRAWAL_QUEUE.claimWithdrawals(_requestIds, _hints, msg.sender, _recipient);
+
+        for (uint256 i = 0; i < _requestIds.length; ++i) {
+            emit WithdrawalClaimed(_requestIds[i], msg.sender, _recipient, claimedEth[i]);
+        }
+    }
+
+    /**
+     * @notice Burn stv from WithdrawalQueue contract when processing withdrawal requests
+     * @param _stv Amount of stv to burn (27 decimals)
+     * @dev Can only be called by the WithdrawalQueue contract
+     */
+    function burnStvForWithdrawalQueue(uint256 _stv) external {
+        _checkOnlyWithdrawalQueue();
+        _burn(msg.sender, _stv);
     }
 
     // withdrawal queue is immutable and set in constructor
@@ -429,6 +459,10 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
         $.requestsByOwner[_owner].add(requestId);
 
         emit WithdrawalRequestCreated(requestId, _owner, _ethAmount, request.requestType);
+    }
+
+    function _checkOnlyWithdrawalQueue() internal view {
+        if (address(WITHDRAWAL_QUEUE) != msg.sender) revert NotWithdrawalQueue();
     }
 
     // =================================================================================

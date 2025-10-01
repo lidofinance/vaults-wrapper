@@ -67,6 +67,7 @@ contract WithdrawalQueueTest is Test {
 
         // Deploy wrapper
         uint256 maxAcceptableWQFinalizationTimeInSeconds = 60 days;
+        uint256 minWithdrawalDelayTime = 1 days;
 
         // Precreate wrapper proxy with empty implementation
         OssifiableProxy wrapperProxy = new OssifiableProxy(address(0), admin, bytes(""));
@@ -75,12 +76,26 @@ contract WithdrawalQueueTest is Test {
         vm.label(address(lazyOracle), "LazyOracle");
 
         // Deploy WQ implementation with immutable wrapper; proxy it and initialize
-        address wqImpl = address(new WithdrawalQueue(address(wrapperProxy), address(lazyOracle), maxAcceptableWQFinalizationTimeInSeconds));
-        OssifiableProxy wqProxy = new OssifiableProxy(wqImpl, admin, abi.encodeCall(WithdrawalQueue.initialize, (admin, operator)));
+        address wqImpl = address(
+            new WithdrawalQueue(
+                address(wrapperProxy),
+                address(lazyOracle),
+                maxAcceptableWQFinalizationTimeInSeconds,
+                minWithdrawalDelayTime
+            )
+        );
+        OssifiableProxy wqProxy = new OssifiableProxy(
+            wqImpl,
+            admin,
+            abi.encodeCall(WithdrawalQueue.initialize, (admin, operator))
+        );
 
         // Deploy wrapper implementation with immutable WQ, then upgrade wrapper proxy and initialize
         WrapperA impl = new WrapperA(address(dashboard), false, address(wqProxy));
-        wrapperProxy.proxy__upgradeToAndCall(address(impl), abi.encodeCall(WrapperBase.initialize, (admin, admin, "Staked ETH Vault Wrapper", "stvETH")));
+        wrapperProxy.proxy__upgradeToAndCall(
+            address(impl),
+            abi.encodeCall(WrapperBase.initialize, (admin, admin, "Staked ETH Vault Wrapper", "stvETH"))
+        );
         wrapper = WrapperA(payable(address(wrapperProxy)));
 
         withdrawalQueue = WithdrawalQueue(payable(address(wqProxy)));
@@ -120,20 +135,14 @@ contract WithdrawalQueueTest is Test {
 
         uint256[] memory user1Amounts = new uint256[](1);
         user1Amounts[0] = USER1_DEPOSIT;
-        uint256[] memory user1RequestIds = withdrawalQueue.requestWithdrawals(
-            user1Amounts,
-            user1
-        );
+        uint256[] memory user1RequestIds = withdrawalQueue.requestWithdrawals(user1Amounts, user1);
         vm.stopPrank();
 
         vm.startPrank(user2);
         wrapper.approve(address(withdrawalQueue), USER2_DEPOSIT);
         uint256[] memory user2Amounts = new uint256[](1);
         user2Amounts[0] = USER2_DEPOSIT;
-        uint256[] memory user2RequestIds = withdrawalQueue.requestWithdrawals(
-            user2Amounts,
-            user2
-        );
+        uint256[] memory user2RequestIds = withdrawalQueue.requestWithdrawals(user2Amounts, user2);
         vm.stopPrank();
 
         // Simulate operator run validators and send ETH to the BeaconChain
@@ -144,9 +153,7 @@ contract WithdrawalQueueTest is Test {
         console.log("---send to beaconChain---");
 
         vm.prank(address(stakingVault));
-        (bool sent, ) = address(beaconChain).call{
-            value: stakingVaultBalanceBefore
-        }("");
+        (bool sent, ) = address(beaconChain).call{value: stakingVaultBalanceBefore}("");
         require(sent, "ETH send failed");
 
         console.log("Vault balance after:", address(stakingVault).balance);
@@ -161,8 +168,12 @@ contract WithdrawalQueueTest is Test {
         assertEq(wrapper.balanceOf(user2), 0);
 
         // Check request status
-        WithdrawalQueue.WithdrawalRequestStatus memory user1Status = withdrawalQueue.getWithdrawalStatus(user1RequestIds[0]);
-        WithdrawalQueue.WithdrawalRequestStatus memory user2Status = withdrawalQueue.getWithdrawalStatus(user2RequestIds[0]);
+        WithdrawalQueue.WithdrawalRequestStatus memory user1Status = withdrawalQueue.getWithdrawalStatus(
+            user1RequestIds[0]
+        );
+        WithdrawalQueue.WithdrawalRequestStatus memory user2Status = withdrawalQueue.getWithdrawalStatus(
+            user2RequestIds[0]
+        );
 
         assertEq(user1Status.isFinalized, false);
         assertEq(user2Status.isFinalized, false);
@@ -171,7 +182,7 @@ contract WithdrawalQueueTest is Test {
         assertEq(user2Status.isClaimed, false);
 
         // Calculate total ETH needed using prefinalize
-        uint256 shareRate = withdrawalQueue.calculateCurrentShareRate();
+        uint256 shareRate = withdrawalQueue.calculateCurrentStvRate();
         uint256 totalToFinalize1 = withdrawalQueue.unfinalizedAssets();
         console.log("totalToFinalize1", totalToFinalize1);
 
@@ -179,9 +190,7 @@ contract WithdrawalQueueTest is Test {
         // operator exit validators and send ETH back to the Staking Vault
         deal(beaconChain, 1 ether + totalToFinalize1);
         vm.prank(beaconChain);
-        (bool success, ) = address(stakingVault).call{value: totalToFinalize1}(
-            ""
-        );
+        (bool success, ) = address(stakingVault).call{value: totalToFinalize1}("");
         require(success, "send failed");
         console.log("Vault balance before finalize:", address(stakingVault).balance);
 
@@ -197,14 +206,8 @@ contract WithdrawalQueueTest is Test {
         console.log("Wrapper balance before:", address(wrapper).balance);
         console.log("Wrapper totalSupply before:", wrapper.totalSupply());
         console.log("Wrapper totalAssets before:", wrapper.totalAssets());
-        console.log(
-            "WithdrawalQueue balance ETH:",
-            address(withdrawalQueue).balance
-        );
-        console.log(
-            "WithdrawalQueue balance stvETH:",
-            wrapper.balanceOf(address(withdrawalQueue))
-        );
+        console.log("WithdrawalQueue balance ETH:", address(withdrawalQueue).balance);
+        console.log("WithdrawalQueue balance stvETH:", wrapper.balanceOf(address(withdrawalQueue)));
         console.log("unfinalizedRequestNumber before", withdrawalQueue.unfinalizedRequestNumber());
 
         vm.prank(operator);
@@ -213,7 +216,7 @@ contract WithdrawalQueueTest is Test {
 
         assertEq(withdrawalQueue.unfinalizedRequestNumber(), 0);
         assertEq(withdrawalQueue.unfinalizedAssets(), 0);
-        assertEq(withdrawalQueue.unfinalizedShares(), 0);
+        assertEq(withdrawalQueue.unfinalizedStv(), 0);
         assertEq(withdrawalQueue.getLastRequestId(), 2);
         assertEq(withdrawalQueue.getLastFinalizedRequestId(), 2);
 
@@ -222,14 +225,8 @@ contract WithdrawalQueueTest is Test {
         console.log("Wrapper balance before:", address(wrapper).balance);
         console.log("Wrapper totalSupply before:", wrapper.totalSupply());
         console.log("Wrapper totalAssets before:", wrapper.totalAssets());
-        console.log(
-            "WithdrawalQueue balance ETH:",
-            address(withdrawalQueue).balance
-        );
-        console.log(
-            "WithdrawalQueue balance stvETH:",
-            wrapper.balanceOf(address(withdrawalQueue))
-        );
+        console.log("WithdrawalQueue balance ETH:", address(withdrawalQueue).balance);
+        console.log("WithdrawalQueue balance stvETH:", wrapper.balanceOf(address(withdrawalQueue)));
 
         assertEq(user1.balance, initialBalance - USER1_DEPOSIT);
         assertEq(user2.balance, initialBalance - USER2_DEPOSIT);
@@ -242,25 +239,19 @@ contract WithdrawalQueueTest is Test {
 
         // Claim withdrawals
         vm.startPrank(user1);
-        withdrawalQueue.claimWithdrawal(user1RequestIds[0], address(0));
+        withdrawalQueue.claimWithdrawal(user1RequestIds[0], user1, address(0));
         vm.stopPrank();
 
         vm.startPrank(user2);
-        withdrawalQueue.claimWithdrawal(user2RequestIds[0], address(0));
+        withdrawalQueue.claimWithdrawal(user2RequestIds[0], user2, address(0));
         vm.stopPrank();
 
         console.log("--------------step2------------------");
         console.log("Wrapper balance before:", address(wrapper).balance);
         console.log("Wrapper totalSupply before:", wrapper.totalSupply());
         console.log("Wrapper totalAssets before:", wrapper.totalAssets());
-        console.log(
-            "WithdrawalQueue balance ETH:",
-            address(withdrawalQueue).balance
-        );
-        console.log(
-            "WithdrawalQueue balance stvETH:",
-            wrapper.balanceOf(address(withdrawalQueue))
-        );
+        console.log("WithdrawalQueue balance ETH:", address(withdrawalQueue).balance);
+        console.log("WithdrawalQueue balance stvETH:", wrapper.balanceOf(address(withdrawalQueue)));
         console.log("user1 balance:", user1.balance);
         console.log("user2 balance:", user2.balance);
 
@@ -304,7 +295,6 @@ contract WithdrawalQueueTest is Test {
     //     console.log("lastRequestId", withdrawalQueue.getLastRequestId());
     //     console.log("lastFinalizedRequestId", withdrawalQueue.getLastFinalizedRequestId());
     //     console.log("halfUser1Deposit", halfUser1Deposit);
-
 
     //     console.log("--- calculateFinalizationBatches ---");
 
