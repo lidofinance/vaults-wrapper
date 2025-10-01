@@ -226,4 +226,48 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
 
         assertEq(finalizedCount, 1);
     }
+
+    // Rewards & penalties
+
+    function test_Finalize_RewardsDoNotAffectFinalizationRate() public {
+        uint256 stvToRequest = 10 ** STV_DECIMALS;
+        uint256 expectedEth = wrapper.previewRedeem(stvToRequest);
+        uint256 requestId = wrapper.requestWithdrawal(stvToRequest);
+
+        // Simulate rewards
+        uint256 totalAssetsBefore = wrapper.totalAssets();
+        dashboard.mock_simulateRewards(10 ether);
+        uint256 totalAssetsAfter = wrapper.totalAssets();
+        assertEq(totalAssetsAfter, totalAssetsBefore + 10 ether);
+
+        // Finalize request
+        vm.warp(block.timestamp + MIN_WITHDRAWAL_DELAY_TIME + 1);
+        vm.prank(finalizeRoleHolder);
+        withdrawalQueue.finalize(1);
+
+        // Check finalized request has correct ETH amount unaffected by rewards
+        assertEq(withdrawalQueue.getClaimableEther(requestId), expectedEth);
+    }
+
+    function test_Finalize_PenaltiesAffectFinalizationRate() public {
+        uint256 stvToRequest = 10 ** STV_DECIMALS;
+        uint256 requestId = wrapper.requestWithdrawal(stvToRequest);
+
+        // Simulate penalties
+        uint256 totalAssetsBefore = wrapper.totalAssets();
+        dashboard.mock_simulateRewards(-10 ether);
+        uint256 totalAssetsAfter = wrapper.totalAssets();
+        assertEq(totalAssetsAfter, totalAssetsBefore - 10 ether);
+
+        // Expected ETH should be lower due to penalties
+        uint256 expectedEth = wrapper.previewRedeem(stvToRequest);
+
+        // Finalize request
+        vm.warp(block.timestamp + MIN_WITHDRAWAL_DELAY_TIME + 1);
+        vm.prank(finalizeRoleHolder);
+        withdrawalQueue.finalize(1);
+
+        // Check finalized request has correct ETH amount unaffected by rewards
+        assertEq(withdrawalQueue.getClaimableEther(requestId), expectedEth);
+    }
 }
