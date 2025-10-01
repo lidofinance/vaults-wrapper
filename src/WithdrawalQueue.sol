@@ -235,32 +235,55 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
 
     /**
      * @notice Request multiple withdrawals for a user
-     * @param _assets amount of ETH to withdraw
+     * @param _stvToWithdraw array of amounts of stv to withdraw
+     * @param _stethSharesToRebalance array of amounts of stETH shares to rebalance
      * @param _owner address that will be able to claim the created request
      * @return requestIds the created withdrawal request ids
      * @dev Can be called only by the Wrapper contract
      */
     function requestWithdrawals(
-        uint256[] calldata _assets,
+        uint256[] calldata _stvToWithdraw,
+        uint256[] calldata _stethSharesToRebalance,
         address _owner
     ) external returns (uint256[] memory requestIds) {
-        if (_owner == address(0)) _owner = msg.sender;
+        _checkResumedOrEmergencyExit();
+        _checkOnlyWrapper();
 
-        requestIds = new uint256[](_assets.length);
-        for (uint256 i = 0; i < _assets.length; ++i) {
-            requestIds[i] = requestWithdrawal(_assets[i], 0, _owner);
+        if (_stvToWithdraw.length != _stethSharesToRebalance.length) {
+            revert ArraysLengthMismatch(_stvToWithdraw.length, _stethSharesToRebalance.length);
+        }
+
+        requestIds = new uint256[](_stvToWithdraw.length);
+
+        for (uint256 i = 0; i < _stvToWithdraw.length; ++i) {
+            requestIds[i] = _requestWithdrawal(_stvToWithdraw[i], _stethSharesToRebalance[i], _owner);
         }
     }
 
-    function requestWithdrawal(uint256 _stvToWithdraw, address _owner) public returns (uint256 requestId) {
-        requestId = requestWithdrawal(_stvToWithdraw, 0, _owner);
-    }
-
+    /**
+     * @notice Request a withdrawal for a user
+     * @param _stvToWithdraw amount of stv to withdraw
+     * @param _stethSharesToRebalance amount of steth shares to rebalance
+     * @param _owner address that will be able to claim the created request
+     * @return requestId the created withdrawal request id
+     * @dev Can be called only by the Wrapper contract
+     */
     function requestWithdrawal(
         uint256 _stvToWithdraw,
         uint256 _stethSharesToRebalance,
         address _owner
     ) public returns (uint256 requestId) {
+        _checkResumedOrEmergencyExit();
+        _checkOnlyWrapper();
+
+        requestId = _requestWithdrawal(_stvToWithdraw, _stethSharesToRebalance, _owner);
+    }
+
+    function _requestWithdrawal(
+        uint256 _stvToWithdraw,
+        uint256 _stethSharesToRebalance,
+        address _owner
+    ) internal returns (uint256 requestId) {
         _checkResumedOrEmergencyExit();
         _checkOnlyWrapper();
 
@@ -394,6 +417,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
 
         DASHBOARD.withdraw(address(this), totalEthToClaim);
 
+        // TODO: check if burn can be locked because of minted steth shares
         if (totalStvToBurn > 0) WRAPPER.burnStvForWithdrawalQueue(totalStvToBurn);
         if (totalStethShares > 0) WRAPPER.rebalanceMintedStethShares(totalStethShares, maxStvToRebalance);
 

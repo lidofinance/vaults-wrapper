@@ -97,18 +97,4 @@ abstract contract SetupWithdrawalQueue is Test {
         // Initialize wrapper
         wrapper.initialize(owner, address(0), "Test", "stvETH");
     }
-
-    function _makeWithdrawalRequest(address _user, uint256 _stvAmount) internal returns (uint256 requestId) {
-        vm.prank(address(wrapper));
-        requestId = withdrawalQueue.requestWithdrawal(_stvAmount, _user);
-    }
-
-    function _makeWithdrawalRequestWithRebalance(
-        address _user,
-        uint256 _stvAmount,
-        uint256 _stethShares
-    ) internal returns (uint256 requestId) {
-        vm.prank(address(wrapper));
-        requestId = withdrawalQueue.requestWithdrawal(_stvAmount, _stethShares, _user);
-    }
 }

@@ -47,35 +47,35 @@ contract WrapperC is WrapperB {
     }
 
     function requestWithdrawalFromStrategy(uint256 _stethAmount) public returns (uint256 requestId) {
-        requestId = _addWithdrawalRequest(msg.sender, _stethAmount, WithdrawalType.STRATEGY);
-        STRATEGY.requestWithdrawByStETH(msg.sender, _stethAmount);
+        // TODO: fix this
+        // requestId = _addWithdrawalRequest(msg.sender, _stethAmount, WithdrawalType.STRATEGY);
+        // STRATEGY.requestWithdrawByStETH(msg.sender, _stethAmount);
     }
 
-    function finalizeWithdrawal(uint256 _requestId) external {
-        WrapperBaseStorage storage $ = _getWrapperBaseStorage();
-        WithdrawalRequest memory request = $.withdrawalRequests[_requestId];
+    // function finalizeWithdrawal(uint256 _requestId) external {
+    //     WrapperBaseStorage storage $ = _getWrapperBaseStorage();
+    //     WithdrawalRequest memory request = $.withdrawalRequests[_requestId];
 
-        if (request.requestType != WithdrawalType.STRATEGY) revert InvalidRequestType();
+    //     if (request.requestType != WithdrawalType.STRATEGY) revert InvalidRequestType();
 
-        $.requestsByOwner[request.owner].remove(_requestId);
+    //     $.requestsByOwner[request.owner].remove(_requestId);
 
-        STRATEGY.finalizeWithdrawal(request.owner, request.amount);
-    }
+    //     STRATEGY.finalizeWithdrawal(request.owner, request.amount);
+    // }
 
     /// @notice Requests a withdrawal of the specified amount of stvETH shares from the strategy
     /// @param _owner The address that owns the stvETH shares
     /// @param _receiver The address to receive the stETH
     /// @param _stvShares The amount of stvETH shares to withdraw
     /// @return requestId The ID of the created withdrawal request
+
+    // TODO: fix this
     function requestWithdrawalQueue(address _owner, address _receiver, uint256 _stvShares)
         external
         returns (uint256 requestId)
     {
         if (msg.sender != address(STRATEGY)) revert InvalidSender();
-        requestId = _requestWithdrawalQueue(_owner, _receiver, _stvShares, 0, 0);
-    }
-
-    function getRequest(uint256 requestId) external view returns (WithdrawalRequest memory) {
-        return _getWrapperBaseStorage().withdrawalRequests[requestId];
+        _transfer(_owner, address(WITHDRAWAL_QUEUE), _stvShares);
+        requestId = WITHDRAWAL_QUEUE.requestWithdrawal(_stvShares, 0 /** stethSharesToRebalance */, _receiver);
     }
 }

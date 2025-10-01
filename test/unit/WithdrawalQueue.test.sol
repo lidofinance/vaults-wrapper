@@ -135,14 +135,14 @@ contract WithdrawalQueueTest is Test {
 
         uint256[] memory user1Amounts = new uint256[](1);
         user1Amounts[0] = USER1_DEPOSIT;
-        uint256[] memory user1RequestIds = withdrawalQueue.requestWithdrawals(user1Amounts, user1);
+        uint256[] memory user1RequestIds = withdrawalQueue.requestWithdrawals(user1Amounts, new uint256[](1), user1);
         vm.stopPrank();
 
         vm.startPrank(user2);
         wrapper.approve(address(withdrawalQueue), USER2_DEPOSIT);
         uint256[] memory user2Amounts = new uint256[](1);
         user2Amounts[0] = USER2_DEPOSIT;
-        uint256[] memory user2RequestIds = withdrawalQueue.requestWithdrawals(user2Amounts, user2);
+        uint256[] memory user2RequestIds = withdrawalQueue.requestWithdrawals(user2Amounts, new uint256[](1), user2);
         vm.stopPrank();
 
         // Simulate operator run validators and send ETH to the BeaconChain
