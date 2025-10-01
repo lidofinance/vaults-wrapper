@@ -24,7 +24,6 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
     error NoMintingCapacityAvailable();
     error ZeroStvShares();
     error TransferNotAllowed();
-    error NotOwner(address caller, address owner);
     error NotWithdrawalQueue();
     error InvalidRequestType();
     error NotEnoughToRebalance();
