@@ -71,6 +71,13 @@ contract DeployWrapper is Script {
         p.value = vm.parseJsonUint(json, "$.value");
     }
 
+    function _getProxyImplementation(address proxy) internal view returns (address impl) {
+        (bool ok, bytes memory ret) = proxy.staticcall(abi.encodeWithSignature("proxy__getImplementation()"));
+        if (ok && ret.length >= 32) {
+            impl = abi.decode(ret, (address));
+        }
+    }
+
     function run() external {
         string memory factoryJsonPath = vm.envString("FACTORY_DEPLOYED_JSON");
         string memory paramsJsonPath = vm.envString("WRAPPER_PARAMS_JSON");
@@ -195,15 +202,8 @@ contract DeployWrapper is Script {
         vm.stopBroadcast();
 
         // Read implementation addresses from proxies (OssifiableProxy exposes proxy__getImplementation())
-        (bool okW, bytes memory retW) = wrapperProxy.staticcall(abi.encodeWithSignature("proxy__getImplementation()"));
-        if (okW && retW.length >= 32) {
-            wrapperImpl = abi.decode(retW, (address));
-        }
-        (bool okQ, bytes memory retQ) =
-            payable(withdrawalQueueProxy).staticcall(abi.encodeWithSignature("proxy__getImplementation()"));
-        if (okQ && retQ.length >= 32) {
-            withdrawalQueueImpl = abi.decode(retQ, (address));
-        }
+        wrapperImpl = _getProxyImplementation(wrapperProxy);
+        withdrawalQueueImpl = _getProxyImplementation(address(withdrawalQueueProxy));
 
         // write artifact
         string memory out = vm.serializeAddress("wrapper", "factory", factoryAddr);
