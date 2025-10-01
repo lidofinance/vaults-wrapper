@@ -344,7 +344,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
 
         uint256 lastFinalizedRequestId = $.lastFinalizedRequestId;
         uint256 firstRequestIdToFinalize = lastFinalizedRequestId + 1;
-        uint256 lastRequestIdToFinalize = Math.max(lastFinalizedRequestId + _maxRequests, $.lastRequestId);
+        uint256 lastRequestIdToFinalize = Math.min(lastFinalizedRequestId + _maxRequests, $.lastRequestId);
 
         if (firstRequestIdToFinalize > lastRequestIdToFinalize) revert NoRequestsToFinalize();
 
