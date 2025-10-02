@@ -20,6 +20,237 @@ contract WrapperATest is WrapperAHarness {
         _initializeCore();
     }
 
+    function test_happy_path_deposit_request_finalize_claim() public {
+        // Deploy wrapper system
+        WrapperContext memory ctx = _deployWrapperA(false, 0);
+
+        // 1) USER1 deposits 10_000 wei (above MIN_WITHDRAWAL_AMOUNT=100)
+        uint256 depositAmount = 10_000;
+        uint256 expectedStv = ctx.wrapper.previewDeposit(depositAmount);
+        vm.prank(USER1);
+        ctx.wrapper.depositETH{value: depositAmount}(USER1, address(0));
+        assertEq(ctx.wrapper.balanceOf(USER1), expectedStv, "minted shares should match previewDeposit");
+        assertEq(address(ctx.vault).balance, depositAmount + CONNECT_DEPOSIT, "vault balance should match deposit amount");
+
+        // 2) USER1 immediately requests withdrawal of all their shares
+        vm.prank(USER1);
+        uint256 requestId = ctx.wrapper.requestWithdrawal(expectedStv);
+
+        // Expected ETH to withdraw
+        uint256 expectedEth = ctx.wrapper.previewRedeem(expectedStv);
+        // 3) Advance past min delay and ensure fresh report via harness
+        _advancePastMinDelayAndRefreshReport(ctx, requestId);
+
+        // 4) Simulate NO-triggered validator exits returning ETH to staking vault (least intrusive: deal)
+        // This models enough validator withdrawals to cover the request amount without touching WQ balance directly
+        address stakingVault = ctx.wrapper.STAKING_VAULT();
+        uint256 svBal = stakingVault.balance;
+        if (svBal < expectedEth) {
+            vm.deal(stakingVault, expectedEth - svBal);
+        }
+
+        // 5) Node Operator finalizes one request
+        vm.prank(NODE_OPERATOR);
+        ctx.withdrawalQueue.finalize(1);
+
+        // 6) USER1 claims
+        uint256 userBalanceBefore = USER1.balance;
+        vm.prank(USER1);
+        ctx.wrapper.claimWithdrawal(requestId, USER1);
+
+        assertEq(USER1.balance, userBalanceBefore + expectedEth, "user should receive expected ETH on claim");
+    }
+
+    function test_happy_path_deposit_request_finalize_claim_with_rewards_report() public {
+        // Deploy wrapper system
+        WrapperContext memory ctx = _deployWrapperA(false, 0);
+
+        // 1) USER1 deposits 10_000 wei (above MIN_WITHDRAWAL_AMOUNT=100)
+        uint256 depositAmount = 10_000;
+        uint256 expectedStv = ctx.wrapper.previewDeposit(depositAmount);
+        vm.prank(USER1);
+        ctx.wrapper.depositETH{value: depositAmount}(USER1, address(0));
+        assertEq(ctx.wrapper.balanceOf(USER1), expectedStv, "minted shares should match previewDeposit");
+        assertEq(address(ctx.vault).balance, depositAmount + CONNECT_DEPOSIT, "vault balance should match deposit amount");
+
+        // 2) USER1 immediately requests withdrawal of all their shares
+        vm.prank(USER1);
+        uint256 requestId = ctx.wrapper.requestWithdrawal(expectedStv);
+
+        // Expected ETH to withdraw is locked at request time
+        uint256 expectedEth = ctx.wrapper.previewRedeem(expectedStv);
+        assertEq(expectedEth, depositAmount, "expected eth should match deposit amount");
+        // 3) Advance past min delay
+        _advancePastMinDelayAndRefreshReport(ctx, requestId);
+
+        // 4) Apply +3% rewards via vault report BEFORE finalization
+        //    This increases total value but should not discount the request
+        reportVaultValueChangeNoFees(ctx, 10300); // +3%
+        _ensureFreshness(ctx);
+
+        // 5) Simulate NO-triggered validator exits returning ETH to staking vault (least intrusive: deal)
+        address stakingVault = ctx.wrapper.STAKING_VAULT();
+        uint256 svBal = stakingVault.balance;
+        if (svBal < expectedEth) {
+            vm.deal(stakingVault, expectedEth - svBal);
+        }
+
+        // 6) Node Operator finalizes one request
+        vm.prank(NODE_OPERATOR);
+        ctx.withdrawalQueue.finalize(1);
+
+        // 7) USER1 claims
+        uint256 userBalanceBefore = USER1.balance;
+        vm.prank(USER1);
+        ctx.wrapper.claimWithdrawal(requestId, USER1);
+
+        // Expected claim equals the amount locked at request time (no discount on rewards)
+        assertEq(USER1.balance, userBalanceBefore + expectedEth, "user should receive expected ETH on claim");
+    }
+
+    function test_happy_path_deposit_request_finalize_claim_with_rewards_report_before_request() public {
+        // Deploy wrapper system
+        WrapperContext memory ctx = _deployWrapperA(false, 0);
+
+        // 1) USER1 deposits 10_000 wei (above MIN_WITHDRAWAL_AMOUNT=100)
+        uint256 depositAmount = 10_000;
+        uint256 expectedStv = ctx.wrapper.previewDeposit(depositAmount);
+        vm.prank(USER1);
+        ctx.wrapper.depositETH{value: depositAmount}(USER1, address(0));
+        assertEq(ctx.wrapper.balanceOf(USER1), expectedStv, "minted shares should match previewDeposit");
+        assertEq(address(ctx.vault).balance, depositAmount + CONNECT_DEPOSIT, "vault balance should match deposit amount");
+
+        // 2) Apply +3% rewards via vault report BEFORE withdrawal request
+        reportVaultValueChangeNoFees(ctx, 10300); // +3%
+        _ensureFreshness(ctx);
+
+        // 3) Now request withdrawal of all USER1 shares
+        //    Expected ETH is increased by ~3% compared to initial deposit
+        uint256 expectedEth = ctx.wrapper.previewRedeem(expectedStv);
+        assertApproxEqAbs(expectedEth, (depositAmount * 103) / 100, WEI_ROUNDING_TOLERANCE, "expected eth should be ~+3% of deposit");
+
+        vm.prank(USER1);
+        uint256 requestId = ctx.wrapper.requestWithdrawal(expectedStv);
+        // 4) Advance past min delay and ensure a fresh report after the request (required by WQ)
+        _advancePastMinDelayAndRefreshReport(ctx, requestId);
+
+        // 5) Ensure staking vault has enough ETH to cover the request
+        address stakingVault = ctx.wrapper.STAKING_VAULT();
+        uint256 svBal = stakingVault.balance;
+        if (svBal < expectedEth) {
+            vm.deal(stakingVault, expectedEth - svBal);
+        }
+
+        // 6) Node Operator finalizes one request
+        vm.prank(NODE_OPERATOR);
+        ctx.withdrawalQueue.finalize(1);
+
+        // 7) USER1 claims and receives the increased amount
+        uint256 userBalanceBefore = USER1.balance;
+        vm.prank(USER1);
+        ctx.wrapper.claimWithdrawal(requestId, USER1);
+
+        assertApproxEqAbs(
+            USER1.balance,
+            userBalanceBefore + ((depositAmount * 103) / 100),
+            WEI_ROUNDING_TOLERANCE,
+            "user should receive ~deposit * 1.03 on claim"
+        );
+    }
+
+    function test_finalize_reverts_after_loss_report_with_small_deposit() public {
+        // Deploy wrapper system
+        WrapperContext memory ctx = _deployWrapperA(false, 0);
+
+        // 1) USER1 deposits 10_000 wei (above MIN_WITHDRAWAL_AMOUNT=100)
+        uint256 depositAmount = 10_000;
+        uint256 expectedStv = ctx.wrapper.previewDeposit(depositAmount);
+        vm.prank(USER1);
+        ctx.wrapper.depositETH{value: depositAmount}(USER1, address(0));
+        assertEq(ctx.wrapper.balanceOf(USER1), expectedStv, "minted shares should match previewDeposit");
+        assertEq(address(ctx.vault).balance, depositAmount + CONNECT_DEPOSIT, "vault balance should match deposit amount");
+
+        // 2) USER1 immediately requests withdrawal of all their shares
+        vm.prank(USER1);
+        uint256 requestId = ctx.wrapper.requestWithdrawal(expectedStv);
+
+        // Expected ETH to withdraw is locked at request time (equals initial deposit for WrapperA)
+        uint256 expectedEthAtRequest = ctx.wrapper.previewRedeem(expectedStv);
+        assertEq(expectedEthAtRequest, depositAmount, "expected eth should match deposit amount at request time");
+
+        // 3) Advance past min delay and ensure a fresh report after the request
+        _advancePastMinDelayAndRefreshReport(ctx, requestId);
+
+        // 4) Apply -3% report BEFORE finalization (vault value decreases)
+        reportVaultValueChangeNoFees(ctx, 9700); // -3%
+        _ensureFreshness(ctx);
+
+        // After the loss report, totalValue should be less than CONNECT_DEPOSIT
+        assertLt(ctx.dashboard.totalValue(), CONNECT_DEPOSIT, "totalValue should be less than CONNECT_DEPOSIT after loss report");
+
+        // Finalization should revert due to insufficient ETH to cover the request
+        vm.prank(NODE_OPERATOR);
+        vm.expectRevert();
+        ctx.withdrawalQueue.finalize(1);
+    }
+
+
+    function test_withdrawal_request_finalized_after_reward_and_loss_reports() public {
+        // Deploy wrapper system
+        WrapperContext memory ctx = _deployWrapperA(false, 0);
+
+        // Simulate a +3% vault value report before deposit
+        reportVaultValueChangeNoFees(ctx, 10300); // +3%
+        _ensureFreshness(ctx);
+
+        // 1) USER1 deposits 10_000 wei (above MIN_WITHDRAWAL_AMOUNT=100)
+        uint256 depositAmount = 10_000;
+        uint256 expectedStv = ctx.wrapper.previewDeposit(depositAmount);
+        vm.prank(USER1);
+        ctx.wrapper.depositETH{value: depositAmount}(USER1, address(0));
+
+        // 2) USER1 requests withdrawal of all their shares
+        uint256 expectedEth = depositAmount;
+
+        vm.prank(USER1);
+        uint256 requestId = ctx.wrapper.requestWithdrawal(expectedStv);
+
+        // 3) Advance past min delay and ensure a fresh report after the request (required by WQ)
+        _advancePastMinDelayAndRefreshReport(ctx, requestId);
+
+        // 4) Simulate a -2% vault value report after the withdrawal request
+        reportVaultValueChangeNoFees(ctx, 9800); // -2%
+        _ensureFreshness(ctx);
+
+        // 5) Ensure staking vault has enough ETH to cover the request
+        address stakingVault = ctx.wrapper.STAKING_VAULT();
+        uint256 svBal = stakingVault.balance;
+        if (svBal < expectedEth) {
+            vm.deal(stakingVault, expectedEth - svBal);
+        }
+
+        // 6) Node Operator finalizes one request
+        vm.prank(NODE_OPERATOR);
+        ctx.withdrawalQueue.finalize(1);
+
+        // 7) USER1 claims and receives the decreased amount
+        uint256 userBalanceBefore = USER1.balance;
+        vm.prank(USER1);
+        ctx.wrapper.claimWithdrawal(requestId, USER1);
+
+        assertApproxEqAbs(
+            USER1.balance,
+            userBalanceBefore + ((depositAmount * 98) / 100),
+            WEI_ROUNDING_TOLERANCE,
+            "user should receive ~deposit * 0.98 on claim"
+        );
+    }
+
+    function test_initial_state() public {
+        WrapperContext memory ctx2 = _deployWrapperA(false, 0);
+        _checkInitialState(ctx2);
+    }
+
     /**
      * @notice Test deploying a wrapper with custom configuration (allowlist enabled)
      */
@@ -56,7 +287,7 @@ contract WrapperATest is WrapperAHarness {
      * 7. User1 deposits again → receives stvETH shares, system continues operating normally
      */
     // TODO: fix
-    function test_happy_path() public {
+    function test_old_todo() public {
         // Deploy wrapper system for this test
         WrapperContext memory ctx = _deployWrapperA(false, 0);
 
@@ -288,18 +519,4 @@ contract WrapperATest is WrapperAHarness {
         assertEq(ctx.dashboard.liabilityShares(), 0, "Vault should have no liability shares - no minting occurred");
     }
 
-    function test_initial_state() public {
-        // Deploy wrapper system for this test
-        WrapperContext memory ctx2 = _deployWrapperA(false, 0);
-
-        // Verify initial state for WrapperA (no minting, no strategy)
-        assertEq(ctx2.wrapper.totalAssets(), CONNECT_DEPOSIT, "Initial total assets should be CONNECT_DEPOSIT");
-        assertEq(
-            ctx2.wrapper.totalSupply(),
-            CONNECT_DEPOSIT * EXTRA_BASE,
-            "Initial total supply should be CONNECT_DEPOSIT * EXTRA_BASE"
-        );
-        assertEq(ctx2.dashboard.liabilityShares(), 0, "Should have no liability shares initially");
-        assertEq(ctx2.dashboard.locked(), CONNECT_DEPOSIT, "Should have CONNECT_DEPOSIT locked");
-    }
 }

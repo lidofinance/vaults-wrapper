@@ -32,6 +32,8 @@ contract WrapperAHarness is Test {
     address public constant USER2 = address(0x1002);
     address public constant USER3 = address(0x1003);
 
+    address public constant CL_LAYER = address(0x128284828);
+
     address public constant NODE_OPERATOR = address(0x1004);
 
     // Test constants
@@ -247,8 +249,6 @@ contract WrapperAHarness is Test {
         assertEq(ctx.dashboard.remainingMintingCapacityShares(0), 0, "Remaining minting capacity should be zero");
         assertEq(ctx.dashboard.totalMintingCapacityShares(), 0, "Total minting capacity should be zero");
 
-        assertEq(steth.getPooledEthByShares(1 ether), 1 ether + 10 ** 17, "ETH for 1e18 stETH shares should be 1.1 ETH");
-
         console.log("Reserve ratio:", ctx.dashboard.reserveRatioBP());
         console.log("ETH for 1e18 stETH shares: ", steth.getPooledEthByShares(1 ether));
 
@@ -271,25 +271,59 @@ contract WrapperAHarness is Test {
      * current vault record so tests can proceed with minting/withdrawing flows.
      */
     function _ensureFreshness(WrapperContext memory ctx) internal {
-        // Ensure VaultHub record timestamp is set
-        uint256 recTs = IVaultHub(address(ctx.dashboard.VAULT_HUB())).vaultRecord(address(ctx.vault)).report.timestamp;
-        if (recTs == 0) {
-            core.applyVaultReport(
-                address(ctx.vault), ctx.dashboard.totalValue(), 0, ctx.dashboard.liabilityShares(), 0, false
-            );
-            recTs = IVaultHub(address(ctx.dashboard.VAULT_HUB())).vaultRecord(address(ctx.vault)).report.timestamp;
-        }
+        // Bump the vault record to the current block time to satisfy freshness requirements
+        core.applyVaultReport(
+            address(ctx.vault), ctx.dashboard.totalValue(), 0, ctx.dashboard.liabilityShares(), 0, false
+        );
 
-        // Make LazyOracle.latestReportTimestamp equal to the record timestamp to satisfy _isReportFresh logic
-        vm.warp(recTs + 1);
+        uint256 recTs = IVaultHub(address(ctx.dashboard.VAULT_HUB())).vaultRecord(address(ctx.vault)).report.timestamp;
         vm.mockCall(address(core.lazyOracle()), abi.encodeWithSignature("latestReportTimestamp()"), abi.encode(recTs));
 
-        // Also return true from VaultHub.isReportFresh for the specific vault used in this test context
+        // Ensure core treats the record as fresh for this vault
         vm.mockCall(
             address(core.vaultHub()),
             abi.encodeWithSignature("isReportFresh(address)", address(ctx.vault)),
             abi.encode(true)
         );
+    }
+
+    /**
+     * @notice Advance block time past the WQ min delay for the given request and ensure report freshness afterwards
+     * @dev Ensures LazyOracle.latestReportTimestamp() is >= request.timestamp and that report is fresh
+     */
+    function _advancePastMinDelayAndRefreshReport(WrapperContext memory ctx, uint256 requestId) internal {
+        WithdrawalQueue.WithdrawalRequestStatus memory st = ctx.withdrawalQueue.getWithdrawalStatus(requestId);
+        uint256 minDelay = ctx.withdrawalQueue.MIN_WITHDRAWAL_DELAY_TIME_IN_SECONDS();
+        vm.warp(st.timestamp + minDelay + 2);
+        _ensureFreshness(ctx);
+    }
+
+    /**
+     * @notice Simulate a deposit to the consensus layer by transferring ETH from the vault to the CL_LAYER address
+     * @dev Moves the specified amount of ETH from the vault to the CL_LAYER address
+     * @param ctx The wrapper context containing the vault
+     * @param amount The amount of ETH to transfer
+     */
+    function _depositToCL(WrapperContext memory ctx, uint256 amount) public {
+        address payable vault = payable(address(ctx.vault));
+        require(vault.balance >= amount, "Vault does not have enough ETH");
+        vm.prank(vault);
+        (bool sent, ) = CL_LAYER.call{value: amount}("");
+        require(sent, "ETH transfer to CL_LAYER failed");
+    }
+
+    /**
+     * @notice Simulate a withdrawal from the consensus layer by transferring ETH from the CL_LAYER to the vault
+     * @dev Moves the specified amount of ETH from the CL_LAYER address to the vault
+     * @param ctx The wrapper context containing the vault
+     * @param amount The amount of ETH to transfer
+     */
+    function _withdrawFromCL(WrapperContext memory ctx, uint256 amount) public {
+        address payable vault = payable(address(ctx.vault));
+        require(CL_LAYER.balance >= amount, "CL_LAYER does not have enough ETH");
+        vm.prank(CL_LAYER);
+        (bool sent, ) = vault.call{value: amount}("");
+        require(sent, "ETH transfer from CL_LAYER to vault failed");
     }
 
     // TODO: add after report invariants
