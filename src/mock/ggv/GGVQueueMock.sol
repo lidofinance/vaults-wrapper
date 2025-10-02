@@ -9,6 +9,8 @@ import {IWstETH} from "src/interfaces/IWstETH.sol";
 import {GGVVaultMock} from "./GGVVaultMock.sol";
 import {BorrowedMath} from "./BorrowedMath.sol";
 
+import {console} from "forge-std/console.sol";
+
 contract GGVQueueMock is IBoringOnChainQueue {
     using EnumerableSet for EnumerableSet.Bytes32Set;
 
@@ -107,6 +109,7 @@ contract GGVQueueMock is IBoringOnChainQueue {
             revert("Not enough assets in vault");
         }
 
+
         // needs approval
         _vault.transferFrom(msg.sender, address(this), amountOfShares);
 
@@ -201,25 +204,18 @@ contract GGVQueueMock is IBoringOnChainQueue {
             revert("Only steth and wsteth supported");
         }
 
-        //uint256 price = accountant.getRateInQuoteSafe(ERC20(assetOut));
-        // assets(steth shares) per 1 share
-        uint256 price = _vault.getAssetsByShares(ONE_SHARE);
+        uint256 amountOfAssets = _vault.getAssetsByShares(amountOfShares);
         // discount
-        price = BorrowedMath.mulDivDown(price, 1e4 - discount, 1e4);
-        // shares * (price == assets * ONE_SHARE ) / one _share
-        uint256 amountOfAssets = BorrowedMath.mulDivDown(uint256(amountOfShares), price, ONE_SHARE);
+        amountOfAssets = BorrowedMath.mulDivDown(amountOfAssets, 1e4 - discount, 1e4);
 
         uint256 amountOfTokens;
         if (assetOut == address(steth)) {
-            // FIX: CONVERT SHARES -> STETH TOKENS using current dynamic share rate (1.04)
             amountOfTokens = steth.getPooledEthByShares(amountOfAssets);
         } else {
-            // wstETH case
-            // Mock simplification: wstETH is static, so we return the shares amount as the token amount.
             amountOfTokens = amountOfAssets;
         }
 
-        if (amountOfAssets > type(uint128).max) revert("overflow");
+        if (amountOfTokens > type(uint128).max) revert("overflow");
 
         amountOfAssets128 = uint128(amountOfTokens);
     }

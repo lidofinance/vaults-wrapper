@@ -48,24 +48,9 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
 
     WithdrawalQueue public immutable WITHDRAWAL_QUEUE;
 
-    enum WithdrawalType {
-        WITHDRAWAL_QUEUE,
-        STRATEGY
-    }
-
-    struct WithdrawalRequest {
-        uint256 requestId;
-        WithdrawalType requestType;
-        address owner;
-        uint40 timestamp;
-        uint256 amount;
-    }
-
     /// @custom:storage-location erc7201:wrapper.base.storage
     struct WrapperBaseStorage {
         bool vaultDisconnected;
-        WithdrawalRequest[] withdrawalRequests;
-        mapping(address => EnumerableSet.UintSet) requestsByOwner;
     }
 
     // keccak256(abi.encode(uint256(keccak256("wrapper.base.storage")) - 1)) & ~bytes32(uint256(0xff))
@@ -96,7 +81,6 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
     event VaultDisconnected(address indexed initiator);
     event ConnectDepositClaimed(address indexed recipient, uint256 amount);
     event WithdrawalClaimed(uint256 requestId, address indexed owner, address indexed receiver, uint256 amountOfETH);
-    event WithdrawalRequestCreated(uint256 requestId, address indexed user, uint256 amount, WithdrawalType requestType);
     event UnassignedLiabilityRebalanced(uint256 stethShares, uint256 ethAmount);
 
     constructor(address _dashboard, bool _allowListEnabled, address _withdrawalQueue) AllowList(_allowListEnabled) {
@@ -261,7 +245,6 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
         _checkAllowList();
 
         stvShares = previewDeposit(msg.value);
-        console.log("_deposit stvShares", stvShares);
         _mint(_receiver, stvShares);
         DASHBOARD.fund{value: msg.value}();
 
@@ -372,63 +355,6 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
     function burnSharesForWithdrawalQueue(uint256 _shares) external {
         if (msg.sender != address(WITHDRAWAL_QUEUE)) revert NotWithdrawalQueue();
         _burn(msg.sender, _shares);
-    }
-
-    // withdrawal queue is immutable and set in constructor
-
-    /// @notice Returns all withdrawal requests that belong to the `_owner` address
-    /// @param _owner address to get requests for
-    /// @return requestIds array of request ids
-    function getWithdrawalRequests(address _owner) external view returns (uint256[] memory requestIds) {
-        WrapperBaseStorage storage $ = _getWrapperBaseStorage();
-        return $.requestsByOwner[_owner].values();
-    }
-
-    /// @notice Returns all withdrawal requests that belong to the `_owner` address
-    /// @param _owner address to get requests for
-    /// @param _start start index
-    /// @param _end end index
-    /// @return requestIds array of request ids
-    function getWithdrawalRequests(
-        address _owner,
-        uint256 _start,
-        uint256 _end
-    ) external view returns (uint256[] memory requestIds) {
-        WrapperBaseStorage storage $ = _getWrapperBaseStorage();
-        return $.requestsByOwner[_owner].values(_start, _end);
-    }
-
-    /// @notice Returns the length of the withdrawal requests that belong to the `_owner` address
-    /// @param _owner address to get requests for
-    /// @return length of the withdrawal requests
-    function getWithdrawalRequestsLength(address _owner) external view returns (uint256) {
-        WrapperBaseStorage storage $ = _getWrapperBaseStorage();
-        return $.requestsByOwner[_owner].length();
-    }
-
-    function getWithdrawalRequest(uint256 requestId) external view returns (WithdrawalRequest memory) {
-        return _getWrapperBaseStorage().withdrawalRequests[requestId];
-    }
-
-    function _addWithdrawalRequest(
-        address _owner,
-        uint256 _ethAmount,
-        WithdrawalType _type
-    ) internal returns (uint256 requestId) {
-        WrapperBaseStorage storage $ = _getWrapperBaseStorage();
-        requestId = $.withdrawalRequests.length;
-        WithdrawalRequest memory request = WithdrawalRequest({
-            requestId: requestId,
-            requestType: _type,
-            owner: _owner,
-            timestamp: uint40(block.timestamp),
-            amount: _ethAmount
-        });
-
-        $.withdrawalRequests.push(request);
-        $.requestsByOwner[_owner].add(requestId);
-
-        emit WithdrawalRequestCreated(requestId, _owner, _ethAmount, request.requestType);
     }
 
     // =================================================================================

@@ -30,8 +30,8 @@ contract GGVMockTeller is ITellerWithMultiAssetSupport {
         // eq to 10 ** vault.decimals()
         ONE_SHARE = 10 ** 18;
 
-        _updateAssetData(ERC20(_steth), true, true, 0);
-        _updateAssetData(ERC20(_wsteth), true, true, 0);
+        _updateAssetData(ERC20(_steth), true, false, 0);
+        _updateAssetData(ERC20(_wsteth), false, true, 0);
     }
 
     function deposit(ERC20 depositAsset, uint256 depositAmount, uint256 minimumMint)
@@ -45,20 +45,14 @@ contract GGVMockTeller is ITellerWithMultiAssetSupport {
         if (depositAmount == 0) {
             revert("Deposit amount must be greater than 0");
         }
-        if (depositAsset != ERC20(address(steth))) {
-            revert("Asset not supported");
-        }
+
+        uint256 stethShares = steth.getSharesByPooledEth(depositAmount);
 
         // hardcode share calculation for only steth
-        shares = _vault.getSharesByAssets(steth.getSharesByPooledEth(depositAmount));
-        // apply premium if any
-        shares = asset.sharePremium > 0 ? BorrowedMath.mulDivDown(shares, 1e4 - asset.sharePremium, 1e4) : shares;
+        shares = _vault.getSharesByAssets(stethShares);
+        if (shares < minimumMint) revert("Minted shares less than minimumMint");
 
-        if (shares < minimumMint) {
-            revert("Minted shares less than minimumMint");
-        }
-
-        _vault.depositByTeller(address(depositAsset), shares, depositAmount, msg.sender);
+        _vault.depositByTeller(address(depositAsset), shares, stethShares, msg.sender);
     }
 
     function _updateAssetData(ERC20 asset, bool allowDeposits, bool allowWithdraws, uint16 sharePremium) internal {

@@ -111,6 +111,7 @@ interface IVaultHub is IAccessControl {
         uint256 _reportLiabilityShares,
         uint256 _reportSlashingReserve
     ) external;
+    function latestReport(address _vault) external view returns (Report memory);
 
     // -----------------------------
     //           ERRORS

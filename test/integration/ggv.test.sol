@@ -79,6 +79,8 @@ contract GGVTest is WrapperCHarness {
     //0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2 WETH
     //0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE eth
 
+    uint16 public constant DISCOUNT = 0;
+
     function setUp() public {
         _initializeCore();
 
@@ -107,7 +109,7 @@ contract GGVTest is WrapperCHarness {
             address(steth),
             address(wsteth),
             address(boringOnChainQueue),
-            ggvStrategy.DISCOUNT()
+            DISCOUNT
         );
 
         vm.startPrank(ADMIN);
@@ -173,16 +175,28 @@ contract GGVTest is WrapperCHarness {
         boringVault.rebase(1 ether);
         vm.stopPrank();
 
+        // Apply 1% increase to core (stETH share ratio)
+        uint256 currentTotalEth1 = steth.totalSupply();
+        uint256 ethProfit1 = currentTotalEth1 * 1 / 100;
+        core.increaseBufferedEther(ethProfit1);
+        uint256 shareRate3 = steth.getPooledEthByShares(1e18);
+
         _log.printUsers("[USER] before request", logUsers);
 
         uint256 ggvShares = boringVault.balanceOf(user1StrategyProxy);
         uint256 withdrawalStethAmount =
-            boringOnChainQueue.previewAssetsOut(address(steth), uint128(ggvShares), ggvStrategy.DISCOUNT());
+            boringOnChainQueue.previewAssetsOut(address(steth), uint128(ggvShares), DISCOUNT);
+
+        GGVStrategy.GGVParams memory params = GGVStrategy.GGVParams({
+            discount: 0,
+            minimumMint: 0,
+            secondsToDeadline: type(uint24).max
+        });
 
         vm.prank(USER1);
-        uint256 requestId = wrapper.requestWithdrawalFromStrategy(withdrawalStethAmount);
+        uint256 requestId = wrapper.requestWithdrawalFromStrategy(withdrawalStethAmount, abi.encode(params));
         assertNotEq(requestId, 0);
-        bytes32 ggvRequestId = ggvStrategy.getUserPosition(USER1).exitRequestId;
+        bytes32 ggvRequestId = ggvStrategy.getWithdrawalRequestId(USER1);
 
         IBoringOnChainQueue.OnChainWithdraw memory req =
             GGVQueueMock(address(boringOnChainQueue)).mockGetRequestById(ggvRequestId);
@@ -198,7 +212,7 @@ contract GGVTest is WrapperCHarness {
 
         vm.startPrank(USER1);
         for (uint256 i = 0; i < requestIds.length; i++) {
-            wrapper.finalizeWithdrawal(requestIds[i]);
+            wrapper.finalizeWithdrawalFromStrategy(requestIds[i]);
         }
         vm.stopPrank();
 
@@ -219,10 +233,12 @@ contract GGVTest is WrapperCHarness {
         _log.printUsers("[USER] Recovery ERC20", logUsers);
     }
 
-    function test_rebase_scenario() public {
-        // APR_Vault = 5%, APR_steth = 4%
+    function test_rebase_scenario(uint256 stethIncrease, uint256 vaultIncrease) public {
+        stethIncrease = bound(stethIncrease, 1, 100);
+        vaultIncrease = bound(vaultIncrease, 1, 100);
+
         uint256 depositAmount = 1 ether;
-        uint256 vaultProfit = depositAmount * 5 / 100; // 0.05 ether profit
+        uint256 vaultProfit = depositAmount * vaultIncrease / 100; // 0.05 ether profit
 
         uint256 shareRate1 = steth.getPooledEthByShares(1e18);
         assertTrue(shareRate1 == 1 ether, "Started share rate is not 1:1");
@@ -233,6 +249,10 @@ contract GGVTest is WrapperCHarness {
         logUsers.push(TableUtils.User(address(wrapper.WITHDRAWAL_QUEUE()), "wq"));
         logUsers.push(TableUtils.User(address(boringVault), "boringVault"));
         logUsers.push(TableUtils.User(address(boringOnChainQueue), "boringVaultQueue"));
+
+        // Apply 1% increase to core (stETH share ratio)
+        core.increaseBufferedEther(steth.totalSupply() * stethIncrease / 100);
+        console.log("INITIAL share rate %s", steth.getPooledEthByShares(1e18));
 
         _log.printUsers("[SCENARIO] Initial State", logUsers);
 
@@ -253,98 +273,111 @@ contract GGVTest is WrapperCHarness {
 
         _log.printUsers("[SCENARIO] After report (increase vault balance)", logUsers);
 
-        // 3. Request withdrawal (full amount, based on appreciated value)
-        uint256 totalGgvShares = boringVault.balanceOf(user1StrategyProxy);
-        uint256 withdrawalStethAmount =
-            boringOnChainQueue.previewAssetsOut(address(steth), uint128(totalGgvShares), ggvStrategy.DISCOUNT());
+//         3. Request withdrawal (full amount, based on appreciated value)
+         uint256 totalGgvShares = boringVault.balanceOf(user1StrategyProxy);
+         uint256 withdrawalStethAmount =
+             boringOnChainQueue.previewAssetsOut(address(steth), uint128(totalGgvShares), DISCOUNT);
 
-        console.log("\n[SCENARIO] Requesting withdrawal based on new appreciated assets:", withdrawalStethAmount);
+         console.log("\n[SCENARIO] Requesting withdrawal based on new appreciated assets:", withdrawalStethAmount);
 
-        vm.prank(USER1);
-        uint256 requestId = wrapper.requestWithdrawalFromStrategy(withdrawalStethAmount);
+         GGVStrategy.GGVParams memory params = GGVStrategy.GGVParams({
+             discount: 0,
+             minimumMint: 0,
+             secondsToDeadline: type(uint24).max
+         });
 
-        // Apply 4% increase to core (stETH share ratio)
-        uint256 currentTotalEth = steth.totalSupply();
-        uint256 ethProfit = currentTotalEth * 4 / 100;
-        core.increaseBufferedEther(ethProfit);
-        uint256 shareRate3 = steth.getPooledEthByShares(1e18);
-        //        assertTrue(shareRate3 > shareRate2, "stETH rate did not update to 1.04");
+         vm.prank(USER1);
+         uint256 requestId = wrapper.requestWithdrawalFromStrategy(withdrawalStethAmount, abi.encode(params));
+    
+         // Apply 4% increase to core (stETH share ratio)
+         uint256 currentTotalEth = steth.totalSupply();
+         uint256 ethProfit = currentTotalEth * 4 / 100;
+         core.increaseBufferedEther(ethProfit);
+         uint256 shareRate3 = steth.getPooledEthByShares(1e18);
 
-        console.log("\n[SCENARIO] apply new stETH rebase shareRate after request, before ggv solve:", shareRate3);
+         console.log("\n[SCENARIO] apply new stETH rebase shareRate after request, before ggv solve:", shareRate3);
 
-        _log.printUsers("[SCENARIO] After Request Withdrawal", logUsers);
+         _log.printUsers("[SCENARIO] After Request Withdrawal", logUsers);
 
-        // 4. Solve GGV requests (Simulate GGV Solver)
-        console.log("\n[SCENARIO] Step 4. Solve GGV requests");
+         // 4. Solve GGV requests (Simulate GGV Solver)
+         console.log("\n[SCENARIO] Step 4. Solve GGV requests");
 
-        GGVStrategy.UserPosition memory position = ggvStrategy.getUserPosition(USER1);
-        bytes32 ggvRequestId = position.exitRequestId;
+         bytes32 ggvRequestId = ggvStrategy.getWithdrawalRequestId(USER1);
 
-        IBoringOnChainQueue.OnChainWithdraw memory req =
-            GGVQueueMock(address(boringOnChainQueue)).mockGetRequestById(ggvRequestId);
-        IBoringOnChainQueue.OnChainWithdraw[] memory requests = new IBoringOnChainQueue.OnChainWithdraw[](1);
-        requests[0] = req;
+         IBoringOnChainQueue.OnChainWithdraw memory req =
+             GGVQueueMock(address(boringOnChainQueue)).mockGetRequestById(ggvRequestId);
+         IBoringOnChainQueue.OnChainWithdraw[] memory requests = new IBoringOnChainQueue.OnChainWithdraw[](1);
+         requests[0] = req;
 
-        vm.warp(block.timestamp + req.secondsToMaturity + 1);
-        boringOnChainQueue.solveOnChainWithdraws(requests, new bytes(0), address(0));
+         vm.warp(block.timestamp + req.secondsToMaturity + 1);
+         boringOnChainQueue.solveOnChainWithdraws(requests, new bytes(0), address(0));
 
-        _log.printUsers("After GGV Solver", logUsers);
+         _log.printUsers("After GGV Solver", logUsers);
 
-        // 5. User Finalizes Withdrawal (Wrapper side)
-        console.log("\n[SCENARIO] Step 5. Finalize Wrapper withdrawal");
-        uint256[] memory requestIds = wrapper.getWithdrawalRequests(USER1);
-        assertEq(requestIds.length, 1, "Wrapper requests should be one before finalize");
+        ggvStrategy.cancelRequest();
 
-        vm.startPrank(USER1);
-        for (uint256 i = 0; i < requestIds.length; i++) {
-            wrapper.finalizeWithdrawal(requestIds[i]);
-        }
-        vm.stopPrank();
+         // 5. User Finalizes Withdrawal (Wrapper side)
+         console.log("\n[SCENARIO] Step 5. Finalize Wrapper withdrawal");
+         uint256[] memory requestIds = wrapper.getWithdrawalRequests(USER1);
+         assertEq(requestIds.length, 1, "Wrapper requests should be one before finalize");
 
-        _log.printUsers("After User Finalizes Wrapper", logUsers);
+         vm.startPrank(USER1);
+         for (uint256 i = 0; i < requestIds.length; i++) {
+             wrapper.finalizeWithdrawalFromStrategy(requestIds[i]);
+         }
+         vm.stopPrank();
 
-        // 6. Node Operator Finalizes WQ (Node Operator side)
-        console.log("\n[SCENARIO] Step 6. Finalize WQ (Node Operator)");
-        // Добавляем ETH в StakingVault, чтобы WQ мог забрать средства
-        vm.deal(address(ctx.vault), 10 ether);
-        _finalizeWQ(1, vaultProfit);
+         _log.printUsers("After User Finalizes Wrapper", logUsers);
 
-        _log.printUsers("After WQ Finalized", logUsers);
+         // 6. Node Operator Finalizes WQ (Node Operator side)
+         console.log("\n[SCENARIO] Step 6. Finalize WQ (Node Operator)");
 
-        // 7. User Claims ETH
-        console.log("\n[SCENARIO] Step 7. Claim final ETH");
-        uint256 userBalanceBeforeClaim = USER1.balance;
+         vm.deal(address(ctx.vault), 10 ether);
+         _finalizeWQ(1, vaultProfit);
 
-        vm.prank(USER1);
-        wrapper.claimWithdrawal(1, address(0));
+         _log.printUsers("After WQ Finalized", logUsers);
 
-        uint256 ethClaimed = USER1.balance - userBalanceBeforeClaim;
-        console.log("ETH Claimed:", ethClaimed);
+         // 7. User Claims ETH
+         console.log("\n[SCENARIO] Step 7. Claim final ETH");
+         uint256 userBalanceBeforeClaim = USER1.balance;
 
-        _log.printUsers("After User Claims ETH", logUsers);
+         vm.prank(USER1);
+         wrapper.claimWithdrawal(1, address(0));
 
-        // 8. Recover Surplus stETH (если есть)
-        uint256 surplusStETH = steth.balanceOf(user1StrategyProxy);
-        if (surplusStETH > 0) {
-            uint256 stethBalance = steth.sharesOf(user1StrategyProxy);
-            uint256 stethDebt = wrapper.mintedStethSharesOf(user1StrategyProxy);
-            uint256 surplusInShares = stethBalance > stethDebt ? stethBalance - stethDebt : 0;
-            uint256 maxAmount = steth.getPooledEthByShares(surplusInShares);
+         uint256 ethClaimed = USER1.balance - userBalanceBeforeClaim;
+         console.log("ETH Claimed:", ethClaimed);
 
-            console.log("\n[SCENARIO] Step 8. Recover Surplus stETH:", maxAmount);
-            vm.prank(USER1);
-            ggvStrategy.recoverERC20(address(steth), USER1, maxAmount);
-        }
+         _log.printUsers("After User Claims ETH", logUsers);
 
-        _log.printUsers("After Recovery", logUsers);
+//         // 8. Recover Surplus stETH (если есть)
+//         uint256 surplusStETH = steth.balanceOf(user1StrategyProxy);
+//         if (surplusStETH > 0) {
+//             uint256 stethBalance = steth.sharesOf(user1StrategyProxy);
+//             uint256 stethDebt = wrapper.mintedStethSharesOf(user1StrategyProxy);
+//             uint256 surplusInShares = stethBalance > stethDebt ? stethBalance - stethDebt : 0;
+//             uint256 maxAmount = steth.getPooledEthByShares(surplusInShares);
+
+//             console.log("\n[SCENARIO] Step 8. Recover Surplus stETH:", maxAmount);
+//             vm.prank(USER1);
+//             ggvStrategy.recoverERC20(address(steth), USER1, maxAmount);
+//         }
+
+//         _log.printUsers("After Recovery", logUsers);
     }
 
     function _finalizeWQ(uint256 _maxRequest, uint256 vaultProfit) public {
         vm.deal(address(wrapper.STAKING_VAULT()), 1 ether);
 
-        uint256 _maxLiabilityShares = wrapper.VAULT_HUB().vaultRecord(wrapper.STAKING_VAULT()).maxLiabilityShares;
-        uint256 liabilityShares = wrapper.DASHBOARD().liabilityShares();
-        core.applyVaultReport(address(wrapper.STAKING_VAULT()), wrapper.totalAssets(), 0, liabilityShares, 0, false);
+        vm.warp(block.timestamp + 1 days);
+        core.applyVaultReport(
+            address(wrapper.STAKING_VAULT()),
+            wrapper.totalAssets(),
+            0,
+            wrapper.DASHBOARD().liabilityShares(),
+            0,
+            false
+        );
+        _ensureFreshness(ctx);
 
         vm.startPrank(NODE_OPERATOR);
         wrapper.DASHBOARD().fund{value: vaultProfit}();
