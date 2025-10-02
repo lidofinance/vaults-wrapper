@@ -101,7 +101,8 @@ contract WrapperC is WrapperB {
         returns (uint256 requestId)
     {
         if (msg.sender != address(STRATEGY)) revert InvalidSender();
-        requestId = _requestWithdrawalQueue(_owner, _receiver, _stvShares, 0);
+        _transfer(_owner, address(WITHDRAWAL_QUEUE), _stvShares);
+        requestId = WITHDRAWAL_QUEUE.requestWithdrawal(_stvShares, 0 /** stethSharesToRebalance */, _receiver);
     }
 
     // =================================================================================

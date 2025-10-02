@@ -76,8 +76,10 @@ contract DepositGasProfileTest is Test {
 
         stakingVaultWithoutAllowList = new MockStakingVault();
         vaultHubWithoutAllowList = new MockVaultHub();
-        dashboardWithoutAllowList =
-            new MockDashboard(address(vaultHubWithoutAllowList), address(stakingVaultWithoutAllowList));
+        dashboardWithoutAllowList = new MockDashboard(
+            address(vaultHubWithoutAllowList),
+            address(stakingVaultWithoutAllowList)
+        );
 
         // Fund the staking vaults to simulate initial state
         vm.deal(address(stakingVaultWithAllowList), 1 ether);
@@ -89,16 +91,18 @@ contract DepositGasProfileTest is Test {
         ERC1967Proxy openProxy;
 
         MockLazyOracle lazyOracle = new MockLazyOracle();
-        address wqImpl1 = address(new WithdrawalQueue(address(0), address(lazyOracle), 30 days));
+        address wqImpl1 = address(new WithdrawalQueue(address(0), address(0), address(0), address(0), address(0), address(lazyOracle), 30 days, 1 days));
         address wqProxy1 = address(new ERC1967Proxy(wqImpl1, ""));
         WrapperA allowListImpl = new WrapperA(address(dashboardWithAllowList), true, wqProxy1);
-        bytes memory initDataAllowList =
-            abi.encodeCall(WrapperBase.initialize, (owner, owner, "AllowListed Vault", "wstvETH"));
+        bytes memory initDataAllowList = abi.encodeCall(
+            WrapperBase.initialize,
+            (owner, owner, "AllowListed Vault", "wstvETH")
+        );
         allowListProxy = new ERC1967Proxy(address(allowListImpl), initDataAllowList);
         wrapperWithAllowList = WrapperA(payable(address(allowListProxy)));
 
         // Create wrapper without allowlist
-        address wqImpl2 = address(new WithdrawalQueue(address(0), address(lazyOracle), 30 days));
+        address wqImpl2 = address(new WithdrawalQueue(address(0), address(0), address(0), address(0), address(0), address(lazyOracle), 30 days, 1 days));
         address wqProxy2 = address(new ERC1967Proxy(wqImpl2, ""));
         WrapperA openImpl = new WrapperA(address(dashboardWithoutAllowList), false, wqProxy2);
         bytes memory initDataOpen = abi.encodeCall(WrapperBase.initialize, (owner, owner, "Open Vault", "ostvETH"));

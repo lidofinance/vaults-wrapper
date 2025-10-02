@@ -22,7 +22,7 @@ contract GGVStrategy is Strategy {
 
     event Execute(address indexed user, uint256 stv, uint256 stethShares, uint256 stethAmount, uint256 ggvShares);
     event RequestWithdraw(address indexed user, uint256 stethAmount, uint256 ggvShares);
-    event Finalized(address indexed user, uint256 stv, uint256 stethAmount, uint256 stethShares);
+    event Finalized(address indexed user, uint256 wqRequestId, uint256 stv, uint256 stethAmount, uint256 stethShares);
 
     // ==================== Errors ====================
 
@@ -186,9 +186,9 @@ contract GGVStrategy is Strategy {
         );
 
         uint256 stv = WRAPPER.withdrawableStv(proxy);
-        uint256 requestId = WRAPPER.requestWithdrawalQueue(proxy, _request.owner, stv);
+        uint256 wqRequestId = WRAPPER.requestWithdrawalQueue(proxy, _request.owner, stv);
 
-        emit Finalized(_request.owner, stv, stethAmount, burnStethShares);
+        emit Finalized(_request.owner, wqRequestId, stv, stethAmount, burnStethShares);
     }
 
     /// @notice Recovers ERC20 tokens from the strategy

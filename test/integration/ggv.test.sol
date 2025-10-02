@@ -125,7 +125,7 @@ contract GGVTest is WrapperCHarness {
         vm.stopPrank();
 
         // Skip external GGV mainnet setup when using local mocks
-        //        _setupGGV();
+        // _setupGGV();
     }
 
     function _setupGGV() public {
@@ -179,7 +179,6 @@ contract GGVTest is WrapperCHarness {
         uint256 currentTotalEth1 = steth.totalSupply();
         uint256 ethProfit1 = currentTotalEth1 * 1 / 100;
         core.increaseBufferedEther(ethProfit1);
-        uint256 shareRate3 = steth.getPooledEthByShares(1e18);
 
         _log.printUsers("[USER] before request", logUsers);
 
@@ -288,6 +287,7 @@ contract GGVTest is WrapperCHarness {
 
          vm.prank(USER1);
          uint256 requestId = wrapper.requestWithdrawalFromStrategy(withdrawalStethAmount, abi.encode(params));
+        assertEq(requestId, 0);
     
          // Apply 4% increase to core (stETH share ratio)
          uint256 currentTotalEth = steth.totalSupply();
@@ -313,8 +313,6 @@ contract GGVTest is WrapperCHarness {
          boringOnChainQueue.solveOnChainWithdraws(requests, new bytes(0), address(0));
 
          _log.printUsers("After GGV Solver", logUsers);
-
-        ggvStrategy.cancelRequest();
 
          // 5. User Finalizes Withdrawal (Wrapper side)
          console.log("\n[SCENARIO] Step 5. Finalize Wrapper withdrawal");
@@ -342,7 +340,7 @@ contract GGVTest is WrapperCHarness {
          uint256 userBalanceBeforeClaim = USER1.balance;
 
          vm.prank(USER1);
-         wrapper.claimWithdrawal(1, address(0));
+         wrapper.claimWithdrawal(1, USER1);
 
          uint256 ethClaimed = USER1.balance - userBalanceBeforeClaim;
          console.log("ETH Claimed:", ethClaimed);

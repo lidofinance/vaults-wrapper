@@ -67,8 +67,8 @@ contract WrapperATest is WrapperAHarness {
         vm.prank(USER1);
         ctx.wrapper.depositETH{value: user1Deposit}(USER1, address(0));
 
-        uint256 wrapperConnectDepositStvShares = CONNECT_DEPOSIT * EXTRA_BASE;
-        uint256 expectedUser1StvShares = user1Deposit * EXTRA_BASE;
+        uint256 wrapperConnectDepositStv = CONNECT_DEPOSIT * EXTRA_BASE;
+        uint256 expectedUser1Stv = user1Deposit * EXTRA_BASE;
 
         assertEq(
             ctx.wrapper.totalAssets(),
@@ -77,18 +77,18 @@ contract WrapperATest is WrapperAHarness {
         );
         assertEq(
             ctx.wrapper.totalSupply(),
-            wrapperConnectDepositStvShares + expectedUser1StvShares,
+            wrapperConnectDepositStv + expectedUser1Stv,
             "Wrapper total supply should be equal to user deposit plus CONNECT_DEPOSIT"
         );
 
         assertEq(
             ctx.wrapper.balanceOf(address(ctx.wrapper)),
-            wrapperConnectDepositStvShares,
-            "Wrapper balance should be equal to wrapperConnectDepositStvShares"
+            wrapperConnectDepositStv,
+            "Wrapper balance should be equal to wrapperConnectDepositStv"
         );
         assertEq(
             ctx.wrapper.balanceOf(USER1),
-            expectedUser1StvShares,
+            expectedUser1Stv,
             "Wrapper balance of USER1 should be equal to user deposit"
         );
         assertEq(
@@ -107,7 +107,9 @@ contract WrapperATest is WrapperAHarness {
             "Vault's balance should be equal to CONNECT_DEPOSIT + user1Deposit"
         );
         assertEq(
-            ctx.dashboard.totalValue(), address(ctx.vault).balance, "Vault's total value should be equal to its balance"
+            ctx.dashboard.totalValue(),
+            address(ctx.vault).balance,
+            "Vault's total value should be equal to its balance"
         );
         assertEq(ctx.dashboard.locked(), CONNECT_DEPOSIT, "Vault's locked should be equal to CONNECT_DEPOSIT only");
         assertEq(ctx.dashboard.withdrawableValue(), user1Deposit, "Vault's withdrawable value should be user deposit");
@@ -122,7 +124,9 @@ contract WrapperATest is WrapperAHarness {
         reportVaultValueChangeNoFees(ctx, 10000);
         _ensureFreshness(ctx);
         assertEq(
-            ctx.dashboard.totalValue(), address(ctx.vault).balance, "Vault's total value should be equal to its balance"
+            ctx.dashboard.totalValue(),
+            address(ctx.vault).balance,
+            "Vault's total value should be equal to its balance"
         );
 
         //
@@ -143,7 +147,7 @@ contract WrapperATest is WrapperAHarness {
             uint256 base = CONNECT_DEPOSIT + user1Deposit;
             uint256 tv = ctx.dashboard.totalValue();
             assertTrue(
-                tv == base * 101 / 100 || tv == base,
+                tv == (base * 101) / 100 || tv == base,
                 "Vault's total value should reflect 1% increase (or remain baseline if oracle update is unavailable)"
             );
         }
@@ -157,8 +161,8 @@ contract WrapperATest is WrapperAHarness {
 
         // User1's shares should now be worth more due to vault outperformance
         uint256 user1RedeemValue = ctx.wrapper.previewRedeem(ctx.wrapper.balanceOf(USER1));
-        uint256 expectedUser1ProRata =
-            (ctx.dashboard.totalValue() * ctx.wrapper.balanceOf(USER1)) / ctx.wrapper.totalSupply();
+        uint256 expectedUser1ProRata = (ctx.dashboard.totalValue() * ctx.wrapper.balanceOf(USER1)) /
+            ctx.wrapper.totalSupply();
         // Use tight wei-level tolerance
         assertApproxEqAbs(
             user1RedeemValue,
@@ -198,7 +202,7 @@ contract WrapperATest is WrapperAHarness {
 
         assertEq(
             ctx.wrapper.totalSupply(),
-            wrapperConnectDepositStvShares + expectedUser1StvShares + expectedUser2StvShares,
+            wrapperConnectDepositStv + expectedUser1Stv + expectedUser2StvShares,
             "Wrapper total supply should include all shares"
         );
 
@@ -207,22 +211,22 @@ contract WrapperATest is WrapperAHarness {
         //
         uint256 user1StvShares = ctx.wrapper.balanceOf(USER1);
         // Withdraw full USER1 stake to avoid zero-amount edge cases on forks
-        uint256 user1SharesToWithdraw = user1StvShares / 2;
-        uint256 user1ExpectedEthWithdrawn = ctx.wrapper.previewRedeem(user1SharesToWithdraw);
+        uint256 user1StvToWithdraw = user1StvShares / 2;
+        uint256 user1ExpectedEthWithdrawn = ctx.wrapper.previewRedeem(user1StvToWithdraw);
 
         _ensureFreshness(ctx);
         vm.prank(USER1);
-        uint256 requestId = ctx.wrapper.requestWithdrawal(user1SharesToWithdraw);
+        uint256 requestId = ctx.wrapper.requestWithdrawal(user1StvToWithdraw);
 
         // Verify withdrawal request was created
         assertEq(
             ctx.wrapper.balanceOf(address(ctx.withdrawalQueue)),
-            user1SharesToWithdraw,
-            "Wrapper balance of withdrawalQueue should be equal to user1SharesToWithdraw"
+            user1StvToWithdraw,
+            "Wrapper balance of withdrawalQueue should be equal to user1StvToWithdraw"
         );
         assertEq(
             ctx.wrapper.balanceOf(USER1),
-            user1StvShares - user1SharesToWithdraw,
+            user1StvShares - user1StvToWithdraw,
             "Wrapper balance of USER1 should be reduced"
         );
 
@@ -245,11 +249,11 @@ contract WrapperATest is WrapperAHarness {
         WithdrawalQueue.WithdrawalRequestStatus memory status = ctx.withdrawalQueue.getWithdrawalStatus(requestId);
         assertTrue(status.isFinalized, "Withdrawal request should be finalized");
         assertEq(
-            status.amountOfAssets, user1ExpectedEthWithdrawn, "Withdrawal request amount should match previewRedeem"
+            status.amountOfAssets,
+            user1ExpectedEthWithdrawn,
+            "Withdrawal request amount should match previewRedeem"
         );
-        assertEq(
-            status.amountOfShares, user1SharesToWithdraw, "Withdrawal request shares should match user1SharesToWithdraw"
-        );
+        assertEq(status.amountOfStv, user1StvToWithdraw, "Withdrawal request stv should match user1StvToWithdraw");
 
         // Deal ETH to withdrawal queue for the claim (simulating validator exit)
         vm.deal(address(ctx.withdrawalQueue), address(ctx.withdrawalQueue).balance + user1ExpectedEthWithdrawn);

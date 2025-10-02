@@ -20,17 +20,18 @@ contract WrapperB is WrapperBase {
 
     event StethSharesMinted(address indexed account, uint256 stethShares);
     event StethSharesBurned(address indexed account, uint256 stethShares);
-    event StethSharesRebalanced(address indexed account, uint256 stethShares);
+    event StethSharesRebalanced(uint256 stethShares, uint256 stvBurned);
+    event SocializedLoss(uint256 stv, uint256 assets);
 
     error InsufficientMintingCapacity();
     error InsufficientStethShares();
     error InsufficientBalance();
     error InsufficientReservedBalance();
     error InsufficientMintedShares();
+    error InsufficientStv();
     error ZeroArgument();
     error MintingForThanTargetStSharesShareIsNotAllowed();
-    error TodoError();
-    error VaultReportStale();
+    error ArraysLengthMismatch(uint256 firstArrayLength, uint256 secondArrayLength);
 
     uint256 public immutable WRAPPER_RR_BP; // vault's reserve ratio plus gap for wrapper
 
@@ -115,15 +116,6 @@ contract WrapperB is WrapperBase {
     // =================================================================================
 
     /**
-     * @notice Calculate the amount of ETH that can be withdrawn by an account
-     * @param _account The address of the account
-     * @return ethAmount The amount of ETH that can be withdrawn (18 decimals)
-     */
-    function withdrawableEth(address _account) public view returns (uint256 ethAmount) {
-        ethAmount = withdrawableEth(_account, 0);
-    }
-
-    /**
      * @notice Calculate the amount of ETH that can be withdrawn by burning a specific amount of stETH shares
      * @param _account The address of the account
      * @param _stethSharesToBurn The amount of stETH shares to burn
@@ -136,16 +128,17 @@ contract WrapperB is WrapperBase {
         uint256 mintedStethSharesAfter = mintedStethShares - _stethSharesToBurn;
         uint256 minLockedAssetsAfter = _calcAssetsToLockForStethShares(mintedStethSharesAfter);
         uint256 currentAssets = effectiveAssetsOf(_account);
-        ethAmount = currentAssets - minLockedAssetsAfter;
+        ethAmount = Math.saturatingSub(currentAssets, minLockedAssetsAfter);
     }
 
     /**
-     * @notice Calculate the amount of stvETH shares that can be withdrawn by an account
+     * @notice Calculate the amount of ETH that can be withdrawn by an account
      * @param _account The address of the account
-     * @return stv The amount of stvETH shares that can be withdrawn (18 decimals)
+     * @return ethAmount The amount of ETH that can be withdrawn (18 decimals)
+     * @dev Overridden method to include locked assets
      */
-    function withdrawableStv(address _account) public view returns (uint256 stv) {
-        stv = withdrawableStv(_account, 0);
+    function withdrawableEth(address _account) public view override returns (uint256 ethAmount) {
+        ethAmount = withdrawableEth(_account, 0);
     }
 
     /**
@@ -156,6 +149,16 @@ contract WrapperB is WrapperBase {
      */
     function withdrawableStv(address _account, uint256 _stethSharesToBurn) public view returns (uint256 stv) {
         stv = _convertToShares(withdrawableEth(_account, _stethSharesToBurn), Math.Rounding.Floor);
+    }
+
+    /**
+     * @notice Calculate the amount of stvETH shares that can be withdrawn by an account
+     * @param _account The address of the account
+     * @return stv The amount of stvETH shares that can be withdrawn (18 decimals)
+     * @dev Overridden method to include locked assets
+     */
+    function withdrawableStv(address _account) public view override returns (uint256 stv) {
+        stv = withdrawableStv(_account, 0);
     }
 
     /**
@@ -174,34 +177,78 @@ contract WrapperB is WrapperBase {
         stethShares = Math.saturatingSub(mintedStethSharesOf(_account), maxStethSharesAfter);
     }
 
-    // TODO: add request as ether as arg (not stvShares)
-    function requestWithdrawal(uint256 _stv) public virtual returns (uint256 requestId) {
-        requestId = _requestWithdrawalQueue(msg.sender, msg.sender, _stv, 0);
-    }
-
-    function requestWithdrawal(uint256 _stv, uint256 _stethSharesToBurn) public virtual returns (uint256 requestId) {
-        requestId = _requestWithdrawalQueue(msg.sender, msg.sender, _stv, _stethSharesToBurn);
-    }
-
-    function _requestWithdrawalQueue(
-        address _owner,
-        address _receiver,
-        uint256 _stv,
-        uint256 _stethSharesToBurn
-    ) internal returns (uint256 requestId) {
-        if (_stv == 0) revert WrapperBase.ZeroStvShares();
-
-        // TODO: move min max withdrawal amount check from WQ here?
-
-        WithdrawalQueue withdrawalQueue = WITHDRAWAL_QUEUE;
+    /**
+     * @notice Request a withdrawal by specifying the amount of stv to withdraw, burning stETH shares and rebalancing
+     * @param _stvToWithdraw The amount of stv to withdraw (27 decimals)
+     * @param _stethSharesToBurn The amount of stETH shares to burn to repay user's liabilities (18 decimals)
+     * @param _stethSharesToRebalance The amount of stETH shares to rebalance (18 decimals)
+     * @return requestId The ID of the withdrawal request
+     */
+    function requestWithdrawal(
+        uint256 _stvToWithdraw,
+        uint256 _stethSharesToBurn,
+        uint256 _stethSharesToRebalance,
+        address _receiver
+    ) public virtual returns (uint256 requestId) {
+        address receiver = _receiver == address(0) ? msg.sender : _receiver;
 
         if (_stethSharesToBurn > 0) {
-            _burnStethShares(_owner, _stethSharesToBurn);
+            _burnStethShares(msg.sender, _stethSharesToBurn);
         }
 
-        _transfer(_owner, address(withdrawalQueue), _stv);
+        if (_stethSharesToRebalance > 0) {
+            _checkMinStvToLock(_stvToWithdraw, _stethSharesToRebalance);
+        }
 
-        requestId = withdrawalQueue.requestWithdrawal(_stv, _receiver);
+        _transferMintedStethShares(msg.sender, address(WITHDRAWAL_QUEUE), _stethSharesToRebalance);
+        _transfer(msg.sender, address(WITHDRAWAL_QUEUE), _stvToWithdraw);
+        requestId = WITHDRAWAL_QUEUE.requestWithdrawal(_stvToWithdraw, _stethSharesToRebalance, receiver);
+    }
+
+    /**
+     * @notice Request multiple withdrawals by specifying the amounts of stv to withdraw, burning stETH shares and rebalancing
+     * @param _stvToWithdraw The array of amounts of stv to withdraw (27 decimals)
+     * @param _stethSharesToBurn The amount of stETH shares to burn to repay user's liabilities (18 decimals)
+     * @param _stethSharesToRebalance The array of amounts of stETH shares to rebalance (18 decimals)
+     * @param _receiver The address to receive the claimed ether, or address(0)
+     * @return requestIds The array of IDs of the created withdrawal requests
+     */
+    function requestWithdrawals(
+        uint256[] calldata _stvToWithdraw,
+        uint256[] calldata _stethSharesToRebalance,
+        uint256 _stethSharesToBurn,
+        address _receiver
+    ) public virtual returns (uint256[] memory requestIds) {
+        address receiver = _receiver == address(0) ? msg.sender : _receiver;
+
+        if (_stethSharesToBurn > 0) {
+            _burnStethShares(msg.sender, _stethSharesToBurn);
+        }
+
+        if (_stvToWithdraw.length != _stethSharesToRebalance.length) {
+            revert ArraysLengthMismatch(_stvToWithdraw.length, _stethSharesToRebalance.length);
+        }
+
+        uint256 totalStvToTransfer;
+        uint256 totalStethSharesToTransfer;
+
+        for (uint256 i = 0; i < _stvToWithdraw.length; ++i) {
+            if (_stethSharesToRebalance[i] > 0) {
+                _checkMinStvToLock(_stvToWithdraw[i], _stethSharesToRebalance[i]);
+                totalStethSharesToTransfer += _stethSharesToRebalance[i];
+            }
+
+            totalStvToTransfer += _stvToWithdraw[i];
+        }
+
+        _transferMintedStethShares(msg.sender, address(WITHDRAWAL_QUEUE), totalStethSharesToTransfer);
+        _transfer(msg.sender, address(WITHDRAWAL_QUEUE), totalStvToTransfer);
+        requestIds = WITHDRAWAL_QUEUE.requestWithdrawals(_stvToWithdraw, _stethSharesToRebalance, receiver);
+    }
+
+    function _checkMinStvToLock(uint256 _stv, uint256 _stethShares) internal view {
+        uint256 minStvAmountToLock = _calcStvToLockForStethShares(_stethShares);
+        if (_stv < minStvAmountToLock) revert InsufficientStv();
     }
 
     // =================================================================================
@@ -338,6 +385,19 @@ contract WrapperB is WrapperBase {
         emit StethSharesBurned(_account, _stethShares);
     }
 
+    function _transferMintedStethShares(address _from, address _to, uint256 _stethShares) internal {
+        WrapperBStorage storage $ = _getWrapperBStorage();
+
+        if (_stethShares == 0) revert ZeroArgument();
+        if ($.mintedStethShares[_from] < _stethShares) revert InsufficientMintedShares();
+
+        $.mintedStethShares[_from] -= _stethShares;
+        $.mintedStethShares[_to] += _stethShares;
+
+        emit StethSharesBurned(_from, _stethShares);
+        emit StethSharesMinted(_to, _stethShares);
+    }
+
     /**
      * @dev Use the ceiling rounding to ensure enough assets are locked
      */
@@ -398,7 +458,7 @@ contract WrapperB is WrapperBase {
      * @return steth Amount of exceeding stETH (18 decimals)
      * @dev May occur if rebalancing happens on the Staking Vault bypassing the Wrapper
      */
-    function totalExceedingMintedSteth() public view returns (uint256 steth) {
+    function totalExceedingMintedSteth() public view override returns (uint256 steth) {
         steth = STETH.getPooledEthByShares(totalExceedingMintedStethShares());
     }
 
@@ -453,28 +513,31 @@ contract WrapperB is WrapperBase {
      * @param _stethShares The amount of stETH shares to rebalance
      * @dev First, rebalances internally by burning stvETH shares, which decreases exceeding shares (if any)
      * @dev Second, if there are remaining liability shares, rebalances Staking Vault
+     * @dev Requires fresh oracle report, which is checked in the Withdrawal Queue
      */
-    function rebalanceMintedStethShares(uint256 _stethShares) public {
+    function rebalanceMintedStethShares(uint256 _stethShares, uint256 _maxStvToBurn) public {
+        _checkOnlyWithdrawalQueue();
+
+        if (_stethShares == 0) revert ZeroArgument();
         if (_stethShares > mintedStethSharesOf(msg.sender)) revert InsufficientMintedShares();
-        if (!VAULT_HUB.isReportFresh(STAKING_VAULT)) revert VaultReportStale();
 
         uint256 exceedingStethShares = totalExceedingMintedStethShares();
         uint256 remainingStethShares = Math.saturatingSub(_stethShares, exceedingStethShares);
 
         if (remainingStethShares > 0) DASHBOARD.rebalanceVaultWithShares(remainingStethShares);
-        _rebalanceMintedStethShares(msg.sender, _stethShares);
-
-        emit StethSharesRebalanced(msg.sender, _stethShares);
-    }
-
-    function _rebalanceMintedStethShares(address _account, uint256 _stethShares) internal {
-        if (_stethShares == 0) revert ZeroArgument();
 
         uint256 ethToRebalance = STETH.getPooledEthBySharesRoundUp(_stethShares);
         uint256 stvToBurn = _convertToShares(ethToRebalance, Math.Rounding.Ceil);
 
-        _decreaseMintedStethShares(_account, _stethShares);
-        _burn(_account, stvToBurn);
+        if (stvToBurn > _maxStvToBurn) {
+            emit SocializedLoss(stvToBurn - _maxStvToBurn, ethToRebalance - _convertToAssets(_maxStvToBurn));
+            stvToBurn = _maxStvToBurn;
+        }
+
+        emit StethSharesRebalanced(_stethShares, stvToBurn);
+
+        _decreaseMintedStethShares(msg.sender, _stethShares);
+        _burn(msg.sender, stvToBurn);
     }
 
     // =================================================================================

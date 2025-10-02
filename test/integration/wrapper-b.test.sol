@@ -467,11 +467,11 @@ contract WrapperBTest is WrapperBHarness {
 
         // assertEq(w.stethSharesForWithdrawal(USER1, w.balanceOf(USER1)), expectedUser1MintedStShares, "USER1 stSharesForWithdrawal should be equal to expectedUser1MintedStShares");
 
-        uint256 rewardsStvShares =
+        uint256 rewardsStv =
             Math.mulDiv(user1Rewards, w.balanceOf(USER1), user1Deposit + user1Rewards, Math.Rounding.Floor);
         // TODO: fix fail here
         assertEq(
-            w.stethSharesForWithdrawal(USER1, rewardsStvShares), 0, "USER1 stSharesForWithdrawal should be equal to 0"
+            w.stethSharesForWithdrawal(USER1, rewardsStv), 0, "USER1 stSharesForWithdrawal should be equal to 0"
         );
 
         _assertUniversalInvariants("Step 1", ctx);
@@ -483,11 +483,11 @@ contract WrapperBTest is WrapperBHarness {
         console.log("withdrawableStvWithoutBurning", withdrawableStvWithoutBurning);
 
         assertEq(
-            withdrawableStvWithoutBurning, rewardsStvShares, "Withdrawable stv should be equal to rewardsStvShares"
+            withdrawableStvWithoutBurning, rewardsStv, "Withdrawable stv should be equal to rewardsStv"
         );
 
         vm.prank(USER1);
-        uint256 requestId = w.requestWithdrawal(rewardsStvShares);
+        uint256 requestId = w.requestWithdrawal(rewardsStv);
 
         WithdrawalQueue.WithdrawalRequestStatus memory status = ctx.withdrawalQueue.getWithdrawalStatus(requestId);
         assertEq(status.amountOfAssets, user1Rewards, "Withdrawal request amount should match previewRedeem");
@@ -501,9 +501,7 @@ contract WrapperBTest is WrapperBHarness {
         status = ctx.withdrawalQueue.getWithdrawalStatus(requestId);
         assertTrue(status.isFinalized, "Withdrawal request should be finalized");
         assertEq(status.amountOfAssets, user1Rewards, "Withdrawal request amount should match previewRedeem");
-        assertEq(
-            status.amountOfShares, rewardsStvShares, "Withdrawal request shares should match user1SharesToWithdraw"
-        );
+        assertEq(status.amountOfStv, rewardsStv, "Withdrawal request shares should match user1SharesToWithdraw");
 
         // Deal ETH to withdrawal queue for the claim (simulating validator exit)
         vm.deal(address(ctx.withdrawalQueue), address(ctx.withdrawalQueue).balance + user1Rewards);

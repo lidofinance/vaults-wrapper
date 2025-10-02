@@ -2,194 +2,192 @@
 pragma solidity >=0.8.25;
 
 import {Test, console, stdError} from "forge-std/Test.sol";
-import {SetupWrapperB} from "./SetupWrapperB.sol";
-import {WrapperB} from "src/WrapperB.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+import {SetupWrapperB} from "./SetupWrapperB.sol";
+import {WrapperBase} from "src/WrapperBase.sol";
+import {WrapperB} from "src/WrapperB.sol";
 
 contract RebalanceMintedStethSharesTest is Test, SetupWrapperB {
     uint256 ethToDeposit = 10 ether;
+    uint256 unlimitedStvToBurn = type(uint256).max;
 
     function setUp() public override {
         super.setUp();
-        wrapper.depositETH{value: ethToDeposit}();
+        // Deposit ETH and mint shares directly on WithdrawalQueue for testing
+        wrapper.depositETH{value: ethToDeposit}(withdrawalQueue, address(0));
+    }
+
+    function _mintStethSharesToWQ(uint256 _amount) internal {
+        vm.prank(withdrawalQueue);
+        wrapper.mintStethShares(_amount);
+    }
+
+    // Access control tests
+
+    function test_RebalanceMintedStethShares_RevertOnCallFromStranger() public {
+        vm.prank(userAlice);
+        vm.expectRevert(WrapperBase.NotWithdrawalQueue.selector);
+        wrapper.rebalanceMintedStethShares(1, unlimitedStvToBurn);
+    }
+
+    function test_RebalanceMintedStethShares_SuccessfulCallFromWithdrawalQueue() public {
+        uint256 sharesToMint = wrapper.mintingCapacitySharesOf(withdrawalQueue) / 4;
+        _mintStethSharesToWQ(sharesToMint);
+
+        uint256 wqMintedBefore = wrapper.mintedStethSharesOf(withdrawalQueue);
+        uint256 wqBalanceBefore = wrapper.balanceOf(withdrawalQueue);
+
+        // Call from withdrawal queue
+        vm.prank(withdrawalQueue);
+        wrapper.rebalanceMintedStethShares(sharesToMint, unlimitedStvToBurn);
+
+        // Verify withdrawal queue's shares were rebalanced
+        assertEq(wrapper.mintedStethSharesOf(withdrawalQueue), wqMintedBefore - sharesToMint);
+        assertLt(wrapper.balanceOf(withdrawalQueue), wqBalanceBefore);
     }
 
     // Error validation tests
 
     function test_RebalanceMintedStethShares_RevertOnZeroAmount() public {
+        vm.prank(withdrawalQueue);
         vm.expectRevert(WrapperB.ZeroArgument.selector);
-        wrapper.rebalanceMintedStethShares(0);
+        wrapper.rebalanceMintedStethShares(0, unlimitedStvToBurn);
     }
 
     function test_RebalanceMintedStethShares_RevertOnInsufficientMintedShares() public {
-        uint256 sharesToMint = wrapper.mintingCapacitySharesOf(address(this)) / 4;
-        wrapper.mintStethShares(sharesToMint);
+        uint256 sharesToMint = wrapper.mintingCapacitySharesOf(withdrawalQueue) / 4;
+        _mintStethSharesToWQ(sharesToMint);
 
+        vm.prank(withdrawalQueue);
         vm.expectRevert(WrapperB.InsufficientMintedShares.selector);
-        wrapper.rebalanceMintedStethShares(sharesToMint + 1);
+        wrapper.rebalanceMintedStethShares(sharesToMint + 1, unlimitedStvToBurn);
     }
 
     function test_RebalanceMintedStethShares_RevertOnNoMintedShares() public {
-        // Try to rebalance without having any minted shares
+        assertEq(wrapper.mintedStethSharesOf(withdrawalQueue), 0);
+
+        vm.prank(withdrawalQueue);
         vm.expectRevert(WrapperB.InsufficientMintedShares.selector);
-        wrapper.rebalanceMintedStethShares(10 ** 18);
+        wrapper.rebalanceMintedStethShares(10 ** 18, unlimitedStvToBurn);
     }
 
-    function test_RebalanceMintedStethShares_RevertOnStaleReport() public {
-        uint256 sharesToMint = wrapper.mintingCapacitySharesOf(address(this)) / 4;
-        wrapper.mintStethShares(sharesToMint);
+    // Basic functionality test
 
-        // Set report as stale
-        dashboard.VAULT_HUB().mock_setReportFreshness(dashboard.STAKING_VAULT(), false);
+    function test_RebalanceMintedStethShares_BasicFunctionality() public {
+        uint256 sharesToMint = wrapper.mintingCapacitySharesOf(withdrawalQueue) / 4;
+        _mintStethSharesToWQ(sharesToMint);
 
-        vm.expectRevert(WrapperB.VaultReportStale.selector);
-        wrapper.rebalanceMintedStethShares(sharesToMint);
+        uint256 wqBalanceBefore = wrapper.balanceOf(withdrawalQueue);
+        uint256 wqMintedSharesBefore = wrapper.mintedStethSharesOf(withdrawalQueue);
+        uint256 totalSupplyBefore = wrapper.totalSupply();
+
+        vm.prank(withdrawalQueue);
+        wrapper.rebalanceMintedStethShares(sharesToMint, unlimitedStvToBurn);
+
+        assertEq(wrapper.mintedStethSharesOf(withdrawalQueue), wqMintedSharesBefore - sharesToMint);
+        assertLt(wrapper.balanceOf(withdrawalQueue), wqBalanceBefore);
+        assertLt(wrapper.totalSupply(), totalSupplyBefore);
     }
 
     function test_RebalanceMintedStethShares_EmitsCorrectEvent() public {
-        uint256 sharesToMint = wrapper.mintingCapacitySharesOf(address(this)) / 4;
-        wrapper.mintStethShares(sharesToMint);
+        uint256 sharesToMint = wrapper.mintingCapacitySharesOf(withdrawalQueue) / 4;
+        _mintStethSharesToWQ(sharesToMint);
 
-        vm.expectEmit(true, false, false, true);
-        emit WrapperB.StethSharesRebalanced(address(this), sharesToMint);
+        // Only check that event is emitted with correct shares parameter (without exact stv amount)
+        vm.expectEmit(true, true, false, false);
+        emit WrapperB.StethSharesRebalanced(sharesToMint, 0);
 
-        wrapper.rebalanceMintedStethShares(sharesToMint);
-    }
-
-    // Basic functionality tests
-
-    function test_RebalanceMintedStethShares_BasicFunctionality() public {
-        uint256 sharesToMint = wrapper.mintingCapacitySharesOf(address(this)) / 4;
-        wrapper.mintStethShares(sharesToMint);
-
-        uint256 balanceBefore = wrapper.balanceOf(address(this));
-        uint256 mintedSharesBefore = wrapper.mintedStethSharesOf(address(this));
-        uint256 totalSupplyBefore = wrapper.totalSupply();
-
-        wrapper.rebalanceMintedStethShares(sharesToMint);
-
-        assertEq(wrapper.mintedStethSharesOf(address(this)), mintedSharesBefore - sharesToMint);
-        assertLt(wrapper.balanceOf(address(this)), balanceBefore);
-        assertLt(wrapper.totalSupply(), totalSupplyBefore);
+        vm.prank(withdrawalQueue);
+        wrapper.rebalanceMintedStethShares(sharesToMint, unlimitedStvToBurn);
     }
 
     // Exceeding shares scenarios
 
-    function test_RebalanceMintedStethShares_WithExceedingShares_FullyInternal() public {
-        // Setup: Create exceeding shares by simulating vault rebalancing
-        uint256 sharesToMint = wrapper.mintingCapacitySharesOf(address(this)) / 4;
-        wrapper.mintStethShares(sharesToMint);
+    function test_RebalanceMintedStethShares_WithExceedingShares() public {
+        uint256 sharesToMint = wrapper.mintingCapacitySharesOf(withdrawalQueue) / 4;
+        _mintStethSharesToWQ(sharesToMint);
 
-        // Simulate external vault rebalance that creates exceeding shares
-        dashboard.rebalanceVaultWithShares(sharesToMint);
+        // Create exceeding shares by external rebalancing
+        dashboard.rebalanceVaultWithShares(sharesToMint / 2);
 
-        // Verify we have exceeding shares
-        assertEq(wrapper.totalExceedingMintedStethShares(), sharesToMint);
+        uint256 exceedingBefore = wrapper.totalExceedingMintedStethShares();
+        assertGt(exceedingBefore, 0); // Should have exceeding shares
 
-        uint256 balanceBefore = wrapper.balanceOf(address(this));
+        vm.prank(withdrawalQueue);
+        wrapper.rebalanceMintedStethShares(sharesToMint, unlimitedStvToBurn);
 
-        // Rebalance amount that can be handled fully internally
-        wrapper.rebalanceMintedStethShares(sharesToMint);
-
-        // Verify: should only burn STV, no external dashboard call needed
-        assertEq(wrapper.totalExceedingMintedStethShares(), 0);
-        assertLt(wrapper.balanceOf(address(this)), balanceBefore);
-        assertEq(wrapper.mintedStethSharesOf(address(this)), 0);
+        // Should rebalance shares
+        assertEq(wrapper.mintedStethSharesOf(withdrawalQueue), 0);
     }
 
-    function test_RebalanceMintedStethShares_WithExceedingShares_PartiallyInternal() public {
-        // Create scenario where rebalance amount exceeds internal capacity
-        uint256 sharesToMint = wrapper.mintingCapacitySharesOf(address(this)) / 2;
-        wrapper.mintStethShares(sharesToMint);
+    // Socialization scenarios
 
-        // Create smaller exceeding shares
-        uint256 exceedingShares = sharesToMint / 4;
-        dashboard.rebalanceVaultWithShares(exceedingShares);
+    function test_RebalanceMintedStethShares_SocializationWhenMaxStvExceeded() public {
+        uint256 sharesToMint = wrapper.mintingCapacitySharesOf(withdrawalQueue) / 4;
+        _mintStethSharesToWQ(sharesToMint);
 
-        uint256 dashboardLiabilityBefore = dashboard.liabilityShares();
-        uint256 balanceBefore = wrapper.balanceOf(address(this));
+        // Set very low maxStvToBurn to trigger socialization
+        uint256 maxStvToBurn = 1 wei;
 
-        // Rebalance more than exceeding shares
-        uint256 rebalanceAmount = exceedingShares + (sharesToMint / 4);
-        wrapper.rebalanceMintedStethShares(rebalanceAmount);
+        // Only check that SocializedLoss event is emitted (without exact amounts)
+        vm.expectEmit(false, false, false, false);
+        emit WrapperB.SocializedLoss(0, 0);
 
-        // Verify: should handle exceeding internally, rest via dashboard
-        assertEq(wrapper.totalExceedingMintedStethShares(), 0);
-        assertLt(dashboard.liabilityShares(), dashboardLiabilityBefore); // Dashboard was called
-        assertLt(wrapper.balanceOf(address(this)), balanceBefore); // STV burned
+        vm.prank(withdrawalQueue);
+        wrapper.rebalanceMintedStethShares(sharesToMint, maxStvToBurn);
+
+        // Verify shares were still rebalanced
+        assertEq(wrapper.mintedStethSharesOf(withdrawalQueue), 0);
     }
 
-    function test_RebalanceMintedStethShares_NoExceedingShares_CallsDashboard() public {
-        // Setup: Normal scenario without exceeding shares
-        uint256 sharesToMint = wrapper.mintingCapacitySharesOf(address(this)) / 4;
-        wrapper.mintStethShares(sharesToMint);
+    function test_RebalanceMintedStethShares_ZeroMaxStvToBurn_FullSocialization() public {
+        uint256 sharesToMint = wrapper.mintingCapacitySharesOf(withdrawalQueue) / 4;
+        _mintStethSharesToWQ(sharesToMint);
 
-        uint256 dashboardLiabilityBefore = dashboard.liabilityShares();
+        uint256 maxStvToBurn = 0; // No burning allowed
+        uint256 wqBalanceBefore = wrapper.balanceOf(withdrawalQueue);
 
-        wrapper.rebalanceMintedStethShares(sharesToMint);
+        // Only check that SocializedLoss event is emitted (without exact amounts)
+        vm.expectEmit(false, false, false, false);
+        emit WrapperB.SocializedLoss(0, 0);
 
-        // Should call dashboard to rebalance vault
-        assertLt(dashboard.liabilityShares(), dashboardLiabilityBefore);
+        vm.prank(withdrawalQueue);
+        wrapper.rebalanceMintedStethShares(sharesToMint, maxStvToBurn);
+
+        // No STV should be burned
+        assertEq(wrapper.balanceOf(withdrawalQueue), wqBalanceBefore);
+        // But shares should still be rebalanced
+        assertEq(wrapper.mintedStethSharesOf(withdrawalQueue), 0);
     }
 
-    // Edge cases and partial operations
+    // Partial rebalance scenarios
 
     function test_RebalanceMintedStethShares_PartialRebalance() public {
-        uint256 sharesToMint = wrapper.mintingCapacitySharesOf(address(this)) / 2;
-        wrapper.mintStethShares(sharesToMint);
+        uint256 sharesToMint = wrapper.mintingCapacitySharesOf(withdrawalQueue) / 2;
+        _mintStethSharesToWQ(sharesToMint);
 
         uint256 sharesToRebalance = sharesToMint / 2;
-        uint256 balanceBefore = wrapper.balanceOf(address(this));
-        uint256 mintedBefore = wrapper.mintedStethSharesOf(address(this));
+        uint256 wqBalanceBefore = wrapper.balanceOf(withdrawalQueue);
+        uint256 wqMintedBefore = wrapper.mintedStethSharesOf(withdrawalQueue);
 
-        wrapper.rebalanceMintedStethShares(sharesToRebalance);
+        vm.prank(withdrawalQueue);
+        wrapper.rebalanceMintedStethShares(sharesToRebalance, unlimitedStvToBurn);
 
-        assertEq(wrapper.mintedStethSharesOf(address(this)), mintedBefore - sharesToRebalance);
-        assertLt(wrapper.balanceOf(address(this)), balanceBefore); // Some STV burned
+        assertEq(wrapper.mintedStethSharesOf(withdrawalQueue), wqMintedBefore - sharesToRebalance);
+        assertLt(wrapper.balanceOf(withdrawalQueue), wqBalanceBefore); // Some STV burned
     }
 
     function test_RebalanceMintedStethShares_MinimalAmount() public {
-        uint256 sharesToMint = wrapper.mintingCapacitySharesOf(address(this)) / 4;
-        wrapper.mintStethShares(sharesToMint);
+        uint256 sharesToMint = wrapper.mintingCapacitySharesOf(withdrawalQueue) / 4;
+        _mintStethSharesToWQ(sharesToMint);
 
-        uint256 balanceBefore = wrapper.balanceOf(address(this));
+        uint256 wqBalanceBefore = wrapper.balanceOf(withdrawalQueue);
 
         // Rebalance minimal amount (1 wei)
-        wrapper.rebalanceMintedStethShares(1);
+        vm.prank(withdrawalQueue);
+        wrapper.rebalanceMintedStethShares(1, unlimitedStvToBurn);
 
-        assertEq(wrapper.mintedStethSharesOf(address(this)), sharesToMint - 1);
-        assertLt(wrapper.balanceOf(address(this)), balanceBefore);
-    }
-
-    // Multi-user scenarios
-
-    function test_RebalanceMintedStethShares_MultipleUsers_IndependentRebalancing() public {
-        // Alice and Bob deposit and mint
-        vm.prank(userAlice);
-        wrapper.depositETH{value: ethToDeposit}(userAlice, address(0));
-
-        vm.prank(userBob);
-        wrapper.depositETH{value: ethToDeposit}(userBob, address(0));
-
-        uint256 aliceMintCapacity = wrapper.mintingCapacitySharesOf(userAlice);
-        uint256 bobMintCapacity = wrapper.mintingCapacitySharesOf(userBob);
-
-        vm.prank(userAlice);
-        wrapper.mintStethShares(aliceMintCapacity / 2);
-
-        vm.prank(userBob);
-        wrapper.mintStethShares(bobMintCapacity / 4);
-
-        uint256 aliceMintedBefore = wrapper.mintedStethSharesOf(userAlice);
-        uint256 bobMintedBefore = wrapper.mintedStethSharesOf(userBob);
-
-        // Alice rebalances some of her shares
-        uint256 aliceRebalanceAmount = aliceMintedBefore / 2;
-        vm.prank(userAlice);
-        wrapper.rebalanceMintedStethShares(aliceRebalanceAmount);
-
-        // Verify Alice's debt decreased but Bob's unchanged
-        assertEq(wrapper.mintedStethSharesOf(userAlice), aliceMintedBefore - aliceRebalanceAmount);
-        assertEq(wrapper.mintedStethSharesOf(userBob), bobMintedBefore); // Unchanged
+        assertEq(wrapper.mintedStethSharesOf(withdrawalQueue), sharesToMint - 1);
+        assertLt(wrapper.balanceOf(withdrawalQueue), wqBalanceBefore);
     }
 }

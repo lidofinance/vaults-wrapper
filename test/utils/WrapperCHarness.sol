@@ -32,12 +32,12 @@ contract WrapperCHarness is WrapperBHarness {
             nodeOperatorFeeBP: nodeOperatorFeeBP,
             confirmExpiry: CONFIRM_EXPIRY,
             maxFinalizationTime: 30 days,
+            minWithdrawalDelayTime: 1 days,
             teller: _teller,
             boringQueue: _boringQueue
         });
 
         WrapperContext memory ctx = _deployWrapperSystem(config);
-        WrapperC wrapperC_ = WrapperC(payable(address(ctx.wrapper)));
 
         strategy = IStrategy(payable(strategy_));
 

@@ -53,17 +53,17 @@ library TableUtils {
         self.discount = _discount;
     }
 
-    function printHeader(Context storage self, string memory title) internal pure {
+    function printHeader( string memory title) internal pure {
         console.log();
         console.log();
         console.log(title);
         console.log(
             unicode"───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────"
         );
-        printColumnHeaders(self);
+        printColumnHeaders();
     }
 
-    function printColumnHeaders(Context storage self) internal pure {
+    function printColumnHeaders() internal pure {
         console.log(
             string.concat(
                 padRight("user", 16),
@@ -83,8 +83,8 @@ library TableUtils {
         );
     }
 
-    function printUsers(Context storage self, string memory title, User[] memory _addresses) internal {
-        printHeader(self, title);
+    function printUsers(Context storage self, string memory title, User[] memory _addresses) internal view {
+        printHeader( title);
 
         for (uint256 i = 0; i < _addresses.length; i++) {
             printUserRow(self, _addresses[i].name, _addresses[i].user);

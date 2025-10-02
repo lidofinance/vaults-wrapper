@@ -16,6 +16,7 @@ contract DeployWrapper is Script {
         uint256 nodeOperatorFeeBP;
         uint256 confirmExpiry;
         uint256 maxFinalizationTime;
+        uint256 minWithdrawalDelayTime;
         bool allowlistEnabled;
         uint256 reserveRatioGapBP; // B/C only
         uint256 loops; // LOOP only
@@ -40,6 +41,7 @@ contract DeployWrapper is Script {
         p.nodeOperatorFeeBP = vm.parseJsonUint(json, "$.nodeOperatorFeeBP");
         p.confirmExpiry = vm.parseJsonUint(json, "$.confirmExpiry");
         p.maxFinalizationTime = vm.parseJsonUint(json, "$.maxFinalizationTime");
+        p.minWithdrawalDelayTime = vm.parseJsonUint(json, "$.minWithdrawalDelayTime");
         p.allowlistEnabled = vm.parseJsonBool(json, "$.allowlistEnabled");
         // Parse only fields relevant to the wrapper type
         if (
@@ -67,6 +69,13 @@ contract DeployWrapper is Script {
             p.boringQueue = ggvQueue;
         }
         p.value = vm.parseJsonUint(json, "$.value");
+    }
+
+    function _getProxyImplementation(address proxy) internal view returns (address impl) {
+        (bool ok, bytes memory ret) = proxy.staticcall(abi.encodeWithSignature("proxy__getImplementation()"));
+        if (ok && ret.length >= 32) {
+            impl = abi.decode(ret, (address));
+        }
     }
 
     function run() external {
@@ -140,6 +149,7 @@ contract DeployWrapper is Script {
                 p.nodeOperatorFeeBP,
                 p.confirmExpiry,
                 p.maxFinalizationTime,
+                p.minWithdrawalDelayTime,
                 p.allowlistEnabled
             );
         } else if (p.wrapperType == uint256(Factory.WrapperType.MINTING_NO_STRATEGY)) {
@@ -152,6 +162,7 @@ contract DeployWrapper is Script {
                 p.nodeOperatorFeeBP,
                 p.confirmExpiry,
                 p.maxFinalizationTime,
+                p.minWithdrawalDelayTime,
                 p.allowlistEnabled,
                 p.reserveRatioGapBP
             );
@@ -163,6 +174,7 @@ contract DeployWrapper is Script {
                 p.nodeOperatorFeeBP,
                 p.confirmExpiry,
                 p.maxFinalizationTime,
+                p.minWithdrawalDelayTime,
                 p.allowlistEnabled,
                 p.reserveRatioGapBP,
                 p.loops
@@ -176,6 +188,7 @@ contract DeployWrapper is Script {
                 p.nodeOperatorFeeBP,
                 p.confirmExpiry,
                 p.maxFinalizationTime,
+                p.minWithdrawalDelayTime,
                 p.allowlistEnabled,
                 p.reserveRatioGapBP,
                 p.teller,
@@ -189,15 +202,8 @@ contract DeployWrapper is Script {
         vm.stopBroadcast();
 
         // Read implementation addresses from proxies (OssifiableProxy exposes proxy__getImplementation())
-        (bool okW, bytes memory retW) = wrapperProxy.staticcall(abi.encodeWithSignature("proxy__getImplementation()"));
-        if (okW && retW.length >= 32) {
-            wrapperImpl = abi.decode(retW, (address));
-        }
-        (bool okQ, bytes memory retQ) =
-            payable(withdrawalQueueProxy).staticcall(abi.encodeWithSignature("proxy__getImplementation()"));
-        if (okQ && retQ.length >= 32) {
-            withdrawalQueueImpl = abi.decode(retQ, (address));
-        }
+        wrapperImpl = _getProxyImplementation(wrapperProxy);
+        withdrawalQueueImpl = _getProxyImplementation(address(withdrawalQueueProxy));
 
         // write artifact
         string memory out = vm.serializeAddress("wrapper", "factory", factoryAddr);
@@ -250,9 +256,9 @@ contract DeployWrapper is Script {
         }
         out = vm.serializeBytes("wrapper", "wrapperImplCtorArgs", wrapperImplCtorArgs);
 
-        // WithdrawalQueue implementation constructor args: (wrapper, lazyOracle, maxFinalizationTime)
+        // WithdrawalQueue implementation constructor args: (wrapper, lazyOracle, maxFinalizationTime, minWithdrawalDelayTime)
         bytes memory withdrawalQueueImplCtorArgs =
-            abi.encode(wrapperProxy, factoryView.LAZY_ORACLE(), p.maxFinalizationTime);
+            abi.encode(wrapperProxy, factoryView.LAZY_ORACLE(), p.maxFinalizationTime, p.minWithdrawalDelayTime);
         out = vm.serializeBytes("wrapper", "withdrawalQueueImplCtorArgs", withdrawalQueueImplCtorArgs);
 
         // Strategy constructor args (if any)
