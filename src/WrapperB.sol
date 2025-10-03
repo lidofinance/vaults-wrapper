@@ -174,7 +174,7 @@ contract WrapperB is WrapperBase {
         stethShares = Math.saturatingSub(mintedStethSharesOf(_account), maxStethSharesAfter);
     }
 
-    // TODO: add request as ether as arg (not stvShares)
+    // TODO: add request as ether as arg (not stv)
     function requestWithdrawal(uint256 _stv) public virtual returns (uint256 requestId) {
         requestId = _requestWithdrawalQueue(msg.sender, msg.sender, _stv, 0);
     }
@@ -189,7 +189,7 @@ contract WrapperB is WrapperBase {
         uint256 _stv,
         uint256 _stethSharesToBurn
     ) internal returns (uint256 requestId) {
-        if (_stv == 0) revert WrapperBase.ZeroStvShares();
+        if (_stv == 0) revert WrapperBase.ZeroStv();
 
         // TODO: move min max withdrawal amount check from WQ here?
 

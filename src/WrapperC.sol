@@ -38,12 +38,12 @@ contract WrapperC is WrapperB {
      * @dev Funds the vault and mints shares to the receiver, then executes strategy
      * @param _receiver Address to receive the minted shares
      * @param _referral Address to credit for referral (optional)
-     * @return stvShares Amount of stvETH shares minted
+     * @return stv Amount of stvETH shares minted
      */
-    function depositETH(address _receiver, address _referral) public payable override returns (uint256 stvShares) {
+    function depositETH(address _receiver, address _referral) public payable override returns (uint256 stv) {
         uint256 targetStethShares = calcStethSharesToMintForAssets(msg.value);
-        stvShares = _deposit(address(STRATEGY), _referral);
-        STRATEGY.execute(_receiver, stvShares, targetStethShares);
+        stv = _deposit(address(STRATEGY), _referral);
+        STRATEGY.execute(_receiver, stv, targetStethShares);
     }
 
     function requestWithdrawalFromStrategy(uint256 _stethAmount) public returns (uint256 requestId) {
@@ -65,14 +65,14 @@ contract WrapperC is WrapperB {
     /// @notice Requests a withdrawal of the specified amount of stvETH shares from the strategy
     /// @param _owner The address that owns the stvETH shares
     /// @param _receiver The address to receive the stETH
-    /// @param _stvShares The amount of stvETH shares to withdraw
+    /// @param _stv The amount of stvETH shares to withdraw
     /// @return requestId The ID of the created withdrawal request
-    function requestWithdrawalQueue(address _owner, address _receiver, uint256 _stvShares)
+    function requestWithdrawalQueue(address _owner, address _receiver, uint256 _stv)
         external
         returns (uint256 requestId)
     {
         if (msg.sender != address(STRATEGY)) revert InvalidSender();
-        requestId = _requestWithdrawalQueue(_owner, _receiver, _stvShares, 0);
+        requestId = _requestWithdrawalQueue(_owner, _receiver, _stv, 0);
     }
 
     function getRequest(uint256 requestId) external view returns (WithdrawalRequest memory) {

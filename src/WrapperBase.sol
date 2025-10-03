@@ -22,7 +22,7 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
     error ZeroDeposit();
     error InvalidReceiver();
     error NoMintingCapacityAvailable();
-    error ZeroStvShares();
+    error ZeroStv();
     error TransferNotAllowed();
     error NotOwner(address caller, address owner);
     error NotWithdrawalQueue();
@@ -233,17 +233,17 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
 
     /**
      * @notice Convenience function to deposit ETH to msg.sender
-     * @return stvShares Amount of stvETH shares minted
+     * @return stv Amount of stvETH shares minted
      */
-    function depositETH(address _referral) public payable returns (uint256 stvShares) {
+    function depositETH(address _referral) public payable returns (uint256 stv) {
         return depositETH(msg.sender, _referral);
     }
 
     /**
      * @notice Convenience function to deposit ETH to msg.sender without referral
-     * @return stvShares Amount of stvETH shares minted
+     * @return stv Amount of stvETH shares minted
      */
-    function depositETH() public payable returns (uint256 stvShares) {
+    function depositETH() public payable returns (uint256 stv) {
         return depositETH(msg.sender, address(0));
     }
 
@@ -251,21 +251,21 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
      * @notice Deposit native ETH and receive stvETH shares
      * @dev Implementation depends on specific wrapper configuration
      * @param _receiver Address to receive the minted shares
-     * @return stvShares Amount of stvETH shares minted
+     * @return stv Amount of stvETH shares minted
      */
-    function depositETH(address _receiver, address _referral) public payable virtual returns (uint256 stvShares);
+    function depositETH(address _receiver, address _referral) public payable virtual returns (uint256 stv);
 
-    function _deposit(address _receiver, address _referral) internal returns (uint256 stvShares) {
+    function _deposit(address _receiver, address _referral) internal returns (uint256 stv) {
         if (msg.value == 0) revert WrapperBase.ZeroDeposit();
         if (_receiver == address(0)) revert WrapperBase.InvalidReceiver();
         _checkAllowList();
 
-        stvShares = previewDeposit(msg.value);
-        console.log("_deposit stvShares", stvShares);
-        _mint(_receiver, stvShares);
+        stv = previewDeposit(msg.value);
+        console.log("_deposit stv", stv);
+        _mint(_receiver, stv);
         DASHBOARD.fund{value: msg.value}();
 
-        emit Deposit(msg.sender, _receiver, _referral, msg.value, stvShares);
+        emit Deposit(msg.sender, _receiver, _referral, msg.value, stv);
     }
 
     // =================================================================================

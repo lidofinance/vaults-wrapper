@@ -4,7 +4,7 @@ pragma solidity >=0.8.25;
 import {Test, console} from "forge-std/Test.sol";
 import {SetupWrapperA} from "./SetupWrapperA.sol";
 
-contract StvSharesTest is Test, SetupWrapperA {
+contract StvTest is Test, SetupWrapperA {
     uint8 supplyDecimals = 27;
 
     function test_InitialState_CorrectSupplyAndAssets() public view {

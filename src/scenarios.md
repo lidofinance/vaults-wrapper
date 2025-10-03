@@ -105,9 +105,9 @@ In (C) user gets record in Wrapper which represents the position. The record con
 
 ### Withdrawals
 
-There are different withdraw functions for (A), (B) and (C). For calling each of them user must have "enough" stvShares.
+There are different withdraw functions for (A), (B) and (C). For calling each of them user must have "enough" stv.
 
-In (A) and (B) user may withdraw part of his Vault share by specifying stvShares amount (must own at least that shares).
+In (A) and (B) user may withdraw part of his Vault share by specifying stv amount (must own at least that shares).
 In (C) user may with withdraw only his Vault share corresponding to an entire strategy position
 
 - (A) withdraw(stvETHShares)

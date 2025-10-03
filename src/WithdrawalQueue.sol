@@ -230,13 +230,13 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
         }
     }
 
-    function requestWithdrawal(uint256 _stvShares, address _owner) public returns (uint256 requestId) {
+    function requestWithdrawal(uint256 _stv, address _owner) public returns (uint256 requestId) {
         if (!isEmergencyExitActivated()) {
             _requireNotPaused();
         }
         if (msg.sender != address(WRAPPER)) revert OnlyWrapperCan();
 
-        uint256 assets = WRAPPER.previewRedeem(_stvShares);
+        uint256 assets = WRAPPER.previewRedeem(_stv);
 
         if (assets < MIN_WITHDRAWAL_AMOUNT) revert RequestAmountTooSmall(assets);
         if (assets > MAX_WITHDRAWAL_AMOUNT) revert RequestAmountTooLarge(assets);
@@ -250,7 +250,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
         $.lastRequestId = uint96(requestId);
 
         uint256 cumulativeAssets = lastRequest.cumulativeAssets + assets;
-        uint256 cumulativeShares = lastRequest.cumulativeShares + _stvShares;
+        uint256 cumulativeShares = lastRequest.cumulativeShares + _stv;
 
         $.requests[requestId] = WithdrawalRequest({
             cumulativeAssets: uint128(cumulativeAssets),
@@ -262,7 +262,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
 
         assert($.requestsByOwner[_owner].add(requestId));
 
-        emit WithdrawalRequested(requestId, _owner, assets, _stvShares);
+        emit WithdrawalRequested(requestId, _owner, assets, _stv);
     }
 
     /// @notice Finalize withdrawal requests

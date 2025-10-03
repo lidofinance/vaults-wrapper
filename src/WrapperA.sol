@@ -23,22 +23,22 @@ contract WrapperA is WrapperBase {
      * @dev Simple deposit with stvETH shares only
      * @param _receiver Address to receive the minted shares
      * @param _referral Address to credit for referral (optional)
-     * @return stvShares Amount of stvETH shares minted
+     * @return stv Amount of stvETH shares minted
      */
-    function depositETH(address _receiver, address _referral) public payable override returns (uint256 stvShares) {
-        stvShares = _deposit(_receiver, _referral);
+    function depositETH(address _receiver, address _referral) public payable override returns (uint256 stv) {
+        stv = _deposit(_receiver, _referral);
     }
 
     /**
      * @notice Request withdrawal for Configuration A (no minting, no strategy)
-     * @param _stvShares Amount of stvETH shares to withdraw
+     * @param _stv Amount of stvETH shares to withdraw
      * @return requestId The withdrawal request ID
      */
-    function requestWithdrawal(uint256 _stvShares) external returns (uint256 requestId) {
-        if (_stvShares == 0) revert WrapperBase.ZeroStvShares();
+    function requestWithdrawal(uint256 _stv) external returns (uint256 requestId) {
+        if (_stv == 0) revert WrapperBase.ZeroStv();
 
-        _transfer(msg.sender, address(WITHDRAWAL_QUEUE), _stvShares);
+        _transfer(msg.sender, address(WITHDRAWAL_QUEUE), _stv);
 
-        requestId = WITHDRAWAL_QUEUE.requestWithdrawal(_stvShares, msg.sender);
+        requestId = WITHDRAWAL_QUEUE.requestWithdrawal(_stv, msg.sender);
     }
 }

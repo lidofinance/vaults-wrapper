@@ -2,7 +2,7 @@
 pragma solidity >=0.8.25;
 
 import {Test} from "forge-std/Test.sol";
-import {Wrapper, MintingMustBeAllowedForStrategy, ZeroStvShares} from "src/Wrapper.sol";
+import {Wrapper, MintingMustBeAllowedForStrategy, ZeroStv} from "src/Wrapper.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 // Mock contracts for testing
@@ -237,14 +237,14 @@ contract MintingParameterTest is Test {
     function test_case1_openPositionDoesNothing() public {
         vm.startPrank(user);
 
-        // User deposits to get stvShares
+        // User deposits to get stv
         uint256 depositAmount = 1 ether;
         uint256 shares = wrapperNoMintingNoStrategy.depositETH{value: depositAmount}(user);
 
         // Record initial state
         uint256 initialStvBalance = wrapperNoMintingNoStrategy.balanceOf(user);
         uint256 initialStETHBalance = stETH.balanceOf(user);
-        uint256 initialLockedShares = wrapperNoMintingNoStrategy.lockedStvSharesByUser(user);
+        uint256 initialLockedShares = wrapperNoMintingNoStrategy.lockedStvByUser(user);
 
         // Open position - should do nothing since minting is disabled and no strategy
         wrapperNoMintingNoStrategy.openPosition(shares);
@@ -252,7 +252,7 @@ contract MintingParameterTest is Test {
         // Verify nothing changed
         assertEq(wrapperNoMintingNoStrategy.balanceOf(user), initialStvBalance, "STV balance should not change");
         assertEq(stETH.balanceOf(user), initialStETHBalance, "stETH balance should not change");
-        assertEq(wrapperNoMintingNoStrategy.lockedStvSharesByUser(user), initialLockedShares, "Locked shares should not change");
+        assertEq(wrapperNoMintingNoStrategy.lockedStvByUser(user), initialLockedShares, "Locked shares should not change");
 
         vm.stopPrank();
     }
@@ -264,14 +264,14 @@ contract MintingParameterTest is Test {
     function test_case2_openPositionOnlyMints() public {
         vm.startPrank(user);
 
-        // User deposits to get stvShares
+        // User deposits to get stv
         uint256 depositAmount = 1 ether;
         uint256 shares = wrapperMintingNoStrategy.depositETH{value: depositAmount}(user);
 
         // Record initial state
         uint256 initialStvBalance = wrapperMintingNoStrategy.balanceOf(user);
         uint256 initialStETHBalance = stETH.balanceOf(user);
-        uint256 initialLockedShares = wrapperMintingNoStrategy.lockedStvSharesByUser(user);
+        uint256 initialLockedShares = wrapperMintingNoStrategy.lockedStvByUser(user);
 
         // Open position - should only mint stETH
         wrapperMintingNoStrategy.openPosition(shares);
@@ -279,10 +279,10 @@ contract MintingParameterTest is Test {
         // Verify minting occurred
         assertLt(wrapperMintingNoStrategy.balanceOf(user), initialStvBalance, "STV balance should decrease (transferred to wrapper)");
         assertGt(stETH.balanceOf(user), initialStETHBalance, "stETH balance should increase (minted)");
-        assertGt(wrapperMintingNoStrategy.lockedStvSharesByUser(user), initialLockedShares, "Locked shares should increase");
+        assertGt(wrapperMintingNoStrategy.lockedStvByUser(user), initialLockedShares, "Locked shares should increase");
 
         // Verify shares were locked
-        assertEq(wrapperMintingNoStrategy.lockedStvSharesByUser(user), shares, "All shares should be locked");
+        assertEq(wrapperMintingNoStrategy.lockedStvByUser(user), shares, "All shares should be locked");
 
         vm.stopPrank();
     }
@@ -290,7 +290,7 @@ contract MintingParameterTest is Test {
     function test_case2_canCallMintStETHDirectly() public {
         vm.startPrank(user);
 
-        // User deposits to get stvShares
+        // User deposits to get stv
         uint256 depositAmount = 1 ether;
         uint256 shares = wrapperMintingNoStrategy.depositETH{value: depositAmount}(user);
 
@@ -311,7 +311,7 @@ contract MintingParameterTest is Test {
     function test_case3_openPositionTransfersToStrategyAndExecutes() public {
         vm.startPrank(user);
 
-        // User deposits to get stvShares
+        // User deposits to get stv
         uint256 depositAmount = 1 ether;
         uint256 shares = wrapperMintingWithStrategy.depositETH{value: depositAmount}(user);
 
@@ -323,17 +323,17 @@ contract MintingParameterTest is Test {
         strategy = new MockStrategy();
         wrapperMintingWithStrategy.setStrategy(address(strategy));
 
-        // Open position - should transfer stvShares to strategy and execute
+        // Open position - should transfer stv to strategy and execute
         wrapperMintingWithStrategy.openPosition(shares);
 
-        // Verify stvShares were transferred to strategy
+        // Verify stv were transferred to strategy
         assertLt(wrapperMintingWithStrategy.balanceOf(user), initialStvBalance, "User STV balance should decrease");
         assertGt(wrapperMintingWithStrategy.balanceOf(address(strategy)), initialStrategyBalance, "Strategy STV balance should increase");
 
         // Verify strategy was executed with correct parameters
         assertTrue(strategy.executeCalled(), "Strategy execute should be called");
         assertEq(strategy.lastUser(), user, "Strategy should be called with user address");
-        assertEq(strategy.lastAmount(), shares, "Strategy should be called with stvShares amount");
+        assertEq(strategy.lastAmount(), shares, "Strategy should be called with stv amount");
 
         vm.stopPrank();
     }
@@ -341,7 +341,7 @@ contract MintingParameterTest is Test {
     function test_case3_strategyReceivesStvTokenShares() public {
         vm.startPrank(user);
 
-        // User deposits to get stvShares
+        // User deposits to get stv
         uint256 depositAmount = 1 ether;
         uint256 shares = wrapperMintingWithStrategy.depositETH{value: depositAmount}(user);
 
@@ -370,7 +370,7 @@ contract MintingParameterTest is Test {
         wrapperNoMintingNoStrategy.openPosition(0); // This should just do nothing
 
         // Case 2 should revert with zero shares because it tries to mint
-        vm.expectRevert(ZeroStvShares.selector);
+        vm.expectRevert(ZeroStv.selector);
         wrapperMintingNoStrategy.openPosition(0);
 
         // Case 3 will transfer 0 shares to strategy and call execute with 0

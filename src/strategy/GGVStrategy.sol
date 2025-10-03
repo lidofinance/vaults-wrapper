@@ -36,7 +36,7 @@ contract GGVStrategy is Strategy {
 
     struct UserPosition {
         bytes32 exitRequestId;
-        uint256 exitStvShares;
+        uint256 exitStv;
     }
 
     mapping(address user => UserPosition) public userPositions;
@@ -114,10 +114,10 @@ contract GGVStrategy is Strategy {
         if (stethSharesToBurn > totalStethSharesFromGgv) revert InvalidStethAmount();
 
         uint256 ggvShares = Math.mulDiv(totalGGV, stethSharesToBurn, totalStethSharesFromGgv);
-        uint256 calculatedExitStvShares = WRAPPER.withdrawableStv(proxy, stethSharesToBurn);
+        uint256 calculatedExitStv = WRAPPER.withdrawableStv(proxy, stethSharesToBurn);
         uint256 userStvBalance = WRAPPER.balanceOf(proxy);
 
-        uint256 exitStvShares = Math.min(calculatedExitStvShares, userStvBalance);
+        uint256 exitStv = Math.min(calculatedExitStv, userStvBalance);
 
         IStrategyProxy(proxy).call(
             address(boringVault), abi.encodeWithSelector(boringVault.approve.selector, address(BORING_QUEUE), ggvShares)
@@ -136,7 +136,7 @@ contract GGVStrategy is Strategy {
         bytes32 ggvRequestId = abi.decode(data, (bytes32));
 
         position.exitRequestId = ggvRequestId;
-        position.exitStvShares = exitStvShares;
+        position.exitStv = exitStv;
 
         emit RequestWithdraw(_user, ggvShares);
 
@@ -179,7 +179,7 @@ contract GGVStrategy is Strategy {
         uint256 stv = WRAPPER.withdrawableStv(proxy, stethShares);
         uint256 requestId = WRAPPER.requestWithdrawalQueue(proxy, _receiver, stv);
 
-        emit Claim(_receiver, address(STETH), position.exitStvShares);
+        emit Claim(_receiver, address(STETH), position.exitStv);
     }
 
     /// @notice Recovers ERC20 tokens from the strategy
