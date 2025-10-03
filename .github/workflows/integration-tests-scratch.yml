@@ -37,4 +37,4 @@ jobs:
       - name: Run integration tests
         run: make test-integration
         env:
-          CORE_RPC_PORT: 9123
+          RPC_URL: http://localhost:9123
