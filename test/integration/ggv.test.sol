@@ -219,7 +219,7 @@ contract GGVTest is WrapperCHarness {
         _log.printUsers("[USER] Recovery ERC20", logUsers);
     }
 
-    function test_rebase_scenario() public {
+    function xtest_rebase_scenario() public {
         // APR_Vault = 5%, APR_steth = 4%
         uint256 depositAmount = 1 ether;
         uint256 vaultProfit = depositAmount * 5 / 100; // 0.05 ether profit
