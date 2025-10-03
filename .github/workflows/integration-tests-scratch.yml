@@ -27,7 +27,7 @@ jobs:
       - name: Initialize Lido Core
         run: make core-init
         env:
-          CORE_BRANCH: "feat/vaults
+          CORE_BRANCH: "feat/vaults"
 
       - name: Deploy Lido Core
         run: make core-deploy
