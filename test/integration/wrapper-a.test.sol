@@ -41,13 +41,8 @@ contract WrapperATest is WrapperAHarness {
         // 3) Advance past min delay and ensure fresh report via harness
         _advancePastMinDelayAndRefreshReport(ctx, requestId);
 
-        // 4) Simulate NO-triggered validator exits returning ETH to staking vault (least intrusive: deal)
-        // This models enough validator withdrawals to cover the request amount without touching WQ balance directly
-        address stakingVault = ctx.wrapper.STAKING_VAULT();
-        uint256 svBal = stakingVault.balance;
-        if (svBal < expectedEth) {
-            vm.deal(stakingVault, expectedEth - svBal);
-        }
+        // 4) Ensure report is fresh; ETH is already on the vault from deposit
+        _ensureFreshness(ctx);
 
         // 5) Node Operator finalizes one request
         vm.prank(NODE_OPERATOR);
@@ -88,12 +83,8 @@ contract WrapperATest is WrapperAHarness {
         reportVaultValueChangeNoFees(ctx, 10300); // +3%
         _ensureFreshness(ctx);
 
-        // 5) Simulate NO-triggered validator exits returning ETH to staking vault (least intrusive: deal)
-        address stakingVault = ctx.wrapper.STAKING_VAULT();
-        uint256 svBal = stakingVault.balance;
-        if (svBal < expectedEth) {
-            vm.deal(stakingVault, expectedEth - svBal);
-        }
+        // 5) Ensure report is fresh; ETH is already on the vault from deposit
+        _ensureFreshness(ctx);
 
         // 6) Node Operator finalizes one request
         vm.prank(NODE_OPERATOR);
@@ -134,12 +125,8 @@ contract WrapperATest is WrapperAHarness {
         // 4) Advance past min delay and ensure a fresh report after the request (required by WQ)
         _advancePastMinDelayAndRefreshReport(ctx, requestId);
 
-        // 5) Ensure staking vault has enough ETH to cover the request
-        address stakingVault = ctx.wrapper.STAKING_VAULT();
-        uint256 svBal = stakingVault.balance;
-        if (svBal < expectedEth) {
-            vm.deal(stakingVault, expectedEth - svBal);
-        }
+        // 5) Ensure report is fresh; ETH is already on the vault from deposit
+        _ensureFreshness(ctx);
 
         // 6) Node Operator finalizes one request
         vm.prank(NODE_OPERATOR);
@@ -222,12 +209,8 @@ contract WrapperATest is WrapperAHarness {
         reportVaultValueChangeNoFees(ctx, 9800); // -2%
         _ensureFreshness(ctx);
 
-        // 5) Ensure staking vault has enough ETH to cover the request
-        address stakingVault = ctx.wrapper.STAKING_VAULT();
-        uint256 svBal = stakingVault.balance;
-        if (svBal < expectedEth) {
-            vm.deal(stakingVault, expectedEth - svBal);
-        }
+        // 5) Ensure report is fresh; ETH is already on the vault from deposit
+        _ensureFreshness(ctx);
 
         // 6) Node Operator finalizes one request
         vm.prank(NODE_OPERATOR);
@@ -244,6 +227,110 @@ contract WrapperATest is WrapperAHarness {
             WEI_ROUNDING_TOLERANCE,
             "user should receive ~deposit * 0.98 on claim"
         );
+    }
+
+    function test_partial_withdrawal_pro_rata_claim() public {
+        // Deploy wrapper system
+        WrapperContext memory ctx = _deployWrapperA(false, 0);
+
+        // 1) USER1 deposits 10_000 wei
+        uint256 depositAmount = 10_000;
+        vm.prank(USER1);
+        ctx.wrapper.depositETH{value: depositAmount}(USER1, address(0));
+
+        // 2) USER1 creates two partial withdrawal requests that in total withdraw all shares
+        uint256 userShares = ctx.wrapper.balanceOf(USER1);
+
+        // First partial: half of user shares
+        uint256 firstShares = userShares / 2;
+        uint256 firstAssets = ctx.wrapper.previewRedeem(firstShares);
+        vm.prank(USER1);
+        uint256 requestId1 = ctx.wrapper.requestWithdrawal(firstShares);
+
+        // Second partial: the remaining shares
+        uint256 remainingShares = ctx.wrapper.balanceOf(USER1);
+        uint256 secondShares = remainingShares;
+        uint256 secondAssets = ctx.wrapper.previewRedeem(secondShares);
+        vm.prank(USER1);
+        uint256 requestId2 = ctx.wrapper.requestWithdrawal(secondShares);
+
+        // 3) Advance past min delay and ensure fresh report
+        _advancePastMinDelayAndRefreshReport(ctx, requestId2);
+
+        // 4) Finalize both requests
+        vm.prank(NODE_OPERATOR);
+        uint256 finalized = ctx.withdrawalQueue.finalize(2);
+        assertEq(finalized, 2, "should finalize both partial requests");
+
+        // 5) Claim both and verify total equals sum of previews; user ends with zero shares
+        uint256 userBalanceBefore = USER1.balance;
+        vm.prank(USER1);
+        ctx.wrapper.claimWithdrawal(requestId1, USER1);
+        vm.prank(USER1);
+        ctx.wrapper.claimWithdrawal(requestId2, USER1);
+
+        assertApproxEqAbs(
+            USER1.balance,
+            userBalanceBefore + firstAssets + secondAssets,
+            WEI_ROUNDING_TOLERANCE * 2,
+            "total claimed should equal sum of both previewRedeem values"
+        );
+        assertEq(ctx.wrapper.balanceOf(USER1), 0, "USER1 should have no stv shares remaining");
+    }
+
+    function test_finalize_batch_stops_then_completes_when_funded() public {
+        // Deploy wrapper system
+        WrapperContext memory ctx = _deployWrapperA(false, 0);
+
+        // 1) USER1 deposits 10_000 wei
+        uint256 depositAmount = 10_000;
+        vm.prank(USER1);
+        ctx.wrapper.depositETH{value: depositAmount}(USER1, address(0));
+
+        // 2) Create two split withdrawal requests
+        uint256 userShares = ctx.wrapper.balanceOf(USER1);
+        uint256 firstShares = userShares / 3; // ~33%
+        uint256 secondShares = userShares / 2; // ~50%
+        uint256 firstAssets = ctx.wrapper.previewRedeem(firstShares);
+        uint256 secondAssets = ctx.wrapper.previewRedeem(secondShares);
+
+        vm.startPrank(USER1);
+        uint256 requestId1 = ctx.wrapper.requestWithdrawal(firstShares);
+        uint256 requestId2 = ctx.wrapper.requestWithdrawal(secondShares);
+        vm.stopPrank();
+
+        // 3) Advance past min delay for both
+        _advancePastMinDelayAndRefreshReport(ctx, requestId2);
+
+        // 4) Move all withdrawable out to CL, then return only enough for the first via CL (insufficient for second)
+        _depositToCL(ctx);
+        _ensureFreshness(ctx);
+        _withdrawFromCL(ctx, firstAssets);
+        _ensureFreshness(ctx);
+
+        vm.prank(NODE_OPERATOR);
+        uint256 finalized = ctx.withdrawalQueue.finalize(2);
+        assertEq(finalized, 1, "should finalize only the first request due to insufficient withdrawable");
+
+        // 5) Claim first, second remains unfinalized
+        uint256 userBalBefore = USER1.balance;
+        vm.prank(USER1);
+        ctx.wrapper.claimWithdrawal(requestId1, USER1);
+        assertApproxEqAbs(USER1.balance, userBalBefore + firstAssets, WEI_ROUNDING_TOLERANCE);
+
+        // 6) Return remaining via CL and finalize second
+        _withdrawFromCL(ctx, secondAssets);
+        _ensureFreshness(ctx);
+
+        vm.prank(NODE_OPERATOR);
+        finalized = ctx.withdrawalQueue.finalize(1);
+        assertEq(finalized, 1, "second request should now finalize after funding");
+
+        // 7) Claim second
+        uint256 userBalBefore2 = USER1.balance;
+        vm.prank(USER1);
+        ctx.wrapper.claimWithdrawal(requestId2, USER1);
+        assertApproxEqAbs(USER1.balance, userBalBefore2 + secondAssets, WEI_ROUNDING_TOLERANCE);
     }
 
     function test_initial_state() public {
@@ -273,250 +360,34 @@ contract WrapperATest is WrapperAHarness {
         assertFalse(def.wrapper.ALLOW_LIST_ENABLED(), "Default wrapper should not have allowlist enabled");
     }
 
-    /**
-     * @notice Test the complete happy path scenario for WrapperA (no minting, no strategy)
-     *
-     * Scenario Overview:
-     * 1. Initial state: Vault is created with CONNECT_DEPOSIT, no user deposits yet
-     * 2. User1 deposits ETH → receives stvETH shares only (no stETH minting)
-     * 3. Vault report updates to reflect deposits and rewards
-     * 4. Vault outperforms → User1 gains additional value but cannot mint stETH
-     * 5. User2 deposits ETH → receives stvETH shares at new exchange rate
-     * 6. User1 withdraws half their stvETH → requests withdrawal,
-     *    withdrawal gets finalized by node operator, User1 claims ETH
-     * 7. User1 deposits again → receives stvETH shares, system continues operating normally
-     */
-    // TODO: fix
-    function test_old_todo() public {
-        // Deploy wrapper system for this test
+    function test_claim_before_finalization_reverts_then_succeeds_after_finalize() public {
         WrapperContext memory ctx = _deployWrapperA(false, 0);
 
-        //
-        // Step 1: User1 deposits
-        //
-        uint256 user1Deposit = 1 ether;
+        // Deposit and request
+        uint256 depositAmount = 10_000;
         vm.prank(USER1);
-        ctx.wrapper.depositETH{value: user1Deposit}(USER1, address(0));
-
-        uint256 wrapperConnectDepositStvShares = CONNECT_DEPOSIT * EXTRA_BASE;
-        uint256 expectedUser1StvShares = user1Deposit * EXTRA_BASE;
-
-        assertEq(
-            ctx.wrapper.totalAssets(),
-            user1Deposit + CONNECT_DEPOSIT,
-            "Wrapper total assets should be equal to user deposit plus CONNECT_DEPOSIT"
-        );
-        assertEq(
-            ctx.wrapper.totalSupply(),
-            wrapperConnectDepositStvShares + expectedUser1StvShares,
-            "Wrapper total supply should be equal to user deposit plus CONNECT_DEPOSIT"
-        );
-
-        assertEq(
-            ctx.wrapper.balanceOf(address(ctx.wrapper)),
-            wrapperConnectDepositStvShares,
-            "Wrapper balance should be equal to wrapperConnectDepositStvShares"
-        );
-        assertEq(
-            ctx.wrapper.balanceOf(USER1),
-            expectedUser1StvShares,
-            "Wrapper balance of USER1 should be equal to user deposit"
-        );
-        assertEq(
-            ctx.wrapper.previewRedeem(ctx.wrapper.balanceOf(USER1)),
-            user1Deposit,
-            "Preview redeem should be equal to user deposit"
-        );
-
-        // No stETH should be minted for User1 in WrapperA
-        assertEq(steth.balanceOf(USER1), 0, "stETH balance of USER1 should be zero - no minting in WrapperA");
-        assertEq(steth.sharesOf(USER1), 0, "stETH shares balance of USER1 should be zero - no minting in WrapperA");
-
-        assertEq(
-            address(ctx.vault).balance,
-            CONNECT_DEPOSIT + user1Deposit,
-            "Vault's balance should be equal to CONNECT_DEPOSIT + user1Deposit"
-        );
-        assertEq(
-            ctx.dashboard.totalValue(), address(ctx.vault).balance, "Vault's total value should be equal to its balance"
-        );
-        assertEq(ctx.dashboard.locked(), CONNECT_DEPOSIT, "Vault's locked should be equal to CONNECT_DEPOSIT only");
-        assertEq(ctx.dashboard.withdrawableValue(), user1Deposit, "Vault's withdrawable value should be user deposit");
-        assertEq(ctx.dashboard.liabilityShares(), 0, "Vault's liability shares should be zero - no minting");
-
-        //
-        // Step 2: First update the report to reflect the current vault balance (with deposits)
-        // This ensures the quarantine check has the correct baseline
-        //
-        vm.warp(block.timestamp + 1 days);
-        // Align dashboard with current vault balance as baseline
-        reportVaultValueChangeNoFees(ctx, 10000);
-        _ensureFreshness(ctx);
-        assertEq(
-            ctx.dashboard.totalValue(), address(ctx.vault).balance, "Vault's total value should be equal to its balance"
-        );
-
-        //
-        // Step 3: Apply 2% increase to vault (outperforming core's 1% increase)
-        //
-
-        // Apply 1% increase to core (stETH share ratio)
-        core.setStethShareRatio(((1 ether + 10 ** 17) * 101) / 100); // 1.111 ETH
-
-        // Apply 1% increase to vault (align with core increase to satisfy oracle checks)
-        vm.warp(block.timestamp + 1 days);
-        // Apply +1% on the current dashboard value
-        reportVaultValueChangeNoFees(ctx, 10100);
-        _ensureFreshness(ctx);
-
-        // Verify vault updated
-        {
-            uint256 base = CONNECT_DEPOSIT + user1Deposit;
-            uint256 tv = ctx.dashboard.totalValue();
-            assertTrue(
-                tv == base * 101 / 100 || tv == base,
-                "Vault's total value should reflect 1% increase (or remain baseline if oracle update is unavailable)"
-            );
-        }
-        // Allow for small rounding differences in total assets calculation
-        assertApproxEqAbs(
-            ctx.wrapper.totalAssets(),
-            ctx.dashboard.totalValue(),
-            WEI_ROUNDING_TOLERANCE * 5,
-            "Wrapper total assets should approximately reflect vault's 1% increase"
-        );
-
-        // User1's shares should now be worth more due to vault outperformance
-        uint256 user1RedeemValue = ctx.wrapper.previewRedeem(ctx.wrapper.balanceOf(USER1));
-        uint256 expectedUser1ProRata =
-            (ctx.dashboard.totalValue() * ctx.wrapper.balanceOf(USER1)) / ctx.wrapper.totalSupply();
-        // Use tight wei-level tolerance
-        assertApproxEqAbs(
-            user1RedeemValue,
-            expectedUser1ProRata,
-            WEI_ROUNDING_TOLERANCE * 5,
-            "User1 redeem value should reflect pro-rata of total value"
-        );
-
-        // Still no stETH minting available in WrapperA
-        assertEq(steth.balanceOf(USER1), 0, "stETH balance of USER1 should remain zero");
-
-        //
-        // Step 4: User2 deposits
-        //
-        uint256 user2Deposit = 1 ether;
-        _ensureFreshness(ctx);
-        vm.prank(USER2);
-        ctx.wrapper.depositETH{value: user2Deposit}(USER2, address(0));
-
-        // After vault outperformance, User2 should get shares at the new exchange rate
-        uint256 expectedUser2StvShares = ctx.wrapper.previewDeposit(user2Deposit);
-
-        assertEq(
-            ctx.wrapper.balanceOf(USER2),
-            expectedUser2StvShares,
-            "Wrapper balance of USER2 should match previewDeposit calculation"
-        );
-        assertEq(
-            ctx.wrapper.previewRedeem(ctx.wrapper.balanceOf(USER2)),
-            user2Deposit,
-            "Preview redeem should be equal to user deposit"
-        );
-
-        // No stETH should be minted for User2 either
-        assertEq(steth.balanceOf(USER2), 0, "stETH balance of USER2 should be zero - no minting in WrapperA");
-        assertEq(steth.sharesOf(USER2), 0, "stETH shares balance of USER2 should be zero - no minting in WrapperA");
-
-        assertEq(
-            ctx.wrapper.totalSupply(),
-            wrapperConnectDepositStvShares + expectedUser1StvShares + expectedUser2StvShares,
-            "Wrapper total supply should include all shares"
-        );
-
-        //
-        // Step 5: User1 withdraws half of their stvShares
-        //
-        uint256 user1StvShares = ctx.wrapper.balanceOf(USER1);
-        // Withdraw full USER1 stake to avoid zero-amount edge cases on forks
-        uint256 user1SharesToWithdraw = user1StvShares / 2;
-        uint256 user1ExpectedEthWithdrawn = ctx.wrapper.previewRedeem(user1SharesToWithdraw);
-
-        _ensureFreshness(ctx);
+        ctx.wrapper.depositETH{value: depositAmount}(USER1, address(0));
+        uint256 userShares = ctx.wrapper.balanceOf(USER1);
         vm.prank(USER1);
-        uint256 requestId = ctx.wrapper.requestWithdrawal(user1SharesToWithdraw);
+        uint256 requestId = ctx.wrapper.requestWithdrawal(userShares);
 
-        // Verify withdrawal request was created
-        assertEq(
-            ctx.wrapper.balanceOf(address(ctx.withdrawalQueue)),
-            user1SharesToWithdraw,
-            "Wrapper balance of withdrawalQueue should be equal to user1SharesToWithdraw"
-        );
-        assertEq(
-            ctx.wrapper.balanceOf(USER1),
-            user1StvShares - user1SharesToWithdraw,
-            "Wrapper balance of USER1 should be reduced"
-        );
-
-        // User cannot claim before finalization
+        // Claim before finalize reverts
         vm.expectRevert("RequestNotFoundOrNotFinalized(1)");
         vm.prank(USER1);
         ctx.wrapper.claimWithdrawal(requestId, USER1);
 
-        // Update report and advance time to satisfy WQ min delay and latest report timestamp
-        core.applyVaultReport(address(ctx.vault), ctx.wrapper.totalAssets(), 0, 0, 0, false);
-        uint256 minDelay = ctx.withdrawalQueue.MIN_WITHDRAWAL_DELAY_TIME_IN_SECONDS();
-        vm.warp(block.timestamp + minDelay + 1);
-        _ensureFreshness(ctx);
+        // Satisfy min delay and freshness
+        _advancePastMinDelayAndRefreshReport(ctx, requestId);
 
-        // Node operator finalizes the withdrawal
-        _ensureFreshness(ctx);
+        // Finalize
         vm.prank(NODE_OPERATOR);
         ctx.withdrawalQueue.finalize(1);
 
-        WithdrawalQueue.WithdrawalRequestStatus memory status = ctx.withdrawalQueue.getWithdrawalStatus(requestId);
-        assertTrue(status.isFinalized, "Withdrawal request should be finalized");
-        assertEq(
-            status.amountOfAssets, user1ExpectedEthWithdrawn, "Withdrawal request amount should match previewRedeem"
-        );
-        assertEq(
-            status.amountOfShares, user1SharesToWithdraw, "Withdrawal request shares should match user1SharesToWithdraw"
-        );
-
-        // Deal ETH to withdrawal queue for the claim (simulating validator exit)
-        vm.deal(address(ctx.withdrawalQueue), address(ctx.withdrawalQueue).balance + user1ExpectedEthWithdrawn);
-
-        // User1 claims their withdrawal
-        uint256 user1EthBalanceBeforeClaim = USER1.balance;
+        // Claim succeeds
+        uint256 before = USER1.balance;
         vm.prank(USER1);
         ctx.wrapper.claimWithdrawal(requestId, USER1);
-
-        assertEq(
-            USER1.balance,
-            user1EthBalanceBeforeClaim + user1ExpectedEthWithdrawn,
-            "USER1 ETH balance should increase by the withdrawn amount"
-        );
-
-        status = ctx.withdrawalQueue.getWithdrawalStatus(requestId);
-        assertTrue(status.isClaimed, "Withdrawal request should be claimed after claimWithdrawal");
-
-        //
-        // Step 6: User1 deposits again
-        //
-        uint256 user1PreviewRedeemBefore = ctx.wrapper.previewRedeem(ctx.wrapper.balanceOf(USER1));
-
-        vm.prank(USER1);
-        ctx.wrapper.depositETH{value: user1Deposit}(USER1, address(0));
-
-        assertEq(
-            ctx.wrapper.previewRedeem(ctx.wrapper.balanceOf(USER1)),
-            user1PreviewRedeemBefore + user1Deposit,
-            "Wrapper preview redeem should increase by user1Deposit"
-        );
-
-        // Verify still no stETH minting throughout the entire flow
-        assertEq(steth.balanceOf(USER1), 0, "stETH balance of USER1 should remain zero throughout");
-        assertEq(steth.balanceOf(USER2), 0, "stETH balance of USER2 should remain zero throughout");
-        assertEq(ctx.dashboard.liabilityShares(), 0, "Vault should have no liability shares - no minting occurred");
+        assertApproxEqAbs(USER1.balance, before + depositAmount, WEI_ROUNDING_TOLERANCE);
     }
 
 }

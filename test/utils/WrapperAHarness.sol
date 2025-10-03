@@ -288,6 +288,21 @@ contract WrapperAHarness is Test {
     }
 
     /**
+     * @notice Simulate sending all available ETH from staking vault to consensus layer (drain withdrawable)
+     */
+    function _depositToCL(WrapperContext memory ctx) internal {
+        core.mockValidatorsReceiveETH(address(ctx.vault));
+    }
+
+    /**
+     * @notice Simulate validator exits returning ETH from consensus layer to staking vault
+     * @param _amount amount of ETH to return to staking vault
+     */
+    function _withdrawFromCL(WrapperContext memory ctx, uint256 _amount) internal {
+        core.mockValidatorExitReturnETH(address(ctx.vault), _amount);
+    }
+
+    /**
      * @notice Advance block time past the WQ min delay for the given request and ensure report freshness afterwards
      * @dev Ensures LazyOracle.latestReportTimestamp() is >= request.timestamp and that report is fresh
      */
@@ -296,34 +311,6 @@ contract WrapperAHarness is Test {
         uint256 minDelay = ctx.withdrawalQueue.MIN_WITHDRAWAL_DELAY_TIME_IN_SECONDS();
         vm.warp(st.timestamp + minDelay + 2);
         _ensureFreshness(ctx);
-    }
-
-    /**
-     * @notice Simulate a deposit to the consensus layer by transferring ETH from the vault to the CL_LAYER address
-     * @dev Moves the specified amount of ETH from the vault to the CL_LAYER address
-     * @param ctx The wrapper context containing the vault
-     * @param amount The amount of ETH to transfer
-     */
-    function _depositToCL(WrapperContext memory ctx, uint256 amount) public {
-        address payable vault = payable(address(ctx.vault));
-        require(vault.balance >= amount, "Vault does not have enough ETH");
-        vm.prank(vault);
-        (bool sent, ) = CL_LAYER.call{value: amount}("");
-        require(sent, "ETH transfer to CL_LAYER failed");
-    }
-
-    /**
-     * @notice Simulate a withdrawal from the consensus layer by transferring ETH from the CL_LAYER to the vault
-     * @dev Moves the specified amount of ETH from the CL_LAYER address to the vault
-     * @param ctx The wrapper context containing the vault
-     * @param amount The amount of ETH to transfer
-     */
-    function _withdrawFromCL(WrapperContext memory ctx, uint256 amount) public {
-        address payable vault = payable(address(ctx.vault));
-        require(CL_LAYER.balance >= amount, "CL_LAYER does not have enough ETH");
-        vm.prank(CL_LAYER);
-        (bool sent, ) = vault.call{value: amount}("");
-        require(sent, "ETH transfer from CL_LAYER to vault failed");
     }
 
     // TODO: add after report invariants
