@@ -222,7 +222,7 @@ contract WrapperAHarness is Test {
     function _checkInitialState(WrapperContext memory ctx) internal virtual {
         // Basic checks common to all wrappers
         assertEq(
-            ctx.dashboard.reserveRatioBP(), RESERVE_RATIO_BP, "Reserve ratio should match RESERVE_RATIO_BP constant"
+            ctx.dashboard.vaultConnection().reserveRatioBP, RESERVE_RATIO_BP, "Reserve ratio should match RESERVE_RATIO_BP constant"
         );
         assertEq(ctx.wrapper.EXTRA_DECIMALS_BASE(), EXTRA_BASE, "EXTRA_DECIMALS_BASE should match EXTRA_BASE constant");
 
@@ -249,7 +249,7 @@ contract WrapperAHarness is Test {
         assertEq(ctx.dashboard.remainingMintingCapacityShares(0), 0, "Remaining minting capacity should be zero");
         assertEq(ctx.dashboard.totalMintingCapacityShares(), 0, "Total minting capacity should be zero");
 
-        console.log("Reserve ratio:", ctx.dashboard.reserveRatioBP());
+        console.log("Reserve ratio:", ctx.dashboard.vaultConnection().reserveRatioBP);
         console.log("ETH for 1e18 stETH shares: ", steth.getPooledEthByShares(1 ether));
 
         _assertUniversalInvariants("Initial state", ctx);

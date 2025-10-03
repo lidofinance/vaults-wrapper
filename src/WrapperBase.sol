@@ -88,7 +88,7 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
 
     event VaultFunded(uint256 amount);
     event ValidatorExitRequested(bytes pubkeys);
-    event ValidatorWithdrawalsTriggered(bytes pubkeys, uint64[] amounts);
+    event ValidatorWithdrawalsTriggered(bytes pubkeys, uint64[] amountsInGwei);
     event Deposit(
         address indexed sender, address indexed receiver, address indexed referral, uint256 assets, uint256 stvETHShares
     );
@@ -494,11 +494,11 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
 
     function triggerValidatorWithdrawals(
         bytes calldata _pubkeys,
-        uint64[] calldata _amounts,
+        uint64[] calldata _amountsInGwei,
         address _refundRecipient
     ) external payable {
         _checkOnlyRoleOrEmergencyExit(TRIGGER_VALIDATOR_WITHDRAWAL_ROLE);
-        DASHBOARD.triggerValidatorWithdrawals{value: msg.value}(_pubkeys, _amounts, _refundRecipient);
+        DASHBOARD.triggerValidatorWithdrawals{value: msg.value}(_pubkeys, _amountsInGwei, _refundRecipient);
     }
 
     /// @notice Modifier to check role or Emergency Exit

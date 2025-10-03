@@ -6,21 +6,13 @@ pragma solidity >=0.8.0;
 import {IAccessControlEnumerable} from "@openzeppelin/contracts/access/extensions/IAccessControlEnumerable.sol";
 
 import {IStakingVault} from "./IStakingVault.sol";
+import {IVaultHub} from "./IVaultHub.sol";
 
 interface IDashboard is IAccessControlEnumerable {
     // ==================== Structs ====================
     struct RoleAssignment {
         address account;
         bytes32 role;
-    }
-
-    struct VaultConnection {
-        uint256 shareLimit;
-        uint16 reserveRatioBP;
-        uint16 forcedRebalanceThresholdBP;
-        uint16 infraFeeBP;
-        uint16 liquidityFeeBP;
-        uint16 reservationFeeBP;
     }
 
     struct Report {
@@ -44,7 +36,7 @@ interface IDashboard is IAccessControlEnumerable {
     event NodeOperatorFeeDisbursed(
         address indexed recipient,
         uint256 amount,
-        VaultConnection vaultConnection,
+        IVaultHub.VaultConnection vaultConnection,
         Report feePeriodStartReport,
         Report feePeriodEndReport
     );
@@ -72,6 +64,9 @@ interface IDashboard is IAccessControlEnumerable {
     error ConfirmExpiryOutOfBounds();
     error SenderNotMember();
     error ZeroConfirmingRoles();
+    error PDGPolicyAlreadyActive();
+    error ForbiddenByPDGPolicy();
+    error ForbiddenToConnectByNodeOperator();
 
     // ==================== Constants and Immutables ====================
     function STETH() external view returns (address);
@@ -108,6 +103,7 @@ interface IDashboard is IAccessControlEnumerable {
     function initialize(
         address _defaultAdmin,
         address _nodeOperatorManager,
+        address _nodeOperatorFeeRecipient,
         uint256 _nodeOperatorFeeBP,
         uint256 _confirmExpiry
     ) external;
@@ -116,21 +112,16 @@ interface IDashboard is IAccessControlEnumerable {
 
     // ==================== View Functions ====================
     function stakingVault() external view returns (IStakingVault);
-    function vaultConnection() external view returns (VaultConnection memory);
-    function shareLimit() external view returns (uint256);
+    function vaultConnection() external view returns (IVaultHub.VaultConnection memory);
     function liabilityShares() external view returns (uint256);
-    function reserveRatioBP() external view returns (uint16);
-    function forcedRebalanceThresholdBP() external view returns (uint16);
-    function infraFeeBP() external view returns (uint16);
-    function liquidityFeeBP() external view returns (uint16);
-    function reservationFeeBP() external view returns (uint16);
     function totalValue() external view returns (uint256);
-    function unsettledObligations() external view returns (uint256);
     function locked() external view returns (uint256);
     function maxLockableValue() external view returns (uint256);
     function totalMintingCapacityShares() external view returns (uint256);
     function remainingMintingCapacityShares(uint256 _etherToFund) external view returns (uint256);
     function withdrawableValue() external view returns (uint256);
+    function obligations() external view returns (uint256 sharesToBurn, uint256 feesToSettle);
+    function healthShortfallShares() external view returns (uint256);
 
     // ==================== Node Operator Fee Functions ====================
     function nodeOperatorFeeRate() external view returns (uint256);
@@ -168,6 +159,8 @@ interface IDashboard is IAccessControlEnumerable {
     function connectToVaultHub() external payable;
     function connectAndAcceptTier(uint256 _tierId, uint256 _requestedShareLimit) external payable;
     function changeTier(uint256 _tierId, uint256 _requestedShareLimit) external returns (bool);
+    function syncTier() external returns (bool);
+    function updateShareLimit(uint256 _requestedShareLimit) external returns (bool);
 
     // ==================== Vault Operations ====================
     function fund() external payable;
@@ -193,12 +186,21 @@ interface IDashboard is IAccessControlEnumerable {
         returns (uint256 totalAmount);
 
     // ==================== PDG Operations ====================
-    // function proveUnknownValidatorsToPDG(IPredepositGuarantee.ValidatorWitness[] calldata _witnesses) external;
     function compensateDisprovenPredepositFromPDG(bytes calldata _pubkey, address _recipient) external;
 
     // ==================== Asset Recovery ====================
     function recoverERC20(address _token, address _recipient, uint256 _amount) external;
-    function recoverERC721(address _token, uint256 _tokenId, address _recipient) external;
+    function collectERC20FromVault(address _token, address _recipient, uint256 _amount) external;
+
+    // ==================== PDG Policy ====================
+    enum PDGPolicy {
+        STRICT,
+        ALLOW_PROVE,
+        ALLOW_DEPOSIT_AND_PROVE
+    }
+
+    function pdgPolicy() external view returns (PDGPolicy);
+    function setPDGPolicy(PDGPolicy _pdgPolicy) external;
 
     // ==================== Receive Function ====================
     receive() external payable;

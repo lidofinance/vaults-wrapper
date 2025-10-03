@@ -42,7 +42,7 @@ contract MockStakingVault {
 
     function triggerValidatorWithdrawals(
         bytes calldata pubkeys,
-        uint64[] calldata amounts,
+        uint64[] calldata amountsInGwei,
         address refundRecipient
     ) external payable {
         // Mock implementation

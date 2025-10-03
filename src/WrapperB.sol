@@ -56,7 +56,7 @@ contract WrapperB is WrapperBase {
         uint256 _reserveRatioGapBP,
         address _withdrawalQueue
     ) WrapperBase(_dashboard, _allowListEnabled, _withdrawalQueue) {
-        uint256 vaultRR = DASHBOARD.reserveRatioBP();
+        uint256 vaultRR = DASHBOARD.vaultConnection().reserveRatioBP;
         require(_reserveRatioGapBP < TOTAL_BASIS_POINTS - vaultRR, "Reserve ratio gap too high");
         WRAPPER_RR_BP = vaultRR + _reserveRatioGapBP;
     }
