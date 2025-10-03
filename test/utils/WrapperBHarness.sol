@@ -52,13 +52,13 @@ contract WrapperBHarness is WrapperAHarness {
         address[] memory holders = _allPossibleStvHolders(_ctx);
 
         {
-            // Check none can mint beyond mintableStShares
+            // Check none can mint beyond mintable capacity
             for (uint256 i = 0; i < holders.length; i++) {
                 address holder = holders[i];
                 uint256 mintableStShares = wrapperB(_ctx).mintableStethShares(holder);
 
                 vm.startPrank(holder);
-                vm.expectRevert("InsufficientMintableStShares()");
+                vm.expectRevert(WrapperB.InsufficientMintingCapacity.selector);
                 wrapperB(_ctx).mintStethShares(mintableStShares + 1);
                 vm.stopPrank();
             }

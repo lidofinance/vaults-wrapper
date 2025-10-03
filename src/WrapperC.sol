@@ -41,7 +41,7 @@ contract WrapperC is WrapperB {
      * @return stvShares Amount of stvETH shares minted
      */
     function depositETH(address _receiver, address _referral) public payable override returns (uint256 stvShares) {
-        uint256 targetStethShares = _calcStethSharesToMintForAssets(msg.value);
+        uint256 targetStethShares = calcStethSharesToMintForAssets(msg.value);
         stvShares = _deposit(address(STRATEGY), _referral);
         STRATEGY.execute(_receiver, stvShares, targetStethShares);
     }

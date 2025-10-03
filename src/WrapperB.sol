@@ -281,7 +281,7 @@ contract WrapperB is WrapperBase {
      * @return stethSharesCapacity The minting capacity in stETH shares
      */
     function mintingCapacitySharesOf(address _account) public view returns (uint256 stethSharesCapacity) {
-        uint256 stethSharesForAssets = _calcStethSharesToMintForAssets(effectiveAssetsOf(_account));
+        uint256 stethSharesForAssets = calcStethSharesToMintForAssets(effectiveAssetsOf(_account));
         stethSharesCapacity = Math.saturatingSub(stethSharesForAssets, mintedStethSharesOf(_account));
     }
 
@@ -354,12 +354,12 @@ contract WrapperB is WrapperBase {
         );
     }
 
-    function _calcStethSharesToMintForAssets(uint256 _assets) internal view returns (uint256 stethShares) {
+    function calcStethSharesToMintForAssets(uint256 _assets) public view returns (uint256 stethShares) {
         stethShares = STETH.getSharesByPooledEth(_calcUnreservedAssetsPart(_assets));
     }
 
     function _calcStethSharesToMintForStv(uint256 _stv) internal view returns (uint256 stethShares) {
-        stethShares = _calcStethSharesToMintForAssets(_convertToAssets(_stv));
+        stethShares = calcStethSharesToMintForAssets(_convertToAssets(_stv));
     }
 
     /**
