@@ -11,7 +11,7 @@ contract StvTest is Test, SetupWrapperA {
         assertEq(wrapper.totalAssets(), initialDeposit);
         assertEq(wrapper.totalSupply(), 10 ** supplyDecimals);
 
-        assertEq(wrapper.assetsOf(address(wrapper)), initialDeposit);
+        assertEq(wrapper.nominalAssetsOf(address(wrapper)), initialDeposit);
         assertEq(wrapper.balanceOf(address(wrapper)), 10 ** supplyDecimals);
     }
 
@@ -76,8 +76,8 @@ contract StvTest is Test, SetupWrapperA {
         uint256 rewards = 333;
         dashboard.mock_simulateRewards(int256(rewards));
 
-        assertEq(wrapper.assetsOf(address(wrapper)), 1 ether + (rewards / 4));
-        assertEq(wrapper.assetsOf(userAlice), 1 ether + (rewards / 4));
-        assertEq(wrapper.assetsOf(userBob), 2 ether + (rewards / 2));
+        assertEq(wrapper.nominalAssetsOf(address(wrapper)), 1 ether + (rewards / 4));
+        assertEq(wrapper.nominalAssetsOf(userAlice), 1 ether + (rewards / 4));
+        assertEq(wrapper.nominalAssetsOf(userBob), 2 ether + (rewards / 2));
     }
 }

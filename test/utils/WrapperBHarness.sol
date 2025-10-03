@@ -69,4 +69,13 @@ contract WrapperBHarness is WrapperAHarness {
     function wrapperB(WrapperContext memory ctx) internal pure returns (WrapperB) {
         return WrapperB(payable(address(ctx.wrapper)));
     }
+
+    /**
+     * @notice Calculate max mintable stETH shares for a given ETH amount
+     * @dev Uses WRAPPER_RR_BP from WrapperB which includes the wrapper gap
+     */
+    function _calcMaxMintableStShares(WrapperContext memory ctx, uint256 _eth) public view returns (uint256) {
+        uint256 wrapperRrBp = wrapperB(ctx).WRAPPER_RR_BP();
+        return steth.getSharesByPooledEth(_eth * (TOTAL_BASIS_POINTS - wrapperRrBp) / TOTAL_BASIS_POINTS);
+    }
 }

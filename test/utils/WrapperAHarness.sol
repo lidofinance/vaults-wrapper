@@ -172,13 +172,6 @@ contract WrapperAHarness is Test {
         }
         vm.stopPrank();
 
-        console.log("Factory created wrapper system:");
-        console.log("  factory: %s", address(factory));
-        console.log("  wrapper: %s", wrapperAddress);
-        console.log("  dashboard: %s", dashboard_);
-        console.log("  vault: %s", vault_);
-        console.log("  withdrawalQueue: %s", withdrawalQueue_);
-
         // Apply initial vault report with current total value equal to connect deposit
         core.applyVaultReport(vault_, CONNECT_DEPOSIT, 0, 0, 0, false);
 

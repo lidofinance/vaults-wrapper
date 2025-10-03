@@ -34,6 +34,9 @@ contract WrapperB is WrapperBase {
 
     uint256 public immutable WRAPPER_RR_BP; // vault's reserve ratio plus gap for wrapper
 
+    /// @notice Sentinel value for depositETH to mint maximum available stETH shares for the deposit
+    uint256 public constant MAX_MINTABLE_AMOUNT = type(uint256).max;
+
     /// @custom:storage-location erc7201:wrapper.b.storage
     struct WrapperBStorage {
         mapping(address => uint256) mintedStethShares;
@@ -95,7 +98,8 @@ contract WrapperB is WrapperBase {
      * @notice Deposit native ETH and receive stvETH shares, optionally minting stETH shares
      * @param _receiver Address to receive the minted shares
      * @param _referral Address of the referral (if any)
-     * @param _stethSharesToMint Amount of stETH shares to mint (up to maximum capacity)
+     * @param _stethSharesToMint Amount of stETH shares to mint (up to maximum capacity for this deposit)
+     *                           Pass MAX_MINTABLE_AMOUNT to mint maximum available for this deposit
      * @return stv Amount of stvETH shares minted
      */
     function depositETH(
@@ -106,7 +110,14 @@ contract WrapperB is WrapperBase {
         stv = _deposit(_receiver, _referral);
 
         if (_stethSharesToMint > 0) {
-            _mintStethShares(_receiver, _stethSharesToMint);
+            // If MAX_MINTABLE_AMOUNT is passed, calculate max mintable for this deposit
+            uint256 sharesToMint = _stethSharesToMint == MAX_MINTABLE_AMOUNT
+                ? calcStethSharesToMintForAssets(msg.value)
+                : _stethSharesToMint;
+
+            if (sharesToMint > 0) {
+                _mintStethShares(_receiver, sharesToMint);
+            }
         }
     }
 
@@ -135,8 +146,8 @@ contract WrapperB is WrapperBase {
 
         uint256 mintedStethSharesAfter = mintedStethShares - _stethSharesToBurn;
         uint256 minLockedAssetsAfter = _calcAssetsToLockForStethShares(mintedStethSharesAfter);
-        uint256 currentAssets = effectiveAssetsOf(_account);
-        ethAmount = currentAssets - minLockedAssetsAfter;
+        uint256 currentAssets = assetsOf(_account);
+        ethAmount = Math.saturatingSub(currentAssets, minLockedAssetsAfter);
     }
 
     /**
@@ -218,11 +229,11 @@ contract WrapperB is WrapperBase {
     }
 
     /**
-     * @notice Effective assets of a specific account
+     * @notice Assets of a specific account
      * @param _account The address of the account
-     * @return effectiveAssets Effective assets of the account (18 decimals)
+     * @return effectiveAssets Assets of the account (18 decimals)
      */
-    function effectiveAssetsOf(address _account) public view override returns (uint256 effectiveAssets) {
+    function assetsOf(address _account) public view override returns (uint256 effectiveAssets) {
         /// As a result of the rebalancing initiated in the Staking Vault, bypassing the Wrapper,
         /// part of the total liability can be reduced at the expense of the Staking Vault's assets.
         ///
@@ -234,7 +245,7 @@ contract WrapperB is WrapperBase {
         ///
         /// Thus, in rare situations, Staking Vault may have two assets: ETH and stETH, which are
         /// distributed among all users in proportion to their shares.
-        effectiveAssets = assetsOf(_account) + exceedingMintedStethOf(_account);
+        effectiveAssets = nominalAssetsOf(_account) + exceedingMintedStethOf(_account);
     }
 
     // =================================================================================
@@ -281,7 +292,7 @@ contract WrapperB is WrapperBase {
      * @return stethSharesCapacity The minting capacity in stETH shares
      */
     function mintingCapacitySharesOf(address _account) public view returns (uint256 stethSharesCapacity) {
-        uint256 stethSharesForAssets = calcStethSharesToMintForAssets(effectiveAssetsOf(_account));
+        uint256 stethSharesForAssets = calcStethSharesToMintForAssets(assetsOf(_account));
         stethSharesCapacity = Math.saturatingSub(stethSharesForAssets, mintedStethSharesOf(_account));
     }
 
@@ -386,11 +397,7 @@ contract WrapperB is WrapperBase {
      * @dev May occur if rebalancing happens on the Staking Vault bypassing the Wrapper
      */
     function totalExceedingMintedStethShares() public view returns (uint256 stethShares) {
-        uint256 totalMinted = totalMintedStethShares();
-        uint256 totalLiability = DASHBOARD.liabilityShares();
-
-        if (totalMinted <= totalLiability) return 0;
-        stethShares = totalMinted - totalLiability;
+        stethShares = Math.saturatingSub(totalMintedStethShares(), DASHBOARD.liabilityShares());
     }
 
     /**
@@ -437,11 +444,7 @@ contract WrapperB is WrapperBase {
      * @dev May occur if liability was transferred from another Staking Vault
      */
     function totalUnassignedLiabilityShares() public view override returns (uint256 unassignedLiabilityShares) {
-        uint256 totalMinted = totalMintedStethShares();
-        uint256 totalLiability = DASHBOARD.liabilityShares();
-
-        if (totalMinted >= totalLiability) return 0;
-        unassignedLiabilityShares = totalLiability - totalMinted;
+        unassignedLiabilityShares = Math.saturatingSub(DASHBOARD.liabilityShares(), totalMintedStethShares());
     }
 
     // =================================================================================

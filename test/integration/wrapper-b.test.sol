@@ -90,6 +90,62 @@ contract WrapperBTest is WrapperBHarness {
         assertEq(wrapperB(ctx).mintableStethShares(USER1), 0, "Mintable stETH shares should be equal to 0");
     }
 
+    function test_depositETH_with_max_mintable_amount() public {
+        WrapperContext memory ctx = _deployWrapperB(false, 0, 0);
+
+        //
+        // Step 1: User deposits ETH and mints max stETH shares in one transaction using MAX_MINTABLE_AMOUNT
+        //
+        uint256 user1Deposit = 10_000 wei;
+        uint256 user1ExpectedMintableStethShares = _calcMaxMintableStShares(ctx, user1Deposit);
+
+        _ensureFreshness(ctx);
+        vm.prank(USER1);
+        wrapperB(ctx).depositETH{value: user1Deposit}(USER1, address(0), wrapperB(ctx).MAX_MINTABLE_AMOUNT());
+
+        _assertUniversalInvariants("Step 1", ctx);
+
+        assertEq(
+            steth.sharesOf(USER1),
+            user1ExpectedMintableStethShares,
+            "stETH shares balance of USER1 should equal max mintable for deposit"
+        );
+        assertEq(
+            wrapperB(ctx).mintedStethSharesOf(USER1),
+            user1ExpectedMintableStethShares,
+            "Minted stETH shares should equal expected"
+        );
+        assertEq(
+            ctx.dashboard.liabilityShares(),
+            user1ExpectedMintableStethShares,
+            "Vault's liability shares should equal minted shares"
+        );
+        assertEq(wrapperB(ctx).mintableStethShares(USER1), 0, "No additional mintable shares should remain");
+
+        //
+        // Step 2: User deposits more ETH and mints max for new deposit
+        //
+        uint256 user1Deposit2 = 15_000 wei;
+        uint256 user1ExpectedMintableStethShares2 = _calcMaxMintableStShares(ctx, user1Deposit2);
+
+        _ensureFreshness(ctx);
+        vm.prank(USER1);
+        wrapperB(ctx).depositETH{value: user1Deposit2}(USER1, address(0), wrapperB(ctx).MAX_MINTABLE_AMOUNT());
+
+        _assertUniversalInvariants("Step 2", ctx);
+
+        assertEq(
+            steth.sharesOf(USER1),
+            user1ExpectedMintableStethShares + user1ExpectedMintableStethShares2,
+            "stETH shares should equal sum of both deposits"
+        );
+        assertEq(
+            ctx.dashboard.liabilityShares(),
+            user1ExpectedMintableStethShares + user1ExpectedMintableStethShares2,
+            "Vault's liability should equal sum of both minted amounts"
+        );
+    }
+
     function test_single_user_mints_full_in_two_steps() public {
         WrapperContext memory ctx = _deployWrapperB(false, 0, 0);
 
@@ -361,10 +417,6 @@ contract WrapperBTest is WrapperBHarness {
         );
     }
 
-    function _calc_fair_st_shares(uint256 _eth) internal view returns (uint256) {
-        return steth.getSharesByPooledEth(_eth * (TOTAL_BASIS_POINTS - RESERVE_RATIO_BP) / TOTAL_BASIS_POINTS);
-    }
-
     function test_vault_underperforms() public {
         WrapperContext memory ctx = _deployWrapperB(false, 0, 0);
 
@@ -372,7 +424,7 @@ contract WrapperBTest is WrapperBHarness {
         // Step 1: User1 deposits
         //
         uint256 user1Deposit = 200 ether;
-        uint256 user1ExpectedMintable = _calc_fair_st_shares(user1Deposit);
+        uint256 user1ExpectedMintable = _calcMaxMintableStShares(ctx, user1Deposit);
         _ensureFreshness(ctx);
         vm.prank(USER1);
         wrapperB(ctx).depositETH{value: user1Deposit}(USER1, address(0), user1ExpectedMintable);
@@ -405,7 +457,7 @@ contract WrapperBTest is WrapperBHarness {
             );
         }
 
-        // assertEq(steth.sharesOf(USER2), _calc_fair_st_shares(user2Deposit), "USER2 stETH shares should be equal to user2Deposit");
+        // assertEq(steth.sharesOf(USER2), _calcMaxMintableStShares(user2Deposit), "USER2 stETH shares should be equal to user2Deposit");
 
         // TODO: fix fail here
         // _assertUniversalInvariants("Step 2", ctx);
@@ -420,11 +472,7 @@ contract WrapperBTest is WrapperBHarness {
         //
         uint256 user1Deposit = 10_000 wei;
         _ensureFreshness(ctx);
-        uint256 rrBp = w.WRAPPER_RR_BP();
-        // uint256 sharesForDeposit = steth.getSharesByPooledEth(
-        //     (user1Deposit * (TOTAL_BASIS_POINTS - rrBp)) / TOTAL_BASIS_POINTS
-        // );
-        uint256 sharesForDeposit = _calc_fair_st_shares(user1Deposit);
+        uint256 sharesForDeposit = _calcMaxMintableStShares(ctx, user1Deposit);
         vm.prank(USER1);
         w.depositETH{value: user1Deposit}(USER1, address(0), sharesForDeposit);
 
@@ -454,9 +502,7 @@ contract WrapperBTest is WrapperBHarness {
         );
 
         // TODO: handle 1 wei problem here
-        uint256 expectedRewardsShares = steth.getSharesByPooledEth(
-            (user1Rewards * (TOTAL_BASIS_POINTS - rrBp)) / TOTAL_BASIS_POINTS
-        );
+        uint256 expectedRewardsShares = _calcMaxMintableStShares(ctx, user1Rewards);
         assertApproxEqAbs(
             w.mintableStethShares(USER1),
             expectedRewardsShares,
@@ -652,10 +698,4 @@ contract WrapperBTest is WrapperBHarness {
             _contextMsg("Final", "Total claimed should equal deposit + rewards")
         );
     }
-
-    // ========================================================================
-    // Helper functions
-    // ========================================================================
-
-    // _contextMsg has been moved to WrapperHarness
 }

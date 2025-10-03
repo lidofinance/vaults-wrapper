@@ -13,8 +13,8 @@ contract EffectiveAssetsTest is Test, SetupWrapperB {
         assertEq(wrapper.totalAssets(), initialDeposit);
         assertEq(wrapper.totalEffectiveAssets(), initialDeposit);
 
+        assertEq(wrapper.nominalAssetsOf(address(wrapper)), initialDeposit);
         assertEq(wrapper.assetsOf(address(wrapper)), initialDeposit);
-        assertEq(wrapper.effectiveAssetsOf(address(wrapper)), initialDeposit);
     }
 
     function test_Deposit_IncreasesEffectiveAssets() public {
@@ -29,24 +29,24 @@ contract EffectiveAssetsTest is Test, SetupWrapperB {
 
     function test_Deposit_IncreasesUserEffectiveAssets() public {
         uint256 ethToDeposit = 1 ether;
-        uint256 assetsBefore = wrapper.effectiveAssetsOf(userAlice);
+        uint256 assetsBefore = wrapper.assetsOf(userAlice);
 
         vm.prank(userAlice);
         wrapper.depositETH{value: ethToDeposit}(userAlice, address(0));
 
-        assertEq(wrapper.effectiveAssetsOf(userAlice), assetsBefore + ethToDeposit);
+        assertEq(wrapper.assetsOf(userAlice), assetsBefore + ethToDeposit);
     }
 
     function test_Rebalance_DoNotChangeUserEffectiveAssets() public {
         wrapper.depositETH{value: 4 ether}();
         wrapper.mintStethShares(1 * 10 ** 18);
 
-        uint256 assetsBefore = wrapper.effectiveAssetsOf(address(this));
+        uint256 assetsBefore = wrapper.assetsOf(address(this));
 
         dashboard.rebalanceVaultWithShares(1 * 10 ** 18);
 
-        assertEq(wrapper.effectiveAssetsOf(address(this)), assetsBefore);
-        assertLt(wrapper.assetsOf(address(this)), assetsBefore);
+        assertEq(wrapper.assetsOf(address(this)), assetsBefore);
+        assertLt(wrapper.nominalAssetsOf(address(this)), assetsBefore);
         assertGt(wrapper.exceedingMintedStethOf(address(this)), 0);
     }
 }

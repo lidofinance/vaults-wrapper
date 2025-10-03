@@ -159,12 +159,12 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
     }
 
     /**
-     * @notice Assets owned by an account
+     * @notice Nominal assets owned by an account
      * @param _account The account to query
      * @return assets Amount of account assets (18 decimals)
      * @dev Overridable method to include other assets if needed
      */
-    function assetsOf(address _account) public view returns (uint256 assets) {
+    function nominalAssetsOf(address _account) public view returns (uint256 assets) {
         assets = _getAssetsShare(balanceOf(_account), totalAssets());
     }
 
@@ -178,13 +178,13 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
     }
 
     /**
-     * @notice Effective assets owned by an account
+     * @notice Assets owned by an account
      * @param _account The account to query
-     * @return Amount of effective assets (18 decimals)
+     * @return Amount of assets (18 decimals)
      * @dev Overridable method to include other assets if needed
      */
-    function effectiveAssetsOf(address _account) public view virtual returns (uint256) {
-        return assetsOf(_account); /* plus other assets if any */
+    function assetsOf(address _account) public view virtual returns (uint256) {
+        return nominalAssetsOf(_account); /* plus other assets if any */
     }
 
     function decimals() public pure override returns (uint8) {
@@ -261,7 +261,6 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
         _checkAllowList();
 
         stv = previewDeposit(msg.value);
-        console.log("_deposit stv", stv);
         _mint(_receiver, stv);
         DASHBOARD.fund{value: msg.value}();
 
