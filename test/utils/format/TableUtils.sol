@@ -61,7 +61,7 @@ library TableUtils {
         printColumnHeaders(self);
     }
 
-    function printColumnHeaders(Context storage self) internal pure {
+    function printColumnHeaders(Context storage /* self */) internal pure {
         console.log(
             string.concat(
                 padRight("user", 16),
@@ -81,7 +81,7 @@ library TableUtils {
         );
     }
 
-    function printUsers(Context storage self, string memory title, User[] memory _addresses) internal {
+    function printUsers(Context storage self, string memory title, User[] memory _addresses) internal view {
         printHeader(self, title);
 
         for (uint256 i = 0; i < _addresses.length; i++) {

@@ -174,7 +174,7 @@ contract MintingStethSharesTest is Test, SetupWrapperB {
 
     // Reserve ratio tests
 
-    function test_MintingCapacity_RespectsReserveRatio() public {
+    function test_MintingCapacity_RespectsReserveRatio() public view {
         uint256 effectiveAssets = wrapper.assetsOf(address(this));
         uint256 capacity = wrapper.mintingCapacitySharesOf(address(this));
 

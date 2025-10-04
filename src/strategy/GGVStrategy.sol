@@ -161,8 +161,7 @@ contract GGVStrategy is Strategy {
 
     /// @notice Finalizes a withdrawal of stETH from the strategy
     /// @param _receiver The address that owns the stETH
-    /// @param _amount The amount of stETH to withdraw
-    function finalizeWithdrawal(address _receiver, uint256 _amount) external {
+    function finalizeWithdrawal(address _receiver, uint256 /* _amount */) external {
         _onlyWrapper();
         if (address(0) == _receiver) _receiver = msg.sender;
         address proxy = _getOrCreateProxy(_receiver);
@@ -177,7 +176,7 @@ contract GGVStrategy is Strategy {
         uint256 stethShares = STETH.getSharesByPooledEth(stethAmount);
 
         uint256 stv = WRAPPER.withdrawableStv(proxy, stethShares);
-        uint256 requestId = WRAPPER.requestWithdrawalQueue(proxy, _receiver, stv);
+        WRAPPER.requestWithdrawalQueue(proxy, _receiver, stv);
 
         emit Claim(_receiver, address(STETH), position.exitStv);
     }

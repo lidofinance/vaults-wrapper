@@ -37,7 +37,6 @@ contract WrapperCHarness is WrapperBHarness {
         });
 
         WrapperContext memory ctx = _deployWrapperSystem(config);
-        WrapperC wrapperC_ = WrapperC(payable(address(ctx.wrapper)));
 
         strategy = IStrategy(payable(strategy_));
 

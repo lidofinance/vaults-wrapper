@@ -26,11 +26,11 @@ contract MockVaultFactory is IVaultFactory {
 
     function createVaultWithDashboard(
         address _admin,
-        address _nodeOperator,
-        address _nodeOperatorManager,
-        uint256 _nodeOperatorFeeBP,
-        uint256 _confirmExpiry,
-        IVaultFactory.RoleAssignment[] memory _roleAssignments
+        address /* _nodeOperator */,
+        address /* _nodeOperatorManager */,
+        uint256 /* _nodeOperatorFeeBP */,
+        uint256 /* _confirmExpiry */,
+        IVaultFactory.RoleAssignment[] memory /* _roleAssignments */
     ) external payable returns (address vault, address dashboard) {
         if (msg.value != 1 ether) {
             revert InsufficientFunds();
@@ -47,11 +47,11 @@ contract MockVaultFactory is IVaultFactory {
 
     function createVaultWithDashboardWithoutConnectingToVaultHub(
         address _admin,
-        address _nodeOperator,
-        address _nodeOperatorManager,
-        uint256 _nodeOperatorFeeBP,
-        uint256 _confirmExpiry,
-        RoleAssignment[] calldata _roleAssignments
+        address /* _nodeOperator */,
+        address /* _nodeOperatorManager */,
+        uint256 /* _nodeOperatorFeeBP */,
+        uint256 /* _confirmExpiry */,
+        RoleAssignment[] calldata /* _roleAssignments */
     ) external payable returns (address vault, address dashboard) {
         require(msg.value == 0 ether, "invalid value sent");
         vault = address(new MockStakingVault());

@@ -136,7 +136,7 @@ contract FactoryTest is Test {
 
     function test_canCreateWithStrategy() public {
         vm.startPrank(admin);
-        (address vault, address dashboard, address payable wrapperProxy, address withdrawalQueueProxy) = WrapperFactory
+        (, address dashboard, address payable wrapperProxy,) = WrapperFactory
             .createVaultWithLoopStrategy{value: connectDeposit}(
             nodeOperator,
             nodeOperatorManager,
@@ -150,7 +150,6 @@ contract FactoryTest is Test {
         );
 
         WrapperBase wrapper = WrapperBase(wrapperProxy);
-        WithdrawalQueue withdrawalQueue = WithdrawalQueue(payable(withdrawalQueueProxy));
 
         WrapperC wrapperC = WrapperC(payable(address(wrapper)));
         // Strategy is deployed internally for loop strategy

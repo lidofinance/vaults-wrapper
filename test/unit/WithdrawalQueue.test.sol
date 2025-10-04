@@ -171,7 +171,6 @@ contract WithdrawalQueueTest is Test {
         assertEq(user2Status.isClaimed, false);
 
         // Calculate total ETH needed using prefinalize
-        uint256 shareRate = withdrawalQueue.calculateCurrentShareRate();
         uint256 totalToFinalize1 = withdrawalQueue.unfinalizedAssets();
         console.log("totalToFinalize1", totalToFinalize1);
 

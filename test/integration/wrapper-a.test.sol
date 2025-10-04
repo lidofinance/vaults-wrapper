@@ -197,8 +197,6 @@ contract WrapperATest is WrapperAHarness {
         ctx.wrapper.depositETH{value: depositAmount}(USER1, address(0));
 
         // 2) USER1 requests withdrawal of all their shares
-        uint256 expectedEth = depositAmount;
-
         vm.prank(USER1);
         uint256 requestId = ctx.wrapper.requestWithdrawal(expectedStv);
 

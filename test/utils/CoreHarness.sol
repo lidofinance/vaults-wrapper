@@ -167,7 +167,7 @@ contract CoreHarness is Test {
                 // If proof checks enforced, fall back to mock when available
                 address ao = locator.accountingOracle();
                 vm.prank(ao);
-                (bool ok,) = address(lazyOracle).call(
+                (bool success,) = address(lazyOracle).call(
                     abi.encodeWithSelector(
                         ILazyOracleMocked.mock__updateVaultData.selector,
                         _stakingVault,
@@ -178,6 +178,8 @@ contract CoreHarness is Test {
                         _slashingReserve
                     )
                 );
+                // Ignore failures in mock calls - they may not be available on all deployments
+                success;
             }
         }
 

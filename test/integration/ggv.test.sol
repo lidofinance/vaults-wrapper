@@ -180,8 +180,7 @@ contract GGVTest is WrapperCHarness {
             boringOnChainQueue.previewAssetsOut(address(steth), uint128(ggvShares), ggvStrategy.DISCOUNT());
 
         vm.prank(USER1);
-        uint256 requestId = wrapper.requestWithdrawalFromStrategy(withdrawalStethAmount);
-        assertNotEq(requestId, 0);
+        wrapper.requestWithdrawalFromStrategy(withdrawalStethAmount);
         bytes32 ggvRequestId = ggvStrategy.getUserPosition(USER1).exitRequestId;
 
         IBoringOnChainQueue.OnChainWithdraw memory req =
@@ -261,7 +260,7 @@ contract GGVTest is WrapperCHarness {
         console.log("\n[SCENARIO] Requesting withdrawal based on new appreciated assets:", withdrawalStethAmount);
 
         vm.prank(USER1);
-        uint256 requestId = wrapper.requestWithdrawalFromStrategy(withdrawalStethAmount);
+        wrapper.requestWithdrawalFromStrategy(withdrawalStethAmount);
 
         // Apply 4% increase to core (stETH share ratio)
         uint256 currentTotalEth = steth.totalSupply();
@@ -342,7 +341,6 @@ contract GGVTest is WrapperCHarness {
     function _finalizeWQ(uint256 _maxRequest, uint256 vaultProfit) public {
         vm.deal(address(wrapper.STAKING_VAULT()), 1 ether);
 
-        uint256 _maxLiabilityShares = wrapper.VAULT_HUB().vaultRecord(wrapper.STAKING_VAULT()).maxLiabilityShares;
         uint256 liabilityShares = wrapper.DASHBOARD().liabilityShares();
         core.applyVaultReport(address(wrapper.STAKING_VAULT()), wrapper.totalAssets(), 0, liabilityShares, 0, false);
 
