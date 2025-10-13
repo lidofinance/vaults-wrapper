@@ -409,6 +409,7 @@ contract Factory {
     ) internal {
         _dashboard.grantRole(_dashboard.FUND_ROLE(), address(wrapperProxy));
         _dashboard.grantRole(_dashboard.WITHDRAW_ROLE(), withdrawalQueueProxy);
+        _dashboard.grantRole(_dashboard.REBALANCE_ROLE(), address(wrapperProxy));
 
         if (_configuration != WrapperType.NO_MINTING_NO_STRATEGY) {
             _dashboard.grantRole(_dashboard.MINT_ROLE(), address(wrapperProxy));

@@ -12,6 +12,8 @@ import {ILazyOracle} from "./interfaces/ILazyOracle.sol";
 import {IWrapper} from "./interfaces/IWrapper.sol";
 import {IStETH} from "./interfaces/IStETH.sol";
 
+import {console} from "forge-std/Test.sol";
+
 /// @title Withdrawal Queue V3 for Staking Vault Wrapper
 /// @notice Handles withdrawal requests for stvToken holders
 contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradeable {
@@ -358,6 +360,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
         uint256 withdrawableValue = DASHBOARD.withdrawableValue();
         uint256 exceedingSteth = WRAPPER.totalExceedingMintedSteth();
         uint256 latestReportTimestamp = LAZY_ORACLE.latestReportTimestamp();
+        uint256 liabilityShares = STETH.getPooledEthByShares(DASHBOARD.liabilityShares());
 
         uint256 totalStvToBurn;
         uint256 totalStethShares;

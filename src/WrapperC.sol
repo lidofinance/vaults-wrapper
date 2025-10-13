@@ -5,7 +5,7 @@ import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet
 
 import {WrapperB} from "./WrapperB.sol";
 import {IStrategy} from "./interfaces/IStrategy.sol";
-import {WithdrawalRequest} from "./strategy/WithdrawalRequest.sol";
+import {WithdrawalRequest} from "src/strategy/WithdrawalRequest.sol";
 
 
 /**
@@ -89,20 +89,6 @@ contract WrapperC is WrapperB {
         STRATEGY.finalizeWithdrawal(request);
 
         emit StrategyWithdrawalFinalized(_requestId, request.strategyRequestId, request.owner, request.stethAmount, request.timestamp);
-    }
-
-    /// @notice Requests a withdrawal of the specified amount of stvETH shares from the strategy
-    /// @param _owner The address that owns the stvETH shares
-    /// @param _receiver The address to receive the stETH
-    /// @param _stvShares The amount of stvETH shares to withdraw
-    /// @return requestId The ID of the created withdrawal request
-    function requestWithdrawalQueue(address _owner, address _receiver, uint256 _stvShares)
-        external
-        returns (uint256 requestId)
-    {
-        if (msg.sender != address(STRATEGY)) revert InvalidSender();
-        _transfer(_owner, address(WITHDRAWAL_QUEUE), _stvShares);
-        requestId = WITHDRAWAL_QUEUE.requestWithdrawal(_stvShares, 0 /** stethSharesToRebalance */, _receiver);
     }
 
     // =================================================================================

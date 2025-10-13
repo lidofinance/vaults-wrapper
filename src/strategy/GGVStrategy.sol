@@ -9,8 +9,11 @@ import {IBoringOnChainQueue} from "src/interfaces/ggv/IBoringOnChainQueue.sol";
 import {Strategy} from "src/strategy/Strategy.sol";
 import {IStrategyProxy} from "src/interfaces/IStrategyProxy.sol";
 import {WithdrawalRequest} from "src/strategy/WithdrawalRequest.sol";
+import {WrapperB} from "src/WrapperB.sol";
 
 import {IWstETH} from "src/interfaces/IWstETH.sol";
+
+import {console} from "forge-std/console.sol";
 
 contract GGVStrategy is Strategy {
     ITellerWithMultiAssetSupport public immutable TELLER;
@@ -172,23 +175,28 @@ contract GGVStrategy is Strategy {
 
         withdrawalRequest[_request.owner] = 0;
 
-        uint256 wstethAmount = WSTETH.balanceOf(proxy);
+        uint256 stethSharesToBurn = WSTETH.balanceOf(proxy);
         bytes memory data = IStrategyProxy(proxy).call(
             address(WSTETH),
-            abi.encodeWithSelector(WSTETH.unwrap.selector, wstethAmount)
+            abi.encodeWithSelector(WSTETH.unwrap.selector, stethSharesToBurn)
         );
         uint256 stethAmount = abi.decode(data, (uint256));
-        uint256 burnStethShares = STETH.getSharesByPooledEth(stethAmount);
 
-        IStrategyProxy(proxy).call(
+        uint256 stethToRebalance = 0;
+        uint256 mintedStethShares = WRAPPER.mintedStethSharesOf(proxy);
+        if (mintedStethShares > stethSharesToBurn ) {
+            stethToRebalance = mintedStethShares - stethSharesToBurn;
+        }
+
+        uint256 stv = WRAPPER.balanceOf(proxy);
+
+        bytes memory requestData = IStrategyProxy(proxy).call(
             address(WRAPPER),
-            abi.encodeWithSelector(WRAPPER.burnStethShares.selector, burnStethShares)
+            abi.encodeWithSelector(WrapperB.requestWithdrawal.selector, stv, stethSharesToBurn, stethToRebalance, _request.owner)
         );
-
-        uint256 stv = WRAPPER.withdrawableStv(proxy);
-        uint256 wqRequestId = WRAPPER.requestWithdrawalQueue(proxy, _request.owner, stv);
-
-        emit Finalized(_request.owner, wqRequestId, stv, stethAmount, burnStethShares);
+        uint256 wqRequestId = abi.decode(requestData, (uint256));
+        
+        emit Finalized(_request.owner, wqRequestId, stv, stethAmount, stethSharesToBurn);
     }
 
     /// @notice Recovers ERC20 tokens from the strategy
