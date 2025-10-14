@@ -4,14 +4,14 @@ pragma solidity >=0.8.25;
 import {Test, console} from "forge-std/Test.sol";
 import {SetupWrapperA} from "./SetupWrapperA.sol";
 
-contract StvSharesTest is Test, SetupWrapperA {
+contract StvTest is Test, SetupWrapperA {
     uint8 supplyDecimals = 27;
 
     function test_InitialState_CorrectSupplyAndAssets() public view {
         assertEq(wrapper.totalAssets(), initialDeposit);
         assertEq(wrapper.totalSupply(), 10 ** supplyDecimals);
 
-        assertEq(wrapper.assetsOf(address(wrapper)), initialDeposit);
+        assertEq(wrapper.nominalAssetsOf(address(wrapper)), initialDeposit);
         assertEq(wrapper.balanceOf(address(wrapper)), 10 ** supplyDecimals);
     }
 
@@ -76,8 +76,8 @@ contract StvSharesTest is Test, SetupWrapperA {
         uint256 rewards = 333;
         dashboard.mock_simulateRewards(int256(rewards));
 
-        assertEq(wrapper.assetsOf(address(wrapper)), 1 ether + (rewards / 4));
-        assertEq(wrapper.assetsOf(userAlice), 1 ether + (rewards / 4));
-        assertEq(wrapper.assetsOf(userBob), 2 ether + (rewards / 2));
+        assertEq(wrapper.nominalAssetsOf(address(wrapper)), 1 ether + (rewards / 4));
+        assertEq(wrapper.nominalAssetsOf(userAlice), 1 ether + (rewards / 4));
+        assertEq(wrapper.nominalAssetsOf(userBob), 2 ether + (rewards / 2));
     }
 }

@@ -113,7 +113,7 @@ contract MockVaultHub {
     function triggerValidatorWithdrawals(
         address /* _vault */,
         bytes calldata /* _pubkeys */,
-        uint64[] calldata /* _amounts */,
+        uint64[] calldata /* _amountsInGwei */,
         address /* _refundRecipient */
     ) external payable {
     //     // Mock implementation - simulate validator withdrawals
@@ -121,12 +121,12 @@ contract MockVaultHub {
 
     //     // For testing, we can simulate that validators were exited and funds are now available
     //     uint256 totalWithdrawn = 0;
-    //     for (uint256 i = 0; i < _amounts.length; i++) {
-    //         if (_amounts[i] == 0) {
+    //     for (uint256 i = 0; i < _amountsInGwei.length; i++) {
+    //         if (_amountsInGwei[i] == 0) {
     //             // Full withdrawal (32 ETH per validator)
     //             totalWithdrawn += 32 ether;
     //         } else {
-    //             totalWithdrawn += _amounts[i];
+    //             totalWithdrawn += _amountsInGwei[i];
     //         }
     //     }
 

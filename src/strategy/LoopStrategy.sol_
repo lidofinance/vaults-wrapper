@@ -21,7 +21,7 @@ contract LoopStrategy is IStrategy {
 
     struct UserPosition {
         address user;
-        uint256 stvShares;
+        uint256 stv;
         uint256 stShares;
         uint256 borrowedEth;
     }
@@ -51,11 +51,11 @@ contract LoopStrategy is IStrategy {
         return userPositions[_address];
     }
 
-    function execute(address _user, uint256 _stvShares) external {
+    function execute(address _user, uint256 _stv) external {
         uint256 _mintableStShares = WRAPPER.mintableStethShares(address(this));
 
         UserPosition memory position = userPositions[_user];
-        position.stvShares += _stvShares;
+        position.stv += _stv;
         position.stShares += _mintableStShares;
 
         uint256 mintableStShares = _mintableStShares;
@@ -68,8 +68,8 @@ contract LoopStrategy is IStrategy {
             position.borrowedEth += borrowedEth;
 
             uint256 stSharesBefore = STETH.balanceOf(address(this));
-            uint256 mintedStvShares = WRAPPER.depositETH{value: borrowedEth}(address(this), address(0), 0);
-            position.stvShares += mintedStvShares;
+            uint256 mintedStv = WRAPPER.depositETH{value: borrowedEth}(address(this), address(0), 0);
+            position.stv += mintedStv;
             mintableStShares = STETH.balanceOf(address(this)) - stSharesBefore;
         }
 
@@ -88,16 +88,16 @@ contract LoopStrategy is IStrategy {
 
     receive() external payable {}
 
-    function _getStvSharesWithdrawableWithoutBurningStShares(address _address) internal view returns (uint256 stvShares) {
+    function _getStvWithdrawableWithoutBurningStShares(address _address) internal view returns (uint256 stv) {
         UserPosition memory position = userPositions[_address];
-        stvShares = position.stvShares; // TODO: calc properly
+        stv = position.stv; // TODO: calc properly
     }
 
-    function requestWithdrawByETH(address _user, uint256 _stvShares) external override returns (uint256 requestId) {
+    function requestWithdrawByETH(address _user, uint256 _stv) external override returns (uint256 requestId) {
         // LENDER_MOCK.giveBack{value: address(this).balance}();
-        // return WRAPPER.requestWithdrawal(_stvShares);
-        uint256 stvShares = _getStvSharesWithdrawableWithoutBurningStShares(_user);
-       return WRAPPER.requestWithdrawalQueue(msg.sender, msg.sender, stvShares);
+        // return WRAPPER.requestWithdrawal(_stv);
+        uint256 stv = _getStvWithdrawableWithoutBurningStShares(_user);
+       return WRAPPER.requestWithdrawalQueue(msg.sender, msg.sender, stv);
     }
 
     function finalizeWithdrawal(address _receiver, uint256 stETHAmount) external returns(uint256 stvToken) {}

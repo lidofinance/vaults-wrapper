@@ -33,4 +33,36 @@ contract MockLazyOracle is ILazyOracle {
         view
         returns (uint256 timestamp, uint256 refSlot, bytes32 treeRoot, string memory reportCid)
     {}
+
+    function quarantinePeriod() external pure returns (uint256) {
+        return 0;
+    }
+
+    function maxRewardRatioBP() external pure returns (uint256) {
+        return 0;
+    }
+
+    function maxLidoFeeRatePerSecond() external pure returns (uint256) {
+        return 0;
+    }
+
+    function vaultQuarantine(address) external pure returns (QuarantineInfo memory) {
+        return QuarantineInfo({
+            startTimestamp: 0,
+            totalValueBeforeQuarantine: 0,
+            totalValueDuringQuarantine: 0
+        });
+    }
+
+    function vaultsCount() external pure returns (uint256) {
+        return 0;
+    }
+
+    function batchVaultsInfo(uint256, uint256) external pure returns (VaultInfo[] memory) {
+        return new VaultInfo[](0);
+    }
+
+    function removeVaultQuarantine(address) external {}
+
+    function updateSanityParams(uint256, uint256, uint256) external {}
 }

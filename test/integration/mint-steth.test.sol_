@@ -79,17 +79,17 @@ contract MintStethTest is Test {
         vm.deal(user2, user2InitialETH);
 
         vm.prank(user1);
-        uint256 user1StvShares = wrapperB.depositETH{value: user1InitialETH}(user1);
+        uint256 user1Stv = wrapperB.depositETH{value: user1InitialETH}(user1);
 
         vm.prank(user2);
-        uint256 user2StvShares = wrapperB.depositETH{value: user2InitialETH}(user2);
+        uint256 user2Stv = wrapperB.depositETH{value: user2InitialETH}(user2);
 
         uint256 totalDeposits = user1InitialETH + user2InitialETH + dw.CONNECT_DEPOSIT();
         assertEq(wrapperB.totalAssets(), totalDeposits);
 
         // User shares should be approximately proportional to their deposits
-        assertTrue(user1StvShares >= user1InitialETH - 1 && user1StvShares <= user1InitialETH, "user1 shares should be approximately equal to deposit");
-        assertTrue(user2StvShares >= user2InitialETH - 1 && user2StvShares <= user2InitialETH, "user2 shares should be approximately equal to deposit");
+        assertTrue(user1Stv >= user1InitialETH - 1 && user1Stv <= user1InitialETH, "user1 shares should be approximately equal to deposit");
+        assertTrue(user2Stv >= user2InitialETH - 1 && user2Stv <= user2InitialETH, "user2 shares should be approximately equal to deposit");
 
         // Check initial minting capacity for the entire vault
         uint256 totalMintingCapacity = core.dashboard().remainingMintingCapacityShares(0);
@@ -98,7 +98,7 @@ contract MintStethTest is Test {
         // User1 deposits to wrapperB and should automatically get stETH minted
         vm.deal(user1, user1InitialETH);
         vm.startPrank(user1);
-        uint256 user1StvSharesFirst = wrapperB.depositETH{value: user1InitialETH}(user1);
+        uint256 user1StvFirst = wrapperB.depositETH{value: user1InitialETH}(user1);
         vm.stopPrank();
 
         // Check how much stETH the user received
@@ -138,7 +138,7 @@ contract MintStethTest is Test {
 
         vm.deal(user2, user2InitialETH);
         vm.startPrank(user2);
-        uint256 user2StvShares2 = wrapperB.depositETH{value: user2InitialETH}(user2);
+        uint256 user2Stv2 = wrapperB.depositETH{value: user2InitialETH}(user2);
         vm.stopPrank();
 
         // Check how much stETH user2 received
@@ -198,15 +198,15 @@ contract MintStethTest is Test {
         vm.deal(user2, user2InitialETH);
 
         vm.startPrank(user1);
-        uint256 user1StvShares = wrapperB.depositETH{value: user1InitialETH}(user1);
+        uint256 user1Stv = wrapperB.depositETH{value: user1InitialETH}(user1);
         vm.stopPrank();
 
         vm.startPrank(user2);
-        uint256 user2StvShares = wrapperB.depositETH{value: user2InitialETH}(user2);
+        uint256 user2Stv = wrapperB.depositETH{value: user2InitialETH}(user2);
         vm.stopPrank();
 
-        console.log("User1 deposited:", user1InitialETH, "received shares:", user1StvShares);
-        console.log("User2 deposited:", user2InitialETH, "received shares:", user2StvShares);
+        console.log("User1 deposited:", user1InitialETH, "received shares:", user1Stv);
+        console.log("User2 deposited:", user2InitialETH, "received shares:", user2Stv);
 
         // Check capacity after deposits (should still be equal since no stETH minted yet)
         uint256 totalCapacityAfterDeposits = core.dashboard().totalMintingCapacityShares();
@@ -224,7 +224,7 @@ contract MintStethTest is Test {
         // Use existing wrapperB to create liabilities
         vm.deal(user1, user1InitialETH);
         vm.startPrank(user1);
-        uint256 user1StvShares2 = wrapperB.depositETH{value: user1InitialETH}(user1);
+        uint256 user1Stv2 = wrapperB.depositETH{value: user1InitialETH}(user1);
         vm.stopPrank();
 
         uint256 user1MintedShares = steth.balanceOf(user1);
@@ -263,7 +263,7 @@ contract MintStethTest is Test {
 
         vm.deal(user2, user2InitialETH);
         vm.startPrank(user2);
-        uint256 user2StvShares2 = wrapperB.depositETH{value: user2InitialETH}(user2);
+        uint256 user2Stv2 = wrapperB.depositETH{value: user2InitialETH}(user2);
         vm.stopPrank();
 
         uint256 user2MintedShares = steth.balanceOf(user2) - user1MintedShares; // Only user2's portion

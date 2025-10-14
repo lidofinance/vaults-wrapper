@@ -98,14 +98,14 @@ contract WithdrawalTest is Test {
         vm.deal(user1, userInitialETH);
 
         vm.startPrank(user1);
-        uint256 userStvShares = wrapperA.depositETH{value: userInitialETH}(user1);
+        uint256 userStv = wrapperA.depositETH{value: userInitialETH}(user1);
         vm.stopPrank();
 
         console.log("User deposited ETH:", userInitialETH);
-        console.log("User received stvETH shares:", userStvShares);
+        console.log("User received stvETH shares:", userStv);
 
         // Verify initial state - user has shares, no stETH minted, no boost
-        assertEq(wrapperA.balanceOf(user1), userStvShares, "User should have stvETH shares");
+        assertEq(wrapperA.balanceOf(user1), userStv, "User should have stvETH shares");
         assertEq(wrapperA.totalAssets(), userInitialETH + dw.CONNECT_DEPOSIT(), "Total assets should equal user deposit plus initial balance");
         assertEq(user1.balance, 0, "User ETH balance should be zero after deposit");
         assertEq(steth.balanceOf(user1), 0, "User should have no stETH (config A)");
@@ -116,7 +116,7 @@ contract WithdrawalTest is Test {
 <<<<<<< HEAD:test/integration/withdrawal.test.sol_
         // Use Configuration A withdrawal interface
         vm.startPrank(user1);
-        uint256 requestId = wrapperA.requestWithdrawal(userStvShares);
+        uint256 requestId = wrapperA.requestWithdrawal(userStv);
         vm.stopPrank();
 
         console.log("Withdrawal requested. RequestId:", requestId);
@@ -127,10 +127,10 @@ contract WithdrawalTest is Test {
 =======
         // Withdraw based on actual shares received (which may be slightly less due to rounding)
         uint256[] memory withdrawalAmounts = new uint256[](1);
-        withdrawalAmounts[0] = wrapper.convertToAssets(userStvShares);
+        withdrawalAmounts[0] = wrapper.convertToAssets(userStv);
 
         vm.startPrank(user1);
-        wrapper.approve(address(withdrawalQueue), userStvShares);
+        wrapper.approve(address(withdrawalQueue), userStv);
         uint256[] memory requestIds = withdrawalQueue.requestWithdrawals(withdrawalAmounts, user1);
         vm.stopPrank();
 

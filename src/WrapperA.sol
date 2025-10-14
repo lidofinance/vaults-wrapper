@@ -25,9 +25,9 @@ contract WrapperA is WrapperBase {
      * @dev Simple deposit with stvETH shares only
      * @param _receiver Address to receive the minted shares
      * @param _referral Address to credit for referral (optional)
-     * @return stvShares Amount of stvETH shares minted
+     * @return stv Amount of stvETH shares minted
      */
-    function depositETH(address _receiver, address _referral) public payable override returns (uint256 stvShares) {
-        stvShares = _deposit(_receiver, _referral);
+    function depositETH(address _receiver, address _referral) public payable override returns (uint256 stv) {
+        stv = _deposit(_receiver, _referral);
     }
 }

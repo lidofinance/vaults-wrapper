@@ -25,7 +25,7 @@ contract LeverageStrategy is IStrategy {
 
     struct UserPosition {
         address user;
-        uint256 stvShares;
+        uint256 stv;
         uint256 stShares;
         uint256 borrowedEth;
     }
@@ -55,7 +55,7 @@ contract LeverageStrategy is IStrategy {
         return userPositions[_address];
     }
 
-    function execute(address _user, uint256 _stvShares) external {
+    function execute(address _user, uint256 _stv) external {
         _onlyWrapper();
 
         console.log("\n---Execute start");
@@ -63,12 +63,12 @@ contract LeverageStrategy is IStrategy {
         uint256 _mintableStethShares = WRAPPER.mintableStethShares(address(this));
 
         UserPosition storage position = userPositions[_user];
-        position.stvShares += _stvShares;
+        position.stv += _stv;
         position.stShares += _mintableStethShares;
 
         uint256 borrowedEth = 0;
         for (uint256 i = 0; i < LOOPS; i++) {
-           
+
             WRAPPER.mintStethShares(_mintableStethShares);
 
             uint256 stethAmount = STETH.getPooledEthByShares(_mintableStethShares);
@@ -79,7 +79,7 @@ contract LeverageStrategy is IStrategy {
             // uint256 aToken = aave.supply(steth)
             LENDER_MOCK.borrow(stethAmount);
             // borrowedEth = weth().withdraw(weth);
-            
+
             borrowedEth = address(this).balance - ethBefore;
             position.borrowedEth += borrowedEth;
 
@@ -87,7 +87,7 @@ contract LeverageStrategy is IStrategy {
 
             uint256 stethSharesBefore = STETH.sharesOf(address(this));
 
-            position.stvShares += WRAPPER.depositForStrategy{value: borrowedEth}();
+            position.stv += WRAPPER.depositForStrategy{value: borrowedEth}();
             _mintableStethShares = WRAPPER.mintableStethShares(address(this));
             position.stShares += _mintableStethShares;
         }
@@ -97,13 +97,13 @@ contract LeverageStrategy is IStrategy {
         console.log("Execute end---");
     }
 
-    function requestWithdrawByETH(address _user, uint256 _stvShares) external returns (uint256 requestId) {}
+    function requestWithdrawByETH(address _user, uint256 _stv) external returns (uint256 requestId) {}
 
     function finalizeWithdrawal(address _receiver, uint256 stETHAmount) external returns(uint256 stvToken) {
 
-        
+
     }
- 
+
     function finalizeWithdrawal(uint256 shares) external returns(uint256 stvToken) {}
     function getWithdrawableEth(address _address) external view returns (uint256 ethAmount) {}
 

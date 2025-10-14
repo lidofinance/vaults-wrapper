@@ -84,7 +84,7 @@ contract DepositTest is Test {
         assertEq(address(stakingVault).balance, dw.CONNECT_DEPOSIT(), "initialVaultBalance should be equal to CONNECT_DEPOSIT");
 
         vm.prank(user1);
-        uint256 user1StvShares = wrapperA.depositETH{value: user1InitialETH}();
+        uint256 user1Stv = wrapperA.depositETH{value: user1InitialETH}();
 
         uint256 ethAfterFirstDeposit = user1InitialETH + dw.CONNECT_DEPOSIT(); // Include initial vault balance
 
@@ -92,12 +92,12 @@ contract DepositTest is Test {
         // Note: With strategy enabled, totalAssets will be higher due to leverage loops
         assertTrue(wrapperA.totalAssets() >= ethAfterFirstDeposit, "wrapper totalAssets should be at least deposited ETH plus initial balance");
         assertEq(address(stakingVault).balance, ethAfterFirstDeposit, "stakingVault balance should match total assets");
-        assertEq(wrapperA.totalSupply(), user1StvShares + dw.CONNECT_DEPOSIT(), "wrapper totalSupply should equal user shares plus initial supply");
+        assertEq(wrapperA.totalSupply(), user1Stv + dw.CONNECT_DEPOSIT(), "wrapper totalSupply should equal user shares plus initial supply");
 
-        assertEq(wrapperA.balanceOf(user1), user1StvShares, "user1 balance should equal returned shares");
+        assertEq(wrapperA.balanceOf(user1), user1Stv, "user1 balance should equal returned shares");
         // With initial supply, shares might be slightly less due to rounding
         // The important thing is that user gets roughly proportional shares
-        assertTrue(user1StvShares >= user1InitialETH - 1 && user1StvShares <= user1InitialETH, "shares should be approximately equal to deposited amount");
+        assertTrue(user1Stv >= user1InitialETH - 1 && user1Stv <= user1InitialETH, "shares should be approximately equal to deposited amount");
         assertEq(user1.balance, 0, "user1 ETH balance should be zero after deposit");
         // Note: Position/locking functionality is specific to WrapperC configuration
 
@@ -105,7 +105,7 @@ contract DepositTest is Test {
         vm.deal(user2, user2InitialETH);
 
         vm.prank(user2);
-        uint256 user2StvShares = wrapperA.depositETH{value: user2InitialETH}(user2);
+        uint256 user2Stv = wrapperA.depositETH{value: user2InitialETH}(user2);
 
         uint256 totalDeposits = user1InitialETH + user2InitialETH;
         uint256 ethAfterBothDeposits = totalDeposits + dw.CONNECT_DEPOSIT();
@@ -115,20 +115,20 @@ contract DepositTest is Test {
         // Note: Position/locking functionality is specific to WrapperC configuration
         assertTrue(wrapperA.totalAssets() >= ethAfterBothDeposits, "wrapper totalAssets should be at least both deposits");
         assertTrue(address(stakingVault).balance >= ethAfterBothDeposits, "stakingVault balance should be at least total deposits");
-        assertEq(wrapperA.totalSupply(), user1StvShares + user2StvShares + dw.CONNECT_DEPOSIT(), "wrapper totalSupply should equal sum of user shares plus initial supply");
-        assertEq(wrapperA.balanceOf(user1), user1StvShares, "user1 balance should remain unchanged");
-        assertEq(wrapperA.balanceOf(user2), user2StvShares, "user2 balance should equal returned shares");
+        assertEq(wrapperA.totalSupply(), user1Stv + user2Stv + dw.CONNECT_DEPOSIT(), "wrapper totalSupply should equal sum of user shares plus initial supply");
+        assertEq(wrapperA.balanceOf(user1), user1Stv, "user1 balance should remain unchanged");
+        assertEq(wrapperA.balanceOf(user2), user2Stv, "user2 balance should equal returned shares");
 
         // For ERC4626, shares = assets * totalSupply / totalAssets
-        // After first deposit: totalSupply = user1StvShares + CONNECT_DEPOSIT, totalAssets = ethAfterFirstDeposit
-        // User2's shares = user2InitialETH * (user1StvShares + CONNECT_DEPOSIT) / ethAfterFirstDeposit
-        uint256 expectedUser2Shares = user2InitialETH * (user1StvShares + dw.CONNECT_DEPOSIT()) / ethAfterFirstDeposit;
-        assertEq(user2StvShares, expectedUser2Shares, "user2 shares should follow ERC4626 formula");
+        // After first deposit: totalSupply = user1Stv + CONNECT_DEPOSIT, totalAssets = ethAfterFirstDeposit
+        // User2's shares = user2InitialETH * (user1Stv + CONNECT_DEPOSIT) / ethAfterFirstDeposit
+        uint256 expectedUser2Shares = user2InitialETH * (user1Stv + dw.CONNECT_DEPOSIT()) / ethAfterFirstDeposit;
+        assertEq(user2Stv, expectedUser2Shares, "user2 shares should follow ERC4626 formula");
 
         // Verify share-to-asset conversion works correctly for both users (within rounding tolerance)
         // Note: Using totalAssets/totalSupply ratio since convertToAssets not implemented
-        uint256 user1Assets = user1StvShares * wrapperA.totalAssets() / wrapperA.totalSupply();
-        uint256 user2Assets = user2StvShares * wrapperA.totalAssets() / wrapperA.totalSupply();
+        uint256 user1Assets = user1Stv * wrapperA.totalAssets() / wrapperA.totalSupply();
+        uint256 user2Assets = user2Stv * wrapperA.totalAssets() / wrapperA.totalSupply();
         assertTrue(user1Assets >= user1InitialETH - 1 && user1Assets <= user1InitialETH + 1, "user1 assets should be approximately equal to initial deposit");
         assertTrue(user2Assets >= user2InitialETH - 1 && user2Assets <= user2InitialETH + 1, "user2 assets should be approximately equal to initial deposit");
         assertTrue(user1Assets + user2Assets >= user1InitialETH + user2InitialETH - 2 && user1Assets + user2Assets <= user1InitialETH + user2InitialETH + 2, "sum of user assets should approximately equal sum of deposits");
@@ -144,7 +144,7 @@ contract DepositTest is Test {
         uint256 user1SecondShares = wrapperA.depositETH{value: user1SecondDeposit}(user1);
 
         uint256 totalDepositsAfterSecond = ethAfterBothDeposits + user1SecondDeposit;
-        uint256 user1TotalShares = user1StvShares + user1SecondShares;
+        uint256 user1TotalShares = user1Stv + user1SecondShares;
 
         // Main invariants after user1's second deposit
         assertEq(user1.balance, 0, "user1 ETH balance should be zero after second deposit");
@@ -152,7 +152,7 @@ contract DepositTest is Test {
         assertTrue(address(stakingVault).balance >= totalDepositsAfterSecond, "stakingVault balance should include at least second deposit");
         assertEq(wrapperA.totalSupply(), totalSupplyBeforeSecond + user1SecondShares, "totalSupply should increase by second shares");
         assertEq(wrapperA.balanceOf(user1), user1TotalShares, "user1 balance should be sum of both deposits' shares");
-        assertEq(wrapperA.balanceOf(user2), user2StvShares, "user2 balance should remain unchanged");
+        assertEq(wrapperA.balanceOf(user2), user2Stv, "user2 balance should remain unchanged");
 
         // ERC4626 calculation for user1's second deposit
         uint256 expectedUser1SecondShares = user1SecondDeposit * totalSupplyBeforeSecond / totalAssetsBeforeSecond;
@@ -161,7 +161,7 @@ contract DepositTest is Test {
         // Verify final share-to-asset conversions (within rounding tolerance)
         uint256 user1ExpectedAssets = user1InitialETH + user1SecondDeposit;
         uint256 user1TotalAssets = user1TotalShares * wrapperA.totalAssets() / wrapperA.totalSupply();
-        uint256 user2FinalAssets = user2StvShares * wrapperA.totalAssets() / wrapperA.totalSupply();
+        uint256 user2FinalAssets = user2Stv * wrapperA.totalAssets() / wrapperA.totalSupply();
         uint256 totalSupplyAssets = wrapperA.totalAssets(); // Total supply converted to assets is just totalAssets
 
         assertTrue(user1TotalAssets >= user1ExpectedAssets - 3 && user1TotalAssets <= user1ExpectedAssets + 3, "user1 total assets should approximately equal both deposits");
@@ -180,12 +180,12 @@ contract DepositTest is Test {
 
         // User1 deposits ETH
         vm.startPrank(user1);
-        uint256 user1StvShares = wrapperA.depositETH{value: user1InitialETH}(user1);
+        uint256 user1Stv = wrapperA.depositETH{value: user1InitialETH}(user1);
         vm.stopPrank();
 
         // User1 should have all the shares (minus initial supply held by DefiWrapper)
-        assertEq(wrapperA.balanceOf(user1), user1StvShares, "user1 should have all minted shares");
-        assertTrue(user1StvShares >= user1InitialETH - 1 && user1StvShares <= user1InitialETH, "shares should be approximately equal to deposited amount");
+        assertEq(wrapperA.balanceOf(user1), user1Stv, "user1 should have all minted shares");
+        assertTrue(user1Stv >= user1InitialETH - 1 && user1Stv <= user1InitialETH, "shares should be approximately equal to deposited amount");
 
         uint256 user1BalanceBeforeReport = wrapperA.balanceOf(user1);
         console.log("user1BalanceBeforeReport", user1BalanceBeforeReport);

@@ -53,13 +53,13 @@ contract WrapperBHarness is WrapperAHarness {
         address[] memory holders = _allPossibleStvHolders(_ctx);
 
         {
-            // Check none can mint beyond mintableStShares
+            // Check none can mint beyond mintable capacity
             for (uint256 i = 0; i < holders.length; i++) {
                 address holder = holders[i];
                 uint256 mintableStShares = wrapperB(_ctx).mintableStethShares(holder);
 
                 vm.startPrank(holder);
-                vm.expectRevert("InsufficientMintableStShares()");
+                vm.expectRevert(WrapperB.InsufficientMintingCapacity.selector);
                 wrapperB(_ctx).mintStethShares(mintableStShares + 1);
                 vm.stopPrank();
             }
@@ -69,5 +69,14 @@ contract WrapperBHarness is WrapperAHarness {
     // Helper function to access WrapperB-specific functionality from context
     function wrapperB(WrapperContext memory ctx) internal pure returns (WrapperB) {
         return WrapperB(payable(address(ctx.wrapper)));
+    }
+
+    /**
+     * @notice Calculate max mintable stETH shares for a given ETH amount
+     * @dev Uses WRAPPER_RR_BP from WrapperB which includes the wrapper gap
+     */
+    function _calcMaxMintableStShares(WrapperContext memory ctx, uint256 _eth) public view returns (uint256) {
+        uint256 wrapperRrBp = wrapperB(ctx).WRAPPER_RR_BP();
+        return steth.getSharesByPooledEth(_eth * (TOTAL_BASIS_POINTS - wrapperRrBp) / TOTAL_BASIS_POINTS);
     }
 }

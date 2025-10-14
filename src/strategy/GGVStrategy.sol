@@ -195,7 +195,7 @@ contract GGVStrategy is Strategy {
             abi.encodeWithSelector(WrapperB.requestWithdrawal.selector, stv, stethSharesToBurn, stethToRebalance, _request.owner)
         );
         uint256 wqRequestId = abi.decode(requestData, (uint256));
-        
+
         emit Finalized(_request.owner, wqRequestId, stv, stethAmount, stethSharesToBurn);
     }
 

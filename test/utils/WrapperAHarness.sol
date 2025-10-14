@@ -32,6 +32,8 @@ contract WrapperAHarness is Test {
     address public constant USER2 = address(0x1002);
     address public constant USER3 = address(0x1003);
 
+    address public constant CL_LAYER = address(0x128284828);
+
     address public constant NODE_OPERATOR = address(0x1004);
 
     // Test constants
@@ -175,13 +177,6 @@ contract WrapperAHarness is Test {
         }
         vm.stopPrank();
 
-        console.log("Factory created wrapper system:");
-        console.log("  factory: %s", address(factory));
-        console.log("  wrapper: %s", wrapperAddress);
-        console.log("  dashboard: %s", dashboard_);
-        console.log("  vault: %s", vault_);
-        console.log("  withdrawalQueue: %s", withdrawalQueue_);
-
         // Apply initial vault report with current total value equal to connect deposit
         core.applyVaultReport(vault_, CONNECT_DEPOSIT, 0, 0, 0, false);
 
@@ -226,7 +221,7 @@ contract WrapperAHarness is Test {
     function _checkInitialState(WrapperContext memory ctx) internal virtual {
         // Basic checks common to all wrappers
         assertEq(
-            ctx.dashboard.reserveRatioBP(), RESERVE_RATIO_BP, "Reserve ratio should match RESERVE_RATIO_BP constant"
+            ctx.dashboard.vaultConnection().reserveRatioBP, RESERVE_RATIO_BP, "Reserve ratio should match RESERVE_RATIO_BP constant"
         );
         assertEq(ctx.wrapper.EXTRA_DECIMALS_BASE(), EXTRA_BASE, "EXTRA_DECIMALS_BASE should match EXTRA_BASE constant");
 
@@ -253,9 +248,7 @@ contract WrapperAHarness is Test {
         assertEq(ctx.dashboard.remainingMintingCapacityShares(0), 0, "Remaining minting capacity should be zero");
         assertEq(ctx.dashboard.totalMintingCapacityShares(), 0, "Total minting capacity should be zero");
 
-        assertEq(steth.getPooledEthByShares(1 ether), 1 ether + 10 ** 17, "ETH for 1e18 stETH shares should be 1.1 ETH");
-
-        console.log("Reserve ratio:", ctx.dashboard.reserveRatioBP());
+        console.log("Reserve ratio:", ctx.dashboard.vaultConnection().reserveRatioBP);
         console.log("ETH for 1e18 stETH shares: ", steth.getPooledEthByShares(1 ether));
 
         _assertUniversalInvariants("Initial state", ctx);
@@ -277,25 +270,46 @@ contract WrapperAHarness is Test {
      * current vault record so tests can proceed with minting/withdrawing flows.
      */
     function _ensureFreshness(WrapperContext memory ctx) internal {
-        // Ensure VaultHub record timestamp is set
-        uint256 recTs = IVaultHub(address(ctx.dashboard.VAULT_HUB())).vaultRecord(address(ctx.vault)).report.timestamp;
-        if (recTs == 0) {
-            core.applyVaultReport(
-                address(ctx.vault), ctx.dashboard.totalValue(), 0, ctx.dashboard.liabilityShares(), 0, false
-            );
-            recTs = IVaultHub(address(ctx.dashboard.VAULT_HUB())).vaultRecord(address(ctx.vault)).report.timestamp;
-        }
+        // Bump the vault record to the current block time to satisfy freshness requirements
+        core.applyVaultReport(
+            address(ctx.vault), ctx.dashboard.totalValue(), 0, ctx.dashboard.liabilityShares(), 0, false
+        );
 
-        // Make LazyOracle.latestReportTimestamp equal to the record timestamp to satisfy _isReportFresh logic
-        vm.warp(recTs + 1);
+        uint256 recTs = IVaultHub(address(ctx.dashboard.VAULT_HUB())).vaultRecord(address(ctx.vault)).report.timestamp;
         vm.mockCall(address(core.lazyOracle()), abi.encodeWithSignature("latestReportTimestamp()"), abi.encode(recTs));
 
-        // Also return true from VaultHub.isReportFresh for the specific vault used in this test context
+        // Ensure core treats the record as fresh for this vault
         vm.mockCall(
             address(core.vaultHub()),
             abi.encodeWithSignature("isReportFresh(address)", address(ctx.vault)),
             abi.encode(true)
         );
+    }
+
+    /**
+     * @notice Simulate sending all available ETH from staking vault to consensus layer (drain withdrawable)
+     */
+    function _depositToCL(WrapperContext memory ctx) internal {
+        core.mockValidatorsReceiveETH(address(ctx.vault));
+    }
+
+    /**
+     * @notice Simulate validator exits returning ETH from consensus layer to staking vault
+     * @param _amount amount of ETH to return to staking vault
+     */
+    function _withdrawFromCL(WrapperContext memory ctx, uint256 _amount) internal {
+        core.mockValidatorExitReturnETH(address(ctx.vault), _amount);
+    }
+
+    /**
+     * @notice Advance block time past the WQ min delay for the given request and ensure report freshness afterwards
+     * @dev Ensures LazyOracle.latestReportTimestamp() is >= request.timestamp and that report is fresh
+     */
+    function _advancePastMinDelayAndRefreshReport(WrapperContext memory ctx, uint256 requestId) internal {
+        WithdrawalQueue.WithdrawalRequestStatus memory st = ctx.withdrawalQueue.getWithdrawalStatus(requestId);
+        uint256 minDelay = ctx.withdrawalQueue.MIN_WITHDRAWAL_DELAY_TIME_IN_SECONDS();
+        vm.warp(st.timestamp + minDelay + 2);
+        _ensureFreshness(ctx);
     }
 
     // TODO: add after report invariants

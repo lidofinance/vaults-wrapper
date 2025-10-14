@@ -211,7 +211,7 @@ contract GGVTest is WrapperCHarness {
         vm.prank(USER1);
         uint256 requestId = wrapper.requestWithdrawalFromStrategy(withdrawalStethAmount, abi.encode(params));
         assertEq(requestId, 0);
-    
+
         // Apply 1% increase to core (stETH share ratio)
         core.increaseBufferedEther(steth.totalSupply() * 0 / 100);
         uint256 shareRate3 = steth.getPooledEthByShares(1e18);
@@ -307,7 +307,7 @@ contract GGVTest is WrapperCHarness {
             wrapper.DASHBOARD().fund{value: 10 ether}();
             vm.stopPrank();
 //        }
-        
+
 
         vm.startPrank(NODE_OPERATOR);
         uint256 finalizedRequests = wrapper.WITHDRAWAL_QUEUE().finalize(_maxRequest);

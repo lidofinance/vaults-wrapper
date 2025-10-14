@@ -1,7 +1,7 @@
 .ONESHELL:
 
 CORE_RPC_PORT ?= 9123
-CORE_BRANCH ?= feat/testnet-2
+CORE_BRANCH ?= feat/vaults
 CORE_SUBDIR ?= lido-core
 NETWORK ?= local
 VERBOSITY ?= vv
@@ -9,7 +9,7 @@ DEBUG_TEST ?= test_debug
 
 
 test-integration-a:
-	. .env 2>/dev/null || true; \
+	[ -f .env ] && . .env; \
 	FOUNDRY_PROFILE=test \
 	CORE_DEPLOYED_JSON="$$CORE_DEPLOYED_JSON" \
 	forge test \
@@ -18,7 +18,7 @@ test-integration-a:
 		--fork-url "$$RPC_URL"
 
 test-integration-b:
-	. .env 2>/dev/null || true; \
+	[ -f .env ] && . .env; \
 	FOUNDRY_PROFILE=test \
 	CORE_DEPLOYED_JSON="$$CORE_DEPLOYED_JSON" \
 	forge test \
@@ -28,7 +28,7 @@ test-integration-b:
 
 
 test-integration-ggv:
-	. .env 2>/dev/null || true; \
+	[ -f .env ] && . .env; \
 	FOUNDRY_PROFILE=test \
 	CORE_DEPLOYED_JSON="$$CORE_DEPLOYED_JSON" \
 	forge test \
@@ -37,11 +37,11 @@ test-integration-ggv:
 		--fork-url "$$RPC_URL"
 
 test-integration:
-	. .env 2>/dev/null || true; \
+	[ -f .env ] && . .env; \
 	FOUNDRY_PROFILE=test CORE_DEPLOYED_JSON="$$CORE_DEPLOYED_JSON" forge test test/integration/**/*.test.sol -$(VERBOSITY) --fork-url "$$RPC_URL"
 
 test-integration-debug:
-	. .env 2>/dev/null || true; \
+	[ -f .env ] && . .env; \
 	FOUNDRY_PROFILE=test CORE_DEPLOYED_JSON="$$CORE_DEPLOYED_JSON" forge test --match-test $(DEBUG_TEST) -$(VERBOSITY) --fork-url $${RPC_URL}
 	# FOUNDRY_PROFILE=test forge test test/integration/**/*.test.sol -vv --fork-url $(RPC_URL)
 
@@ -53,7 +53,7 @@ test-all:
 	make test-integration
 
 deploy-factory:
-	. .env 2>/dev/null || true; \
+	[ -f .env ] && . .env; \
 	VERIFY_FLAGS=""; \
 	if [ -n "$$PUBLISH_SOURCES" ]; then \
 		export ETHERSCAN_API_KEY="$${ETHERSCAN_API_KEY:-$${ETHERSCAN_TOKEN}}"; \
@@ -73,7 +73,7 @@ deploy-factory:
 
 # Usage: make deploy-wrapper-from-factory PARAMS_JSON=./myparams.json
 deploy-wrapper-from-factory:
-	. .env 2>/dev/null || true; \
+	[ -f .env ] && . .env; \
 	if [ ! -f "$$PARAMS_JSON" ]; then \
 		echo "Error: PARAMS_JSON must be set and point to an existing file (e.g. make deploy-wrapper-from-factory PARAMS_JSON=./myparams.json)"; \
 		exit 1; \
@@ -92,7 +92,7 @@ deploy-wrapper-from-factory:
 
 
 publish-wrapper-sources:
-	. .env 2>/dev/null || true; \
+	[ -f .env ] && . .env; \
 	if [ -z "$$ETHERSCAN_API_KEY" ] && [ -z "$$ETHERSCAN_TOKEN" ]; then \
 		echo "ETHERSCAN_API_KEY or ETHERSCAN_TOKEN must be set"; \
 		exit 1; \
@@ -167,7 +167,7 @@ publish-wrapper-sources:
 
 
 deploy-ggv-mocks:
-	. .env 2>/dev/null || true; \
+	[ -f .env ] && . .env; \
 	OUTPUT_JSON=$${GGV_MOCKS_DEPLOYED_JSON:-deployments/ggv-mocks-$${NETWORK:-$(NETWORK)}.json}; \
 	forge script script/DeployGGVMocks.s.sol:DeployGGVMocks \
 		--rpc-url $${RPC_URL} \
@@ -235,7 +235,7 @@ start-fork-no-size-limit:
 	anvil --chain-id 1 --auto-impersonate --port $(CORE_RPC_PORT) --disable-code-size-limit
 
 start-fork-from-rpc:
-	. .env 2>/dev/null || true; \
+	[ -f .env ] && . .env; \
 	if [ -z "$$RPC_URL_TO_FORK" ]; then \
 		echo "RPC_URL_TO_FORK must be set"; \
 		exit 1; \

@@ -22,7 +22,7 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
     error ZeroDeposit();
     error InvalidReceiver();
     error NoMintingCapacityAvailable();
-    error ZeroStvShares();
+    error ZeroStv();
     error TransferNotAllowed();
     error NotWithdrawalQueue();
     error InvalidRequestType();
@@ -72,7 +72,7 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
 
     event VaultFunded(uint256 amount);
     event ValidatorExitRequested(bytes pubkeys);
-    event ValidatorWithdrawalsTriggered(bytes pubkeys, uint64[] amounts);
+    event ValidatorWithdrawalsTriggered(bytes pubkeys, uint64[] amountsInGwei);
     event Deposit(
         address indexed sender,
         address indexed receiver,
@@ -146,12 +146,12 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
     }
 
     /**
-     * @notice Assets owned by an account
+     * @notice Nominal assets owned by an account
      * @param _account The account to query
      * @return assets Amount of account assets (18 decimals)
      * @dev Overridable method to include other assets if needed
      */
-    function assetsOf(address _account) public view returns (uint256 assets) {
+    function nominalAssetsOf(address _account) public view returns (uint256 assets) {
         assets = _getAssetsShare(balanceOf(_account), totalAssets());
     }
 
@@ -175,13 +175,13 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
     }
 
     /**
-     * @notice Effective assets owned by an account
+     * @notice Assets owned by an account
      * @param _account The account to query
-     * @return Amount of effective assets (18 decimals)
+     * @return Amount of assets (18 decimals)
      * @dev Overridable method to include other assets if needed
      */
-    function effectiveAssetsOf(address _account) public view virtual returns (uint256) {
-        return assetsOf(_account); /* plus other assets if any */
+    function assetsOf(address _account) public view virtual returns (uint256) {
+        return nominalAssetsOf(_account); /* plus other assets if any */
     }
 
     function decimals() public pure override returns (uint8) {
@@ -230,17 +230,17 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
 
     /**
      * @notice Convenience function to deposit ETH to msg.sender
-     * @return stvShares Amount of stvETH shares minted
+     * @return stv Amount of stvETH shares minted
      */
-    function depositETH(address _referral) public payable returns (uint256 stvShares) {
+    function depositETH(address _referral) public payable returns (uint256 stv) {
         return depositETH(msg.sender, _referral);
     }
 
     /**
      * @notice Convenience function to deposit ETH to msg.sender without referral
-     * @return stvShares Amount of stvETH shares minted
+     * @return stv Amount of stvETH shares minted
      */
-    function depositETH() public payable returns (uint256 stvShares) {
+    function depositETH() public payable returns (uint256 stv) {
         return depositETH(msg.sender, address(0));
     }
 
@@ -248,20 +248,20 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
      * @notice Deposit native ETH and receive stvETH shares
      * @dev Implementation depends on specific wrapper configuration
      * @param _receiver Address to receive the minted shares
-     * @return stvShares Amount of stvETH shares minted
+     * @return stv Amount of stvETH shares minted
      */
-    function depositETH(address _receiver, address _referral) public payable virtual returns (uint256 stvShares);
+    function depositETH(address _receiver, address _referral) public payable virtual returns (uint256 stv);
 
-    function _deposit(address _receiver, address _referral) internal returns (uint256 stvShares) {
+    function _deposit(address _receiver, address _referral) internal returns (uint256 stv) {
         if (msg.value == 0) revert WrapperBase.ZeroDeposit();
         if (_receiver == address(0)) revert WrapperBase.InvalidReceiver();
         _checkAllowList();
 
-        stvShares = previewDeposit(msg.value);
-        _mint(_receiver, stvShares);
+        stv = previewDeposit(msg.value);
+        _mint(_receiver, stv);
         DASHBOARD.fund{value: msg.value}();
 
-        emit Deposit(msg.sender, _receiver, _referral, msg.value, stvShares);
+        emit Deposit(msg.sender, _receiver, _referral, msg.value, stv);
     }
 
     // =================================================================================
@@ -355,7 +355,7 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
      * @dev Overridable method to include locked assets if needed
      */
     function withdrawableEth(address _account) public view virtual returns (uint256 ethAmount) {
-        ethAmount = effectiveAssetsOf(_account);
+        ethAmount = assetsOf(_account);
     }
 
     /**
@@ -527,11 +527,11 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
 
     function triggerValidatorWithdrawals(
         bytes calldata _pubkeys,
-        uint64[] calldata _amounts,
+        uint64[] calldata _amountsInGwei,
         address _refundRecipient
     ) external payable {
         _checkOnlyRoleOrEmergencyExit(TRIGGER_VALIDATOR_WITHDRAWAL_ROLE);
-        DASHBOARD.triggerValidatorWithdrawals{value: msg.value}(_pubkeys, _amounts, _refundRecipient);
+        DASHBOARD.triggerValidatorWithdrawals{value: msg.value}(_pubkeys, _amountsInGwei, _refundRecipient);
     }
 
     /// @notice Modifier to check role or Emergency Exit

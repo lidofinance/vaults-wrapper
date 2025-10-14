@@ -6,6 +6,7 @@ import {MockVaultHub} from "./MockVaultHub.sol";
 import {MockStakingVault} from "./MockStakingVault.sol";
 import {AccessControlEnumerable} from "@openzeppelin/contracts/access/extensions/AccessControlEnumerable.sol";
 import {IStakingVault} from "../../src/interfaces/IStakingVault.sol";
+import {IVaultHub} from "../../src/interfaces/IVaultHub.sol";
 
 contract MockDashboard is AccessControlEnumerable {
     MockStETH public immutable STETH;
@@ -90,15 +91,15 @@ contract MockDashboard is AccessControlEnumerable {
         return 1000 ether; // Mock large capacity
     }
 
-    function reserveRatioBP() external pure returns (uint256) {
-        return 500; // 5% reserve ratio for testing
+    function vaultConnection() external view returns (IVaultHub.VaultConnection memory) {
+        return VAULT_HUB.vaultConnection(STAKING_VAULT);
     }
 
     function requestValidatorExit(bytes calldata pubkeys) external {
         // Mock implementation
     }
 
-    function triggerValidatorWithdrawals(bytes calldata pubkeys, uint64[] calldata amounts, address refundRecipient)
+    function triggerValidatorWithdrawals(bytes calldata pubkeys, uint64[] calldata amountsInGwei, address refundRecipient)
         external
         payable
     {

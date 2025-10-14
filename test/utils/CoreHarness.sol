@@ -158,7 +158,6 @@ contract CoreHarness is Test {
         // Apply real updateVaultData with an empty proof path; this triggers applyVaultReport using the latest report timestamp
         if (!_onlyUpdateReportData) {
             uint256 maxLiabilityShares = vaultHub.vaultRecord(_stakingVault).maxLiabilityShares;
-            console.log("Calling mock__updateVaultData with totalValue:", _totalValue);
             vm.prank(locator.accounting());
             try lazyOracle.updateVaultData(
                 _stakingVault, _totalValue, _cumulativeLidoFees, _liabilityShares, _slashingReserve, new bytes32[](0)
@@ -168,7 +167,7 @@ contract CoreHarness is Test {
                 // If proof checks enforced, fall back to mock when available
                 address ao = locator.accountingOracle();
                 vm.prank(ao);
-                (bool ok,) = address(lazyOracle).call(
+                (bool success,) = address(lazyOracle).call(
                     abi.encodeWithSelector(
                         ILazyOracleMocked.mock__updateVaultData.selector,
                         _stakingVault,
@@ -179,11 +178,8 @@ contract CoreHarness is Test {
                         _slashingReserve
                     )
                 );
-                if (ok) {
-                    console.log(
-                        "After mock__updateVaultData, totalValue from vaultHub:", vaultHub.totalValue(_stakingVault)
-                    );
-                }
+                // Ignore failures in mock calls - they may not be available on all deployments
+                success;
             }
         }
 

@@ -27,7 +27,7 @@ contract WrapperC is WrapperB {
     bytes32 private constant WRAPPER_STRATEGY_STORAGE_LOCATION =
         0x76c92ae68eaa959f76afc10fd368073d675fe474488a86150a8ad065d1775b00;
 
-    event StrategyExecuted(address indexed user, uint256 stvShares, uint256 targetStethShares);
+    event StrategyExecuted(address indexed user, uint256 stv, uint256 targetStethShares);
     event StrategyWithdrawalRequested(uint256 requestId, bytes32 strategyRequestId, address indexed user, uint256 amount, uint40 timestamp);
     event StrategyWithdrawalFinalized(uint256 requestId, bytes32 strategyRequestId, address indexed user, uint256 amount, uint40 timestamp);
 
@@ -52,14 +52,14 @@ contract WrapperC is WrapperB {
      * @dev Funds the vault and mints shares to the receiver, then executes strategy
      * @param _receiver Address to receive the minted shares
      * @param _referral Address to credit for referral (optional)
-     * @return stvShares Amount of stvETH shares minted
+     * @return stv Amount of stvETH shares minted
      */
-    function depositETH(address _receiver, address _referral) public payable override returns (uint256 stvShares) {
-        uint256 targetStethShares = _calcStethSharesToMintForAssets(msg.value);
-        stvShares = _deposit(address(STRATEGY), _referral);
-        STRATEGY.execute(_receiver, stvShares, targetStethShares);
+    function depositETH(address _receiver, address _referral) public payable override returns (uint256 stv) {
+        uint256 targetStethShares = calcStethSharesToMintForAssets(msg.value);
+        stv = _deposit(address(STRATEGY), _referral);
+        STRATEGY.execute(_receiver, stv, targetStethShares);
 
-        emit StrategyExecuted(_receiver, stvShares, targetStethShares);
+        emit StrategyExecuted(_receiver, stv, targetStethShares);
     }
 
     function requestWithdrawalFromStrategy(uint256 _stethAmount, bytes calldata params) public returns (uint256 requestId) {
