@@ -10,4 +10,6 @@ interface IStrategy {
     function execute(address _user, uint256 _stv, uint256 _stethShares) external;
     function requestWithdrawByStETH(address _user, uint256 _stethAmount, bytes calldata params) external returns (bytes32 requestId);
     function finalizeWithdrawal(WithdrawalRequest memory request) external;
+
+
 }
