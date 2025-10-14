@@ -9,8 +9,6 @@ import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet
 
 import {WithdrawalQueue} from "./WithdrawalQueue.sol";
 
-import {console} from "forge-std/console.sol";
-
 import {IStETH} from "./interfaces/IStETH.sol";
 
 /**
@@ -570,11 +568,6 @@ contract WrapperB is WrapperBase {
         if (mintedStethShares == 0) return;
 
         uint256 stvToLock = _calcStvToLockForStethShares(mintedStethShares);
-
-        console.log("_update _from", _from);
-        console.log("_update balanceOf(_from)", balanceOf(_from));
-        console.log("_update mintedStethShares", mintedStethShares);
-        console.log("_update stvToLock", stvToLock);
 
         if (balanceOf(_from) < stvToLock) revert InsufficientReservedBalance();
     }
