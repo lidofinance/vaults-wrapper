@@ -518,11 +518,16 @@ contract WrapperB is WrapperBase {
     /**
      * @notice Rebalance the user's minted stETH shares by burning stvETH shares
      * @param _stethShares The amount of stETH shares to rebalance
+     * @param _maxStvToBurn The maximum amount of stvETH shares to burn for rebalancing
+     * @return stvToBurn The actual amount of stvETH shares burned for rebalancing
      * @dev First, rebalances internally by burning stvETH shares, which decreases exceeding shares (if any)
      * @dev Second, if there are remaining liability shares, rebalances Staking Vault
      * @dev Requires fresh oracle report, which is checked in the Withdrawal Queue
      */
-    function rebalanceMintedStethShares(uint256 _stethShares, uint256 _maxStvToBurn) public {
+    function rebalanceMintedStethShares(
+        uint256 _stethShares,
+        uint256 _maxStvToBurn
+    ) public returns (uint256 stvToBurn) {
         _checkOnlyWithdrawalQueue();
 
         if (_stethShares == 0) revert ZeroArgument();
@@ -534,7 +539,7 @@ contract WrapperB is WrapperBase {
         if (remainingStethShares > 0) DASHBOARD.rebalanceVaultWithShares(remainingStethShares);
 
         uint256 ethToRebalance = STETH.getPooledEthBySharesRoundUp(_stethShares);
-        uint256 stvToBurn = _convertToShares(ethToRebalance, Math.Rounding.Ceil);
+        stvToBurn = _convertToShares(ethToRebalance, Math.Rounding.Ceil);
 
         if (stvToBurn > _maxStvToBurn) {
             emit SocializedLoss(stvToBurn - _maxStvToBurn, ethToRebalance - _convertToAssets(_maxStvToBurn));
@@ -557,6 +562,9 @@ contract WrapperB is WrapperBase {
      */
     function _update(address _from, address _to, uint256 _value) internal override {
         super._update(_from, _to, _value);
+
+        // Skip checks for burning from Withdrawal Queue
+        if (_from == address(WITHDRAWAL_QUEUE) && _to == address(0)) return;
 
         uint256 mintedStethShares = mintedStethSharesOf(_from);
         if (mintedStethShares == 0) return;

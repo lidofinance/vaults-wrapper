@@ -12,8 +12,6 @@ import {ILazyOracle} from "./interfaces/ILazyOracle.sol";
 import {IWrapper} from "./interfaces/IWrapper.sol";
 import {IStETH} from "./interfaces/IStETH.sol";
 
-import {console} from "forge-std/Test.sol";
-
 /// @title Withdrawal Queue V3 for Staking Vault Wrapper
 /// @notice Handles withdrawal requests for stvToken holders
 contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradeable {
@@ -136,10 +134,10 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
     event WithdrawalsFinalized(
         uint256 indexed from,
         uint256 indexed to,
-        uint256 amountOfETHLocked,
-        uint256 stvToBurn,
-        uint256 stethSharesToRebalance,
-        uint256 maxStvToRebalance,
+        uint256 ethLocked,
+        uint256 stvBurned,
+        uint256 stvRebalanced,
+        uint256 stethSharesRebalanced,
         uint256 timestamp
     );
 
@@ -338,6 +336,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
      * @notice Finalize withdrawal requests
      * @param _maxRequests the maximum number of requests to finalize
      * @return finalizedRequests the number of requests that were finalized
+     * @dev MIN_WITHDRAWAL_AMOUNT is used to prevent DoS attacks by placing many small requests
      */
     function finalize(uint256 _maxRequests) external returns (uint256 finalizedRequests) {
         if (!isEmergencyExitActivated()) {
@@ -360,7 +359,6 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
         uint256 withdrawableValue = DASHBOARD.withdrawableValue();
         uint256 exceedingSteth = WRAPPER.totalExceedingMintedSteth();
         uint256 latestReportTimestamp = LAZY_ORACLE.latestReportTimestamp();
-        uint256 liabilityShares = STETH.getPooledEthByShares(DASHBOARD.liabilityShares());
 
         uint256 totalStvToBurn;
         uint256 totalStethShares;
@@ -413,21 +411,24 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
 
             withdrawableValue -= (ethToClaim + ethToRebalance);
             totalEthToClaim += ethToClaim;
-            totalStvToBurn += (stv - stvToRebalance);
+            totalStvToBurn += stv;
             totalStethShares += stethSharesToRebalance;
             maxStvToRebalance += stvToRebalance;
             finalizedRequests++;
         }
 
-        if (finalizedRequests == 0) {
-            return 0;
+        if (finalizedRequests == 0) return 0;
+
+        uint256 totalStvRebalanced;
+
+        if (totalStethShares > 0) {
+            totalStvRebalanced = WRAPPER.rebalanceMintedStethShares(totalStethShares, maxStvToRebalance);
+            totalStvToBurn -= totalStvRebalanced;
         }
 
-        DASHBOARD.withdraw(address(this), totalEthToClaim);
-
-        // TODO: check if burn can be locked because of minted steth shares
+        // Could be 0 if all requests were rebalanced
+        if (totalEthToClaim > 0) DASHBOARD.withdraw(address(this), totalEthToClaim);
         if (totalStvToBurn > 0) WRAPPER.burnStvForWithdrawalQueue(totalStvToBurn);
-        if (totalStethShares > 0) WRAPPER.rebalanceMintedStethShares(totalStethShares, maxStvToRebalance);
 
         lastFinalizedRequestId = lastFinalizedRequestId + finalizedRequests;
 
@@ -448,8 +449,8 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
             lastFinalizedRequestId,
             totalEthToClaim,
             totalStvToBurn,
+            totalStvRebalanced,
             totalStethShares,
-            maxStvToRebalance,
             block.timestamp
         );
     }
@@ -471,7 +472,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
      * @return stethShareRate Current stETH share rate (1e27 precision)
      */
     function calculateCurrentStethShareRate() public view returns (uint256 stethShareRate) {
-        stethShareRate = IStETH(WRAPPER.STETH()).getPooledEthBySharesRoundUp(E27_PRECISION_BASE);
+        stethShareRate = STETH.getPooledEthBySharesRoundUp(E27_PRECISION_BASE);
     }
 
     // =================================================================================

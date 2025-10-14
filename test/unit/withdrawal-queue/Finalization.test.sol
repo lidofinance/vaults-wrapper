@@ -167,7 +167,7 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
 
         vm.prank(finalizeRoleHolder);
         vm.expectRevert(WithdrawalQueue.NoRequestsToFinalize.selector);
-        uint256 finalizedCount = withdrawalQueue.finalize(0);
+        withdrawalQueue.finalize(0);
     }
 
     function test_Finalize_NoRequestsToFinalize() public {
