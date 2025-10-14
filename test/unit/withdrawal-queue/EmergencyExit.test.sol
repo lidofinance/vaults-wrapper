@@ -15,7 +15,7 @@ contract EmergencyExitTest is Test, SetupWithdrawalQueue {
 
     // Basic Emergency Exit State
 
-    function test_EmergencyExit_InitialState() public {
+    function test_EmergencyExit_InitialState() public view {
         // Initially should not be activated
         assertFalse(withdrawalQueue.isEmergencyExitActivated());
         assertFalse(withdrawalQueue.isWithdrawalQueueStuck());
