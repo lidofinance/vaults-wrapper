@@ -57,6 +57,7 @@ contract WrapperAHarness is Test {
         uint256 nodeOperatorFeeBP;
         uint256 confirmExpiry;
         uint256 maxFinalizationTime;
+        uint256 minWithdrawalDelayTime;
         address teller;
         address boringQueue;
     }
@@ -122,6 +123,7 @@ contract WrapperAHarness is Test {
                 config.nodeOperatorFeeBP,
                 config.confirmExpiry,
                 config.maxFinalizationTime,
+                config.minWithdrawalDelayTime,
                 config.enableAllowlist
             );
         } else if (config.configuration == Factory.WrapperType.MINTING_NO_STRATEGY) {
@@ -134,6 +136,7 @@ contract WrapperAHarness is Test {
                 config.nodeOperatorFeeBP,
                 config.confirmExpiry,
                 config.maxFinalizationTime,
+                config.minWithdrawalDelayTime,
                 config.enableAllowlist,
                 config.reserveRatioGapBP
             );
@@ -148,6 +151,7 @@ contract WrapperAHarness is Test {
                 config.nodeOperatorFeeBP,
                 config.confirmExpiry,
                 config.maxFinalizationTime,
+                config.minWithdrawalDelayTime,
                 config.enableAllowlist,
                 config.reserveRatioGapBP,
                 loops
@@ -162,6 +166,7 @@ contract WrapperAHarness is Test {
                 config.nodeOperatorFeeBP,
                 config.confirmExpiry,
                 config.maxFinalizationTime,
+                config.minWithdrawalDelayTime,
                 config.enableAllowlist,
                 config.reserveRatioGapBP,
                 config.teller,
@@ -203,6 +208,7 @@ contract WrapperAHarness is Test {
             nodeOperatorFeeBP: nodeOperatorFeeBP,
             confirmExpiry: CONFIRM_EXPIRY,
             maxFinalizationTime: 30 days,
+            minWithdrawalDelayTime: 1 days,
             teller: address(0),
             boringQueue: address(0)
         });

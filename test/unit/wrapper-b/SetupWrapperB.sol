@@ -14,6 +14,7 @@ abstract contract SetupWrapperB is Test {
     MockStETH public steth;
 
     address public owner;
+    address public withdrawalQueue;
     address public userAlice;
     address public userBob;
 
@@ -24,6 +25,7 @@ abstract contract SetupWrapperB is Test {
         owner = makeAddr("owner");
         userAlice = makeAddr("userAlice");
         userBob = makeAddr("userBob");
+        withdrawalQueue = makeAddr("withdrawalQueue");
 
         // Fund accounts
         vm.deal(owner, 100 ether);
@@ -37,8 +39,8 @@ abstract contract SetupWrapperB is Test {
         // Fund the dashboard with 1 ETH
         dashboard.fund{value: initialDeposit}();
 
-        // Deploy the wrapper
-        WrapperB wrapperImpl = new WrapperB(address(dashboard), false, reserveRatioGapBP, address(0));
+        // Deploy the wrapper with mock withdrawal queue
+        WrapperB wrapperImpl = new WrapperB(address(dashboard), false, reserveRatioGapBP, withdrawalQueue);
         ERC1967Proxy wrapperProxy = new ERC1967Proxy(address(wrapperImpl), "");
 
         wrapper = WrapperB(payable(wrapperProxy));

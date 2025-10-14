@@ -10,9 +10,11 @@ error InsufficientShares(uint256 required, uint256 available);
  * @notice Configuration A: No minting, no strategy - Simple stvETH shares without stETH minting
  */
 contract WrapperA is WrapperBase {
-    constructor(address _dashboard, bool _allowListEnabled, address _withdrawalQueue)
-        WrapperBase(_dashboard, _allowListEnabled, _withdrawalQueue)
-    {}
+    constructor(
+        address _dashboard,
+        bool _allowListEnabled,
+        address _withdrawalQueue
+    ) WrapperBase(_dashboard, _allowListEnabled, _withdrawalQueue) {}
 
     function wrapperType() public pure override returns (string memory) {
         return "WrapperA";
@@ -27,18 +29,5 @@ contract WrapperA is WrapperBase {
      */
     function depositETH(address _receiver, address _referral) public payable override returns (uint256 stv) {
         stv = _deposit(_receiver, _referral);
-    }
-
-    /**
-     * @notice Request withdrawal for Configuration A (no minting, no strategy)
-     * @param _stv Amount of stvETH shares to withdraw
-     * @return requestId The withdrawal request ID
-     */
-    function requestWithdrawal(uint256 _stv) external returns (uint256 requestId) {
-        if (_stv == 0) revert WrapperBase.ZeroStv();
-
-        _transfer(msg.sender, address(WITHDRAWAL_QUEUE), _stv);
-
-        requestId = WITHDRAWAL_QUEUE.requestWithdrawal(_stv, msg.sender);
     }
 }

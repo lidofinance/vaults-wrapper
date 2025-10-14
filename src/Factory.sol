@@ -81,6 +81,7 @@ contract Factory {
         uint256 _nodeOperatorFeeBP,
         uint256 _confirmExpiry,
         uint256 _maxFinalizationTime,
+        uint256 _minWithdrawalDelayTime,
         WrapperType _configuration,
         address _strategy,
         bool _allowlistEnabled,
@@ -94,7 +95,7 @@ contract Factory {
         address payable _wrapperProxy;
         address _withdrawalQueueProxy;
         (vault, dashboard, _dashboard, _wrapperProxy, _withdrawalQueueProxy) = _setupVaultAndProxies(
-            _nodeOperator, _nodeOperatorManager, _nodeOperatorFeeBP, _confirmExpiry, _maxFinalizationTime
+            _nodeOperator, _nodeOperatorManager, _nodeOperatorFeeBP, _confirmExpiry, _maxFinalizationTime, _minWithdrawalDelayTime
         );
 
         address usedStrategy = _strategy;
@@ -131,6 +132,7 @@ contract Factory {
         uint256 _nodeOperatorFeeBP,
         uint256 _confirmExpiry,
         uint256 _maxFinalizationTime,
+        uint256 _minWithdrawalDelayTime,
         bool _allowlistEnabled
     )
         external
@@ -141,7 +143,7 @@ contract Factory {
         address payable _wrapperProxy;
         address _withdrawalQueueProxy;
         (vault, dashboard, _dashboard, _wrapperProxy, _withdrawalQueueProxy) = _setupVaultAndProxies(
-            _nodeOperator, _nodeOperatorManager, _nodeOperatorFeeBP, _confirmExpiry, _maxFinalizationTime
+            _nodeOperator, _nodeOperatorManager, _nodeOperatorFeeBP, _confirmExpiry, _maxFinalizationTime, _minWithdrawalDelayTime
         );
 
         WrapperBase wrapper = _deployAndInitWrapper(
@@ -175,6 +177,7 @@ contract Factory {
         uint256 _nodeOperatorFeeBP,
         uint256 _confirmExpiry,
         uint256 _maxFinalizationTime,
+        uint256 _minWithdrawalDelayTime,
         bool _allowlistEnabled,
         uint256 _reserveRatioGapBP
     )
@@ -186,7 +189,7 @@ contract Factory {
         address payable _wrapperProxy;
         address _withdrawalQueueProxy;
         (vault, dashboard, _dashboard, _wrapperProxy, _withdrawalQueueProxy) = _setupVaultAndProxies(
-            _nodeOperator, _nodeOperatorManager, _nodeOperatorFeeBP, _confirmExpiry, _maxFinalizationTime
+            _nodeOperator, _nodeOperatorManager, _nodeOperatorFeeBP, _confirmExpiry, _maxFinalizationTime, _minWithdrawalDelayTime
         );
 
         WrapperBase wrapper = _deployAndInitWrapper(
@@ -220,6 +223,7 @@ contract Factory {
         uint256 _nodeOperatorFeeBP,
         uint256 _confirmExpiry,
         uint256 _maxFinalizationTime,
+        uint256 _minWithdrawalDelayTime,
         bool _allowlistEnabled,
         uint256 _reserveRatioGapBP,
         uint256 _loops
@@ -232,7 +236,7 @@ contract Factory {
         address payable _wrapperProxy;
         address _withdrawalQueueProxy;
         (vault, dashboard, _dashboard, _wrapperProxy, _withdrawalQueueProxy) = _setupVaultAndProxies(
-            _nodeOperator, _nodeOperatorManager, _nodeOperatorFeeBP, _confirmExpiry, _maxFinalizationTime
+            _nodeOperator, _nodeOperatorManager, _nodeOperatorFeeBP, _confirmExpiry, _maxFinalizationTime, _minWithdrawalDelayTime
         );
 
         address loopStrategy = LOOP_STRATEGY_FACTORY.deploy(STETH, address(_wrapperProxy), _loops);
@@ -262,6 +266,7 @@ contract Factory {
         uint256 _nodeOperatorFeeBP,
         uint256 _confirmExpiry,
         uint256 _maxFinalizationTime,
+        uint256 _minWithdrawalDelayTime,
         bool _allowlistEnabled,
         uint256 _reserveRatioGapBP,
         address _teller,
@@ -275,7 +280,7 @@ contract Factory {
         address payable _wrapperProxy;
         address _withdrawalQueueProxy;
         (vault, dashboard, _dashboard, _wrapperProxy, _withdrawalQueueProxy) = _setupVaultAndProxies(
-            _nodeOperator, _nodeOperatorManager, _nodeOperatorFeeBP, _confirmExpiry, _maxFinalizationTime
+            _nodeOperator, _nodeOperatorManager, _nodeOperatorFeeBP, _confirmExpiry, _maxFinalizationTime, _minWithdrawalDelayTime
         );
 
         address ggvStrategy = GGV_STRATEGY_FACTORY.deploy(_wrapperProxy, STETH, WSTETH, _teller, _boringQueue);
@@ -332,7 +337,8 @@ contract Factory {
         address _nodeOperatorManager,
         uint256 _nodeOperatorFeeBP,
         uint256 _confirmExpiry,
-        uint256 _maxFinalizationTime
+        uint256 _maxFinalizationTime,
+        uint256 _minWithdrawalDelayTime
     )
         internal
         returns (
@@ -355,7 +361,16 @@ contract Factory {
         _dashboard = IDashboard(payable(dashboard));
 
         wrapperProxy = payable(address(new OssifiableProxy(DUMMY_IMPLEMENTATION, address(this), bytes(""))));
-        address wqImpl = WITHDRAWAL_QUEUE_FACTORY.deploy(address(wrapperProxy), LAZY_ORACLE, _maxFinalizationTime);
+        address wqImpl = WITHDRAWAL_QUEUE_FACTORY.deploy(
+            address(wrapperProxy),
+            dashboard,
+            _dashboard.VAULT_HUB(),
+            _dashboard.STETH(),
+            vault,
+            LAZY_ORACLE,
+            _maxFinalizationTime,
+            _minWithdrawalDelayTime
+        );
         withdrawalQueueProxy = address(
             new OssifiableProxy(
                 wqImpl, address(this), abi.encodeCall(WithdrawalQueue.initialize, (_nodeOperator, _nodeOperator))
@@ -394,6 +409,7 @@ contract Factory {
     ) internal {
         _dashboard.grantRole(_dashboard.FUND_ROLE(), address(wrapperProxy));
         _dashboard.grantRole(_dashboard.WITHDRAW_ROLE(), withdrawalQueueProxy);
+        _dashboard.grantRole(_dashboard.REBALANCE_ROLE(), address(wrapperProxy));
 
         if (_configuration != WrapperType.NO_MINTING_NO_STRATEGY) {
             _dashboard.grantRole(_dashboard.MINT_ROLE(), address(wrapperProxy));

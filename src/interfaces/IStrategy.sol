@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: MIT
-pragma solidity >= 0.5.0;
+pragma solidity >=0.8.25;
+
+import {WithdrawalRequest} from "src/strategy/WithdrawalRequest.sol";
 
 interface IStrategy {
-    function execute(address _user, uint256 _stv, uint256 _stethShares) external;
-
     function strategyId() external view returns (bytes32);
-    function requestWithdrawByStETH(address _user, uint256 _ethAmount) external returns (uint256 requestId);
-    function finalizeWithdrawal(address _receiver, uint256 stETHAmount) external;
-
     function getStrategyProxyAddress(address user) external view returns (address proxy);
+
+    function execute(address _user, uint256 _stv, uint256 _stethShares) external;
+    function requestWithdrawByStETH(address _user, uint256 _stethAmount, bytes calldata params) external returns (bytes32 requestId);
+    function finalizeWithdrawal(WithdrawalRequest memory request) external;
 }

@@ -25,6 +25,7 @@ contract WrapperBHarness is WrapperAHarness {
             nodeOperatorFeeBP: nodeOperatorFeeBP,
             confirmExpiry: CONFIRM_EXPIRY,
             maxFinalizationTime: 30 days,
+            minWithdrawalDelayTime: 1 days,
             teller: address(0),
             boringQueue: address(0)
         });

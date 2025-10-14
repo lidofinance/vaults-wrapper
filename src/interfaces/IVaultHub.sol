@@ -111,7 +111,6 @@ interface IVaultHub is IAccessControl {
     function liabilityShares(address _vault) external view returns (uint256);
     function locked(address _vault) external view returns (uint256);
     function totalMintingCapacityShares(address _vault, int256 _deltaValue) external view returns (uint256);
-    function latestReport(address _vault) external view returns (Report memory);
     function healthShortfallShares(address _vault) external view returns (uint256);
     function obligations(address _vault) external view returns (uint256 sharesToBurn, uint256 feesToSettle);
     function settleableLidoFeesValue(address _vault) external view returns (uint256);
@@ -141,6 +140,7 @@ interface IVaultHub is IAccessControl {
         uint256 _reportLiabilityShares,
         uint256 _reportSlashingReserve
     ) external;
+    function latestReport(address _vault) external view returns (Report memory);
 
     function socializeBadDebt(
         address _vaultDonor,
