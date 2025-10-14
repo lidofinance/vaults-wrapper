@@ -17,5 +17,5 @@ interface IWrapper {
     function totalEffectiveAssets() external view returns (uint256);
     function burnStvForWithdrawalQueue(uint256 _stv) external;
     function totalExceedingMintedSteth() external view returns (uint256);
-    function rebalanceMintedStethShares(uint256, uint256) external;
+    function rebalanceMintedStethShares(uint256, uint256) external returns (uint256);
 }

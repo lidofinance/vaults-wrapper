@@ -158,6 +158,111 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
         withdrawalQueue.finalize(1);
     }
 
+    function test_Finalize_ReturnsZeroWhenWithdrawableInsufficient() public {
+        uint256 stvToRequest = 10 ** STV_DECIMALS;
+        wrapper.requestWithdrawal(stvToRequest);
+
+        vm.warp(block.timestamp + MIN_WITHDRAWAL_DELAY_TIME + 1);
+
+        address stakingVault = address(dashboard.STAKING_VAULT());
+        uint256 vaultBalance = stakingVault.balance;
+        dashboard.mock_setLocked(vaultBalance);
+
+        vm.prank(finalizeRoleHolder);
+        uint256 finalizedCount = withdrawalQueue.finalize(1);
+
+        assertEq(finalizedCount, 0);
+        assertEq(withdrawalQueue.getLastFinalizedRequestId(), 0);
+    }
+
+    function test_Finalize_PartialDueToWithdrawableLimit() public {
+        uint256 stvRequest1 = 10 ** STV_DECIMALS;
+        uint256 stvRequest2 = 2 * 10 ** STV_DECIMALS;
+
+        wrapper.requestWithdrawal(stvRequest1);
+        wrapper.requestWithdrawal(stvRequest2);
+
+        vm.warp(block.timestamp + MIN_WITHDRAWAL_DELAY_TIME + 1);
+
+        uint256 expectedEthFirst = wrapper.previewRedeem(stvRequest1);
+        address stakingVault = address(dashboard.STAKING_VAULT());
+        uint256 vaultBalance = stakingVault.balance;
+        dashboard.mock_setLocked(vaultBalance - expectedEthFirst);
+
+        vm.prank(finalizeRoleHolder);
+        uint256 finalizedCount = withdrawalQueue.finalize(10);
+
+        assertEq(finalizedCount, 1);
+        assertEq(withdrawalQueue.getLastFinalizedRequestId(), 1);
+        assertTrue(withdrawalQueue.getWithdrawalStatus(1).isFinalized);
+        assertFalse(withdrawalQueue.getWithdrawalStatus(2).isFinalized);
+    }
+
+    function test_Finalize_RebalanceBlockedByAvailableBalance() public {
+        uint256 mintedStethShares = 10 ** ASSETS_DECIMALS;
+        uint256 stvToRequest = 2 * 10 ** STV_DECIMALS;
+
+        wrapper.mintStethShares(mintedStethShares);
+        wrapper.requestWithdrawal(stvToRequest, 0, mintedStethShares, address(this));
+
+        vm.warp(block.timestamp + MIN_WITHDRAWAL_DELAY_TIME + 1);
+
+        uint256 assetsPreview = wrapper.previewRedeem(stvToRequest);
+        uint256 assetsToRebalance = wrapper.STETH().getPooledEthBySharesRoundUp(mintedStethShares);
+
+        address stakingVault = address(dashboard.STAKING_VAULT());
+        vm.deal(stakingVault, assetsPreview);
+        dashboard.mock_setLocked(assetsToRebalance + 1); // block by 1 wei
+
+        vm.prank(finalizeRoleHolder);
+        assertEq(withdrawalQueue.finalize(1), 0);
+    }
+
+    function test_Finalize_RebalanceWithBlockedButAvailableAssets() public {
+        uint256 mintedStethShares = 10 ** ASSETS_DECIMALS;
+        uint256 stvToRequest = 2 * 10 ** STV_DECIMALS;
+
+        wrapper.mintStethShares(mintedStethShares);
+        wrapper.requestWithdrawal(stvToRequest, 0, mintedStethShares, address(this));
+
+        vm.warp(block.timestamp + MIN_WITHDRAWAL_DELAY_TIME + 1);
+
+        uint256 assetsPreview = wrapper.previewRedeem(stvToRequest);
+        uint256 assetsToRebalance = wrapper.STETH().getPooledEthBySharesRoundUp(mintedStethShares);
+
+        address stakingVault = address(dashboard.STAKING_VAULT());
+        vm.deal(stakingVault, assetsPreview);
+        dashboard.mock_setLocked(assetsToRebalance);
+
+        vm.prank(finalizeRoleHolder);
+        assertEq(withdrawalQueue.finalize(1), 1);
+    }
+
+    function test_Finalize_RebalancePartiallyDueToAvailableBalance() public {
+        uint256 mintedStethShares = 10 ** ASSETS_DECIMALS;
+        uint256 stvToRequest = 2 * 10 ** STV_DECIMALS;
+
+        wrapper.mintStethShares(mintedStethShares);
+        uint256 requestId1 = wrapper.requestWithdrawal(stvToRequest, 0, mintedStethShares, address(this));
+
+        wrapper.mintStethShares(mintedStethShares);
+        uint256 requestId2 = wrapper.requestWithdrawal(stvToRequest, 0, mintedStethShares, address(this));
+
+        vm.warp(block.timestamp + MIN_WITHDRAWAL_DELAY_TIME + 1);
+
+        uint256 assetsRequired = wrapper.previewRedeem(stvToRequest);
+        address stakingVault = address(dashboard.STAKING_VAULT());
+        vm.deal(stakingVault, assetsRequired);
+        dashboard.mock_setLocked(0);
+
+        vm.prank(finalizeRoleHolder);
+        uint256 finalizedCount = withdrawalQueue.finalize(10);
+
+        assertEq(finalizedCount, 1);
+        assertTrue(withdrawalQueue.getWithdrawalStatus(requestId1).isFinalized);
+        assertFalse(withdrawalQueue.getWithdrawalStatus(requestId2).isFinalized);
+    }
+
     // Edge Cases
 
     function test_Finalize_ZeroMaxRequests() public {
@@ -167,7 +272,7 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
 
         vm.prank(finalizeRoleHolder);
         vm.expectRevert(WithdrawalQueue.NoRequestsToFinalize.selector);
-        uint256 finalizedCount = withdrawalQueue.finalize(0);
+        withdrawalQueue.finalize(0);
     }
 
     function test_Finalize_NoRequestsToFinalize() public {
@@ -188,6 +293,18 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
         // Try to finalize again
         vm.prank(finalizeRoleHolder);
         vm.expectRevert(WithdrawalQueue.NoRequestsToFinalize.selector);
+        withdrawalQueue.finalize(1);
+    }
+
+    function test_Finalize_RevertWhenReportStale() public {
+        wrapper.requestWithdrawal(10 ** STV_DECIMALS);
+
+        vm.warp(block.timestamp + MIN_WITHDRAWAL_DELAY_TIME + 1);
+
+        dashboard.VAULT_HUB().mock_setReportFreshness(address(dashboard.STAKING_VAULT()), false);
+
+        vm.prank(finalizeRoleHolder);
+        vm.expectRevert(WithdrawalQueue.VaultReportStale.selector);
         withdrawalQueue.finalize(1);
     }
 

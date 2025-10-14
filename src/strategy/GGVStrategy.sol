@@ -182,17 +182,20 @@ contract GGVStrategy is Strategy {
         );
         uint256 stethAmount = abi.decode(data, (uint256));
 
-        uint256 stethToRebalance = 0;
+        // Because of rounding issue, the amount of steth shares after wstETH unwrapping can be less than requested
+        stethSharesToBurn = STETH.getSharesByPooledEth(stethAmount);
+
+        uint256 stethSharesToRebalance = 0;
         uint256 mintedStethShares = WRAPPER.mintedStethSharesOf(proxy);
         if (mintedStethShares > stethSharesToBurn ) {
-            stethToRebalance = mintedStethShares - stethSharesToBurn;
+            stethSharesToRebalance = mintedStethShares - stethSharesToBurn;
         }
 
         uint256 stv = WRAPPER.balanceOf(proxy);
 
         bytes memory requestData = IStrategyProxy(proxy).call(
             address(WRAPPER),
-            abi.encodeWithSelector(WrapperB.requestWithdrawal.selector, stv, stethSharesToBurn, stethToRebalance, _request.owner)
+            abi.encodeWithSelector(WrapperB.requestWithdrawal.selector, stv, stethSharesToBurn, stethSharesToRebalance, _request.owner)
         );
         uint256 wqRequestId = abi.decode(requestData, (uint256));
 

@@ -428,8 +428,9 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
      * @param _recipient The address to receive the claimed ether
      */
     function claimWithdrawal(uint256 _requestId, address _recipient) external virtual {
-        uint256 ethClaimed = WITHDRAWAL_QUEUE.claimWithdrawal(_requestId, msg.sender, _recipient);
-        emit WithdrawalClaimed(_requestId, msg.sender, _recipient, ethClaimed);
+        address recipient = _recipient == address(0) ? msg.sender : _recipient;
+        uint256 ethClaimed = WITHDRAWAL_QUEUE.claimWithdrawal(_requestId, msg.sender, recipient);
+        emit WithdrawalClaimed(_requestId, msg.sender, recipient, ethClaimed);
     }
 
     /**
@@ -443,10 +444,11 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
         uint256[] calldata _hints,
         address _recipient
     ) external virtual {
-        uint256[] memory claimedEth = WITHDRAWAL_QUEUE.claimWithdrawals(_requestIds, _hints, msg.sender, _recipient);
+        address recipient = _recipient == address(0) ? msg.sender : _recipient;
+        uint256[] memory claimedEth = WITHDRAWAL_QUEUE.claimWithdrawals(_requestIds, _hints, msg.sender, recipient);
 
         for (uint256 i = 0; i < _requestIds.length; ++i) {
-            emit WithdrawalClaimed(_requestIds[i], msg.sender, _recipient, claimedEth[i]);
+            emit WithdrawalClaimed(_requestIds[i], msg.sender, recipient, claimedEth[i]);
         }
     }
 

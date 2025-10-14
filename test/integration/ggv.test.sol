@@ -213,7 +213,7 @@ contract GGVTest is WrapperCHarness {
         assertEq(requestId, 0);
 
         // Apply 1% increase to core (stETH share ratio)
-        core.increaseBufferedEther(steth.totalSupply() * 0 / 100);
+        core.increaseBufferedEther(steth.totalSupply() * 1 / 100);
         uint256 shareRate3 = steth.getPooledEthByShares(1e18);
 
         console.log("\n[SCENARIO] apply new stETH rebase shareRate after request, before ggv solve:", shareRate3);
@@ -302,12 +302,11 @@ contract GGVTest is WrapperCHarness {
         );
         _ensureFreshness(ctx);
 
-//        if (vaultProfit != 0) {
+        if (vaultProfit != 0) {
             vm.startPrank(NODE_OPERATOR);
             wrapper.DASHBOARD().fund{value: 10 ether}();
             vm.stopPrank();
-//        }
-
+        }
 
         vm.startPrank(NODE_OPERATOR);
         uint256 finalizedRequests = wrapper.WITHDRAWAL_QUEUE().finalize(_maxRequest);
