@@ -254,7 +254,10 @@ contract WrapperB is WrapperBase {
             totalStvToTransfer += _stvToWithdraw[i];
         }
 
-        _transferMintedStethShares(msg.sender, address(WITHDRAWAL_QUEUE), totalStethSharesToTransfer);
+        if (totalStethSharesToTransfer > 0) {
+            _transferMintedStethShares(msg.sender, address(WITHDRAWAL_QUEUE), totalStethSharesToTransfer);
+        }
+
         _transfer(msg.sender, address(WITHDRAWAL_QUEUE), totalStvToTransfer);
         requestIds = WITHDRAWAL_QUEUE.requestWithdrawals(_stvToWithdraw, _stethSharesToRebalance, receiver);
     }
