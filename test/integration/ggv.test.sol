@@ -213,7 +213,7 @@ contract GGVTest is WrapperCHarness {
         assertEq(requestId, 0);
 
         // Apply 1% increase to core (stETH share ratio)
-        core.increaseBufferedEther(steth.totalSupply() * 0 / 100);
+        core.increaseBufferedEther(steth.totalSupply() * 1 / 100);
         uint256 shareRate3 = steth.getPooledEthByShares(1e18);
 
         console.log("\n[SCENARIO] apply new stETH rebase shareRate after request, before ggv solve:", shareRate3);
