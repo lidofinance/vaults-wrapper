@@ -11,6 +11,7 @@ import {IVaultHub} from "./interfaces/IVaultHub.sol";
 import {ILazyOracle} from "./interfaces/ILazyOracle.sol";
 import {IWrapper} from "./interfaces/IWrapper.sol";
 import {IStETH} from "./interfaces/IStETH.sol";
+import {IStakingVault} from "./interfaces/IStakingVault.sol";
 
 /// @title Withdrawal Queue V3 for Staking Vault Wrapper
 /// @notice Handles withdrawal requests for stvToken holders
@@ -44,8 +45,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
     IDashboard public immutable DASHBOARD;
     IStETH public immutable STETH;
     ILazyOracle public immutable LAZY_ORACLE;
-
-    address public immutable STAKING_VAULT;
+    IStakingVault public immutable STAKING_VAULT;
 
     /// @notice structure representing a request for withdrawal
     struct WithdrawalRequest {
@@ -175,10 +175,8 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
         DASHBOARD = IDashboard(payable(_dashboard));
         VAULT_HUB = IVaultHub(_vaultHub);
         STETH = IStETH(_steth);
-
         LAZY_ORACLE = ILazyOracle(_lazyOracle);
-
-        STAKING_VAULT = _vault;
+        STAKING_VAULT = IStakingVault(_vault);
 
         MAX_ACCEPTABLE_WQ_FINALIZATION_TIME_IN_SECONDS = _maxAcceptableWQFinalizationTimeInSeconds;
         MIN_WITHDRAWAL_DELAY_TIME_IN_SECONDS = _minWithdrawalDelayTimeInSeconds;
@@ -357,6 +355,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
         uint256 currentStvRate = calculateCurrentStvRate();
         uint256 currentStethShareRate = calculateCurrentStethShareRate();
         uint256 withdrawableValue = DASHBOARD.withdrawableValue();
+        uint256 availableBalance = STAKING_VAULT.availableBalance();
         uint256 exceedingSteth = WRAPPER.totalExceedingMintedSteth();
         uint256 latestReportTimestamp = LAZY_ORACLE.latestReportTimestamp();
 
@@ -402,16 +401,18 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
                 // stop if insufficient ETH to cover this request
                 // stop if not enough time has passed since the request was created
                 // stop if the request was created after the latest report was published, at least one oracle report is required
-                ethToClaim + ethToRebalance > withdrawableValue ||
+                ethToClaim > withdrawableValue ||
+                ethToClaim + ethToRebalance > availableBalance ||
                 request.timestamp + MIN_WITHDRAWAL_DELAY_TIME_IN_SECONDS > block.timestamp ||
                 request.timestamp > latestReportTimestamp
             ) {
                 break;
             }
 
-            withdrawableValue -= (ethToClaim + ethToRebalance);
+            withdrawableValue -= ethToClaim;
+            availableBalance -= (ethToClaim + ethToRebalance);
             totalEthToClaim += ethToClaim;
-            totalStvToBurn += stv;
+            totalStvToBurn += (stv - stvToRebalance);
             totalStethShares += stethSharesToRebalance;
             maxStvToRebalance += stvToRebalance;
             finalizedRequests++;
@@ -419,16 +420,32 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
 
         if (finalizedRequests == 0) return 0;
 
-        uint256 totalStvRebalanced;
-
-        if (totalStethShares > 0) {
-            totalStvRebalanced = WRAPPER.rebalanceMintedStethShares(totalStethShares, maxStvToRebalance);
-            totalStvToBurn -= totalStvRebalanced;
-        }
-
-        // Could be 0 if all requests were rebalanced
+        // 1. Withdraw ETH from the vault to cover finalized requests and burn associated stv
+        // Eth to claim or stv to burn could be 0 if all requests are going to be rebalanced
+        // Rebalance cannot be done first because it will withdraw eth without unlocking it
         if (totalEthToClaim > 0) DASHBOARD.withdraw(address(this), totalEthToClaim);
         if (totalStvToBurn > 0) WRAPPER.burnStvForWithdrawalQueue(totalStvToBurn);
+
+        // 2. Rebalance steth shares by burning corresponding amount stv. Or socialize the losses if not enough stv
+        // At this point stv rate may change because of the operation above
+        // So it may burn less stv than maxStvToRebalance because of new stv rate
+        uint256 totalStvRebalanced;
+        if (totalStethShares > 0) {
+            // Stv burning is limited at this point by maxStvToRebalance calculated above
+            // to make sure that only stv of finalized requests is used for rebalancing
+            totalStvRebalanced = WRAPPER.rebalanceMintedStethShares(totalStethShares, maxStvToRebalance);
+        }
+
+        // 3. Burn any remaining stv that was not used for rebalancing
+        // The rebalancing may burn less stv than maxStvToRebalance because of:
+        //   - the changed stv rate after the first step
+        //   - accumulated rounding errors in maxStvToRebalance
+        // It's guaranteed that maxStvToRebalance >= totalStvRebalanced
+        uint256 remainingStvForRebalance = maxStvToRebalance - totalStvRebalanced;
+        if (remainingStvForRebalance > 0) {
+            WRAPPER.burnStvForWithdrawalQueue(remainingStvForRebalance);
+            totalStvToBurn += remainingStvForRebalance;
+        }
 
         lastFinalizedRequestId = lastFinalizedRequestId + finalizedRequests;
 
@@ -497,8 +514,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
     ) external returns (uint256 claimedEth) {
         _checkOnlyWrapper();
         uint256 checkpoint = _findCheckpointHint(_requestId, 1, getLastCheckpointIndex());
-        address recipient = _recipient == address(0) ? msg.sender : _recipient;
-        claimedEth = _claim(_requestId, checkpoint, _requestor, recipient);
+        claimedEth = _claim(_requestId, checkpoint, _requestor, _recipient);
     }
 
     /**
@@ -521,11 +537,10 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
             revert ArraysLengthMismatch(_requestIds.length, _hints.length);
         }
 
-        address recipient = _recipient == address(0) ? msg.sender : _recipient;
         claimedAmounts = new uint256[](_requestIds.length);
 
         for (uint256 i = 0; i < _requestIds.length; ++i) {
-            claimedAmounts[i] = _claim(_requestIds[i], _hints[i], _requestor, recipient);
+            claimedAmounts[i] = _claim(_requestIds[i], _hints[i], _requestor, _recipient);
         }
     }
 
@@ -975,6 +990,6 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
     }
 
     function _checkFreshReport() internal view {
-        if (!VAULT_HUB.isReportFresh(STAKING_VAULT)) revert VaultReportStale();
+        if (!VAULT_HUB.isReportFresh(address(STAKING_VAULT))) revert VaultReportStale();
     }
 }

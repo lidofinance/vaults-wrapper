@@ -302,12 +302,11 @@ contract GGVTest is WrapperCHarness {
         );
         _ensureFreshness(ctx);
 
-//        if (vaultProfit != 0) {
+        if (vaultProfit != 0) {
             vm.startPrank(NODE_OPERATOR);
             wrapper.DASHBOARD().fund{value: 10 ether}();
             vm.stopPrank();
-//        }
-
+        }
 
         vm.startPrank(NODE_OPERATOR);
         uint256 finalizedRequests = wrapper.WITHDRAWAL_QUEUE().finalize(_maxRequest);

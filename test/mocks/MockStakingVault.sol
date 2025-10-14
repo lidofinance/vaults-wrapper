@@ -47,4 +47,8 @@ contract MockStakingVault {
     ) external payable {
         // Mock implementation
     }
+
+    function availableBalance() external view returns (uint256) {
+        return address(this).balance;
+    }
 }
