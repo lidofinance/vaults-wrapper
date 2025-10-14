@@ -164,6 +164,19 @@ contract RequestCreationTest is Test, SetupWithdrawalQueue {
 
     // Validation tests
 
+    function test_RequestWithdrawals_RevertOnArrayLengthMismatch() public {
+        uint256[] memory stvAmounts = new uint256[](2);
+        stvAmounts[0] = 10 ** STV_DECIMALS;
+        stvAmounts[1] = 2 * 10 ** STV_DECIMALS;
+
+        uint256[] memory stethShares = new uint256[](1);
+        stethShares[0] = 10 ** ASSETS_DECIMALS;
+
+        vm.prank(address(wrapper));
+        vm.expectRevert(abi.encodeWithSelector(WithdrawalQueue.ArraysLengthMismatch.selector, 2, 1));
+        withdrawalQueue.requestWithdrawals(stvAmounts, stethShares, address(this));
+    }
+
     function test_RequestWithdrawal_RevertOnTooSmallAmount() public {
         uint256 tinyStvAmount = wrapper.previewWithdraw(withdrawalQueue.MIN_WITHDRAWAL_AMOUNT()) - 1;
         uint256 expectedAssets = wrapper.previewRedeem(tinyStvAmount);
@@ -226,5 +239,67 @@ contract RequestCreationTest is Test, SetupWithdrawalQueue {
         // This should succeed
         uint256 requestId = wrapper.requestWithdrawal(stvAmount);
         assertEq(requestId, 1);
+    }
+
+    function test_GetWithdrawalRequestsLength_RemovesEntriesAfterClaim() public {
+        vm.prank(userAlice);
+        uint256 requestId1 = wrapper.requestWithdrawal(10 ** STV_DECIMALS);
+
+        vm.prank(userAlice);
+        uint256 requestId2 = wrapper.requestWithdrawal(2 * 10 ** STV_DECIMALS);
+
+        assertEq(withdrawalQueue.getWithdrawalRequestsLength(userAlice), 2);
+
+        _finalizeRequests(2);
+
+        vm.startPrank(userAlice);
+        wrapper.claimWithdrawal(requestId1, userAlice);
+        wrapper.claimWithdrawal(requestId2, userAlice);
+        vm.stopPrank();
+
+        assertEq(withdrawalQueue.getWithdrawalRequestsLength(userAlice), 0);
+        assertEq(withdrawalQueue.getWithdrawalRequests(userAlice).length, 0);
+    }
+
+    function test_GetWithdrawalRequests_PaginationReturnsSlice() public {
+        vm.prank(userAlice);
+        uint256 requestId1 = wrapper.requestWithdrawal(10 ** STV_DECIMALS);
+
+        vm.prank(userAlice);
+        uint256 requestId2 = wrapper.requestWithdrawal(2 * 10 ** STV_DECIMALS);
+
+        vm.prank(userAlice);
+        uint256 requestId3 = wrapper.requestWithdrawal(3 * 10 ** STV_DECIMALS);
+
+        uint256[] memory page = withdrawalQueue.getWithdrawalRequests(userAlice, 1, 3);
+
+        assertEq(page.length, 2);
+        assertEq(page[0], requestId2);
+        assertEq(page[1], requestId3);
+
+        // make sure the full list preserves insertion order
+        uint256[] memory fullList = withdrawalQueue.getWithdrawalRequests(userAlice);
+        assertEq(fullList[0], requestId1);
+        assertEq(fullList[1], requestId2);
+        assertEq(fullList[2], requestId3);
+    }
+
+    function test_UnfinalizedStats_TrackAssetsAndStv() public {
+        uint256 stvAmount1 = 10 ** STV_DECIMALS;
+        uint256 stvAmount2 = 3 * 10 ** STV_DECIMALS;
+
+        uint256 expectedAssets1 = wrapper.previewRedeem(stvAmount1);
+        uint256 expectedAssets2 = wrapper.previewRedeem(stvAmount2);
+
+        wrapper.requestWithdrawal(stvAmount1);
+        wrapper.requestWithdrawal(stvAmount2);
+
+        assertEq(withdrawalQueue.unfinalizedStv(), stvAmount1 + stvAmount2);
+        assertEq(withdrawalQueue.unfinalizedAssets(), expectedAssets1 + expectedAssets2);
+
+        _finalizeRequests(2);
+
+        assertEq(withdrawalQueue.unfinalizedStv(), 0);
+        assertEq(withdrawalQueue.unfinalizedAssets(), 0);
     }
 }
