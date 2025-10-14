@@ -158,4 +158,27 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
         // Rebalance should affect unrelated users due to socialization of losses
         assertGt(strangerAssetsBefore, strangerAssetsAfter);
     }
+
+    // Vault rebalance before finalization
+
+    function test_RebalanceFinalization_VaultRebalanceBefore() public {
+        uint256 mintedStethShares = 10 ** ASSETS_DECIMALS;
+        uint256 stvToRequest = 2 * 10 ** STV_DECIMALS;
+        wrapper.mintStethShares(mintedStethShares);
+
+        // Request withdrawal
+        wrapper.requestWithdrawal(stvToRequest, 0, mintedStethShares, address(this));
+
+        // Simulate vault rebalance before finalization
+        assertEq(wrapper.totalExceedingMintedStethShares(), 0);
+        dashboard.rebalanceVaultWithShares(dashboard.liabilityShares());
+        assertEq(wrapper.totalExceedingMintedStethShares(), mintedStethShares);
+
+        // Finalize request
+        _finalizeRequests(1);
+
+        // Make sure that exceeding minted shares are used in rebalance
+        assertEq(wrapper.totalMintedStethShares(), 0);
+        assertEq(wrapper.totalExceedingMintedStethShares(), 0);
+    }
 }
