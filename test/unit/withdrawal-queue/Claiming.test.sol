@@ -90,6 +90,17 @@ contract ClaimingTest is Test, SetupWithdrawalQueue {
 
     // Error Cases
 
+    function test_ClaimWithdrawals_RevertArraysLengthMismatch() public {
+        uint256 requestId = _requestWithdrawalAndFinalize(10 ** STV_DECIMALS);
+
+        uint256[] memory requestIds = new uint256[](1);
+        requestIds[0] = requestId;
+        uint256[] memory hints = new uint256[](0);
+
+        vm.expectRevert(abi.encodeWithSelector(WithdrawalQueue.ArraysLengthMismatch.selector, 1, 0));
+        wrapper.claimWithdrawals(requestIds, hints, address(this));
+    }
+
     function test_ClaimWithdrawal_RevertNotFinalized() public {
         uint256 requestId = wrapper.requestWithdrawal(10 ** STV_DECIMALS);
 
@@ -125,6 +136,14 @@ contract ClaimingTest is Test, SetupWithdrawalQueue {
         wrapper.claimWithdrawal(999, address(this));
     }
 
+    function test_ClaimWithdrawal_RevertRecipientReverts() public {
+        uint256 requestId = _requestWithdrawalAndFinalize(10 ** STV_DECIMALS);
+        RevertingReceiver revertingRecipient = new RevertingReceiver();
+
+        vm.expectRevert(WithdrawalQueue.CantSendValueRecipientMayHaveReverted.selector);
+        wrapper.claimWithdrawal(requestId, address(revertingRecipient));
+    }
+
     function test_ClaimWithdrawal_RevertIfNotWrapper() public {
         // Create and finalize a request
         uint256 requestId = _requestWithdrawalAndFinalize(10 ** STV_DECIMALS);
@@ -134,6 +153,16 @@ contract ClaimingTest is Test, SetupWithdrawalQueue {
     }
 
     // Edge Cases
+
+    function test_ClaimWithdrawal_DefaultsRecipientToMsgSender() public {
+        uint256 requestId = _requestWithdrawalAndFinalize(10 ** STV_DECIMALS);
+        uint256 initialBalance = address(this).balance;
+        uint256 claimableAmount = withdrawalQueue.getClaimableEther(requestId);
+
+        wrapper.claimWithdrawal(requestId, address(0));
+
+        assertEq(address(this).balance, initialBalance + claimableAmount);
+    }
 
     function test_ClaimWithdrawal_PartiallyFinalizedQueue() public {
         // Create 3 requests but finalize only 2
@@ -170,6 +199,68 @@ contract ClaimingTest is Test, SetupWithdrawalQueue {
         assertEq(withdrawalQueue.getClaimableEther(requestId), 0);
     }
 
+    function test_ClaimWithdrawals_DefaultRecipientToMsgSender() public {
+        uint256[] memory requestIds = new uint256[](2);
+        requestIds[0] = _requestWithdrawalAndFinalize(10 ** STV_DECIMALS);
+        requestIds[1] = _requestWithdrawalAndFinalize(10 ** STV_DECIMALS);
+
+        uint256[] memory hints = withdrawalQueue.findCheckpointHints(
+            requestIds,
+            1,
+            withdrawalQueue.getLastCheckpointIndex()
+        );
+
+        uint256 initialBalance = address(this).balance;
+        uint256 totalClaimable;
+        for (uint256 i = 0; i < requestIds.length; ++i) {
+            totalClaimable += withdrawalQueue.getClaimableEther(requestIds[i]);
+        }
+
+        wrapper.claimWithdrawals(requestIds, hints, address(0));
+
+        assertEq(address(this).balance, initialBalance + totalClaimable);
+    }
+
+    function test_ClaimWithdrawals_RevertWithZeroHint() public {
+        uint256 requestId = _requestWithdrawalAndFinalize(10 ** STV_DECIMALS);
+
+        uint256[] memory requestIds = new uint256[](1);
+        requestIds[0] = requestId;
+        uint256[] memory hints = new uint256[](1);
+
+        vm.expectRevert(abi.encodeWithSelector(WithdrawalQueue.InvalidHint.selector, 0));
+        wrapper.claimWithdrawals(requestIds, hints, address(this));
+    }
+
+    function test_ClaimWithdrawals_RevertWithOutOfRangeHint() public {
+        uint256 requestId = _requestWithdrawalAndFinalize(10 ** STV_DECIMALS);
+
+        uint256[] memory requestIds = new uint256[](1);
+        requestIds[0] = requestId;
+        uint256[] memory hints = new uint256[](1);
+        hints[0] = withdrawalQueue.getLastCheckpointIndex() + 1;
+
+        vm.expectRevert(abi.encodeWithSelector(WithdrawalQueue.InvalidHint.selector, hints[0]));
+        wrapper.claimWithdrawals(requestIds, hints, address(this));
+    }
+
+    function test_GetClaimableEtherBatch_RevertArraysLengthMismatch() public {
+        uint256 requestId = _requestWithdrawalAndFinalize(10 ** STV_DECIMALS);
+
+        uint256[] memory requestIds = new uint256[](1);
+        requestIds[0] = requestId;
+        uint256[] memory hints = new uint256[](0);
+
+        vm.expectRevert(abi.encodeWithSelector(WithdrawalQueue.ArraysLengthMismatch.selector, 1, 0));
+        withdrawalQueue.getClaimableEther(requestIds, hints);
+    }
+
     // Receive ETH for claiming tests
     receive() external payable {}
+}
+
+contract RevertingReceiver {
+    receive() external payable {
+        revert("Cannot receive");
+    }
 }
