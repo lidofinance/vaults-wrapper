@@ -181,6 +181,35 @@ contract CheckpointsTest is Test, SetupWithdrawalQueue {
         assertEq(hints[2], 1);
     }
 
+    function test_CheckpointHints_RevertWhenRequestIdsNotSorted() public {
+        uint256 firstRequest = _requestWithdrawalAndFinalize(10 ** STV_DECIMALS);
+        uint256 secondRequest = _requestWithdrawalAndFinalize(10 ** STV_DECIMALS);
+        assertLt(firstRequest, secondRequest);
+
+        uint256[] memory requestIds = new uint256[](2);
+        requestIds[0] = secondRequest;
+        requestIds[1] = firstRequest;
+
+        uint256 lastCheckpointIndex = withdrawalQueue.getLastCheckpointIndex();
+
+        vm.expectRevert(WithdrawalQueue.RequestIdsNotSorted.selector);
+        withdrawalQueue.findCheckpointHints(requestIds, 1, lastCheckpointIndex);
+    }
+
+    function test_CheckpointHints_ReturnsZeroWhenOutsideRange() public {
+        uint256[] memory finalizedRequests = new uint256[](3);
+        for (uint256 i = 0; i < finalizedRequests.length; ++i) {
+            finalizedRequests[i] = _requestWithdrawalAndFinalize(10 ** STV_DECIMALS);
+        }
+
+        uint256[] memory requestIds = new uint256[](1);
+        requestIds[0] = finalizedRequests[0];
+
+        uint256[] memory hints = withdrawalQueue.findCheckpointHints(requestIds, 2, 2);
+
+        assertEq(hints[0], 0);
+    }
+
     // Receive ETH for tests
     receive() external payable {}
 }
