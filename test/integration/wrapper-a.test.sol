@@ -24,8 +24,8 @@ contract WrapperATest is WrapperAHarness {
         // Deploy wrapper system
         WrapperContext memory ctx = _deployWrapperA(false, 0);
 
-        // 1) USER1 deposits 10_000 wei (above MIN_WITHDRAWAL_AMOUNT=100)
-        uint256 depositAmount = 10_000;
+        // 1) USER1 deposits 0.01 ether (above MIN_WITHDRAWAL_AMOUNT)
+        uint256 depositAmount = 1 ether / 100;
         uint256 expectedStv = ctx.wrapper.previewDeposit(depositAmount);
         vm.prank(USER1);
         ctx.wrapper.depositETH{value: depositAmount}(USER1, address(0));
@@ -60,8 +60,8 @@ contract WrapperATest is WrapperAHarness {
         // Deploy wrapper system
         WrapperContext memory ctx = _deployWrapperA(false, 0);
 
-        // 1) USER1 deposits 10_000 wei (above MIN_WITHDRAWAL_AMOUNT=100)
-        uint256 depositAmount = 10_000;
+        // 1) USER1 deposits 0.01 ether (above MIN_WITHDRAWAL_AMOUNT)
+        uint256 depositAmount = 1 ether / 100;
         uint256 expectedStv = ctx.wrapper.previewDeposit(depositAmount);
         vm.prank(USER1);
         ctx.wrapper.depositETH{value: depositAmount}(USER1, address(0));
@@ -103,8 +103,8 @@ contract WrapperATest is WrapperAHarness {
         // Deploy wrapper system
         WrapperContext memory ctx = _deployWrapperA(false, 0);
 
-        // 1) USER1 deposits 10_000 wei (above MIN_WITHDRAWAL_AMOUNT=100)
-        uint256 depositAmount = 10_000;
+        // 1) USER1 deposits 0.01 ether (above MIN_WITHDRAWAL_AMOUNT)
+        uint256 depositAmount = 1 ether / 100;
         uint256 expectedStv = ctx.wrapper.previewDeposit(depositAmount);
         vm.prank(USER1);
         ctx.wrapper.depositETH{value: depositAmount}(USER1, address(0));
@@ -149,8 +149,8 @@ contract WrapperATest is WrapperAHarness {
         // Deploy wrapper system
         WrapperContext memory ctx = _deployWrapperA(false, 0);
 
-        // 1) USER1 deposits 10_000 wei (above MIN_WITHDRAWAL_AMOUNT=100)
-        uint256 depositAmount = 10_000;
+        // 1) USER1 deposits 0.01 ether (above MIN_WITHDRAWAL_AMOUNT)
+        uint256 depositAmount = 1 ether / 100;
         uint256 expectedStv = ctx.wrapper.previewDeposit(depositAmount);
         vm.prank(USER1);
         ctx.wrapper.depositETH{value: depositAmount}(USER1, address(0));
@@ -181,7 +181,6 @@ contract WrapperATest is WrapperAHarness {
         ctx.withdrawalQueue.finalize(1);
     }
 
-
     function test_withdrawal_request_finalized_after_reward_and_loss_reports() public {
         // Deploy wrapper system
         WrapperContext memory ctx = _deployWrapperA(false, 0);
@@ -190,8 +189,8 @@ contract WrapperATest is WrapperAHarness {
         reportVaultValueChangeNoFees(ctx, 10300); // +3%
         _ensureFreshness(ctx);
 
-        // 1) USER1 deposits 10_000 wei (above MIN_WITHDRAWAL_AMOUNT=100)
-        uint256 depositAmount = 10_000;
+        // 1) USER1 deposits 0.01 ether (above MIN_WITHDRAWAL_AMOUNT)
+        uint256 depositAmount = 1 ether / 100;
         uint256 expectedStv = ctx.wrapper.previewDeposit(depositAmount);
         vm.prank(USER1);
         ctx.wrapper.depositETH{value: depositAmount}(USER1, address(0));
@@ -231,8 +230,8 @@ contract WrapperATest is WrapperAHarness {
         // Deploy wrapper system
         WrapperContext memory ctx = _deployWrapperA(false, 0);
 
-        // 1) USER1 deposits 10_000 wei
-        uint256 depositAmount = 10_000;
+        // 1) USER1 deposits 0.01 ether
+        uint256 depositAmount = 1 ether / 100;
         vm.prank(USER1);
         ctx.wrapper.depositETH{value: depositAmount}(USER1, address(0));
 
@@ -280,8 +279,8 @@ contract WrapperATest is WrapperAHarness {
         // Deploy wrapper system
         WrapperContext memory ctx = _deployWrapperA(false, 0);
 
-        // 1) USER1 deposits 10_000 wei
-        uint256 depositAmount = 10_000;
+        // 1) USER1 deposits 0.01 ether
+        uint256 depositAmount = 1 ether / 100;
         vm.prank(USER1);
         ctx.wrapper.depositETH{value: depositAmount}(USER1, address(0));
 
@@ -362,7 +361,7 @@ contract WrapperATest is WrapperAHarness {
         WrapperContext memory ctx = _deployWrapperA(false, 0);
 
         // Deposit and request
-        uint256 depositAmount = 10_000;
+        uint256 depositAmount = 1 ether / 100;
         vm.prank(USER1);
         ctx.wrapper.depositETH{value: depositAmount}(USER1, address(0));
         uint256 userShares = ctx.wrapper.balanceOf(USER1);
@@ -387,5 +386,4 @@ contract WrapperATest is WrapperAHarness {
         ctx.wrapper.claimWithdrawal(requestId, USER1);
         assertApproxEqAbs(USER1.balance, before + depositAmount, WEI_ROUNDING_TOLERANCE);
     }
-
 }
