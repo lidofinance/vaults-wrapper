@@ -470,7 +470,7 @@ contract WrapperBTest is WrapperBHarness {
         //
         // Step 1: User1 deposits
         //
-        uint256 user1Deposit = 1 ether / 100; // 0.01 ETH
+        uint256 user1Deposit = 2 * ctx.withdrawalQueue.MIN_WITHDRAWAL_AMOUNT() * 100; // * 100 to have +1% rewards enough for min withdrawal
         _ensureFreshness(ctx);
         uint256 sharesForDeposit = _calcMaxMintableStShares(ctx, user1Deposit);
         vm.prank(USER1);
@@ -510,11 +510,10 @@ contract WrapperBTest is WrapperBHarness {
             "USER1 mintable stETH shares should equal capacity from rewards"
         );
 
-        // assertEq(ctx.dashboard.withdrawableValue(), user1Rewards, "Dashboard's withdrawable value should be equal to user1Rewards");
         assertEq(w.withdrawableEth(USER1, 0), user1Rewards, "USER1 withdrawable eth should be equal to user1Rewards");
         assertEq(w.withdrawableEth(USER1, expectedUser1MintedStShares), w.previewRedeem(w.balanceOf(USER1)), "USER1 withdrawable eth should be equal to user1Deposit + user1Rewards");
 
-        // assertEq(w.stethSharesForWithdrawal(USER1, w.balanceOf(USER1)), expectedUser1MintedStShares, "USER1 stSharesForWithdrawal should be equal to expectedUser1MintedStShares");
+        assertEq(w.stethSharesForWithdrawal(USER1, w.balanceOf(USER1)), expectedUser1MintedStShares, "USER1 stSharesForWithdrawal should be equal to expectedUser1MintedStShares");
 
         uint256 rewardsStv =
             Math.mulDiv(user1Rewards, w.balanceOf(USER1), user1Deposit + user1Rewards, Math.Rounding.Floor);
@@ -523,6 +522,7 @@ contract WrapperBTest is WrapperBHarness {
             w.stethSharesForWithdrawal(USER1, rewardsStv), WEI_ROUNDING_TOLERANCE,
             "USER1 stSharesForWithdrawal for rewards-only should be ~0"
         );
+        assertEq(w.stethSharesForWithdrawal(USER1, rewardsStv), 0, "USER1 stSharesForWithdrawal should be equal to 0");
 
         _assertUniversalInvariants("Step 1", ctx);
 
@@ -537,7 +537,8 @@ contract WrapperBTest is WrapperBHarness {
         );
 
         vm.prank(USER1);
-        uint256 requestId = w.requestWithdrawal(rewardsStv);
+        uint256 requestId = w.requestWithdrawal(rewardsStv, 0, 0, USER1);
+        // same as: uint256 requestId = w.requestWithdrawal(rewardsStv);
 
         WithdrawalQueue.WithdrawalRequestStatus memory status = ctx.withdrawalQueue.getWithdrawalStatus(requestId);
         assertEq(status.amountOfAssets, user1Rewards, "Withdrawal request amount should match previewRedeem");
@@ -591,16 +592,16 @@ contract WrapperBTest is WrapperBHarness {
         // Step 2.2: User1 tries to withdraw stv without burning any stethShares but fails
         //
         uint256 stvForMinWithdrawal = w.previewWithdraw(ctx.withdrawalQueue.MIN_WITHDRAWAL_AMOUNT());
-        uint256 wstethToBurn = w.stethSharesForWithdrawal(USER1, stvForMinWithdrawal);
-        console.log("wstethToBurn", wstethToBurn);
+        uint256 stethSharesToBurn = w.stethSharesForWithdrawal(USER1, stvForMinWithdrawal);
+        console.log("stethSharesToBurn", stethSharesToBurn);
 
         vm.startPrank(USER1);
 
-        vm.expectRevert("ALLOWANCE_EXCEEDED");
+        vm.expectRevert(WrapperB.InsufficientReservedBalance.selector);
         w.requestWithdrawal(stvForMinWithdrawal);
 
-        steth.approve(address(w), steth.getPooledEthByShares(wstethToBurn - 1));
-        vm.expectRevert("ALLOWANCE_EXCEEDED");
+        steth.approve(address(w), steth.getPooledEthByShares(stethSharesToBurn));
+        vm.expectRevert(WrapperB.InsufficientReservedBalance.selector);
         w.requestWithdrawal(stvForMinWithdrawal);
 
         steth.increaseAllowance(address(w), steth.getPooledEthByShares(1));
@@ -613,12 +614,12 @@ contract WrapperBTest is WrapperBHarness {
 
         assertEq(
             user1StethSharesBefore - steth.balanceOf(USER1),
-            wstethToBurn,
+            stethSharesToBurn,
             "USER1 stETH shares should decrease by wstethToBurn"
         );
         assertApproxEqAbs(
             steth.balanceOf(address(ctx.withdrawalQueue)) - wqStethSharesBefore,
-            wstethToBurn,
+            stethSharesToBurn,
             WEI_ROUNDING_TOLERANCE,
             _contextMsg("Step 2", "WithdrawalQueue stETH shares should increase by wstethToBurn")
         );

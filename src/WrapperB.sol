@@ -159,7 +159,7 @@ contract WrapperB is WrapperBase {
      * @return stv The amount of stvETH shares that can be withdrawn (18 decimals)
      */
     function withdrawableStv(address _account, uint256 _stethSharesToBurn) public view returns (uint256 stv) {
-        stv = _convertToShares(withdrawableEth(_account, _stethSharesToBurn), Math.Rounding.Floor);
+        stv = _convertToStv(withdrawableEth(_account, _stethSharesToBurn), Math.Rounding.Floor);
     }
 
     /**
@@ -203,8 +203,6 @@ contract WrapperB is WrapperBase {
     ) public virtual returns (uint256 requestId) {
         if (_stvToWithdraw == 0) revert WrapperBase.ZeroStv();
 
-        address receiver = _receiver == address(0) ? msg.sender : _receiver;
-
         if (_stethSharesToBurn > 0) {
             _burnStethShares(msg.sender, _stethSharesToBurn);
         }
@@ -215,6 +213,7 @@ contract WrapperB is WrapperBase {
         }
 
         _transfer(msg.sender, address(WITHDRAWAL_QUEUE), _stvToWithdraw);
+        address receiver = _receiver == address(0) ? msg.sender : _receiver;
         requestId = WITHDRAWAL_QUEUE.requestWithdrawal(_stvToWithdraw, _stethSharesToRebalance, receiver);
     }
 
@@ -449,7 +448,7 @@ contract WrapperB is WrapperBase {
 
     function _calcStvToLockForStethShares(uint256 _stethShares) internal view returns (uint256 stvToLock) {
         uint256 assetsToLock = _calcAssetsToLockForStethShares(_stethShares);
-        stvToLock = _convertToShares(assetsToLock, Math.Rounding.Ceil);
+        stvToLock = _convertToStv(assetsToLock, Math.Rounding.Ceil);
     }
 
     // =================================================================================
@@ -540,7 +539,7 @@ contract WrapperB is WrapperBase {
         if (remainingStethShares > 0) DASHBOARD.rebalanceVaultWithShares(remainingStethShares);
 
         uint256 ethToRebalance = STETH.getPooledEthBySharesRoundUp(_stethShares);
-        stvToBurn = _convertToShares(ethToRebalance, Math.Rounding.Ceil);
+        stvToBurn = _convertToStv(ethToRebalance, Math.Rounding.Ceil);
 
         if (stvToBurn > _maxStvToBurn) {
             emit SocializedLoss(stvToBurn - _maxStvToBurn, ethToRebalance - _convertToAssets(_maxStvToBurn));
