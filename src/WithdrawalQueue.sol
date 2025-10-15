@@ -357,6 +357,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
         uint256 firstRequestIdToFinalize = lastFinalizedRequestId + 1;
         uint256 lastRequestIdToFinalize = Math.min(lastFinalizedRequestId + _maxRequests, $.lastRequestId);
 
+        // TODO: think about should it be an early return or revert
         if (firstRequestIdToFinalize > lastRequestIdToFinalize) revert NoRequestsToFinalize();
 
         uint256 currentStvRate = calculateCurrentStvRate();
