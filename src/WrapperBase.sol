@@ -126,7 +126,6 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
         uint256 connectDeposit = VAULT_HUB.CONNECT_DEPOSIT();
         assert(initialVaultBalance >= connectDeposit);
 
-        // TODO: need to mint because NO must be able to withdraw CONNECT_DEPOSIT and rewards accumulated on it
         _mint(address(this), _convertToStv(connectDeposit, Math.Rounding.Floor));
     }
 

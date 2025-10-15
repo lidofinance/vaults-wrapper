@@ -159,7 +159,7 @@ contract WrapperB is WrapperBase {
      * @return stv The amount of stvETH shares that can be withdrawn (18 decimals)
      */
     function withdrawableStv(address _account, uint256 _stethSharesToBurn) public view returns (uint256 stv) {
-        stv = _convertToShares(withdrawableEth(_account, _stethSharesToBurn), Math.Rounding.Floor);
+        stv = _convertToStv(withdrawableEth(_account, _stethSharesToBurn), Math.Rounding.Floor);
     }
 
     /**
@@ -539,7 +539,7 @@ contract WrapperB is WrapperBase {
         if (remainingStethShares > 0) DASHBOARD.rebalanceVaultWithShares(remainingStethShares);
 
         uint256 ethToRebalance = STETH.getPooledEthBySharesRoundUp(_stethShares);
-        stvToBurn = _convertToShares(ethToRebalance, Math.Rounding.Ceil);
+        stvToBurn = _convertToStv(ethToRebalance, Math.Rounding.Ceil);
 
         if (stvToBurn > _maxStvToBurn) {
             emit SocializedLoss(stvToBurn - _maxStvToBurn, ethToRebalance - _convertToAssets(_maxStvToBurn));
