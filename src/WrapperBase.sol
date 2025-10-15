@@ -78,12 +78,11 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
         address indexed receiver,
         address indexed referral,
         uint256 assets,
-        uint256 stvETHShares
+        uint256 stv
     );
 
     event VaultDisconnected(address indexed initiator);
     event ConnectDepositClaimed(address indexed recipient, uint256 amount);
-    event WithdrawalClaimed(uint256 requestId, address indexed owner, address indexed receiver, uint256 amountOfETH);
     event UnassignedLiabilityRebalanced(uint256 stethShares, uint256 ethAmount);
 
     constructor(address _dashboard, bool _allowListEnabled, address _withdrawalQueue) AllowList(_allowListEnabled) {
@@ -120,14 +119,13 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
         _initializeProposalUpgradable(_owner, _upgradeConformer);
 
         // Initial vault balance must include the connect deposit
-        // Minting shares for it to have clear shares math
-        // The shares are withdrawable only upon vault disconnection
+        // Minting stv for it to have clear stv math
+        // The stv are withdrawable only upon vault disconnection
         uint256 initialVaultBalance = address(STAKING_VAULT).balance;
         uint256 connectDeposit = VAULT_HUB.CONNECT_DEPOSIT();
         assert(initialVaultBalance >= connectDeposit);
 
-        // TODO: need to mint because NO must be able to withdraw CONNECT_DEPOSIT and rewards accumulated on it
-        _mint(address(this), _convertToShares(connectDeposit, Math.Rounding.Floor));
+        _mint(address(this), _convertToStv(connectDeposit, Math.Rounding.Floor));
     }
 
     function wrapperType() external pure virtual returns (string memory);
@@ -188,31 +186,31 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
         return uint8(DECIMALS);
     }
 
-    function _convertToShares(uint256 _assetsE18, Math.Rounding rounding) internal view returns (uint256 shares) {
+    function _convertToStv(uint256 _assetsE18, Math.Rounding rounding) internal view returns (uint256 stv) {
         uint256 supplyE27 = totalSupply();
         if (supplyE27 == 0) {
             return _assetsE18 * EXTRA_DECIMALS_BASE; // 1:1 for the first deposit
         }
-        shares = Math.mulDiv(_assetsE18, supplyE27, totalEffectiveAssets(), rounding);
+        stv = Math.mulDiv(_assetsE18, supplyE27, totalEffectiveAssets(), rounding);
     }
 
-    function _convertToAssets(uint256 _shares) internal view returns (uint256 assets) {
-        assets = _getAssetsShare(_shares, totalEffectiveAssets());
+    function _convertToAssets(uint256 _stv) internal view returns (uint256 assets) {
+        assets = _getAssetsShare(_stv, totalEffectiveAssets());
     }
 
-    function _getAssetsShare(uint256 _shares, uint256 _assets) internal view returns (uint256) {
+    function _getAssetsShare(uint256 _stv, uint256 _assets) internal view returns (uint256) {
         // TODO: check supply
         uint256 supply = totalSupply();
         if (supply == 0) {
             return 0;
         }
         // TODO: review this Math.Rounding.Ceil
-        uint256 assetsShare = Math.mulDiv(_shares * EXTRA_DECIMALS_BASE, _assets, supply, Math.Rounding.Ceil);
+        uint256 assetsShare = Math.mulDiv(_stv * EXTRA_DECIMALS_BASE, _assets, supply, Math.Rounding.Ceil);
         return assetsShare / EXTRA_DECIMALS_BASE;
     }
 
     function previewDeposit(uint256 _assets) public view returns (uint256) {
-        return _convertToShares(_assets, Math.Rounding.Floor);
+        return _convertToStv(_assets, Math.Rounding.Floor);
     }
 
     // TODO: get rid of this in favor of previewRedeem?
@@ -224,13 +222,13 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
         return Math.mulDiv(_assets, supply, totalEffectiveAssets(), Math.Rounding.Ceil);
     }
 
-    function previewRedeem(uint256 _shares) external view returns (uint256) {
-        return _convertToAssets(_shares);
+    function previewRedeem(uint256 _stv) external view returns (uint256) {
+        return _convertToAssets(_stv);
     }
 
     /**
      * @notice Convenience function to deposit ETH to msg.sender
-     * @return stv Amount of stvETH shares minted
+     * @return stv Amount of stv minted
      */
     function depositETH(address _referral) public payable returns (uint256 stv) {
         return depositETH(msg.sender, _referral);
@@ -238,17 +236,17 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
 
     /**
      * @notice Convenience function to deposit ETH to msg.sender without referral
-     * @return stv Amount of stvETH shares minted
+     * @return stv Amount of stv minted
      */
     function depositETH() public payable returns (uint256 stv) {
         return depositETH(msg.sender, address(0));
     }
 
     /**
-     * @notice Deposit native ETH and receive stvETH shares
+     * @notice Deposit native ETH and receive stv
      * @dev Implementation depends on specific wrapper configuration
      * @param _receiver Address to receive the minted shares
-     * @return stv Amount of stvETH shares minted
+     * @return stv Amount of stv minted
      */
     function depositETH(address _receiver, address _referral) public payable virtual returns (uint256 stv);
 
@@ -359,13 +357,13 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
     }
 
     /**
-     * @notice Calculate the amount of stvETH shares that can be withdrawn by an account
+     * @notice Calculate the amount of stv that can be withdrawn by an account
      * @param _account The address of the account
-     * @return stv The amount of stvETH shares that can be withdrawn (18 decimals)
+     * @return stv The amount of stv that can be withdrawn (18 decimals)
      * @dev Overridable method to include locked assets if needed
      */
     function withdrawableStv(address _account) public view virtual returns (uint256 stv) {
-        stv = _convertToShares(withdrawableEth(_account), Math.Rounding.Floor);
+        stv = _convertToStv(withdrawableEth(_account), Math.Rounding.Floor);
     }
 
     /**
@@ -374,7 +372,7 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
      * @return requestId The ID of the withdrawal request
      */
     function requestWithdrawalETH(uint256 _assetsToWithdraw) public virtual returns (uint256 requestId) {
-        uint256 stvToWithdraw = _convertToShares(_assetsToWithdraw, Math.Rounding.Ceil);
+        uint256 stvToWithdraw = _convertToStv(_assetsToWithdraw, Math.Rounding.Ceil);
         requestId = requestWithdrawal(stvToWithdraw);
     }
 
@@ -426,10 +424,12 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
      * @notice Claim finalized withdrawal request
      * @param _requestId The withdrawal request ID to claim
      * @param _recipient The address to receive the claimed ether
+     * @return ethClaimed The amount of ether claimed (18 decimals)
+     * @dev If _recipient is address(0), it defaults to msg.sender
      */
-    function claimWithdrawal(uint256 _requestId, address _recipient) external virtual {
-        uint256 ethClaimed = WITHDRAWAL_QUEUE.claimWithdrawal(_requestId, msg.sender, _recipient);
-        emit WithdrawalClaimed(_requestId, msg.sender, _recipient, ethClaimed);
+    function claimWithdrawal(uint256 _requestId, address _recipient) external virtual returns (uint256 ethClaimed) {
+        address recipient = _recipient == address(0) ? msg.sender : _recipient;
+        ethClaimed = WITHDRAWAL_QUEUE.claimWithdrawal(_requestId, msg.sender, recipient);
     }
 
     /**
@@ -437,17 +437,16 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
      * @param _requestIds The array of withdrawal request IDs to claim
      * @param _hints The array of checkpoint hints for each request
      * @param _recipient The address to receive the claimed ether
+     * @return claimedEth The array of amounts of ether claimed for each request (18 decimals)
+     * @dev If _recipient is address(0), it defaults to msg.sender
      */
     function claimWithdrawals(
         uint256[] calldata _requestIds,
         uint256[] calldata _hints,
         address _recipient
-    ) external virtual {
-        uint256[] memory claimedEth = WITHDRAWAL_QUEUE.claimWithdrawals(_requestIds, _hints, msg.sender, _recipient);
-
-        for (uint256 i = 0; i < _requestIds.length; ++i) {
-            emit WithdrawalClaimed(_requestIds[i], msg.sender, _recipient, claimedEth[i]);
-        }
+    ) external virtual returns (uint256[] memory claimedEth) {
+        address recipient = _recipient == address(0) ? msg.sender : _recipient;
+        claimedEth = WITHDRAWAL_QUEUE.claimWithdrawals(_requestIds, _hints, msg.sender, recipient);
     }
 
     /**

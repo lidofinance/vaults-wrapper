@@ -9,8 +9,6 @@ import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet
 
 import {WithdrawalQueue} from "./WithdrawalQueue.sol";
 
-import {console} from "forge-std/console.sol";
-
 import {IStETH} from "./interfaces/IStETH.sol";
 
 /**
@@ -161,7 +159,7 @@ contract WrapperB is WrapperBase {
      * @return stv The amount of stvETH shares that can be withdrawn (18 decimals)
      */
     function withdrawableStv(address _account, uint256 _stethSharesToBurn) public view returns (uint256 stv) {
-        stv = _convertToShares(withdrawableEth(_account, _stethSharesToBurn), Math.Rounding.Floor);
+        stv = _convertToStv(withdrawableEth(_account, _stethSharesToBurn), Math.Rounding.Floor);
     }
 
     /**
@@ -205,8 +203,6 @@ contract WrapperB is WrapperBase {
     ) public virtual returns (uint256 requestId) {
         if (_stvToWithdraw == 0) revert WrapperBase.ZeroStv();
 
-        address receiver = _receiver == address(0) ? msg.sender : _receiver;
-
         if (_stethSharesToBurn > 0) {
             _burnStethShares(msg.sender, _stethSharesToBurn);
         }
@@ -217,6 +213,7 @@ contract WrapperB is WrapperBase {
         }
 
         _transfer(msg.sender, address(WITHDRAWAL_QUEUE), _stvToWithdraw);
+        address receiver = _receiver == address(0) ? msg.sender : _receiver;
         requestId = WITHDRAWAL_QUEUE.requestWithdrawal(_stvToWithdraw, _stethSharesToRebalance, receiver);
     }
 
@@ -256,7 +253,10 @@ contract WrapperB is WrapperBase {
             totalStvToTransfer += _stvToWithdraw[i];
         }
 
-        _transferMintedStethShares(msg.sender, address(WITHDRAWAL_QUEUE), totalStethSharesToTransfer);
+        if (totalStethSharesToTransfer > 0) {
+            _transferMintedStethShares(msg.sender, address(WITHDRAWAL_QUEUE), totalStethSharesToTransfer);
+        }
+
         _transfer(msg.sender, address(WITHDRAWAL_QUEUE), totalStvToTransfer);
         requestIds = WITHDRAWAL_QUEUE.requestWithdrawals(_stvToWithdraw, _stethSharesToRebalance, receiver);
     }
@@ -448,7 +448,7 @@ contract WrapperB is WrapperBase {
 
     function _calcStvToLockForStethShares(uint256 _stethShares) internal view returns (uint256 stvToLock) {
         uint256 assetsToLock = _calcAssetsToLockForStethShares(_stethShares);
-        stvToLock = _convertToShares(assetsToLock, Math.Rounding.Ceil);
+        stvToLock = _convertToStv(assetsToLock, Math.Rounding.Ceil);
     }
 
     // =================================================================================
@@ -518,11 +518,16 @@ contract WrapperB is WrapperBase {
     /**
      * @notice Rebalance the user's minted stETH shares by burning stvETH shares
      * @param _stethShares The amount of stETH shares to rebalance
+     * @param _maxStvToBurn The maximum amount of stvETH shares to burn for rebalancing
+     * @return stvToBurn The actual amount of stvETH shares burned for rebalancing
      * @dev First, rebalances internally by burning stvETH shares, which decreases exceeding shares (if any)
      * @dev Second, if there are remaining liability shares, rebalances Staking Vault
      * @dev Requires fresh oracle report, which is checked in the Withdrawal Queue
      */
-    function rebalanceMintedStethShares(uint256 _stethShares, uint256 _maxStvToBurn) public {
+    function rebalanceMintedStethShares(
+        uint256 _stethShares,
+        uint256 _maxStvToBurn
+    ) public returns (uint256 stvToBurn) {
         _checkOnlyWithdrawalQueue();
 
         if (_stethShares == 0) revert ZeroArgument();
@@ -534,7 +539,7 @@ contract WrapperB is WrapperBase {
         if (remainingStethShares > 0) DASHBOARD.rebalanceVaultWithShares(remainingStethShares);
 
         uint256 ethToRebalance = STETH.getPooledEthBySharesRoundUp(_stethShares);
-        uint256 stvToBurn = _convertToShares(ethToRebalance, Math.Rounding.Ceil);
+        stvToBurn = _convertToStv(ethToRebalance, Math.Rounding.Ceil);
 
         if (stvToBurn > _maxStvToBurn) {
             emit SocializedLoss(stvToBurn - _maxStvToBurn, ethToRebalance - _convertToAssets(_maxStvToBurn));
@@ -558,15 +563,13 @@ contract WrapperB is WrapperBase {
     function _update(address _from, address _to, uint256 _value) internal override {
         super._update(_from, _to, _value);
 
+        // Skip checks for burning from Withdrawal Queue
+        if (_from == address(WITHDRAWAL_QUEUE) && _to == address(0)) return;
+
         uint256 mintedStethShares = mintedStethSharesOf(_from);
         if (mintedStethShares == 0) return;
 
         uint256 stvToLock = _calcStvToLockForStethShares(mintedStethShares);
-
-        console.log("_update _from", _from);
-        console.log("_update balanceOf(_from)", balanceOf(_from));
-        console.log("_update mintedStethShares", mintedStethShares);
-        console.log("_update stvToLock", stvToLock);
 
         if (balanceOf(_from) < stvToLock) revert InsufficientReservedBalance();
     }
