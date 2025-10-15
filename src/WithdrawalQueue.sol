@@ -31,6 +31,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
 
     /// @notice precision base for stv and steth share rates
     uint256 public constant E27_PRECISION_BASE = 1e27;
+    uint256 public constant E36_PRECISION_BASE = 1e36;
 
     /// @notice minimal amount of assets that is possible to withdraw
     /// @dev should be big enough to prevent DoS attacks by placing many small requests
@@ -377,7 +378,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
 
             uint256 stvToRebalance = Math.mulDiv(
                 stethToRebalance,
-                E27_PRECISION_BASE,
+                E36_PRECISION_BASE,
                 currentStvRate,
                 Math.Rounding.Ceil
             );
@@ -477,11 +478,11 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
      * @return stvRate Current stv rate of the vault (1e27 precision)
      */
     function calculateCurrentStvRate() public view returns (uint256 stvRate) {
-        uint256 totalStv = WRAPPER.totalSupply();
-        uint256 totalAssets = WRAPPER.totalEffectiveAssets();
+        uint256 totalStv = WRAPPER.totalSupply(); // e27 precision
+        uint256 totalAssets = WRAPPER.totalEffectiveAssets(); // e18 precision
 
         if (totalStv == 0) return E27_PRECISION_BASE;
-        stvRate = (totalAssets * E27_PRECISION_BASE) / totalStv;
+        stvRate = (totalAssets * E36_PRECISION_BASE) / totalStv;
     }
 
     /**
@@ -643,11 +644,11 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
         stethSharesToRebalance = _request.cumulativeStethShares - _prevRequest.cumulativeStethShares;
         assetsToClaim = _request.cumulativeAssets - _prevRequest.cumulativeAssets;
 
-        uint256 requestStvRate = (assetsToClaim * E27_PRECISION_BASE) / stv;
+        uint256 requestStvRate = (assetsToClaim * E36_PRECISION_BASE) / stv;
 
         // Apply discount if the request stv rate is above the finalization stv rate
         if (requestStvRate > finalizationStvRate) {
-            assetsToClaim = Math.mulDiv(stv, finalizationStvRate, E27_PRECISION_BASE, Math.Rounding.Floor);
+            assetsToClaim = Math.mulDiv(stv, finalizationStvRate, E36_PRECISION_BASE, Math.Rounding.Floor);
         }
 
         if (stethSharesToRebalance > 0) {
