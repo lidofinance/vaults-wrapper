@@ -101,12 +101,10 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
         // Don't advance time enough
         vm.warp(block.timestamp + MIN_WITHDRAWAL_DELAY_TIME - 1);
 
+        // Should not finalize because min delay not passed
         vm.prank(finalizeRoleHolder);
-        uint256 finalizedCount = withdrawalQueue.finalize(1);
-
-        // Should finalize 0 requests due to time restriction
-        assertEq(finalizedCount, 0);
-        assertEq(withdrawalQueue.getLastFinalizedRequestId(), 0);
+        vm.expectRevert(WithdrawalQueue.NoRequestsToFinalize.selector);
+        withdrawalQueue.finalize(1);
     }
 
     function test_Finalize_RequestAfterReport() public {
@@ -120,11 +118,10 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
 
         vm.warp(block.timestamp + MIN_WITHDRAWAL_DELAY_TIME + 1);
 
-        vm.prank(finalizeRoleHolder);
-        uint256 finalizedCount = withdrawalQueue.finalize(1);
-
         // Should not finalize because request was created after last report
-        assertEq(finalizedCount, 0);
+        vm.prank(finalizeRoleHolder);
+        vm.expectRevert(WithdrawalQueue.NoRequestsToFinalize.selector);
+        withdrawalQueue.finalize(1);
     }
 
     function test_Finalize_RevertOnlyFinalizeRole() public {
@@ -168,11 +165,10 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
         uint256 vaultBalance = stakingVault.balance;
         dashboard.mock_setLocked(vaultBalance);
 
+        // Should not finalize because eth to withdraw is locked
         vm.prank(finalizeRoleHolder);
-        uint256 finalizedCount = withdrawalQueue.finalize(1);
-
-        assertEq(finalizedCount, 0);
-        assertEq(withdrawalQueue.getLastFinalizedRequestId(), 0);
+        vm.expectRevert(WithdrawalQueue.NoRequestsToFinalize.selector);
+        withdrawalQueue.finalize(1);
     }
 
     function test_Finalize_PartialDueToWithdrawableLimit() public {
@@ -214,8 +210,10 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
         vm.deal(stakingVault, assetsPreview);
         dashboard.mock_setLocked(assetsToRebalance + 1); // block by 1 wei
 
+        // Should not finalize because eth to withdraw is locked
         vm.prank(finalizeRoleHolder);
-        assertEq(withdrawalQueue.finalize(1), 0);
+        vm.expectRevert(WithdrawalQueue.NoRequestsToFinalize.selector);
+        withdrawalQueue.finalize(1);
     }
 
     function test_Finalize_RebalanceWithBlockedButAvailableAssets() public {

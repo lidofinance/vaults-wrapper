@@ -425,7 +425,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
             finalizedRequests++;
         }
 
-        if (finalizedRequests == 0) return 0;
+        if (finalizedRequests == 0) revert NoRequestsToFinalize();
 
         // 1. Withdraw ETH from the vault to cover finalized requests and burn associated stv
         // Eth to claim or stv to burn could be 0 if all requests are going to be rebalanced
