@@ -448,7 +448,7 @@ contract WrapperB is WrapperBase {
 
     function _calcStvToLockForStethShares(uint256 _stethShares) internal view returns (uint256 stvToLock) {
         uint256 assetsToLock = _calcAssetsToLockForStethShares(_stethShares);
-        stvToLock = _convertToShares(assetsToLock, Math.Rounding.Ceil);
+        stvToLock = _convertToStv(assetsToLock, Math.Rounding.Ceil);
     }
 
     // =================================================================================
