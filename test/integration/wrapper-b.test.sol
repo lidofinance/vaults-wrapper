@@ -470,7 +470,7 @@ contract WrapperBTest is WrapperBHarness {
         //
         // Step 1: User1 deposits
         //
-        uint256 user1Deposit = 10_000 wei;
+        uint256 user1Deposit = 1 ether / 100; // 0.01 ETH
         _ensureFreshness(ctx);
         uint256 sharesForDeposit = _calcMaxMintableStShares(ctx, user1Deposit);
         vm.prank(USER1);
