@@ -203,8 +203,6 @@ contract WrapperB is WrapperBase {
     ) public virtual returns (uint256 requestId) {
         if (_stvToWithdraw == 0) revert WrapperBase.ZeroStv();
 
-        address receiver = _receiver == address(0) ? msg.sender : _receiver;
-
         if (_stethSharesToBurn > 0) {
             _burnStethShares(msg.sender, _stethSharesToBurn);
         }
@@ -215,6 +213,7 @@ contract WrapperB is WrapperBase {
         }
 
         _transfer(msg.sender, address(WITHDRAWAL_QUEUE), _stvToWithdraw);
+        address receiver = _receiver == address(0) ? msg.sender : _receiver;
         requestId = WITHDRAWAL_QUEUE.requestWithdrawal(_stvToWithdraw, _stethSharesToRebalance, receiver);
     }
 
