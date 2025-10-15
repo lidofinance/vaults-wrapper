@@ -83,7 +83,6 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
 
     event VaultDisconnected(address indexed initiator);
     event ConnectDepositClaimed(address indexed recipient, uint256 amount);
-    event WithdrawalClaimed(uint256 requestId, address indexed owner, address indexed receiver, uint256 amountOfETH);
     event UnassignedLiabilityRebalanced(uint256 stethShares, uint256 ethAmount);
 
     constructor(address _dashboard, bool _allowListEnabled, address _withdrawalQueue) AllowList(_allowListEnabled) {
@@ -426,11 +425,12 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
      * @notice Claim finalized withdrawal request
      * @param _requestId The withdrawal request ID to claim
      * @param _recipient The address to receive the claimed ether
+     * @return ethClaimed The amount of ether claimed (18 decimals)
+     * @dev If _recipient is address(0), it defaults to msg.sender
      */
-    function claimWithdrawal(uint256 _requestId, address _recipient) external virtual {
+    function claimWithdrawal(uint256 _requestId, address _recipient) external virtual returns (uint256 ethClaimed) {
         address recipient = _recipient == address(0) ? msg.sender : _recipient;
-        uint256 ethClaimed = WITHDRAWAL_QUEUE.claimWithdrawal(_requestId, msg.sender, recipient);
-        emit WithdrawalClaimed(_requestId, msg.sender, recipient, ethClaimed);
+        ethClaimed = WITHDRAWAL_QUEUE.claimWithdrawal(_requestId, msg.sender, recipient);
     }
 
     /**
@@ -438,18 +438,16 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
      * @param _requestIds The array of withdrawal request IDs to claim
      * @param _hints The array of checkpoint hints for each request
      * @param _recipient The address to receive the claimed ether
+     * @return claimedEth The array of amounts of ether claimed for each request (18 decimals)
+     * @dev If _recipient is address(0), it defaults to msg.sender
      */
     function claimWithdrawals(
         uint256[] calldata _requestIds,
         uint256[] calldata _hints,
         address _recipient
-    ) external virtual {
+    ) external virtual returns (uint256[] memory claimedEth) {
         address recipient = _recipient == address(0) ? msg.sender : _recipient;
-        uint256[] memory claimedEth = WITHDRAWAL_QUEUE.claimWithdrawals(_requestIds, _hints, msg.sender, recipient);
-
-        for (uint256 i = 0; i < _requestIds.length; ++i) {
-            emit WithdrawalClaimed(_requestIds[i], msg.sender, recipient, claimedEth[i]);
-        }
+        claimedEth = WITHDRAWAL_QUEUE.claimWithdrawals(_requestIds, _hints, msg.sender, recipient);
     }
 
     /**

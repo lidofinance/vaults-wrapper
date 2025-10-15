@@ -141,6 +141,12 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
         uint256 stethSharesRebalanced,
         uint256 timestamp
     );
+    event WithdrawalClaimed(
+        uint256 indexed requestId,
+        address indexed owner,
+        address indexed receiver,
+        uint256 amountOfETH
+    );
 
     event EmergencyExitActivated(uint256 timestamp);
     event ImplementationUpgraded(address newImplementation);
@@ -571,6 +577,8 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
 
         (bool success, ) = _recipient.call{value: ethWithDiscount}("");
         if (!success) revert CantSendValueRecipientMayHaveReverted();
+
+        emit WithdrawalClaimed(_requestId, _requestor, _recipient, ethWithDiscount);
 
         return ethWithDiscount;
     }
