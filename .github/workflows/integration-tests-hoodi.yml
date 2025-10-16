@@ -1,0 +1,30 @@
+name: Integrations On Hoodi Core
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  test_integration:
+    name: Integration Tests On Hoodi Core
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      FOUNDRY_PROFILE: test
+      RPC_URL: https://hoodi.drpc.org
+      CORE_DEPLOYED_JSON: deployments/deployed-core-hoodi.json
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Common setup
+        uses: ./.github/workflows/setup
+
+      - name: Run integration tests for WrapperA
+        run: make test-integration-a
+
+      - name: Run integration tests for WrapperB
+        run: make test-integration-b
+
+      - name: Run integration tests for GGV
+        run: make test-integration-ggv
