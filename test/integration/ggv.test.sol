@@ -299,7 +299,6 @@ contract GGVTest is WrapperCHarness {
             wrapper.DASHBOARD().liabilityShares(),
             0
         );
-        _ensureFreshness(ctx);
 
         if (vaultProfit != 0) {
             vm.startPrank(NODE_OPERATOR);

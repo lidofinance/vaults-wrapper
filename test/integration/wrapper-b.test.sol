@@ -21,8 +21,12 @@ contract WrapperBTest is WrapperBHarness {
         _initializeCore();
     }
 
+    uint256 public constant DEFAULT_WRAPPER_RR_GAP = 1000; // 10%
+
     function test_single_user_mints_full_in_one_step() public {
         WrapperContext memory ctx = _deployWrapperB(false, 0, 0);
+        _assertUniversalInvariants("Step 0", ctx);
+        _checkInitialState(ctx);
 
         //
         // Step 1: User deposits ETH
@@ -47,25 +51,24 @@ contract WrapperBTest is WrapperBHarness {
             "stETH shares for withdrawal should be equal to 0"
         );
         assertEq(ctx.dashboard.liabilityShares(), 0, "Vault's liability shares should be equal to 0");
+        assertEq(ctx.dashboard.totalValue(), CONNECT_DEPOSIT + user1Deposit, "Vault's total value should be equal to CONNECT_DEPOSIT + user1Deposit");
 
-        // Due to CONNECT_DEPOSIT counted by vault as eth for reserve vaults minting capacity is higher than for the user
         assertGt(
             ctx.dashboard.remainingMintingCapacityShares(0),
-            user1ExpectedMintableStethShares,
-            "Remaining minting capacity should be greater than user1ExpectedMintableStethShares"
+            0,
+            "Remaining minting capacity should be greater than 0"
         );
 
         //
         // Step 2: User mints all available stETH shares in one step
         //
-        _ensureFreshness(ctx);
 
         vm.prank(USER1);
         wrapperB(ctx).mintStethShares(user1ExpectedMintableStethShares);
 
         vm.clearMockedCalls();
 
-        // _assertUniversalInvariants("Step 2", ctx);
+        _assertUniversalInvariants("Step 2", ctx);
 
         assertEq(
             steth.sharesOf(USER1),
@@ -98,7 +101,6 @@ contract WrapperBTest is WrapperBHarness {
         uint256 user1Deposit = 10_000 wei;
         uint256 user1ExpectedMintableStethShares = _calcMaxMintableStShares(ctx, user1Deposit);
 
-        _ensureFreshness(ctx);
         vm.prank(USER1);
         wrapperB(ctx).depositETH{value: user1Deposit}(USER1, address(0), wrapperB(ctx).MAX_MINTABLE_AMOUNT());
 
@@ -127,7 +129,6 @@ contract WrapperBTest is WrapperBHarness {
         uint256 user1Deposit2 = 15_000 wei;
         uint256 user1ExpectedMintableStethShares2 = _calcMaxMintableStShares(ctx, user1Deposit2);
 
-        _ensureFreshness(ctx);
         vm.prank(USER1);
         wrapperB(ctx).depositETH{value: user1Deposit2}(USER1, address(0), wrapperB(ctx).MAX_MINTABLE_AMOUNT());
 
@@ -184,7 +185,6 @@ contract WrapperBTest is WrapperBHarness {
         //
         uint256 user1StSharesPart1 = user1ExpectedMintableStethShares / 3;
 
-        _ensureFreshness(ctx);
         vm.prank(USER1);
         wrapperB(ctx).mintStethShares(user1StSharesPart1);
 
@@ -222,7 +222,6 @@ contract WrapperBTest is WrapperBHarness {
         //
         // Step 3
         //
-        _ensureFreshness(ctx);
         vm.prank(USER1);
         wrapperB(ctx).mintStethShares(user1StSharesPart2);
 
@@ -303,7 +302,6 @@ contract WrapperBTest is WrapperBHarness {
         //
         uint256 user1StSharesPart1 = user1ExpectedMintableStethShares / 3;
 
-        _ensureFreshness(ctx);
         vm.prank(USER1);
         wrapperB(ctx).mintStethShares(user1StSharesPart1);
 
@@ -329,7 +327,6 @@ contract WrapperBTest is WrapperBHarness {
         //
         uint256 user2StSharesPart1 = user2ExpectedMintableStethShares / 3;
 
-        _ensureFreshness(ctx);
         vm.prank(USER2);
         wrapperB(ctx).mintStethShares(user2StSharesPart1);
 
@@ -357,7 +354,6 @@ contract WrapperBTest is WrapperBHarness {
         //
         uint256 user1StSharesPart2 = user1ExpectedMintableStethShares - user1StSharesPart1;
 
-        _ensureFreshness(ctx);
         vm.prank(USER1);
         wrapperB(ctx).mintStethShares(user1StSharesPart2);
 
@@ -385,7 +381,6 @@ contract WrapperBTest is WrapperBHarness {
         //
         uint256 user2StSharesPart2 = user2ExpectedMintableStethShares - user2StSharesPart1;
 
-        _ensureFreshness(ctx);
         vm.prank(USER2);
         wrapperB(ctx).mintStethShares(user2StSharesPart2);
 
@@ -421,7 +416,6 @@ contract WrapperBTest is WrapperBHarness {
         //
         uint256 user1Deposit = 200 ether;
         uint256 user1ExpectedMintable = _calcMaxMintableStShares(ctx, user1Deposit);
-        _ensureFreshness(ctx);
         vm.prank(USER1);
         wrapperB(ctx).depositETH{value: user1Deposit}(USER1, address(0), user1ExpectedMintable);
 
@@ -439,7 +433,6 @@ contract WrapperBTest is WrapperBHarness {
         reportVaultValueChangeNoFees(ctx, 100_00 - 100); // 99%
 
         uint256 user2Deposit = 10_000 wei;
-        _ensureFreshness(ctx);
         vm.prank(USER2);
         wrapperB(ctx).depositETH{value: user2Deposit}(USER2, address(0), 0);
 
@@ -452,10 +445,10 @@ contract WrapperBTest is WrapperBHarness {
             );
         }
 
-        // assertEq(steth.sharesOf(USER2), _calcMaxMintableStShares(user2Deposit), "USER2 stETH shares should be equal to user2Deposit");
+        // TODO: is this a correct check?
+        // assertEq(steth.sharesOf(USER2), _calcMaxMintableStShares(ctx, user2Deposit), "USER2 stETH shares should be equal to user2Deposit");
 
-        // TODO: fix fail here
-        // _assertUniversalInvariants("Step 2", ctx);
+        _assertUniversalInvariants("Step 2", ctx);
     }
 
     function test_user_withdraws_without_burning() public {
@@ -467,7 +460,6 @@ contract WrapperBTest is WrapperBHarness {
         //
         uint256 user1Deposit = 2 * ctx.withdrawalQueue.MIN_WITHDRAWAL_AMOUNT() * 100; // * 100 to have +1% rewards enough for min withdrawal
 
-        _ensureFreshness(ctx);
         uint256 sharesForDeposit = _calcMaxMintableStShares(ctx, user1Deposit);
         vm.prank(USER1);
         w.depositETH{value: user1Deposit}(USER1, address(0), sharesForDeposit);
@@ -488,7 +480,6 @@ contract WrapperBTest is WrapperBHarness {
         // assertGt(ctx.dashboard.remainingMintingCapacityShares(0), 0, "Remaining minting capacity should be greater than 0");
 
         reportVaultValueChangeNoFees(ctx, 100_00 + 100); // +1%
-        _ensureFreshness(ctx);
         uint256 user1Rewards = user1Deposit * 100 / 10000;
         assertApproxEqAbs(
             w.previewRedeem(w.balanceOf(USER1)),
@@ -526,7 +517,6 @@ contract WrapperBTest is WrapperBHarness {
         // Step 2.0: User1 withdraws rewards without burning any stethShares
         //
         uint256 withdrawableStvWithoutBurning = w.withdrawableStv(USER1, 0);
-        console.log("withdrawableStvWithoutBurning", withdrawableStvWithoutBurning);
 
         assertEq(
             withdrawableStvWithoutBurning, rewardsStv, "Withdrawable stv should be equal to rewardsStv"
@@ -572,9 +562,6 @@ contract WrapperBTest is WrapperBHarness {
         //
         // Step 2.1: User1 tries to withdraw stv corresponding to 1 wei but RequestAmountTooSmall
         //
-
-        uint256 u1StethShares = w.mintedStethSharesOf(USER1);
-        console.log("u1StethShares", u1StethShares);
 
         uint256 stvFor1Wei = w.previewWithdraw(1 wei);
         assertGt(w.balanceOf(USER1), stvFor1Wei, "USER1 stv balance should be greater than stvFor1Wei");

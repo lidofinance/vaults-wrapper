@@ -5,10 +5,12 @@ import {Test, console} from "forge-std/Test.sol";
 
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
+import {IOssifiableProxy} from "src/interfaces/IOssifiableProxy.sol";
 import {ILidoLocator} from "src/interfaces/ILidoLocator.sol";
 import {ILido} from "src/interfaces/ILido.sol";
 import {ILazyOracle} from "src/interfaces/ILazyOracle.sol";
 import {IDashboard} from "src/interfaces/IDashboard.sol";
+import {IOperatorGrid} from "src/interfaces/IOperatorGrid.sol";
 import {IVaultHub as IVaultHubIntact} from "src/interfaces/IVaultHub.sol";
 import {IVaultFactory} from "src/interfaces/IVaultFactory.sol";
 import {IWstETH} from "../../src/interfaces/IWstETH.sol";
@@ -21,11 +23,17 @@ interface IHashConsensusView {
     function getCurrentFrame() external view returns (uint256 refSlot, uint256 reportProcessingDeadlineSlot);
 }
 
+interface IAgent {
+    function kernel() external view returns (address);
+}
+
+interface IKernel {
+    function acl() external view returns (address);
+}
+
 interface IACL {
     function grantPermission(address _entity, address _app, bytes32 _role) external;
-    function grantRole(bytes32 role, address account) external;
-    function createPermission(address _entity, address _app, bytes32 _role, address _manager) external;
-    function setPermissionManager(address _newManager, address _app, bytes32 _role) external;
+    function revokePermission(address _entity, address _app, bytes32 _role) external;
 }
 
 interface IVaultHub is IVaultHubIntact {
@@ -39,12 +47,14 @@ contract CoreHarness is Test {
     IWstETH public wsteth;
     IVaultHub public vaultHub;
     ILazyOracle public lazyOracle;
+    IOperatorGrid public operatorGrid;
     IHashConsensusView public hashConsensus;
 
     uint256 public constant INITIAL_LIDO_SUBMISSION = 15_000 ether;
     uint256 public constant CONNECT_DEPOSIT = 1 ether;
     uint256 public constant LIDO_TOTAL_BASIS_POINTS = 10000;
     uint256 public constant NODE_OPERATOR_FEE_RATE = 1_00; // 1% in basis points
+    uint256 public constant DEFAULT_TIER_ID = 0;
 
     address public constant BEACON_CHAIN = address(0xbeac0);
 
@@ -52,28 +62,30 @@ contract CoreHarness is Test {
         vm.deal(address(this), 10000000 ether);
 
         string memory deployedJson = vm.readFile(vm.envString("CORE_DEPLOYED_JSON"));
-        locator = ILidoLocator(vm.parseJsonAddress(deployedJson, "$.lidoLocator.proxy.address"));
-        vm.label(address(locator), "LidoLocator");
+        address locatorAddress = vm.parseJsonAddress(deployedJson, "$.lidoLocator.proxy.address");
+        locator = ILidoLocator(locatorAddress);
+        vm.label(locatorAddress, "LidoLocator");
 
-        address agent = vm.parseJsonAddress(deployedJson, "$.['app:aragon-agent'].proxy.address");
+        // Discover Aragon Agent address from the locator proxy admin
+        address agent = IOssifiableProxy(locatorAddress).proxy__getAdmin();
         vm.label(agent, "Agent");
 
-        IACL acl = IACL(vm.parseJsonAddress(deployedJson, "$.aragon-acl.proxy.address"));
+        // Discover Aragon ACL address from the Agent Kernel
+        address kernelAddress = IAgent(agent).kernel();
+        vm.label(kernelAddress, "Kernel");
+        IACL acl = IACL(IKernel(kernelAddress).acl());
         vm.label(address(acl), "ACL");
 
         // Get LazyOracle address from the deployed contracts
         lazyOracle = ILazyOracle(locator.lazyOracle());
         vm.label(address(lazyOracle), "LazyOracle");
 
+        operatorGrid = IOperatorGrid(locator.operatorGrid());
+        vm.label(address(operatorGrid), "OperatorGrid");
+
         address hashConsensusAddr = vm.parseJsonAddress(deployedJson, "$.hashConsensusForAccountingOracle.address");
         vm.label(hashConsensusAddr, "HashConsensusForAO");
         hashConsensus = IHashConsensusView(hashConsensusAddr);
-        vm.prank(agent);
-        try IHashConsensus(hashConsensusAddr).updateInitialEpoch(1) {
-            // ok
-        } catch {
-            // ignore if already set on pre-deployed core (Hoodi)
-        }
 
         steth = ILido(locator.lido());
         vm.label(address(steth), "Lido");
@@ -81,17 +93,23 @@ contract CoreHarness is Test {
         wsteth = IWstETH(locator.wstETH());
         vm.label(address(wsteth), "WstETH");
 
-        vm.prank(agent);
-        try steth.setMaxExternalRatioBP(LIDO_TOTAL_BASIS_POINTS) {
-            // ok
-        } catch {
-            // ignore if permissions differ on pre-deployed core
-        }
+        vm.startPrank(agent);
+        {
+            try IHashConsensus(hashConsensusAddr).updateInitialEpoch(1) {
+                // ok
+            } catch {
+                // ignore if already set on pre-deployed core (Hoodi)
+            }
 
-        if (steth.isStopped()) {
-            vm.prank(agent);
-            try steth.resume() {} catch {}
+            acl.grantPermission(agent, address(steth), steth.STAKING_CONTROL_ROLE());
+            steth.setMaxExternalRatioBP(LIDO_TOTAL_BASIS_POINTS);
+            acl.revokePermission(agent, address(steth), steth.STAKING_CONTROL_ROLE());
+
+            if (steth.isStopped()) {
+                steth.resume();
+            }
         }
+        vm.stopPrank();
 
         // Ensure Lido has sufficient shares; on Hoodi it's already funded. Only top up if low.
         uint256 totalShares = steth.getTotalShares();
@@ -100,6 +118,25 @@ contract CoreHarness is Test {
             catch {
                 // ignore stake limit or other constraints on pre-deployed core
             }
+        }
+
+        IOperatorGrid.Tier memory tier = operatorGrid.tier(DEFAULT_TIER_ID);
+        if (tier.shareLimit == 0) {
+            IOperatorGrid.TierParams[] memory params = new IOperatorGrid.TierParams[](1);
+            params[0] = IOperatorGrid.TierParams({
+                shareLimit: 10_000 ether,
+                reserveRatioBP: tier.reserveRatioBP,
+                forcedRebalanceThresholdBP: tier.forcedRebalanceThresholdBP,
+                infraFeeBP: tier.infraFeeBP,
+                liquidityFeeBP: tier.liquidityFeeBP,
+                reservationFeeBP: tier.reservationFeeBP
+            });
+
+            uint256[] memory tierIds = new uint256[](1);
+            tierIds[0] = 0;
+
+            vm.prank(agent);
+            operatorGrid.alterTiers(tierIds, params);
         }
 
         vaultHub = IVaultHub(locator.vaultHub());

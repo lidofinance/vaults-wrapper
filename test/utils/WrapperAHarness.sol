@@ -187,9 +187,6 @@ contract WrapperAHarness is Test {
             vault: IStakingVault(vault_)
         });
 
-        // Ensure report freshness immediately after deployment so tests can proceed
-        _ensureFreshness(ctx);
-
         return ctx;
     }
 
@@ -262,39 +259,6 @@ contract WrapperAHarness is Test {
     }
 
     /**
-     * @notice Ensure the core report freshness checks pass for the given context
-     * Aligns LazyOracle.latestReportTimestamp and VaultHub.isReportFresh with the
-     * current vault record so tests can proceed with minting/withdrawing flows.
-     */
-    function _ensureFreshness(WrapperContext memory ctx) internal {
-        // Bump the vault record to the current block time to satisfy freshness requirements
-        // CoreHarness.applyVaultReport now handles incremental timestamp updates for forked testnets
-        core.applyVaultReport(
-            address(ctx.vault), ctx.dashboard.totalValue(), 0, ctx.dashboard.liabilityShares(), 0
-        );
-
-        uint256 prevTimestamp = core.lazyOracle().latestReportTimestamp();
-        console.log("prevTimestamp: %s", prevTimestamp);
-
-        ILazyOracle lazyOracle = core.lazyOracle();
-
-        // On local testing, apply mocks as well for extra safety (mocks don't work on forked testnets)
-        uint256 timestamp = IVaultHub(address(ctx.dashboard.VAULT_HUB())).vaultRecord(address(ctx.vault)).report.timestamp;
-        console.log("timestamp: %s", timestamp);
-        vm.mockCall(address(core.lazyOracle()), abi.encodeWithSelector(ILazyOracle.latestReportTimestamp.selector), abi.encode(timestamp));
-
-        uint256 afterTimestamp = lazyOracle.latestReportTimestamp();
-        console.log("afterTimestamp: %s", afterTimestamp);
-
-        // // Ensure core treats the record as fresh for this vault
-        // vm.mockCall(
-        //     address(core.vaultHub()),
-        //     abi.encodeWithSignature("isReportFresh(address)", address(ctx.vault)),
-        //     abi.encode(true)
-        // );
-    }
-
-    /**
      * @notice Simulate sending all available ETH from staking vault to consensus layer (drain withdrawable)
      */
     function _depositToCL(WrapperContext memory ctx) internal {
@@ -317,7 +281,6 @@ contract WrapperAHarness is Test {
         uint256 minDelay = ctx.withdrawalQueue.MIN_WITHDRAWAL_DELAY_TIME_IN_SECONDS();
         WithdrawalQueue.WithdrawalRequestStatus memory st = ctx.withdrawalQueue.getWithdrawalStatus(requestId);
         vm.warp(st.timestamp + minDelay + 2);
-        _ensureFreshness(ctx);
     }
 
     // TODO: add after report invariants

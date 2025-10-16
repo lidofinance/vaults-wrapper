@@ -42,6 +42,8 @@ contract WrapperBHarness is WrapperAHarness {
         // WrapperB specific: has minting capacity
         // Note: Cannot check mintableStShares for users with no deposits as it would cause underflow
         // Minting capacity checks are performed in individual tests after deposits are made
+        assertEq(ctx.dashboard.totalMintingCapacityShares(), 0, "Total minting capacity should be equal to 0");
+        assertEq(ctx.dashboard.remainingMintingCapacityShares(0), 0, "Remaining minting capacity should be equal to 0");
     }
 
     function _assertUniversalInvariants(string memory _context, WrapperContext memory _ctx) internal virtual override {
