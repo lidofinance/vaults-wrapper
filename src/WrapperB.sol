@@ -107,7 +107,7 @@ contract WrapperB is WrapperBase {
         address _receiver,
         address _referral,
         uint256 _stethSharesToMint
-    ) public payable returns (uint256 stv) {
+    ) public payable virtual returns (uint256 stv) {
         stv = _deposit(_receiver, _referral);
 
         if (_stethSharesToMint > 0) {

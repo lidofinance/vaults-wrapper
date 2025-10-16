@@ -144,6 +144,8 @@ contract GGVTest is WrapperCHarness {
         console.log("setup GGV finished\n");
     }
 
+
+
     function test_depositStrategy() public {
         vm.prank(USER1);
         wrapper.depositETH{value: 1 ether}(USER1);
@@ -209,8 +211,8 @@ contract GGVTest is WrapperCHarness {
         });
 
         vm.prank(USER1);
-        uint256 requestId = wrapper.requestWithdrawalFromStrategy(withdrawalStethAmount, abi.encode(params));
-        assertEq(requestId, 0);
+        bytes32 requestId = wrapper.requestWithdrawalFromStrategy(withdrawalStethAmount, abi.encode(params));
+        assertNotEq(requestId, 0);
 
         // Apply 1% increase to core (stETH share ratio)
         core.increaseBufferedEther(steth.totalSupply() * 1 / 100);
@@ -237,13 +239,20 @@ contract GGVTest is WrapperCHarness {
 
         // 5. User Finalizes Withdrawal (Wrapper side)
         console.log("\n[SCENARIO] Step 5. Finalize Wrapper withdrawal");
-        uint256[] memory requestIds = wrapper.getWithdrawalRequests(USER1);
-        assertEq(requestIds.length, 1, "Wrapper requests should be one before finalize");
+
+        uint256 _stethSharesToBurn = ggvStrategy.stethSharesOf(USER1);
+        uint256 _stethSharesToRebalance = ggvStrategy.stethSharesToRebalance(USER1);
+        uint256 _stvToWithdraw = ggvStrategy.withdrawableStv(USER1, _stethSharesToRebalance + _stethSharesToBurn);
+
+        console.log("================================================");
+        console.log("FINALIZE EXIT stethSharesToBurn", _stethSharesToBurn);
+        console.log("FINALIZE EXIT stvToWithdraw", _stvToWithdraw);
+        console.log("FINALIZE EXIT stethSharesToRebalance", _stethSharesToRebalance);
+        console.log("================================================");
 
         vm.startPrank(USER1);
-        for (uint256 i = 0; i < requestIds.length; i++) {
-            wrapper.finalizeWithdrawalFromStrategy(requestIds[i]);
-        }
+        // wrapper.finalizeWithdrawalFromStrategy(USER1,ggvRequestId);
+        ggvStrategy.requestWithdrawal(_stvToWithdraw, _stethSharesToBurn, _stethSharesToRebalance, USER1);
         vm.stopPrank();
 
         _log.printUsers("After User Finalizes Wrapper", logUsers, ggvDiscount);
