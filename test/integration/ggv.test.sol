@@ -188,8 +188,8 @@ contract GGVTest is WrapperCHarness {
         console.log("\n[SCENARIO] Simulating Rebases (Vault +5%, stETH +4%)");
 
         // a) Vault Rebase (simulated via mock report)
-        uint256 currentLiabilityShares = wrapper.DASHBOARD().liabilityShares();
-        uint256 currentTotalAssets = wrapper.totalAssets();
+        // uint256 currentLiabilityShares = wrapper.DASHBOARD().liabilityShares();
+        // uint256 currentTotalAssets = wrapper.totalAssets();
 
         // core.applyVaultReport(address(ctx.vault), currentTotalAssets + vaultProfit, 0, currentLiabilityShares, 0, false);
 
