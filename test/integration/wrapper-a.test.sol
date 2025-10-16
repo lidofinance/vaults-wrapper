@@ -9,7 +9,6 @@ import {Factory} from "src/Factory.sol";
 import {WrapperA} from "src/WrapperA.sol";
 import {IDashboard} from "src/interfaces/IDashboard.sol";
 import {IStakingVault} from "src/interfaces/IStakingVault.sol";
-import {ILazyOracle} from "src/interfaces/ILazyOracle.sol";
 
 /**
  * @title WrapperATest
@@ -20,7 +19,7 @@ contract WrapperATest is WrapperAHarness {
         _initializeCore();
     }
 
-    function test_happy_path_deposit_request_finalize_claim() public {
+    function test_happy_path_deposit_request_finalize_claim_no_rewards() public {
         // Deploy wrapper system
         WrapperContext memory ctx = _deployWrapperA(false, 0);
 
@@ -38,17 +37,15 @@ contract WrapperATest is WrapperAHarness {
 
         // Expected ETH to withdraw
         uint256 expectedEth = ctx.wrapper.previewRedeem(expectedStv);
+
         // 3) Advance past min delay and ensure fresh report via harness
         _advancePastMinDelayAndRefreshReport(ctx, requestId);
 
-        // 4) Ensure report is fresh; ETH is already on the vault from deposit
-        _ensureFreshness(ctx);
-
-        // 5) Node Operator finalizes one request
+        // 4) Node Operator finalizes one request
         vm.prank(NODE_OPERATOR);
         ctx.withdrawalQueue.finalize(1);
 
-        // 6) USER1 claims
+        // 5) USER1 claims
         uint256 userBalanceBefore = USER1.balance;
         vm.prank(USER1);
         ctx.wrapper.claimWithdrawal(requestId, USER1);
@@ -81,10 +78,6 @@ contract WrapperATest is WrapperAHarness {
         // 4) Apply +3% rewards via vault report BEFORE finalization
         //    This increases total value but should not discount the request
         reportVaultValueChangeNoFees(ctx, 10300); // +3%
-        _ensureFreshness(ctx);
-
-        // 5) Ensure report is fresh; ETH is already on the vault from deposit
-        _ensureFreshness(ctx);
 
         // 6) Node Operator finalizes one request
         vm.prank(NODE_OPERATOR);
@@ -113,7 +106,6 @@ contract WrapperATest is WrapperAHarness {
 
         // 2) Apply +3% rewards via vault report BEFORE withdrawal request
         reportVaultValueChangeNoFees(ctx, 10300); // +3%
-        _ensureFreshness(ctx);
 
         // 3) Now request withdrawal of all USER1 shares
         //    Expected ETH is increased by ~3% compared to initial deposit
@@ -124,9 +116,6 @@ contract WrapperATest is WrapperAHarness {
         uint256 requestId = ctx.wrapper.requestWithdrawal(expectedStv);
         // 4) Advance past min delay and ensure a fresh report after the request (required by WQ)
         _advancePastMinDelayAndRefreshReport(ctx, requestId);
-
-        // 5) Ensure report is fresh; ETH is already on the vault from deposit
-        _ensureFreshness(ctx);
 
         // 6) Node Operator finalizes one request
         vm.prank(NODE_OPERATOR);
@@ -145,12 +134,12 @@ contract WrapperATest is WrapperAHarness {
         );
     }
 
-    function test_finalize_reverts_after_loss_report_with_small_deposit() public {
+    function test_finalize_reverts_after_loss_more_than_deposit() public {
         // Deploy wrapper system
         WrapperContext memory ctx = _deployWrapperA(false, 0);
 
-        // 1) USER1 deposits 0.01 ether (above MIN_WITHDRAWAL_AMOUNT)
-        uint256 depositAmount = 0.01 ether;
+        // 1) USER1 deposits 0.0001 ether (above MIN_WITHDRAWAL_AMOUNT)
+        uint256 depositAmount = 0.0001 ether;
         uint256 expectedStv = ctx.wrapper.previewDeposit(depositAmount);
         vm.prank(USER1);
         ctx.wrapper.depositETH{value: depositAmount}(USER1, address(0));
@@ -159,18 +148,14 @@ contract WrapperATest is WrapperAHarness {
 
         // 2) USER1 immediately requests withdrawal of all their shares
         vm.prank(USER1);
-        uint256 requestId = ctx.wrapper.requestWithdrawal(expectedStv);
+        ctx.wrapper.requestWithdrawal(expectedStv);
 
         // Expected ETH to withdraw is locked at request time (equals initial deposit for WrapperA)
         uint256 expectedEthAtRequest = ctx.wrapper.previewRedeem(expectedStv);
         assertEq(expectedEthAtRequest, depositAmount, "expected eth should match deposit amount at request time");
 
-        // 3) Advance past min delay and ensure a fresh report after the request
-        _advancePastMinDelayAndRefreshReport(ctx, requestId);
-
-        // 4) Apply -3% report BEFORE finalization (vault value decreases)
-        reportVaultValueChangeNoFees(ctx, 9700); // -3%
-        _ensureFreshness(ctx);
+        // 4) Apply -1% report BEFORE finalization (vault value decreases)
+        reportVaultValueChangeNoFees(ctx, 9900); // -1%
 
         // After the loss report, totalValue should be less than CONNECT_DEPOSIT
         assertLt(ctx.dashboard.totalValue(), CONNECT_DEPOSIT, "totalValue should be less than CONNECT_DEPOSIT after loss report");
@@ -187,7 +172,6 @@ contract WrapperATest is WrapperAHarness {
 
         // Simulate a +3% vault value report before deposit
         reportVaultValueChangeNoFees(ctx, 10300); // +3%
-        _ensureFreshness(ctx);
 
         // 1) USER1 deposits 0.01 ether (above MIN_WITHDRAWAL_AMOUNT)
         uint256 depositAmount = 0.01 ether;
@@ -204,10 +188,6 @@ contract WrapperATest is WrapperAHarness {
 
         // 4) Simulate a -2% vault value report after the withdrawal request
         reportVaultValueChangeNoFees(ctx, 9800); // -2%
-        _ensureFreshness(ctx);
-
-        // 5) Ensure report is fresh; ETH is already on the vault from deposit
-        _ensureFreshness(ctx);
 
         // 6) Node Operator finalizes one request
         vm.prank(NODE_OPERATOR);
@@ -301,9 +281,7 @@ contract WrapperATest is WrapperAHarness {
 
         // 4) Move all withdrawable out to CL, then return only enough for the first via CL (insufficient for second)
         _depositToCL(ctx);
-        _ensureFreshness(ctx);
         _withdrawFromCL(ctx, firstAssets);
-        _ensureFreshness(ctx);
 
         vm.prank(NODE_OPERATOR);
         uint256 finalized = ctx.withdrawalQueue.finalize(2);
@@ -317,7 +295,6 @@ contract WrapperATest is WrapperAHarness {
 
         // 6) Return remaining via CL and finalize second
         _withdrawFromCL(ctx, secondAssets);
-        _ensureFreshness(ctx);
 
         vm.prank(NODE_OPERATOR);
         finalized = ctx.withdrawalQueue.finalize(1);

@@ -297,8 +297,7 @@ contract GGVTest is WrapperCHarness {
             wrapper.totalAssets(),
             0,
             wrapper.DASHBOARD().liabilityShares(),
-            0,
-            false
+            0
         );
         _ensureFreshness(ctx);
 

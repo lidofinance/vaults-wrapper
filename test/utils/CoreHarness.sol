@@ -17,6 +17,10 @@ interface IHashConsensus {
     function updateInitialEpoch(uint256 initialEpoch) external;
 }
 
+interface IHashConsensusView {
+    function getCurrentFrame() external view returns (uint256 refSlot, uint256 reportProcessingDeadlineSlot);
+}
+
 interface IACL {
     function grantPermission(address _entity, address _app, bytes32 _role) external;
     function grantRole(bytes32 role, address account) external;
@@ -28,24 +32,14 @@ interface IVaultHub is IVaultHubIntact {
     function mock__setReportIsAlwaysFresh(bool _reportIsAlwaysFresh) external;
 }
 
-interface ILazyOracleMocked is ILazyOracle {
-    function mock__updateVaultData(
-        address _vault,
-        uint256 _totalValue,
-        uint256 _cumulativeLidoFees,
-        uint256 _liabilityShares,
-        uint256 _maxLiabilityShares,
-        uint256 _slashingReserve
-    ) external;
-}
-
 contract CoreHarness is Test {
     ILidoLocator public locator;
     IDashboard public dashboard;
     ILido public steth;
     IWstETH public wsteth;
     IVaultHub public vaultHub;
-    ILazyOracleMocked public lazyOracle;
+    ILazyOracle public lazyOracle;
+    IHashConsensusView public hashConsensus;
 
     uint256 public constant INITIAL_LIDO_SUBMISSION = 15_000 ether;
     uint256 public constant CONNECT_DEPOSIT = 1 ether;
@@ -54,17 +48,10 @@ contract CoreHarness is Test {
 
     address public constant BEACON_CHAIN = address(0xbeac0);
 
-    constructor(string memory _deployedJsonPath) {
+    constructor() {
         vm.deal(address(this), 10000000 ether);
 
-        // Prefer CORE_DEPLOYED_JSON env var when provided; fallback to the passed path
-        string memory envPath = "";
-        try vm.envString("CORE_DEPLOYED_JSON") returns (string memory p) {
-            envPath = p;
-        } catch {}
-        string memory path = bytes(envPath).length != 0 ? envPath : _deployedJsonPath;
-
-        string memory deployedJson = vm.readFile(path);
+        string memory deployedJson = vm.readFile(vm.envString("CORE_DEPLOYED_JSON"));
         locator = ILidoLocator(vm.parseJsonAddress(deployedJson, "$.lidoLocator.proxy.address"));
         vm.label(address(locator), "LidoLocator");
 
@@ -75,13 +62,14 @@ contract CoreHarness is Test {
         vm.label(address(acl), "ACL");
 
         // Get LazyOracle address from the deployed contracts
-        lazyOracle = ILazyOracleMocked(locator.lazyOracle());
+        lazyOracle = ILazyOracle(locator.lazyOracle());
         vm.label(address(lazyOracle), "LazyOracle");
 
-        address hashConsensus = vm.parseJsonAddress(deployedJson, "$.hashConsensusForAccountingOracle.address");
-        vm.label(hashConsensus, "HashConsensusForAO");
+        address hashConsensusAddr = vm.parseJsonAddress(deployedJson, "$.hashConsensusForAccountingOracle.address");
+        vm.label(hashConsensusAddr, "HashConsensusForAO");
+        hashConsensus = IHashConsensusView(hashConsensusAddr);
         vm.prank(agent);
-        try IHashConsensus(hashConsensus).updateInitialEpoch(1) {
+        try IHashConsensus(hashConsensusAddr).updateInitialEpoch(1) {
             // ok
         } catch {
             // ignore if already set on pre-deployed core (Hoodi)
@@ -134,42 +122,33 @@ contract CoreHarness is Test {
         uint256 _totalValue,
         uint256 _cumulativeLidoFees,
         uint256 _liabilityShares,
-        uint256 _slashingReserve,
-        bool _onlyUpdateReportData
+        uint256 _slashingReserve
     ) public {
-        bytes32 treeRoot = bytes32(0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef);
-        string memory reportCid = "dummy-cid";
+        // TODO: maybe warp exactly to the next report processing deadline?
+        vm.warp(block.timestamp + 24 hours);
 
-        // uint256 reportCumulativeLidoFees = _cumulativeLidoFees;
-        // uint256 reportLiabilityShares = 0;
-        // uint256 reportSlashingReserve = 0;
-
-        // bool isFresh = vaultHub.isReportFresh(_stakingVault);
-        // console.log("isFresh before", isFresh);
-
-        vm.warp(block.timestamp + 1 minutes);
-
-        // Always update report data to mark reports as fresh on fork
         uint256 reportTimestamp = block.timestamp;
-        uint256 refSlot = block.timestamp / 12; // Simulate a slot number based on timestamp (12 second slots)
-        vm.prank(locator.accountingOracle());
-        lazyOracle.updateReportData(reportTimestamp, refSlot, treeRoot, reportCid);
+        uint256 refSlot;
+        // Try to get the actual refSlot from HashConsensus, fallback to naive calculation
+        (refSlot,) = hashConsensus.getCurrentFrame();
 
-        // Apply real updateVaultData with an empty proof path; this triggers applyVaultReport using the latest report timestamp
-        if (!_onlyUpdateReportData) {
-            uint256 maxLiabilityShares = vaultHub.vaultRecord(_stakingVault).maxLiabilityShares;
-            vm.prank(locator.accounting());
-            try lazyOracle.updateVaultData(
-                _stakingVault, _totalValue, _cumulativeLidoFees, _liabilityShares, _slashingReserve, new bytes32[](0)
-            ) {
-                console.log("After updateVaultData, totalValue from vaultHub:", vaultHub.totalValue(_stakingVault));
-            } catch {
-                // If proof checks enforced, fall back to mock when available
-                address ao = locator.accountingOracle();
-                vm.prank(ao);
-                (bool success,) = address(lazyOracle).call(
-                    abi.encodeWithSelector(
-                        ILazyOracleMocked.mock__updateVaultData.selector,
+        // TODO: is fallback needed?
+        // try hashConsensus.getCurrentFrame() returns (uint256 refSlot_, uint256) {
+        //     refSlot = refSlot_;
+        // } catch {
+        //     refSlot = block.timestamp / 12;
+        // }
+
+        // Build a single-leaf Merkle tree: root == leaf, empty proof
+        uint256 maxLiabilityShares = vaultHub.vaultRecord(_stakingVault).maxLiabilityShares;
+        if (_liabilityShares > maxLiabilityShares) {
+            maxLiabilityShares = _liabilityShares;
+        }
+
+        bytes32 leaf = keccak256(
+            bytes.concat(
+                keccak256(
+                    abi.encode(
                         _stakingVault,
                         _totalValue,
                         _cumulativeLidoFees,
@@ -177,14 +156,26 @@ contract CoreHarness is Test {
                         maxLiabilityShares,
                         _slashingReserve
                     )
-                );
-                // Ignore failures in mock calls - they may not be available on all deployments
-                success;
-            }
-        }
+                )
+            )
+        );
 
-        // On pre-deployed core we skip enforcing freshness via mocked calls
+        string memory emptyReportCid = "";
+        vm.prank(locator.accountingOracle());
+        lazyOracle.updateReportData(reportTimestamp, refSlot, leaf, emptyReportCid);
+
+        bytes32[] memory emptyProof = new bytes32[](0);
+        lazyOracle.updateVaultData(
+            _stakingVault,
+            _totalValue,
+            _cumulativeLidoFees,
+            _liabilityShares,
+            maxLiabilityShares,
+            _slashingReserve,
+            emptyProof
+        );
     }
+
 
     /**
      * @dev Mock function to simulate validators receiving ETH from the staking vault

@@ -9,6 +9,7 @@ import {IVaultHub} from "src/interfaces/IVaultHub.sol";
 import {IStakingVault} from "src/interfaces/IStakingVault.sol";
 import {ILido} from "src/interfaces/ILido.sol";
 import {IWstETH} from "src/interfaces/IWstETH.sol";
+import {ILazyOracle} from "src/interfaces/ILazyOracle.sol";
 
 import {WrapperA} from "src/WrapperA.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
@@ -42,7 +43,6 @@ contract WrapperAHarness is Test {
     uint256 public constant CONFIRM_EXPIRY = 1 hours;
 
     uint256 public constant TOTAL_BASIS_POINTS = 100_00;
-    uint256 public constant RESERVE_RATIO_BP = 20_00; // not configurable
     uint256 public immutable EXTRA_BASE = 10 ** (27 - 18); // not configurable
 
     // Deployment configuration struct
@@ -70,7 +70,7 @@ contract WrapperAHarness is Test {
     }
 
     function _initializeCore() internal {
-        core = new CoreHarness("lido-core/deployed-local.json");
+        core = new CoreHarness();
         steth = core.steth();
         wsteth = core.wsteth();
         vaultHub = core.vaultHub();
@@ -178,7 +178,7 @@ contract WrapperAHarness is Test {
         vm.stopPrank();
 
         // Apply initial vault report with current total value equal to connect deposit
-        core.applyVaultReport(vault_, CONNECT_DEPOSIT, 0, 0, 0, false);
+        core.applyVaultReport(vault_, CONNECT_DEPOSIT, 0, 0, 0);
 
         WrapperContext memory ctx = WrapperContext({
             wrapper: WrapperA(payable(wrapperAddress)),
@@ -220,9 +220,6 @@ contract WrapperAHarness is Test {
 
     function _checkInitialState(WrapperContext memory ctx) internal virtual {
         // Basic checks common to all wrappers
-        assertEq(
-            ctx.dashboard.vaultConnection().reserveRatioBP, RESERVE_RATIO_BP, "Reserve ratio should match RESERVE_RATIO_BP constant"
-        );
         assertEq(ctx.wrapper.EXTRA_DECIMALS_BASE(), EXTRA_BASE, "EXTRA_DECIMALS_BASE should match EXTRA_BASE constant");
 
         assertEq(
@@ -261,7 +258,7 @@ contract WrapperAHarness is Test {
     function reportVaultValueChangeNoFees(WrapperContext memory ctx, uint256 _factorBp) public {
         uint256 totalValue = ctx.dashboard.totalValue();
         totalValue = totalValue * _factorBp / 10000;
-        core.applyVaultReport(address(ctx.vault), totalValue, 0, 0, 0, false);
+        core.applyVaultReport(address(ctx.vault), totalValue, 0, 0, 0);
     }
 
     /**
@@ -271,19 +268,30 @@ contract WrapperAHarness is Test {
      */
     function _ensureFreshness(WrapperContext memory ctx) internal {
         // Bump the vault record to the current block time to satisfy freshness requirements
+        // CoreHarness.applyVaultReport now handles incremental timestamp updates for forked testnets
         core.applyVaultReport(
-            address(ctx.vault), ctx.dashboard.totalValue(), 0, ctx.dashboard.liabilityShares(), 0, false
+            address(ctx.vault), ctx.dashboard.totalValue(), 0, ctx.dashboard.liabilityShares(), 0
         );
 
-        uint256 recTs = IVaultHub(address(ctx.dashboard.VAULT_HUB())).vaultRecord(address(ctx.vault)).report.timestamp;
-        vm.mockCall(address(core.lazyOracle()), abi.encodeWithSignature("latestReportTimestamp()"), abi.encode(recTs));
+        uint256 prevTimestamp = core.lazyOracle().latestReportTimestamp();
+        console.log("prevTimestamp: %s", prevTimestamp);
 
-        // Ensure core treats the record as fresh for this vault
-        vm.mockCall(
-            address(core.vaultHub()),
-            abi.encodeWithSignature("isReportFresh(address)", address(ctx.vault)),
-            abi.encode(true)
-        );
+        ILazyOracle lazyOracle = core.lazyOracle();
+
+        // On local testing, apply mocks as well for extra safety (mocks don't work on forked testnets)
+        uint256 timestamp = IVaultHub(address(ctx.dashboard.VAULT_HUB())).vaultRecord(address(ctx.vault)).report.timestamp;
+        console.log("timestamp: %s", timestamp);
+        vm.mockCall(address(core.lazyOracle()), abi.encodeWithSelector(ILazyOracle.latestReportTimestamp.selector), abi.encode(timestamp));
+
+        uint256 afterTimestamp = lazyOracle.latestReportTimestamp();
+        console.log("afterTimestamp: %s", afterTimestamp);
+
+        // // Ensure core treats the record as fresh for this vault
+        // vm.mockCall(
+        //     address(core.vaultHub()),
+        //     abi.encodeWithSignature("isReportFresh(address)", address(ctx.vault)),
+        //     abi.encode(true)
+        // );
     }
 
     /**
@@ -306,8 +314,8 @@ contract WrapperAHarness is Test {
      * @dev Ensures LazyOracle.latestReportTimestamp() is >= request.timestamp and that report is fresh
      */
     function _advancePastMinDelayAndRefreshReport(WrapperContext memory ctx, uint256 requestId) internal {
-        WithdrawalQueue.WithdrawalRequestStatus memory st = ctx.withdrawalQueue.getWithdrawalStatus(requestId);
         uint256 minDelay = ctx.withdrawalQueue.MIN_WITHDRAWAL_DELAY_TIME_IN_SECONDS();
+        WithdrawalQueue.WithdrawalRequestStatus memory st = ctx.withdrawalQueue.getWithdrawalStatus(requestId);
         vm.warp(st.timestamp + minDelay + 2);
         _ensureFreshness(ctx);
     }

@@ -20,14 +20,17 @@ contract MockLazyOracle is ILazyOracle {
         bytes32 _vaultsDataTreeRoot,
         string memory _vaultsDataReportCid
     ) external {}
+
     function updateVaultData(
         address _vault,
         uint256 _totalValue,
         uint256 _cumulativeLidoFees,
         uint256 _liabilityShares,
+        uint256 _maxLiabilityShares,
         uint256 _slashingReserve,
         bytes32[] calldata _proof
     ) external {}
+
     function latestReportData()
         external
         view

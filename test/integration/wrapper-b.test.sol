@@ -28,8 +28,7 @@ contract WrapperBTest is WrapperBHarness {
         // Step 1: User deposits ETH
         //
         uint256 user1Deposit = 10_000 wei;
-        uint256 user1ExpectedMintableStethShares =
-            steth.getSharesByPooledEth(user1Deposit * (TOTAL_BASIS_POINTS - RESERVE_RATIO_BP) / TOTAL_BASIS_POINTS);
+        uint256 user1ExpectedMintableStethShares = _calcMaxMintableStShares(ctx, user1Deposit);
 
         vm.prank(USER1);
         wrapperB(ctx).depositETH{value: user1Deposit}(USER1, address(0), 0);
@@ -153,8 +152,7 @@ contract WrapperBTest is WrapperBHarness {
         // Step 1
         //
         uint256 user1Deposit = 10_000 wei;
-        uint256 user1ExpectedMintableStethShares =
-            steth.getSharesByPooledEth(user1Deposit * (TOTAL_BASIS_POINTS - RESERVE_RATIO_BP) / TOTAL_BASIS_POINTS);
+        uint256 user1ExpectedMintableStethShares = _calcMaxMintableStShares(ctx, user1Deposit);
 
         vm.prank(USER1);
         wrapperB(ctx).depositETH{value: user1Deposit}(USER1, address(0), 0);
@@ -257,8 +255,7 @@ contract WrapperBTest is WrapperBHarness {
         // Step 1: User1 deposits ETH
         //
         uint256 user1Deposit = 10_000 wei;
-        uint256 user1ExpectedMintableStethShares =
-            steth.getSharesByPooledEth(user1Deposit * (TOTAL_BASIS_POINTS - RESERVE_RATIO_BP) / TOTAL_BASIS_POINTS);
+        uint256 user1ExpectedMintableStethShares = _calcMaxMintableStShares(ctx, user1Deposit);
 
         vm.prank(USER1);
         wrapperB(ctx).depositETH{value: user1Deposit}(USER1, address(0), 0);
@@ -275,8 +272,7 @@ contract WrapperBTest is WrapperBHarness {
         // Step 2: User2 deposits ETH
         //
         uint256 user2Deposit = 15_000 wei;
-        uint256 user2ExpectedMintableStethShares =
-            steth.getSharesByPooledEth(user2Deposit * (TOTAL_BASIS_POINTS - RESERVE_RATIO_BP) / TOTAL_BASIS_POINTS);
+        uint256 user2ExpectedMintableStethShares = _calcMaxMintableStShares(ctx, user2Deposit);
 
         vm.prank(USER2);
         wrapperB(ctx).depositETH{value: user2Deposit}(USER2, address(0), 0);
@@ -448,8 +444,7 @@ contract WrapperBTest is WrapperBHarness {
         wrapperB(ctx).depositETH{value: user2Deposit}(USER2, address(0), 0);
 
         {
-            uint256 user2ExpectedMintableStethShares =
-                steth.getSharesByPooledEth(user2Deposit * (TOTAL_BASIS_POINTS - RESERVE_RATIO_BP) / TOTAL_BASIS_POINTS);
+            uint256 user2ExpectedMintableStethShares = _calcMaxMintableStShares(ctx, user2Deposit);
             assertLe(
                 wrapperB(ctx).mintableStethShares(USER2),
                 user2ExpectedMintableStethShares,
@@ -471,6 +466,7 @@ contract WrapperBTest is WrapperBHarness {
         // Step 1: User1 deposits
         //
         uint256 user1Deposit = 2 * ctx.withdrawalQueue.MIN_WITHDRAWAL_AMOUNT() * 100; // * 100 to have +1% rewards enough for min withdrawal
+
         _ensureFreshness(ctx);
         uint256 sharesForDeposit = _calcMaxMintableStShares(ctx, user1Deposit);
         vm.prank(USER1);
@@ -544,7 +540,7 @@ contract WrapperBTest is WrapperBHarness {
         assertEq(status.amountOfAssets, user1Rewards, "Withdrawal request amount should match previewRedeem");
 
         // Update report data with current timestamp to make it fresh
-        core.applyVaultReport(address(ctx.vault), w.totalAssets(), 0, 0, 0, false);
+        core.applyVaultReport(address(ctx.vault), w.totalAssets(), 0, 0, 0);
 
         _advancePastMinDelayAndRefreshReport(ctx, requestId);
         vm.prank(NODE_OPERATOR);

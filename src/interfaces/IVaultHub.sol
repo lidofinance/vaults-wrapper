@@ -138,8 +138,11 @@ interface IVaultHub is IAccessControl {
         int256 _reportInOutDelta,
         uint256 _reportCumulativeLidoFees,
         uint256 _reportLiabilityShares,
+        uint256 _reportMaxLiabilityShares,
         uint256 _reportSlashingReserve
     ) external;
+
+
     function latestReport(address _vault) external view returns (Report memory);
 
     function socializeBadDebt(

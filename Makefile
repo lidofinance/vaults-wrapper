@@ -42,8 +42,7 @@ test-integration:
 
 test-integration-debug:
 	[ -f .env ] && . .env; \
-	FOUNDRY_PROFILE=test CORE_DEPLOYED_JSON="$$CORE_DEPLOYED_JSON" forge test --match-test $(DEBUG_TEST) -$(VERBOSITY) --fork-url $${RPC_URL}
-	# FOUNDRY_PROFILE=test forge test test/integration/**/*.test.sol -vv --fork-url $(RPC_URL)
+	FOUNDRY_PROFILE=test CORE_DEPLOYED_JSON="$$CORE_DEPLOYED_JSON" forge test --match-test $(DEBUG_TEST) -$(VERBOSITY) --fork-url "$$RPC_URL"
 
 test-unit:
 	FOUNDRY_PROFILE=test forge test -$(VERBOSITY) --no-match-path 'test/integration/*' test
