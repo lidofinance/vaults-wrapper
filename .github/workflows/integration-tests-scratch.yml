@@ -11,6 +11,7 @@ jobs:
     timeout-minutes: 10
     env:
       FOUNDRY_PROFILE: test
+      RPC_URL: http://localhost:9123
 
     services:
       hardhat-node:
@@ -34,7 +35,11 @@ jobs:
         env:
           CORE_RPC_PORT: 9123
 
-      - name: Run integration tests
-        run: make test-integration
-        env:
-          RPC_URL: http://localhost:9123
+      - name: Run integration tests for WrapperA
+        run: make test-integration-a
+
+      - name: Run integration tests for WrapperB
+        run: make test-integration-b
+
+      - name: Run integration tests for GGV
+        run: make test-integration-ggv
