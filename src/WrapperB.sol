@@ -137,7 +137,7 @@ contract WrapperB is WrapperBase {
         if (mintedStethShares < _stethSharesToBurn) revert InsufficientStethShares();
 
         uint256 mintedStethSharesAfter = mintedStethShares - _stethSharesToBurn;
-        uint256 minLockedAssetsAfter = _calcAssetsToLockForStethShares(mintedStethSharesAfter);
+        uint256 minLockedAssetsAfter = calcAssetsToLockForStethShares(mintedStethSharesAfter);
         uint256 currentAssets = assetsOf(_account);
         ethAmount = Math.saturatingSub(currentAssets, minLockedAssetsAfter);
     }
@@ -184,7 +184,7 @@ contract WrapperB is WrapperBase {
         if (currentBalance < _stv) revert InsufficientBalance();
 
         uint256 balanceAfter = currentBalance - _stv;
-        uint256 maxStethSharesAfter = _calcStethSharesToMintForStv(balanceAfter);
+        uint256 maxStethSharesAfter = calcStethSharesToMintForStv(balanceAfter);
         stethShares = Math.saturatingSub(mintedStethSharesOf(_account), maxStethSharesAfter);
     }
 
@@ -262,7 +262,7 @@ contract WrapperB is WrapperBase {
     }
 
     function _checkMinStvToLock(uint256 _stv, uint256 _stethShares) internal view {
-        uint256 minStvAmountToLock = _calcStvToLockForStethShares(_stethShares);
+        uint256 minStvAmountToLock = calcStvToLockForStethShares(_stethShares);
         if (_stv < minStvAmountToLock) revert InsufficientStv();
     }
 
@@ -414,40 +414,49 @@ contract WrapperB is WrapperBase {
     }
 
     /**
-     * @dev Use the ceiling rounding to ensure enough assets are locked
+     * @notice Calculate the amount of stETH shares to mint for a given amount of assets
+     * @param _assets The amount of assets (18 decimals)
+     * @return stethShares The corresponding amount of stETH shares to mint (18 decimals)
      */
-    function _calcReservedAssetsPart(uint256 _assets) internal view returns (uint256 assetsToReserve) {
-        assetsToReserve = Math.mulDiv(_assets, WRAPPER_RR_BP, TOTAL_BASIS_POINTS, Math.Rounding.Ceil);
-    }
-
-    function _calcUnreservedAssetsPart(uint256 _assets) internal view returns (uint256 assetsToReserve) {
-        assetsToReserve = Math.mulDiv(
+    function calcStethSharesToMintForAssets(uint256 _assets) public view returns (uint256 stethShares) {
+        uint256 maxStethToMint = Math.mulDiv(
             _assets,
             TOTAL_BASIS_POINTS - WRAPPER_RR_BP,
             TOTAL_BASIS_POINTS,
             Math.Rounding.Floor
         );
+
+        stethShares = STETH.getSharesByPooledEth(maxStethToMint);
     }
 
-    function calcStethSharesToMintForAssets(uint256 _assets) public view returns (uint256 stethShares) {
-        stethShares = STETH.getSharesByPooledEth(_calcUnreservedAssetsPart(_assets));
-    }
-
-    function _calcStethSharesToMintForStv(uint256 _stv) internal view returns (uint256 stethShares) {
+    /**
+     * @notice Calculate the amount of stETH shares to mint for a given amount of stv
+     * @param _stv The amount of stv (27 decimals)
+     * @return stethShares The corresponding amount of stETH shares to mint (18 decimals)
+     */
+    function calcStethSharesToMintForStv(uint256 _stv) public view returns (uint256 stethShares) {
         stethShares = calcStethSharesToMintForAssets(_convertToAssets(_stv));
     }
 
     /**
+     * @notice Calculate the min amount of assets to lock for a given amount of stETH shares
+     * @param _stethShares The amount of stETH shares (18 decimals)
+     * @return assetsToLock The min amount of assets to lock (18 decimals)
      * @dev Use the ceiling rounding to ensure enough assets are locked
      */
-    function _calcAssetsToLockForStethShares(uint256 _stethShares) internal view returns (uint256 assetsToLock) {
+    function calcAssetsToLockForStethShares(uint256 _stethShares) public view returns (uint256 assetsToLock) {
         if (_stethShares == 0) return 0;
         uint256 steth = STETH.getPooledEthBySharesRoundUp(_stethShares);
         assetsToLock = Math.mulDiv(steth, TOTAL_BASIS_POINTS, TOTAL_BASIS_POINTS - WRAPPER_RR_BP, Math.Rounding.Ceil);
     }
 
-    function _calcStvToLockForStethShares(uint256 _stethShares) internal view returns (uint256 stvToLock) {
-        uint256 assetsToLock = _calcAssetsToLockForStethShares(_stethShares);
+    /**
+     * @notice Calculate the min amount of stv to lock for a given amount of stETH shares
+     * @param _stethShares The amount of stETH shares (18 decimals)
+     * @return stvToLock The min amount of stv to lock (27 decimals)
+     */
+    function calcStvToLockForStethShares(uint256 _stethShares) public view returns (uint256 stvToLock) {
+        uint256 assetsToLock = calcAssetsToLockForStethShares(_stethShares);
         stvToLock = _convertToStv(assetsToLock, Math.Rounding.Ceil);
     }
 
@@ -553,6 +562,26 @@ contract WrapperB is WrapperBase {
     }
 
     // =================================================================================
+    // Transfer with liability
+    // =================================================================================
+
+    /**
+     * @notice Transfer stv along with stETH shares liability
+     * @param _to The address to transfer to
+     * @param _stv The amount of stv to transfer
+     * @param _stethShares The amount of stETH shares liability to transfer
+     * @return success True if the transfer was successful
+     * @dev Ensures that the transferred stv covers the minimum required to lock for the transferred stETH shares liability
+     */
+    function transferWithLiability(address _to, uint256 _stv, uint256 _stethShares) public returns (bool) {
+        _checkMinStvToLock(_stv, _stethShares);
+
+        _transferMintedStethShares(msg.sender, _to, _stethShares);
+        _transfer(msg.sender, _to, _stv);
+        return true;
+    }
+
+    // =================================================================================
     // ERC20 overrides
     // =================================================================================
 
@@ -569,11 +598,10 @@ contract WrapperB is WrapperBase {
         uint256 mintedStethShares = mintedStethSharesOf(_from);
         if (mintedStethShares == 0) return;
 
-        uint256 stvToLock = _calcStvToLockForStethShares(mintedStethShares);
+        uint256 stvToLock = calcStvToLockForStethShares(mintedStethShares);
 
         if (balanceOf(_from) < stvToLock) revert InsufficientReservedBalance();
     }
 
-    // TODO: transfer with debt? do we need it?
     // TODO: force rebalance for specific user
 }

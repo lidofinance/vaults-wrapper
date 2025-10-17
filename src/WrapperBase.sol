@@ -354,6 +354,8 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
      * @dev Overridden method from ERC20 to prevent updates if there are unassigned liability
      */
     function _update(address _from, address _to, uint256 _value) internal virtual override {
+        // In rare scenarios, the vault could have liability shares that are not assigned to any wrapper users
+        // In such cases, it prevents any transfers until the unassigned liability is rebalanced
         _checkNoUnassignedLiability();
         super._update(_from, _to, _value);
     }

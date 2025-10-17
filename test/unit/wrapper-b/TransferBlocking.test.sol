@@ -9,23 +9,6 @@ import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 contract TransferBlockingTest is Test, SetupWrapperB {
     uint256 ethToDeposit = 10 ether;
 
-    // Helper functions to replicate internal calculations from WrapperB
-    function _calcAssetsToLockForStethShares(uint256 _stethShares) internal view returns (uint256 assetsToLock) {
-        if (_stethShares == 0) return 0;
-        uint256 stethAmount = steth.getPooledEthBySharesRoundUp(_stethShares);
-        assetsToLock = Math.mulDiv(
-            stethAmount,
-            wrapper.TOTAL_BASIS_POINTS(),
-            wrapper.TOTAL_BASIS_POINTS() - wrapper.WRAPPER_RR_BP(),
-            Math.Rounding.Ceil
-        );
-    }
-
-    function _calcStvToLockForStethShares(uint256 _stethShares) internal view returns (uint256 stvToLock) {
-        uint256 assetsToLock = _calcAssetsToLockForStethShares(_stethShares);
-        stvToLock = wrapper.previewDeposit(assetsToLock);
-    }
-
     function setUp() public override {
         super.setUp();
         wrapper.depositETH{value: ethToDeposit}();
@@ -71,7 +54,7 @@ contract TransferBlockingTest is Test, SetupWrapperB {
         wrapper.mintStethShares(sharesToMint);
 
         uint256 balance = wrapper.balanceOf(address(this));
-        uint256 requiredLocked = _calcStvToLockForStethShares(sharesToMint);
+        uint256 requiredLocked = wrapper.calcStvToLockForStethShares(sharesToMint);
         uint256 excessiveTransfer = balance - requiredLocked + 1;
 
         vm.expectRevert(WrapperB.InsufficientReservedBalance.selector);
@@ -83,7 +66,7 @@ contract TransferBlockingTest is Test, SetupWrapperB {
         wrapper.mintStethShares(sharesToMint);
 
         uint256 balance = wrapper.balanceOf(address(this));
-        uint256 requiredLocked = _calcStvToLockForStethShares(sharesToMint);
+        uint256 requiredLocked = wrapper.calcStvToLockForStethShares(sharesToMint);
         uint256 safeTransfer = balance - requiredLocked;
 
         wrapper.transfer(userAlice, safeTransfer);
@@ -98,7 +81,7 @@ contract TransferBlockingTest is Test, SetupWrapperB {
         wrapper.mintStethShares(sharesToMint);
 
         uint256 balance = wrapper.balanceOf(address(this));
-        uint256 requiredLocked = _calcStvToLockForStethShares(sharesToMint);
+        uint256 requiredLocked = wrapper.calcStvToLockForStethShares(sharesToMint);
         uint256 excessiveTransfer = balance - requiredLocked + 1;
 
         wrapper.approve(userAlice, excessiveTransfer);
@@ -113,7 +96,7 @@ contract TransferBlockingTest is Test, SetupWrapperB {
         wrapper.mintStethShares(sharesToMint);
 
         uint256 balance = wrapper.balanceOf(address(this));
-        uint256 requiredLocked = _calcStvToLockForStethShares(sharesToMint);
+        uint256 requiredLocked = wrapper.calcStvToLockForStethShares(sharesToMint);
         uint256 safeTransfer = balance - requiredLocked;
 
         wrapper.approve(userAlice, safeTransfer);
@@ -149,7 +132,7 @@ contract TransferBlockingTest is Test, SetupWrapperB {
 
         // Alice should have restrictions due to her debt
         uint256 aliceBalance = wrapper.balanceOf(userAlice);
-        uint256 aliceRequiredLocked = _calcStvToLockForStethShares(wrapper.mintedStethSharesOf(userAlice));
+        uint256 aliceRequiredLocked = wrapper.calcStvToLockForStethShares(wrapper.mintedStethSharesOf(userAlice));
 
         uint256 maxSafeTransfer = aliceBalance - aliceRequiredLocked;
         uint256 excessiveTransfer = maxSafeTransfer + 1;
@@ -190,7 +173,7 @@ contract TransferBlockingTest is Test, SetupWrapperB {
         wrapper.mintStethShares(firstMint);
 
         uint256 balance = wrapper.balanceOf(address(this));
-        uint256 initialRequiredLocked = _calcStvToLockForStethShares(firstMint);
+        uint256 initialRequiredLocked = wrapper.calcStvToLockForStethShares(firstMint);
         uint256 initialMaxTransfer = balance > initialRequiredLocked ? balance - initialRequiredLocked : 0;
 
         // Mint more shares to increase debt
@@ -208,7 +191,7 @@ contract TransferBlockingTest is Test, SetupWrapperB {
 
         wrapper.mintStethShares(sharesToMint);
 
-        uint256 initialRequiredLocked = _calcStvToLockForStethShares(sharesToMint);
+        uint256 initialRequiredLocked = wrapper.calcStvToLockForStethShares(sharesToMint);
 
         // Burn half the shares
         vm.deal(address(this), 100 ether);
@@ -218,7 +201,7 @@ contract TransferBlockingTest is Test, SetupWrapperB {
         uint256 sharesToBurn = sharesToMint / 2;
         wrapper.burnStethShares(sharesToBurn);
 
-        uint256 newRequiredLocked = _calcStvToLockForStethShares(sharesToMint - sharesToBurn);
+        uint256 newRequiredLocked = wrapper.calcStvToLockForStethShares(sharesToMint - sharesToBurn);
 
         // Should require less locked amount now
         assertLt(newRequiredLocked, initialRequiredLocked);
@@ -239,7 +222,7 @@ contract TransferBlockingTest is Test, SetupWrapperB {
         wrapper.mintStethShares(sharesToMint);
 
         // Verify our helper function matches the contract's internal logic
-        uint256 requiredLocked = _calcStvToLockForStethShares(sharesToMint);
+        uint256 requiredLocked = wrapper.calcStvToLockForStethShares(sharesToMint);
         uint256 balance = wrapper.balanceOf(address(this));
 
         // Should be able to transfer exactly (balance - requiredLocked)
@@ -269,7 +252,7 @@ contract TransferBlockingTest is Test, SetupWrapperB {
             totalBasisPoints - reserveRatio,
             Math.Rounding.Ceil
         );
-        uint256 calculatedAssetsToLock = _calcAssetsToLockForStethShares(testShares);
+        uint256 calculatedAssetsToLock = wrapper.calcAssetsToLockForStethShares(testShares);
 
         assertEq(calculatedAssetsToLock, expectedAssetsToLock);
     }
