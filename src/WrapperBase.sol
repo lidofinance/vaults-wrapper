@@ -139,7 +139,7 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
      * @return Total assets (18 decimals)
      * @dev Don't subtract CONNECT_DEPOSIT because we mint tokens for it
      */
-    function totalAssets() public view returns (uint256) {
+    function totalNominalAssets() public view returns (uint256) {
         return DASHBOARD.maxLockableValue();
     }
 
@@ -150,16 +150,16 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
      * @dev Overridable method to include other assets if needed
      */
     function nominalAssetsOf(address _account) public view returns (uint256 assets) {
-        assets = _getAssetsShare(balanceOf(_account), totalAssets());
+        assets = _getAssetsShare(balanceOf(_account), totalNominalAssets());
     }
 
     /**
-     * @notice Total effective assets managed by the wrapper
-     * @return assets Total effective assets (18 decimals)
+     * @notice Total assets managed by the wrapper
+     * @return assets Total assets (18 decimals)
      * @dev Overridable method to include other assets if needed
      */
-    function totalEffectiveAssets() public view virtual returns (uint256 assets) {
-        assets = totalAssets(); /* plus other assets if any */
+    function totalAssets() public view virtual returns (uint256 assets) {
+        assets = totalNominalAssets(); /* plus other assets if any */
     }
 
     /**
@@ -191,11 +191,11 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
         if (supplyE27 == 0) {
             return _assetsE18 * EXTRA_DECIMALS_BASE; // 1:1 for the first deposit
         }
-        stv = Math.mulDiv(_assetsE18, supplyE27, totalEffectiveAssets(), rounding);
+        stv = Math.mulDiv(_assetsE18, supplyE27, totalAssets(), rounding);
     }
 
     function _convertToAssets(uint256 _stv) internal view returns (uint256 assets) {
-        assets = _getAssetsShare(_stv, totalEffectiveAssets());
+        assets = _getAssetsShare(_stv, totalAssets());
     }
 
     function _getAssetsShare(uint256 _stv, uint256 _assets) internal view returns (uint256) {
@@ -219,7 +219,7 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
         if (supply == 0) {
             return 0;
         }
-        return Math.mulDiv(_assets, supply, totalEffectiveAssets(), Math.Rounding.Ceil);
+        return Math.mulDiv(_assets, supply, totalAssets(), Math.Rounding.Ceil);
     }
 
     function previewRedeem(uint256 _stv) external view returns (uint256) {

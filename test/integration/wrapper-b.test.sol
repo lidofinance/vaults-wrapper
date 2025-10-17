@@ -43,7 +43,7 @@ contract WrapperBTest is WrapperBHarness {
         assertEq(
             wrapperB(ctx).mintableStethShares(USER1),
             user1ExpectedMintableStethShares,
-            "Mintable stETH shares should equal capacity derived from effective assets"
+            "Mintable stETH shares should equal capacity derived from assets"
         );
         assertEq(
             wrapperB(ctx).stethSharesForWithdrawal(USER1, ctx.wrapper.balanceOf(USER1)),

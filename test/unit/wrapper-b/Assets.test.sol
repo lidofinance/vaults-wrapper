@@ -6,28 +6,28 @@ import {SetupWrapperB} from "./SetupWrapperB.sol";
 
 import {MockVaultHub} from "../../mocks/MockVaultHub.sol";
 
-contract EffectiveAssetsTest is Test, SetupWrapperB {
+contract AssetsTest is Test, SetupWrapperB {
     uint8 supplyDecimals = 27;
 
     function test_InitialState_CorrectAssets() public view {
         assertEq(wrapper.totalAssets(), initialDeposit);
-        assertEq(wrapper.totalEffectiveAssets(), initialDeposit);
+        assertEq(wrapper.totalNominalAssets(), initialDeposit);
 
         assertEq(wrapper.nominalAssetsOf(address(wrapper)), initialDeposit);
         assertEq(wrapper.assetsOf(address(wrapper)), initialDeposit);
     }
 
-    function test_Deposit_IncreasesEffectiveAssets() public {
+    function test_Deposit_IncreasesAssets() public {
         uint256 ethToDeposit = 1 ether;
-        uint256 assetsBefore = wrapper.totalEffectiveAssets();
+        uint256 assetsBefore = wrapper.totalAssets();
 
         vm.prank(userAlice);
         wrapper.depositETH{value: ethToDeposit}(userAlice, address(0));
 
-        assertEq(wrapper.totalEffectiveAssets(), assetsBefore + ethToDeposit);
+        assertEq(wrapper.totalAssets(), assetsBefore + ethToDeposit);
     }
 
-    function test_Deposit_IncreasesUserEffectiveAssets() public {
+    function test_Deposit_IncreasesUserAssets() public {
         uint256 ethToDeposit = 1 ether;
         uint256 assetsBefore = wrapper.assetsOf(userAlice);
 
@@ -37,7 +37,7 @@ contract EffectiveAssetsTest is Test, SetupWrapperB {
         assertEq(wrapper.assetsOf(userAlice), assetsBefore + ethToDeposit);
     }
 
-    function test_Rebalance_DoNotChangeUserEffectiveAssets() public {
+    function test_Rebalance_DoNotChangeUserAssets() public {
         wrapper.depositETH{value: 4 ether}();
         wrapper.mintStethShares(1 * 10 ** 18);
 
@@ -50,3 +50,5 @@ contract EffectiveAssetsTest is Test, SetupWrapperB {
         assertGt(wrapper.exceedingMintedStethOf(address(this)), 0);
     }
 }
+
+

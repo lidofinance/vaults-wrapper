@@ -267,24 +267,24 @@ contract WrapperB is WrapperBase {
     }
 
     // =================================================================================
-    // EFFECTIVE ASSETS
+    // ASSETS
     // =================================================================================
 
     /**
-     * @notice Total effective assets managed by the wrapper
-     * @return effectiveAssets Total effective assets (18 decimals)
+     * @notice Total assets managed by the wrapper
+     * @return assets Total assets (18 decimals)
      * @dev Includes totalAssets + total exceeding minted stETH shares
      */
-    function totalEffectiveAssets() public view override returns (uint256 effectiveAssets) {
-        effectiveAssets = totalAssets() + totalExceedingMintedSteth();
+    function totalAssets() public view override returns (uint256 assets) {
+        assets = super.totalAssets() + totalExceedingMintedSteth();
     }
 
     /**
      * @notice Assets of a specific account
      * @param _account The address of the account
-     * @return effectiveAssets Assets of the account (18 decimals)
+     * @return assets Assets of the account (18 decimals)
      */
-    function assetsOf(address _account) public view override returns (uint256 effectiveAssets) {
+    function assetsOf(address _account) public view override returns (uint256 assets) {
         /// As a result of the rebalancing initiated in the Staking Vault, bypassing the Wrapper,
         /// part of the total liability can be reduced at the expense of the Staking Vault's assets.
         ///
@@ -296,7 +296,7 @@ contract WrapperB is WrapperBase {
         ///
         /// Thus, in rare situations, Staking Vault may have two assets: ETH and stETH, which are
         /// distributed among all users in proportion to their shares.
-        effectiveAssets = nominalAssetsOf(_account) + exceedingMintedStethOf(_account);
+        assets = nominalAssetsOf(_account) + exceedingMintedStethOf(_account);
     }
 
     // =================================================================================

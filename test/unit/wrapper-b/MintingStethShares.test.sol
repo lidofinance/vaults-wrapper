@@ -175,12 +175,12 @@ contract MintingStethSharesTest is Test, SetupWrapperB {
     // Reserve ratio tests
 
     function test_MintingCapacity_RespectsReserveRatio() public view {
-        uint256 effectiveAssets = wrapper.assetsOf(address(this));
+        uint256 assets = wrapper.assetsOf(address(this));
         uint256 capacity = wrapper.mintingCapacitySharesOf(address(this));
 
         // Verify that reserve ratio is respected
-        uint256 expectedReservedPart = (effectiveAssets * wrapper.WRAPPER_RR_BP()) / wrapper.TOTAL_BASIS_POINTS();
-        uint256 expectedUnreservedPart = effectiveAssets - expectedReservedPart;
+        uint256 expectedReservedPart = (assets * wrapper.WRAPPER_RR_BP()) / wrapper.TOTAL_BASIS_POINTS();
+        uint256 expectedUnreservedPart = assets - expectedReservedPart;
         uint256 expectedCapacity = steth.getSharesByPooledEth(expectedUnreservedPart);
 
         assertEq(capacity, expectedCapacity);

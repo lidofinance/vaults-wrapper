@@ -486,7 +486,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
      */
     function calculateCurrentStvRate() public view returns (uint256 stvRate) {
         uint256 totalStv = WRAPPER.totalSupply(); // e27 precision
-        uint256 totalAssets = WRAPPER.totalEffectiveAssets(); // e18 precision
+        uint256 totalAssets = WRAPPER.totalAssets(); // e18 precision
 
         if (totalStv == 0) return E27_PRECISION_BASE;
         stvRate = (totalAssets * E36_PRECISION_BASE) / totalStv;
