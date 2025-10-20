@@ -58,7 +58,7 @@ contract WrapperBHarness is WrapperAHarness {
             // Check none can mint beyond mintable capacity
             for (uint256 i = 0; i < holders.length; i++) {
                 address holder = holders[i];
-                uint256 mintableStShares = wrapperB(_ctx).mintableStethShares(holder);
+                uint256 mintableStShares = wrapperB(_ctx).mintingCapacitySharesOf(holder);
 
                 vm.startPrank(holder);
                 vm.expectRevert(WrapperB.InsufficientMintingCapacity.selector);

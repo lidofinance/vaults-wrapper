@@ -347,11 +347,6 @@ contract WrapperB is WrapperBase {
         stethSharesCapacity = Math.saturatingSub(stethSharesForAssets, mintedStethSharesOf(_account));
     }
 
-    // TODO: remove
-    function mintableStethShares(address _account) public view returns (uint256 stethShares) {
-        stethShares = mintingCapacitySharesOf(_account);
-    }
-
     /**
      * @notice Mint stETH shares up to the user's minting capacity
      * @param _stethShares The amount of stETH shares to mint

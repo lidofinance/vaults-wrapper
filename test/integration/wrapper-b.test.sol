@@ -41,7 +41,7 @@ contract WrapperBTest is WrapperBHarness {
 
         assertEq(steth.sharesOf(USER1), 0, "stETH shares balance of USER1 should be equal to 0");
         assertEq(
-            wrapperB(ctx).mintableStethShares(USER1),
+            wrapperB(ctx).mintingCapacitySharesOf(USER1),
             user1ExpectedMintableStethShares,
             "Mintable stETH shares should equal capacity derived from assets"
         );
@@ -89,7 +89,7 @@ contract WrapperBTest is WrapperBHarness {
         assertGt(
             ctx.dashboard.remainingMintingCapacityShares(0), 0, "Remaining minting capacity should be greater than 0"
         );
-        assertEq(wrapperB(ctx).mintableStethShares(USER1), 0, "Mintable stETH shares should be equal to 0");
+        assertEq(wrapperB(ctx).mintingCapacitySharesOf(USER1), 0, "Mintable stETH shares should be equal to 0");
     }
 
     function test_depositETH_with_max_mintable_amount() public {
@@ -121,7 +121,7 @@ contract WrapperBTest is WrapperBHarness {
             user1ExpectedMintableStethShares,
             "Vault's liability shares should equal minted shares"
         );
-        assertEq(wrapperB(ctx).mintableStethShares(USER1), 0, "No additional mintable shares should remain");
+        assertEq(wrapperB(ctx).mintingCapacitySharesOf(USER1), 0, "No additional mintable shares should remain");
 
         //
         // Step 2: User deposits more ETH and mints max for new deposit
@@ -162,7 +162,7 @@ contract WrapperBTest is WrapperBHarness {
 
         assertEq(steth.sharesOf(USER1), 0, "stETH shares balance of USER1 should be equal to 0");
         assertEq(
-            wrapperB(ctx).mintableStethShares(USER1),
+            wrapperB(ctx).mintingCapacitySharesOf(USER1),
             user1ExpectedMintableStethShares,
             "Mintable stETH shares should be equal to 0"
         );
@@ -212,7 +212,7 @@ contract WrapperBTest is WrapperBHarness {
             "Remaining minting capacity should be equal to user1ExpectedMintableStethShares - user1StSharesToMint"
         );
         assertEq(
-            wrapperB(ctx).mintableStethShares(USER1),
+            wrapperB(ctx).mintingCapacitySharesOf(USER1),
             user1ExpectedMintableStethShares - user1StSharesPart1,
             "Remaining mintable should reduce exactly by minted part"
         );
@@ -244,7 +244,7 @@ contract WrapperBTest is WrapperBHarness {
         );
         // Still remaining capacity is higher due to CONNECT_DEPOSIT
         assertGt(ctx.dashboard.remainingMintingCapacityShares(0), 0, "Remaining minting capacity should be equal to 0");
-        assertEq(wrapperB(ctx).mintableStethShares(USER1), 0, "Mintable stETH shares should be equal to 0");
+        assertEq(wrapperB(ctx).mintingCapacitySharesOf(USER1), 0, "Mintable stETH shares should be equal to 0");
     }
 
     function test_two_users_mint_full_in_two_steps() public {
@@ -261,7 +261,7 @@ contract WrapperBTest is WrapperBHarness {
 
         assertEq(steth.sharesOf(USER1), 0, "stETH shares balance of USER1 should be equal to 0");
         assertEq(
-            wrapperB(ctx).mintableStethShares(USER1),
+            wrapperB(ctx).mintingCapacitySharesOf(USER1),
             user1ExpectedMintableStethShares,
             "Mintable stETH shares for USER1 should equal expected"
         );
@@ -278,7 +278,7 @@ contract WrapperBTest is WrapperBHarness {
 
         assertEq(steth.sharesOf(USER2), 0, "stETH shares balance of USER2 should be equal to 0");
         assertEq(
-            wrapperB(ctx).mintableStethShares(USER2),
+            wrapperB(ctx).mintingCapacitySharesOf(USER2),
             user2ExpectedMintableStethShares,
             "Mintable stETH shares for USER2 should equal expected"
         );
@@ -314,7 +314,7 @@ contract WrapperBTest is WrapperBHarness {
             "USER1 stSharesForWithdrawal should equal part1 minted"
         );
         assertEq(
-            wrapperB(ctx).mintableStethShares(USER1),
+            wrapperB(ctx).mintingCapacitySharesOf(USER1),
             user1ExpectedMintableStethShares - user1StSharesPart1,
             "USER1 remaining mintable should decrease by part1"
         );
@@ -339,7 +339,7 @@ contract WrapperBTest is WrapperBHarness {
             "USER2 stSharesForWithdrawal should equal part1 minted"
         );
         assertEq(
-            wrapperB(ctx).mintableStethShares(USER2),
+            wrapperB(ctx).mintingCapacitySharesOf(USER2),
             user2ExpectedMintableStethShares - user2StSharesPart1,
             "USER2 remaining mintable should decrease by part1"
         );
@@ -369,7 +369,7 @@ contract WrapperBTest is WrapperBHarness {
             user1ExpectedMintableStethShares,
             "USER1 stSharesForWithdrawal should equal full expected"
         );
-        assertEq(wrapperB(ctx).mintableStethShares(USER1), 0, "USER1 remaining mintable should be zero");
+        assertEq(wrapperB(ctx).mintingCapacitySharesOf(USER1), 0, "USER1 remaining mintable should be zero");
         assertEq(
             ctx.dashboard.liabilityShares(),
             user1ExpectedMintableStethShares + user2StSharesPart1,
@@ -396,7 +396,7 @@ contract WrapperBTest is WrapperBHarness {
             user2ExpectedMintableStethShares,
             "USER2 stSharesForWithdrawal should equal full expected"
         );
-        assertEq(wrapperB(ctx).mintableStethShares(USER2), 0, "USER2 remaining mintable should be zero");
+        assertEq(wrapperB(ctx).mintingCapacitySharesOf(USER2), 0, "USER2 remaining mintable should be zero");
         // Still remaining capacity is higher due to CONNECT_DEPOSIT
         assertGt(
             ctx.dashboard.remainingMintingCapacityShares(0), 0, "Remaining minting capacity should be greater than 0"
@@ -420,7 +420,7 @@ contract WrapperBTest is WrapperBHarness {
         wrapperB(ctx).depositETH{value: user1Deposit}(USER1, address(0), user1ExpectedMintable);
 
         assertEq(steth.sharesOf(USER1), user1ExpectedMintable, "USER1 stETH shares should equal expected minted");
-        assertEq(wrapperB(ctx).mintableStethShares(USER1), 0, "USER1 remaining mintable should be zero");
+        assertEq(wrapperB(ctx).mintingCapacitySharesOf(USER1), 0, "USER1 remaining mintable should be zero");
         assertGt(
             ctx.dashboard.remainingMintingCapacityShares(0),
             0,
@@ -439,7 +439,7 @@ contract WrapperBTest is WrapperBHarness {
         {
             uint256 user2ExpectedMintableStethShares = _calcMaxMintableStShares(ctx, user2Deposit);
             assertLe(
-                wrapperB(ctx).mintableStethShares(USER2),
+                wrapperB(ctx).mintingCapacitySharesOf(USER2),
                 user2ExpectedMintableStethShares,
                 "USER2 mintable stETH shares should not exceed expected after underperformance"
             );
@@ -470,7 +470,7 @@ contract WrapperBTest is WrapperBHarness {
             expectedUser1MintedStShares,
             "USER1 stETH shares should be equal to expectedUser1MintedStShares"
         );
-        assertEq(w.mintableStethShares(USER1), 0, "USER1 mintable stETH shares should be equal to 0");
+        assertEq(w.mintingCapacitySharesOf(USER1), 0, "USER1 mintable stETH shares should be equal to 0");
         assertEq(
             w.stethSharesForWithdrawal(USER1, w.balanceOf(USER1)),
             expectedUser1MintedStShares,
@@ -491,7 +491,7 @@ contract WrapperBTest is WrapperBHarness {
         // TODO: handle 1 wei problem here
         uint256 expectedRewardsShares = _calcMaxMintableStShares(ctx, user1Rewards);
         assertApproxEqAbs(
-            w.mintableStethShares(USER1),
+            w.mintingCapacitySharesOf(USER1),
             expectedRewardsShares,
             WEI_ROUNDING_TOLERANCE,
             "USER1 mintable stETH shares should equal capacity from rewards"
