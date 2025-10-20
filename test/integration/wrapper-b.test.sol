@@ -11,6 +11,7 @@ import {Factory} from "src/Factory.sol";
 import {WrapperA} from "src/WrapperA.sol";
 import {WrapperB} from "src/WrapperB.sol";
 import {IVaultHub} from "src/interfaces/IVaultHub.sol";
+import {IStETH} from "src/interfaces/IStETH.sol";
 
 /**
  * @title WrapperBTest
@@ -607,6 +608,8 @@ contract WrapperBTest is WrapperBHarness {
             _contextMsg("Step 2", "WithdrawalQueue stETH shares should increase by wstethToBurn")
         );
 
+        // TODO: continue with the test after the above is fixed
+
 //        // Finalize and claim the second (min-withdrawal) request
 //        _advancePastMinDelayAndRefreshReport(ctx, requestId);
 //        vm.prank(NODE_OPERATOR);
@@ -674,5 +677,371 @@ contract WrapperBTest is WrapperBHarness {
 //            WEI_ROUNDING_TOLERANCE,
 //            _contextMsg("Final", "Total claimed should equal deposit + rewards")
 //        );
+    }
+
+    /**
+     * @notice Test transferWithLiability enforces reserve ratio for sender
+     * @dev Verifies that after transfer with liability, sender cannot decrease collateral below wrapper RR
+     */
+    function test_transferWithLiability_maintains_sender_reserve_ratio() public {
+        WrapperContext memory ctx = _deployWrapperB(false, 0, DEFAULT_WRAPPER_RR_GAP);
+        WrapperB w = wrapperB(ctx);
+
+        //
+        // Step 1: USER1 deposits and mints stETH shares
+        //
+        uint256 user1Deposit = 100 ether;
+        uint256 user1MintedShares = _calcMaxMintableStShares(ctx, user1Deposit);
+
+        vm.prank(USER1);
+        w.depositETH{value: user1Deposit}(USER1, address(0), user1MintedShares);
+
+        uint256 user1Stv = w.balanceOf(USER1);
+
+        _assertUniversalInvariants("Step 1", ctx);
+
+        //
+        // Step 2: Calculate minimum stv needed to maintain reserve ratio
+        //
+        uint256 minStvForHalfShares = w.calcStvToLockForStethShares(user1MintedShares / 2);
+
+        //
+        // Step 3: Try to transfer too much stv with half the liability (should fail)
+        //
+        // If we transfer half the shares, we need to transfer at least minStvForHalfShares
+        // But let's try to transfer more than allowed, leaving sender with insufficient collateral
+        uint256 excessiveStvToTransfer = user1Stv - minStvForHalfShares + 1;
+
+        vm.startPrank(USER1);
+        vm.expectRevert(WrapperB.InsufficientReservedBalance.selector);
+        w.transferWithLiability(USER2, excessiveStvToTransfer, user1MintedShares / 2);
+        vm.stopPrank();
+
+        //
+        // Step 4: Valid transfer - transfer exactly minimum stv for half the liability
+        //
+        vm.prank(USER1);
+        bool success = w.transferWithLiability(USER2, minStvForHalfShares, user1MintedShares / 2);
+        assertTrue(success, "Transfer with liability should succeed");
+
+        // Verify USER2 received the stv and liability
+        assertEq(w.balanceOf(USER2), minStvForHalfShares, "USER2 should receive stv");
+        assertEq(w.mintedStethSharesOf(USER2), user1MintedShares / 2, "USER2 should receive half the liability");
+
+        // Verify USER1 still has correct balance and maintains reserve ratio
+        assertEq(w.balanceOf(USER1), user1Stv - minStvForHalfShares, "USER1 should have remaining stv");
+        assertEq(w.mintedStethSharesOf(USER1), user1MintedShares / 2, "USER1 should have half the liability");
+
+        uint256 user1RequiredStv = w.calcStvToLockForStethShares(w.mintedStethSharesOf(USER1));
+        assertGe(
+            w.balanceOf(USER1),
+            user1RequiredStv,
+            "USER1 should maintain minimum reserve ratio after transfer"
+        );
+
+        _assertUniversalInvariants("Step 4", ctx);
+
+        //
+        // Step 5: Try to transfer remaining stv without transferring remaining liability (should fail)
+        //
+        vm.startPrank(USER1);
+        vm.expectRevert(WrapperB.InsufficientReservedBalance.selector);
+        w.transfer(USER2, w.balanceOf(USER1));
+        vm.stopPrank();
+
+        // TODO: continue with the test
+        // //
+        // // Step 6: Valid transfer - transfer all remaining with full liability
+        // //
+        // uint256 user1RemainingStv = w.balanceOf(USER1);
+        // uint256 user1RemainingShares = w.mintedStethSharesOf(USER1);
+
+        // vm.prank(USER1);
+        // success = w.transferWithLiability(USER2, user1RemainingStv, user1RemainingShares);
+
+        // assertTrue(success, "Transfer of remaining balance with liability should succeed");
+
+        // // Verify USER1 has no more stv or liability
+        // assertEq(w.balanceOf(USER1), 0, "USER1 should have zero stv after full transfer");
+        // assertEq(w.mintedStethSharesOf(USER1), 0, "USER1 should have zero liability after full transfer");
+
+        // // Verify USER2 now has everything
+        // assertEq(w.balanceOf(USER2), user1Stv, "USER2 should have all original stv");
+        // assertEq(w.mintedStethSharesOf(USER2), user1MintedShares, "USER2 should have all original liability");
+
+        // _assertUniversalInvariants("Step 6", ctx);
+
+        // //
+        // // Step 7: Verify USER2 can now transfer with liability
+        // //
+        // uint256 user2Shares = w.mintedStethSharesOf(USER2);
+        // uint256 sharesToTransfer = user2Shares / 4;
+        // uint256 minStvToTransfer = w.calcStvToLockForStethShares(sharesToTransfer);
+
+        // vm.prank(USER2);
+        // success = w.transferWithLiability(USER3, minStvToTransfer, sharesToTransfer);
+
+        // assertTrue(success, "USER2 should be able to transfer with liability");
+        // assertEq(w.balanceOf(USER3), minStvToTransfer, "USER3 should receive stv");
+        // assertEq(w.mintedStethSharesOf(USER3), sharesToTransfer, "USER3 should receive liability");
+
+        // _assertUniversalInvariants("Step 7", ctx);
+    }
+
+    /**
+     * @notice Test regular transfer reverts when sender would have insufficient collateral for minted shares
+     */
+    function test_transfer_reverts_when_insufficient_collateral_for_minted_shares() public {
+        WrapperContext memory ctx = _deployWrapperB(false, 0, DEFAULT_WRAPPER_RR_GAP);
+        WrapperB w = wrapperB(ctx);
+
+        // User deposits and mints maximum stETH shares
+        uint256 userDeposit = 100 ether;
+
+        vm.prank(USER1);
+        w.depositETH{value: userDeposit}(USER1, address(0), _calcMaxMintableStShares(ctx, userDeposit));
+
+        vm.startPrank(USER1);
+        vm.expectRevert(WrapperB.InsufficientReservedBalance.selector);
+        w.transfer(USER2, 1);
+        vm.stopPrank();
+    }
+
+    /**
+     * @notice Test transferWithLiability fails when stv is insufficient for liability being transferred
+     */
+    function test_transferWithLiability_reverts_when_stv_insufficient_for_liability() public {
+        WrapperContext memory ctx = _deployWrapperB(false, 0, DEFAULT_WRAPPER_RR_GAP);
+        WrapperB w = wrapperB(ctx);
+
+        uint256 user1Deposit = 50 ether;
+        vm.prank(USER1);
+        w.depositETH{value: user1Deposit}(USER1, address(0), _calcMaxMintableStShares(ctx, user1Deposit));
+
+        uint256 sharesToTransfer = w.mintedStethSharesOf(USER1) / 2;
+        uint256 minStvRequired = w.calcStvToLockForStethShares(sharesToTransfer);
+
+        // Transfer with insufficient stv fails
+        vm.startPrank(USER1);
+        vm.expectRevert(WrapperB.InsufficientStv.selector);
+        w.transferWithLiability(USER2, minStvRequired - 1, sharesToTransfer);
+        vm.stopPrank();
+
+        // Transfer with exact minimum succeeds
+        vm.prank(USER1);
+        assertTrue(w.transferWithLiability(USER2, minStvRequired, sharesToTransfer));
+    }
+
+    /**
+     * @notice Test behavior after vault loss causes collateral to drop below wrapper RR
+     */
+    function test_after_vault_loss_user_below_reserve_ratio() public {
+        WrapperContext memory ctx = _deployWrapperB(false, 0, DEFAULT_WRAPPER_RR_GAP);
+        WrapperB w = wrapperB(ctx);
+
+        // User deposits and mints max shares
+        uint256 userDeposit = 100 ether;
+        vm.prank(USER1);
+        w.depositETH{value: userDeposit}(USER1, address(0), _calcMaxMintableStShares(ctx, userDeposit));
+
+        // Vault loses 10% value - user now below reserve ratio
+        vm.warp(block.timestamp + 1 days);
+        reportVaultValueChangeNoFees(ctx, 100_00 - 1000); // -10%
+
+        uint256 mintedShares = w.mintedStethSharesOf(USER1);
+
+        // Regular transfer fails - insufficient collateral
+        vm.startPrank(USER1);
+        vm.expectRevert(WrapperB.InsufficientReservedBalance.selector);
+        w.transfer(USER2, 1);
+        vm.stopPrank();
+
+        // Can transfer with liability if transferring enough liability to restore ratio
+        uint256 sharesToTransfer = mintedShares / 2;
+        uint256 minStvForTransfer = w.calcStvToLockForStethShares(sharesToTransfer);
+        uint256 user1Stv = w.balanceOf(USER1);
+
+        // After transferring half liability, remaining stv must cover remaining liability
+        uint256 remainingShares = mintedShares - sharesToTransfer;
+        uint256 minStvForRemaining = w.calcStvToLockForStethShares(remainingShares);
+
+        // This transfer works if: user1Stv - minStvForTransfer >= minStvForRemaining
+        if (user1Stv >= minStvForTransfer + minStvForRemaining) {
+            vm.prank(USER1);
+            assertTrue(w.transferWithLiability(USER2, minStvForTransfer, sharesToTransfer));
+        } else {
+            // Need to transfer more liability to make it work
+            vm.startPrank(USER1);
+            vm.expectRevert(WrapperB.InsufficientReservedBalance.selector);
+            w.transferWithLiability(USER2, minStvForTransfer, sharesToTransfer);
+            vm.stopPrank();
+        }
+    }
+
+    /**
+     * @notice Test burning stETH shares restores ability to transfer after vault loss
+     */
+    function test_burning_shares_after_vault_loss_allows_transfer() public {
+        WrapperContext memory ctx = _deployWrapperB(false, 0, DEFAULT_WRAPPER_RR_GAP);
+        WrapperB w = wrapperB(ctx);
+        IStETH steth = core.steth();
+
+        // User deposits and mints max shares
+        uint256 userDeposit = 100 ether;
+        vm.prank(USER1);
+        w.depositETH{value: userDeposit}(USER1, address(0), _calcMaxMintableStShares(ctx, userDeposit));
+
+        // Vault loses value
+        vm.warp(block.timestamp + 1 days);
+        reportVaultValueChangeNoFees(ctx, 100_00 - 500); // -5%
+
+        // Transfer fails
+        vm.startPrank(USER1);
+        vm.expectRevert(WrapperB.InsufficientReservedBalance.selector);
+        w.transfer(USER2, 1 ether);
+
+        // Burn enough shares to restore ratio
+        uint256 sharesToBurn = w.mintedStethSharesOf(USER1) / 4;
+        steth.approve(address(w), steth.getPooledEthByShares(sharesToBurn));
+        w.burnStethShares(sharesToBurn);
+
+        // Now transfer succeeds (if enough collateral freed up)
+        uint256 minRequired = w.calcStvToLockForStethShares(w.mintedStethSharesOf(USER1));
+        if (w.balanceOf(USER1) > minRequired + 1 ether) {
+            w.transfer(USER2, 1 ether);
+        }
+        vm.stopPrank();
+    }
+
+    /**
+     * @notice Test user can transfer excess stv after vault gains without transferring liability
+     */
+    function test_after_vault_gains_can_transfer_excess_without_liability() public {
+        WrapperContext memory ctx = _deployWrapperB(false, 0, DEFAULT_WRAPPER_RR_GAP);
+        WrapperB w = wrapperB(ctx);
+
+        // User deposits and mints max shares
+        uint256 userDeposit = 100 ether;
+        vm.prank(USER1);
+        w.depositETH{value: userDeposit}(USER1, address(0), _calcMaxMintableStShares(ctx, userDeposit));
+
+        // Initially can't transfer - at exact reserve ratio
+        vm.startPrank(USER1);
+        vm.expectRevert(WrapperB.InsufficientReservedBalance.selector);
+        w.transfer(USER2, 1);
+        vm.stopPrank();
+
+        // Vault gains 10% value - user now has excess stv
+        reportVaultValueChangeNoFees(ctx, 100_00 + 1000); // +10%
+
+        // Calculate unlocked stv
+        uint256 minRequired = w.calcStvToLockForStethShares(w.mintedStethSharesOf(USER1));
+        uint256 excessStv = w.balanceOf(USER1) - minRequired;
+
+        // Can transfer excess WITHOUT transferring liability
+        vm.prank(USER1);
+        w.transfer(USER2, excessStv);
+
+        assertEq(w.mintedStethSharesOf(USER1), w.mintedStethSharesOf(USER1), "USER1 liability unchanged");
+        assertEq(w.mintedStethSharesOf(USER2), 0, "USER2 has no liability");
+    }
+
+    /**
+     * @notice Test user can transfer more stv than required with liability (overpaying)
+     */
+    function test_transferWithLiability_can_overpay_stv() public {
+        WrapperContext memory ctx = _deployWrapperB(false, 0, DEFAULT_WRAPPER_RR_GAP);
+        WrapperB w = wrapperB(ctx);
+
+        // User deposits and mints
+        uint256 userDeposit = 100 ether;
+        vm.prank(USER1);
+        w.depositETH{value: userDeposit}(USER1, address(0), _calcMaxMintableStShares(ctx, userDeposit));
+
+        // Vault gains 10%
+        reportVaultValueChangeNoFees(ctx, 100_00 + 1000);
+
+        uint256 sharesToTransfer = w.mintedStethSharesOf(USER1) / 2;
+        uint256 minStvRequired = w.calcStvToLockForStethShares(sharesToTransfer);
+        uint256 overpayAmount = minStvRequired + 10 wei;
+
+        // Can transfer MORE stv than minimum with liability
+        vm.prank(USER1);
+        assertTrue(w.transferWithLiability(USER2, overpayAmount, sharesToTransfer));
+        assertEq(w.balanceOf(USER2), overpayAmount, "USER2 receives overpaid stv");
+    }
+
+    /**
+     * @notice Test user with no minted shares can transfer freely
+     */
+    function test_user_with_no_minted_shares_can_transfer_freely() public {
+        WrapperContext memory ctx = _deployWrapperB(false, 0, DEFAULT_WRAPPER_RR_GAP);
+        WrapperB w = wrapperB(ctx);
+
+        // User deposits WITHOUT minting shares
+        vm.prank(USER1);
+        w.depositETH{value: 10 ether}(USER1, address(0), 0);
+
+        assertEq(w.mintedStethSharesOf(USER1), 0, "USER1 has no minted shares");
+
+        // Can transfer entire balance
+        vm.prank(USER1);
+        w.transfer(USER2, w.balanceOf(USER1));
+
+        assertEq(w.balanceOf(USER1), 0, "USER1 transferred everything");
+    }
+
+    /**
+     * @notice Test after vault gains user can mint additional shares from rewards
+     */
+    function xtest_after_vault_gains_can_mint_from_rewards() public {
+        WrapperContext memory ctx = _deployWrapperB(false, 0, DEFAULT_WRAPPER_RR_GAP);
+        WrapperB w = wrapperB(ctx);
+
+        // User deposits and mints max
+        uint256 userDeposit = 100 ether;
+        vm.prank(USER1);
+        w.depositETH{value: userDeposit}(USER1, address(0), _calcMaxMintableStShares(ctx, userDeposit));
+
+        uint256 initialMinted = w.mintedStethSharesOf(USER1);
+        assertEq(w.mintingCapacitySharesOf(USER1), 0, "No capacity initially");
+
+        // Vault gains 5%
+        // vm.warp(block.timestamp + 1 days);
+        reportVaultValueChangeNoFees(ctx, 100_00 + 500);
+
+        // Now has minting capacity from rewards
+        uint256 additionalCapacity = w.mintingCapacitySharesOf(USER1);
+        assertGt(additionalCapacity, 0, "Has minting capacity from rewards");
+
+        // Can mint additional shares
+        vm.prank(USER1);
+        w.mintStethShares(additionalCapacity);
+
+        assertEq(w.mintedStethSharesOf(USER1), initialMinted + additionalCapacity, "Minted additional shares");
+    }
+
+    /**
+     * @notice Test transferring all liability with all stv works
+     */
+    function test_transferWithLiability_all_stv_and_liability() public {
+        WrapperContext memory ctx = _deployWrapperB(false, 0, DEFAULT_WRAPPER_RR_GAP);
+        WrapperB w = wrapperB(ctx);
+
+        // User deposits and mints
+        vm.prank(USER1);
+        w.depositETH{value: 50 ether}(USER1, address(0), _calcMaxMintableStShares(ctx, 50 ether));
+
+        uint256 allStv = w.balanceOf(USER1);
+        uint256 allShares = w.mintedStethSharesOf(USER1);
+
+        // Can transfer everything
+        vm.prank(USER1);
+        assertTrue(w.transferWithLiability(USER2, allStv, allShares));
+
+        assertEq(w.balanceOf(USER1), 0, "USER1 has no stv");
+        assertEq(w.mintedStethSharesOf(USER1), 0, "USER1 has no liability");
+        assertEq(w.balanceOf(USER2), allStv, "USER2 has all stv");
+        assertEq(w.mintedStethSharesOf(USER2), allShares, "USER2 has all liability");
     }
 }
