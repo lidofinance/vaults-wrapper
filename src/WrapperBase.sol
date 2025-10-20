@@ -213,7 +213,7 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
     }
 
     /**
-     * @notice Simulate the amount of stv that would be received for a given asset amount
+     * @notice Preview the amount of stv that would be received for a given asset amount
      * @param _assets Amount of assets to deposit (18 decimals)
      * @return stv Amount of stv that would be minted (27 decimals)
      */
@@ -222,19 +222,16 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
     }
 
     /**
-     * @notice Simulate the amount of stv that would be burned for a given asset amount
+     * @notice Preview the amount of stv that would be burned for a given asset withdrawal
      * @param _assets Amount of assets to withdraw (18 decimals)
      * @return stv Amount of stv that would be burned (27 decimals)
      */
     function previewWithdraw(uint256 _assets) public view returns (uint256 stv) {
-        uint256 totalAssets_ = totalAssets();
-        if (totalAssets_ == 0) return 0;
-
-        stv = Math.mulDiv(_assets, totalSupply(), totalAssets_, Math.Rounding.Ceil);
+        stv = _convertToStv(_assets, Math.Rounding.Ceil);
     }
 
     /**
-     * @notice Simulate the amount of assets that would be received for a given stv amount
+     * @notice Preview the amount of assets that would be received for a given stv amount
      * @param _stv Amount of stv to redeem (27 decimals)
      * @return assets Amount of assets that would be received (18 decimals)
      */
@@ -247,7 +244,7 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
      * @return stv Amount of stv minted
      */
     function depositETH(address _referral) public payable returns (uint256 stv) {
-        return depositETH(msg.sender, _referral);
+        stv = depositETH(msg.sender, _referral);
     }
 
     /**
@@ -255,7 +252,7 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
      * @return stv Amount of stv minted
      */
     function depositETH() public payable returns (uint256 stv) {
-        return depositETH(msg.sender, address(0));
+        stv = depositETH(msg.sender, address(0));
     }
 
     /**
