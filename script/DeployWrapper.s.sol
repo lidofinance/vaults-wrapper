@@ -12,7 +12,7 @@ contract DeployWrapper is Script {
         uint256 wrapperType; // 0:A, 1:B, 2:LOOP, 3:GGV
         address nodeOperator;
         address nodeOperatorManager;
-        address upgradeConformer;
+        address upgradeConfirmer;
         uint256 nodeOperatorFeeBP;
         uint256 confirmExpiry;
         uint256 maxFinalizationTime;
@@ -37,7 +37,7 @@ contract DeployWrapper is Script {
         p.wrapperType = vm.parseJsonUint(json, "$.wrapperType");
         p.nodeOperator = vm.parseJsonAddress(json, "$.nodeOperator");
         p.nodeOperatorManager = vm.parseJsonAddress(json, "$.nodeOperatorManager");
-        p.upgradeConformer = vm.parseJsonAddress(json, "$.upgradeConformer");
+        p.upgradeConfirmer = vm.parseJsonAddress(json, "$.upgradeConfirmer");
         p.nodeOperatorFeeBP = vm.parseJsonUint(json, "$.nodeOperatorFeeBP");
         p.confirmExpiry = vm.parseJsonUint(json, "$.confirmExpiry");
         p.maxFinalizationTime = vm.parseJsonUint(json, "$.maxFinalizationTime");
@@ -145,7 +145,7 @@ contract DeployWrapper is Script {
             }(
                 p.nodeOperator,
                 p.nodeOperatorManager,
-                p.upgradeConformer,
+                p.upgradeConfirmer,
                 p.nodeOperatorFeeBP,
                 p.confirmExpiry,
                 p.maxFinalizationTime,
@@ -158,7 +158,7 @@ contract DeployWrapper is Script {
             }(
                 p.nodeOperator,
                 p.nodeOperatorManager,
-                p.upgradeConformer,
+                p.upgradeConfirmer,
                 p.nodeOperatorFeeBP,
                 p.confirmExpiry,
                 p.maxFinalizationTime,
@@ -170,7 +170,7 @@ contract DeployWrapper is Script {
             (vault, dashboard, wrapperProxy, withdrawalQueueProxy) = factory.createVaultWithLoopStrategy{value: p.value}(
                 p.nodeOperator,
                 p.nodeOperatorManager,
-                p.upgradeConformer,
+                p.upgradeConfirmer,
                 p.nodeOperatorFeeBP,
                 p.confirmExpiry,
                 p.maxFinalizationTime,
@@ -184,7 +184,7 @@ contract DeployWrapper is Script {
             (vault, dashboard, wrapperProxy, withdrawalQueueProxy) = factory.createVaultWithGGVStrategy{value: p.value}(
                 p.nodeOperator,
                 p.nodeOperatorManager,
-                p.upgradeConformer,
+                p.upgradeConfirmer,
                 p.nodeOperatorFeeBP,
                 p.confirmExpiry,
                 p.maxFinalizationTime,

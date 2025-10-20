@@ -29,7 +29,7 @@ abstract contract ProposalUpgradable is Initializable, AccessControlEnumerableUp
     error TooEarlyToEnact();
 
     // upgrade roles
-    bytes32 public constant UPGRADE_CONFORMER = keccak256("UPGRADE_CONFORMER");
+    bytes32 public constant UPGRADE_CONFIRMER = keccak256("UPGRADE_CONFIRMER");
     bytes32 public constant UPGRADE_PROPOSER = keccak256("UPGRADE_PROPOSER");
 
     struct WrapperUpgradePayload {
@@ -58,11 +58,11 @@ abstract contract ProposalUpgradable is Initializable, AccessControlEnumerableUp
         }
     }
 
-    function _initializeProposalUpgradable(address _proposer, address _conformer) internal onlyInitializing {
+    function _initializeProposalUpgradable(address _proposer, address _confirmer) internal onlyInitializing {
         _grantRole(UPGRADE_PROPOSER, _proposer);
-        _setRoleAdmin(UPGRADE_CONFORMER, UPGRADE_CONFORMER);
-        if (_conformer != address(0)) {
-            _grantRole(UPGRADE_CONFORMER, _conformer);
+        _setRoleAdmin(UPGRADE_CONFIRMER, UPGRADE_CONFIRMER);
+        if (_confirmer != address(0)) {
+            _grantRole(UPGRADE_CONFIRMER, _confirmer);
         }
     }
 
@@ -114,7 +114,7 @@ abstract contract ProposalUpgradable is Initializable, AccessControlEnumerableUp
     }
 
     function confirmUpgrade(WrapperUpgradePayload calldata _payload) external {
-        _checkRole(UPGRADE_CONFORMER, msg.sender);
+        _checkRole(UPGRADE_CONFIRMER, msg.sender);
         // check if upgrade is allowed before starting countdown via confirm
         _beforeUpgrade();
 

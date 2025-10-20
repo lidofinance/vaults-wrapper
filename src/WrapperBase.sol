@@ -96,16 +96,16 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
 
     function initialize(
         address _owner,
-        address _upgradeConformer,
+        address _upgradeConfirmer,
         string memory _name,
         string memory _symbol
     ) public virtual initializer {
-        _initializeWrapperBase(_owner, _upgradeConformer, _name, _symbol);
+        _initializeWrapperBase(_owner, _upgradeConfirmer, _name, _symbol);
     }
 
     function _initializeWrapperBase(
         address _owner,
-        address _upgradeConformer,
+        address _upgradeConfirmer,
         string memory _name,
         string memory _symbol
     ) internal {
@@ -114,7 +114,7 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
 
         _grantRole(DEFAULT_ADMIN_ROLE, _owner);
         _initializeAllowList(_owner);
-        _initializeProposalUpgradable(_owner, _upgradeConformer);
+        _initializeProposalUpgradable(_owner, _upgradeConfirmer);
 
         // Initial vault balance must include the connect deposit
         // Minting stv for it to have clear stv math
