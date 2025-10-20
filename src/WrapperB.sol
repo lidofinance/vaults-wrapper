@@ -132,7 +132,7 @@ contract WrapperB is WrapperBase {
      * @param _stethSharesToBurn The amount of stETH shares to burn
      * @return ethAmount The amount of ETH that can be withdrawn (18 decimals)
      */
-    function withdrawableEth(address _account, uint256 _stethSharesToBurn) public view returns (uint256 ethAmount) {
+    function withdrawableEthOf(address _account, uint256 _stethSharesToBurn) public view returns (uint256 ethAmount) {
         uint256 mintedStethShares = mintedStethSharesOf(_account);
         if (mintedStethShares < _stethSharesToBurn) revert InsufficientStethShares();
 
@@ -148,8 +148,8 @@ contract WrapperB is WrapperBase {
      * @return ethAmount The amount of ETH that can be withdrawn (18 decimals)
      * @dev Overridden method to include locked assets
      */
-    function withdrawableEth(address _account) public view override returns (uint256 ethAmount) {
-        ethAmount = withdrawableEth(_account, 0);
+    function withdrawableEthOf(address _account) public view override returns (uint256 ethAmount) {
+        ethAmount = withdrawableEthOf(_account, 0);
     }
 
     /**
@@ -158,8 +158,8 @@ contract WrapperB is WrapperBase {
      * @param _stethSharesToBurn The amount of stETH shares to burn
      * @return stv The amount of stvETH shares that can be withdrawn (18 decimals)
      */
-    function withdrawableStv(address _account, uint256 _stethSharesToBurn) public view returns (uint256 stv) {
-        stv = _convertToStv(withdrawableEth(_account, _stethSharesToBurn), Math.Rounding.Floor);
+    function withdrawableStvOf(address _account, uint256 _stethSharesToBurn) public view returns (uint256 stv) {
+        stv = _convertToStv(withdrawableEthOf(_account, _stethSharesToBurn), Math.Rounding.Floor);
     }
 
     /**
@@ -168,8 +168,8 @@ contract WrapperB is WrapperBase {
      * @return stv The amount of stvETH shares that can be withdrawn (18 decimals)
      * @dev Overridden method to include locked assets
      */
-    function withdrawableStv(address _account) public view override returns (uint256 stv) {
-        stv = withdrawableStv(_account, 0);
+    function withdrawableStvOf(address _account) public view override returns (uint256 stv) {
+        stv = withdrawableStvOf(_account, 0);
     }
 
     /**

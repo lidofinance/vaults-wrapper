@@ -242,7 +242,7 @@ contract GGVTest is WrapperCHarness {
 
         uint256 _stethSharesToBurn = ggvStrategy.stethSharesOf(USER1);
         uint256 _stethSharesToRebalance = ggvStrategy.stethSharesToRebalance(USER1);
-        uint256 _stvToWithdraw = ggvStrategy.withdrawableStv(USER1, _stethSharesToRebalance + _stethSharesToBurn);
+        uint256 _stvToWithdraw = ggvStrategy.withdrawableStvOf(USER1, _stethSharesToRebalance + _stethSharesToBurn);
 
         console.log("================================================");
         console.log("FINALIZE EXIT stethSharesToBurn", _stethSharesToBurn);

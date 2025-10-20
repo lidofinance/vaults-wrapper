@@ -497,8 +497,8 @@ contract WrapperBTest is WrapperBHarness {
             "USER1 mintable stETH shares should equal capacity from rewards"
         );
 
-        assertEq(w.withdrawableEth(USER1, 0), user1Rewards, "USER1 withdrawable eth should be equal to user1Rewards");
-        assertEq(w.withdrawableEth(USER1, expectedUser1MintedStShares), w.previewRedeem(w.balanceOf(USER1)), "USER1 withdrawable eth should be equal to user1Deposit + user1Rewards");
+        assertEq(w.withdrawableEthOf(USER1, 0), user1Rewards, "USER1 withdrawable eth should be equal to user1Rewards");
+        assertEq(w.withdrawableEthOf(USER1, expectedUser1MintedStShares), w.previewRedeem(w.balanceOf(USER1)), "USER1 withdrawable eth should be equal to user1Deposit + user1Rewards");
 
         assertEq(w.stethSharesForWithdrawal(USER1, w.balanceOf(USER1)), expectedUser1MintedStShares, "USER1 stSharesForWithdrawal should be equal to expectedUser1MintedStShares");
 
@@ -516,7 +516,7 @@ contract WrapperBTest is WrapperBHarness {
         //
         // Step 2.0: User1 withdraws rewards without burning any stethShares
         //
-        uint256 withdrawableStvWithoutBurning = w.withdrawableStv(USER1, 0);
+        uint256 withdrawableStvWithoutBurning = w.withdrawableStvOf(USER1, 0);
 
         assertEq(
             withdrawableStvWithoutBurning, rewardsStv, "Withdrawable stv should be equal to rewardsStv"

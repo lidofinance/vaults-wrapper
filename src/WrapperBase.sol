@@ -367,7 +367,7 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
      * @return ethAmount The amount of ETH that can be withdrawn (18 decimals)
      * @dev Overridable method to include locked assets if needed
      */
-    function withdrawableEth(address _account) public view virtual returns (uint256 ethAmount) {
+    function withdrawableEthOf(address _account) public view virtual returns (uint256 ethAmount) {
         ethAmount = assetsOf(_account);
     }
 
@@ -377,8 +377,8 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
      * @return stv The amount of stv that can be withdrawn (18 decimals)
      * @dev Overridable method to include locked assets if needed
      */
-    function withdrawableStv(address _account) public view virtual returns (uint256 stv) {
-        stv = _convertToStv(withdrawableEth(_account), Math.Rounding.Floor);
+    function withdrawableStvOf(address _account) public view virtual returns (uint256 stv) {
+        stv = _convertToStv(withdrawableEthOf(_account), Math.Rounding.Floor);
     }
 
     /**
