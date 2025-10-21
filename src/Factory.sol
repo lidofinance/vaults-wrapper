@@ -77,7 +77,7 @@ contract Factory {
     function createVaultWithConfiguredWrapper(
         address _nodeOperator,
         address _nodeOperatorManager,
-        address _upgradeConformer,
+        address _upgradeConfirmer,
         uint256 _nodeOperatorFeeBP,
         uint256 _confirmExpiry,
         uint256 _maxFinalizationTime,
@@ -111,7 +111,7 @@ contract Factory {
             _withdrawalQueueProxy,
             usedStrategy,
             _wrapperProxy,
-            _upgradeConformer
+            _upgradeConfirmer
         );
 
         _configureAndFinalize(
@@ -128,7 +128,7 @@ contract Factory {
     function createVaultWithNoMintingNoStrategy(
         address _nodeOperator,
         address _nodeOperatorManager,
-        address _upgradeConformer,
+        address _upgradeConfirmer,
         uint256 _nodeOperatorFeeBP,
         uint256 _confirmExpiry,
         uint256 _maxFinalizationTime,
@@ -154,7 +154,7 @@ contract Factory {
             _withdrawalQueueProxy,
             address(0),
             _wrapperProxy,
-            _upgradeConformer
+            _upgradeConfirmer
         );
 
         _configureAndFinalize(
@@ -173,7 +173,7 @@ contract Factory {
     function createVaultWithMintingNoStrategy(
         address _nodeOperator,
         address _nodeOperatorManager,
-        address _upgradeConformer,
+        address _upgradeConfirmer,
         uint256 _nodeOperatorFeeBP,
         uint256 _confirmExpiry,
         uint256 _maxFinalizationTime,
@@ -200,7 +200,7 @@ contract Factory {
             _withdrawalQueueProxy,
             address(0),
             _wrapperProxy,
-            _upgradeConformer
+            _upgradeConfirmer
         );
 
         _configureAndFinalize(
@@ -219,7 +219,7 @@ contract Factory {
     function createVaultWithLoopStrategy(
         address _nodeOperator,
         address _nodeOperatorManager,
-        address _upgradeConformer,
+        address _upgradeConfirmer,
         uint256 _nodeOperatorFeeBP,
         uint256 _confirmExpiry,
         uint256 _maxFinalizationTime,
@@ -249,7 +249,7 @@ contract Factory {
             _withdrawalQueueProxy,
             loopStrategy,
             _wrapperProxy,
-            _upgradeConformer
+            _upgradeConfirmer
         );
 
         _configureAndFinalize(
@@ -262,7 +262,7 @@ contract Factory {
     function createVaultWithGGVStrategy(
         address _nodeOperator,
         address _nodeOperatorManager,
-        address _upgradeConformer,
+        address _upgradeConfirmer,
         uint256 _nodeOperatorFeeBP,
         uint256 _confirmExpiry,
         uint256 _maxFinalizationTime,
@@ -293,7 +293,7 @@ contract Factory {
             _withdrawalQueueProxy,
             ggvStrategy,
             _wrapperProxy,
-            _upgradeConformer
+            _upgradeConfirmer
         );
 
         _configureAndFinalize(
@@ -386,14 +386,14 @@ contract Factory {
         address withdrawalQueueProxy,
         address _strategy,
         address payable wrapperProxy,
-        address _upgradeConformer
+        address _upgradeConfirmer
     ) internal returns (WrapperBase wrapper) {
         address wrapperImpl = _deployWrapper(
             _configuration, dashboard, _allowlistEnabled, _reserveRatioGapBP, withdrawalQueueProxy, _strategy
         );
 
         OssifiableProxy(wrapperProxy).proxy__upgradeToAndCall(
-            wrapperImpl, abi.encodeCall(WrapperBase.initialize, (address(this), _upgradeConformer, NAME, SYMBOL))
+            wrapperImpl, abi.encodeCall(WrapperBase.initialize, (address(this), _upgradeConfirmer, NAME, SYMBOL))
         );
         wrapper = WrapperBase(payable(address(wrapperProxy)));
     }
@@ -416,6 +416,7 @@ contract Factory {
             _dashboard.grantRole(_dashboard.BURN_ROLE(), address(wrapperProxy));
         }
 
+        wrapper.grantRole(wrapper.ALLOW_LIST_MANAGER_ROLE(), msg.sender);
         wrapper.grantRole(wrapper.DEFAULT_ADMIN_ROLE(), msg.sender);
         wrapper.revokeRole(wrapper.DEFAULT_ADMIN_ROLE(), address(this));
 

@@ -14,10 +14,10 @@ contract ProposalUpgradableHarness is ProposalUpgradable {
         _disableInitializers();
     }
 
-    function initialize(address owner, address proposer, address conformer, address _wqContract) public initializer {
+    function initialize(address owner, address proposer, address confirmer, address _wqContract) public initializer {
         __AccessControlEnumerable_init();
         _grantRole(DEFAULT_ADMIN_ROLE, owner);
-        _initializeProposalUpgradable(proposer, conformer);
+        _initializeProposalUpgradable(proposer, confirmer);
         wqContract = _wqContract;
         canUpgrade = true;
     }

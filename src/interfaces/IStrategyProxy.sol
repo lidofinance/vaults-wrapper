@@ -9,4 +9,5 @@ interface IStrategyProxy {
         payable
         returns (bytes memory);
     function sendValue(address payable _recipient, uint256 _amount) external payable;
+    function safeRecoverERC20(address _token, address _recipient, uint256 _amount) external;
 }

@@ -24,18 +24,18 @@ contract ProposalUpgradableTest is Test {
 
     address public admin;
     address public proposer;
-    address public conformer;
+    address public confirmer;
     address public stranger;
 
     function setUp() public {
         admin = address(0xABCD);
         proposer = address(0xBEEF);
-        conformer = address(0xCAFE);
+        confirmer = address(0xCAFE);
         stranger = address(0xDEAD);
 
         vm.label(admin, "Admin");
         vm.label(proposer, "Proposer");
-        vm.label(conformer, "Conformer");
+        vm.label(confirmer, "Confirmer");
         vm.label(stranger, "Stranger");
 
         proposalUpgradableImpl = address(new ProposalUpgradableHarness());
@@ -49,7 +49,7 @@ contract ProposalUpgradableTest is Test {
 
         wqProxy = MockUpgradableWq(address(new ERC1967Proxy(wqImplementation, new bytes(0))));
 
-        proposalUpgradableProxy.initialize(admin, proposer, conformer, address(wqProxy));
+        proposalUpgradableProxy.initialize(admin, proposer, confirmer, address(wqProxy));
     }
 
     function test_upgradeHappyPath() public {
@@ -65,7 +65,7 @@ contract ProposalUpgradableTest is Test {
 
         vm.stopPrank();
 
-        vm.startPrank(conformer);
+        vm.startPrank(confirmer);
         proposalUpgradableProxy.setCanUpgrade(true);
         proposalUpgradableProxy.confirmUpgrade(payload);
         vm.warp(block.timestamp + proposalUpgradableProxy.UPGRADE_DELAY() + 1);
@@ -175,7 +175,7 @@ contract ProposalUpgradableTest is Test {
         emit ProposalUpgradable.WrapperUpgradeConfirmed(
             expectedHash, uint64(block.timestamp) + proposalUpgradableProxy.UPGRADE_DELAY()
         );
-        vm.prank(conformer);
+        vm.prank(confirmer);
         proposalUpgradableProxy.confirmUpgrade(payload);
 
         currentProposal = proposalUpgradableProxy.getCurrentUpgradeProposal();
@@ -196,7 +196,7 @@ contract ProposalUpgradableTest is Test {
         bytes32 proposalId = proposalUpgradableProxy.proposeUpgrade(payload);
         assertNotEq(proposalId, 0);
 
-        vm.prank(conformer);
+        vm.prank(confirmer);
         proposalUpgradableProxy.confirmUpgrade(payload);
 
         vm.prank(stranger);
