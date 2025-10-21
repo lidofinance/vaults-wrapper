@@ -10,32 +10,46 @@ contract UnassignedLiabilityTest is Test, SetupWrapperA {
         assertEq(wrapper.totalUnassignedLiabilityShares(), 0);
     }
 
-    // unassigned liability (UL) tests
+    // unassigned liability tests
 
-    function test_IncreaseWithVaultLiability_UpdatesShares() public {
-        uint256 liabilityToTransfer = 100;
-        dashboard.mock_increaseLiability(liabilityToTransfer);
-        assertEq(wrapper.totalUnassignedLiabilityShares(), liabilityToTransfer);
+    function test_TotalUnassignedLiabilityShares() public {
+        uint256 liabilityShares = 100;
+        dashboard.mock_increaseLiability(liabilityShares);
+        assertEq(wrapper.totalUnassignedLiabilityShares(), liabilityShares);
+    }
+
+    function test_TotalUnassignedLiabilitySteth() public {
+        uint256 liabilityShares = 1000;
+        uint256 stethRoundedUp = steth.getPooledEthBySharesRoundUp(liabilityShares);
+        dashboard.mock_increaseLiability(liabilityShares);
+        assertEq(wrapper.totalUnassignedLiabilitySteth(), stethRoundedUp);
+    }
+
+    function test_UnassignedLiabilityDecreasesTotalAssets() public {
+        uint256 totalAssetsBefore = wrapper.totalAssets();
+        uint256 liabilityShares = 1000;
+        uint256 stethRoundedUp = steth.getPooledEthBySharesRoundUp(liabilityShares);
+        dashboard.mock_increaseLiability(liabilityShares);
+
+        assertEq(wrapper.totalAssets(), totalAssetsBefore - stethRoundedUp);
     }
 
     // unavailable user operations tests
 
-    function test_RevertOnDeposits() public {
+    function test_DoesNotRevertOnDeposits() public {
         dashboard.mock_increaseLiability(100);
 
         vm.prank(userAlice);
-        vm.expectRevert(WrapperBase.UnassignedLiabilityOnVault.selector);
         wrapper.depositETH{value: 1 ether}(userAlice, address(0));
     }
 
-    function test_RevertOnTransfers() public {
+    function test_DoesNotRevertOnTransfers() public {
         vm.prank(userAlice);
         wrapper.depositETH{value: 1 ether}(userAlice, address(0));
 
         dashboard.mock_increaseLiability(100);
 
         vm.prank(userAlice);
-        vm.expectRevert(WrapperBase.UnassignedLiabilityOnVault.selector);
         wrapper.transfer(userBob, 1);
     }
 

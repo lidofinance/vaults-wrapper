@@ -25,7 +25,6 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
     error NotWithdrawalQueue();
     error InvalidRequestType();
     error NotEnoughToRebalance();
-    error UnassignedLiabilityOnVault();
 
     // keccak256("REQUEST_VALIDATOR_EXIT_ROLE")
     bytes32 public immutable REQUEST_VALIDATOR_EXIT_ROLE =
@@ -154,9 +153,13 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
      * @notice Total assets managed by the wrapper
      * @return assets Total assets (18 decimals)
      * @dev Overridable method to include other assets if needed
+     * @dev Subtract unassigned liability stETH from total nominal assets
      */
     function totalAssets() public view virtual returns (uint256 assets) {
-        assets = totalNominalAssets(); /* plus other assets if any */
+        assets = Math.saturatingSub(
+            totalNominalAssets(),
+            totalUnassignedLiabilitySteth()
+        ); /* plus other assets if any */
     }
 
     /**
@@ -296,6 +299,13 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
     }
 
     /**
+     * @notice Total unassigned liability in stETH
+     */
+    function totalUnassignedLiabilitySteth() public view returns (uint256 unassignedLiabilitySteth) {
+        unassignedLiabilitySteth = STETH.getPooledEthBySharesRoundUp(totalUnassignedLiabilityShares());
+    }
+
+    /**
      * @notice Rebalance unassigned liability by repaying it with assets held by the vault
      * @param _stethShares Amount of stETH shares to rebalance (18 decimals)
      * @dev Only unassigned liability can be rebalanced with this method, not individual liability
@@ -332,27 +342,6 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
 
         if (_stethShares == 0) revert NotEnoughToRebalance();
         if (unassignedLiabilityShares < _stethShares) revert NotEnoughToRebalance();
-    }
-
-    /**
-     * @dev Checks if there are no unassigned liability shares
-     */
-    function _checkNoUnassignedLiability() internal view {
-        if (totalUnassignedLiabilityShares() > 0) revert UnassignedLiabilityOnVault();
-    }
-
-    // =================================================================================
-    // ERC20 OVERRIDES
-    // =================================================================================
-
-    /**
-     * @dev Overridden method from ERC20 to prevent updates if there are unassigned liability
-     */
-    function _update(address _from, address _to, uint256 _value) internal virtual override {
-        // In rare scenarios, the vault could have liability shares that are not assigned to any wrapper users
-        // In such cases, it prevents any transfers until the unassigned liability is rebalanced
-        _checkNoUnassignedLiability();
-        super._update(_from, _to, _value);
     }
 
     // =================================================================================

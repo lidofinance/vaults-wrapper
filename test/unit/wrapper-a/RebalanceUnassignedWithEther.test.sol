@@ -18,13 +18,13 @@ contract RebalanceUnassignedWithEtherTest is Test, SetupWrapperA {
         assertEq(wrapper.totalUnassignedLiabilityShares(), liabilityToTransfer - expectedLiabilityDecrease);
     }
 
-    function test_DoesNotDecreaseTotalValue() public {
+    function test_DecreasesTotalValue() public {
         uint256 totalAssetsBefore = wrapper.totalAssets();
 
         dashboard.mock_increaseLiability(100);
         wrapper.rebalanceUnassignedLiabilityWithEther{value: 50}();
 
-        assertEq(wrapper.totalAssets(), totalAssetsBefore);
+        assertLt(wrapper.totalAssets(), totalAssetsBefore);
     }
 
     function test_RevertIfMoreThanUnassignedLiability() public {
