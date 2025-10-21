@@ -207,7 +207,6 @@ core-init:
 	git clone https://github.com/lidofinance/core.git -b $(CORE_BRANCH) --depth 1 $(CORE_SUBDIR)
 
 	cd $(CORE_SUBDIR) && \
-	git apply ../test/core-mocking.patch && \
 	corepack enable && \
 	yarn install --frozen-lockfile
 
@@ -240,10 +239,6 @@ start-fork-from-rpc:
 		exit 1; \
 	fi; \
 	anvil --fork-url "$$RPC_URL_TO_FORK" --auto-impersonate --port $(CORE_RPC_PORT)
-
-core-save-patch:
-	cd $(CORE_SUBDIR) && \
-	git diff > ../test/core-mocking.patch
 
 mock-deploy:
 	PRIVATE_KEY=$(PRIVATE_KEY) \
