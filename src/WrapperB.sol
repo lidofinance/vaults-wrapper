@@ -86,16 +86,6 @@ contract WrapperB is WrapperBase {
     // =================================================================================
 
     /**
-     * @notice Deposit native ETH and receive stvETH shares
-     * @param _receiver Address to receive the minted shares
-     * @param _referral Address of the referral (if any)
-     * @return stv Amount of stvETH shares minted
-     */
-    function depositETH(address _receiver, address _referral) public payable virtual override returns (uint256 stv) {
-        stv = depositETH(_receiver, _referral, 0);
-    }
-
-    /**
      * @notice Deposit native ETH and receive stvETH shares, optionally minting stETH shares
      * @param _receiver Address to receive the minted shares
      * @param _referral Address of the referral (if any)

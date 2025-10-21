@@ -255,11 +255,13 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
 
     /**
      * @notice Deposit native ETH and receive stv
-     * @dev Implementation depends on specific wrapper configuration
      * @param _receiver Address to receive the minted shares
+     * @param _referral Address of the referral (if any)
      * @return stv Amount of stv minted
      */
-    function depositETH(address _receiver, address _referral) public payable virtual returns (uint256 stv);
+    function depositETH(address _receiver, address _referral) public payable returns (uint256 stv) {
+        stv = _deposit(_receiver, _referral);
+    }
 
     function _deposit(address _receiver, address _referral) internal returns (uint256 stv) {
         if (msg.value == 0) revert WrapperBase.ZeroDeposit();
