@@ -985,8 +985,9 @@ contract WrapperBTest is WrapperBHarness {
         assertEq(w.mintedStethSharesOf(USER1), 0, "USER1 has no minted shares");
 
         // Can transfer entire balance
-        vm.prank(USER1);
+        vm.startPrank(USER1);
         w.transfer(USER2, w.balanceOf(USER1));
+        vm.stopPrank();
 
         assertEq(w.balanceOf(USER1), 0, "USER1 transferred everything");
     }
