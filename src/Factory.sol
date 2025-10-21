@@ -9,6 +9,7 @@ import {WrapperCFactory} from "./factories/WrapperCFactory.sol";
 import {WithdrawalQueueFactory} from "./factories/WithdrawalQueueFactory.sol";
 import {LoopStrategyFactory} from "./factories/LoopStrategyFactory.sol";
 import {GGVStrategyFactory} from "./factories/GGVStrategyFactory.sol";
+import {TimelockFactory} from "./factories/TimelockFactory.sol";
 import {OssifiableProxy} from "./proxy/OssifiableProxy.sol";
 
 import {IVaultFactory} from "./interfaces/IVaultFactory.sol";
@@ -29,6 +30,11 @@ contract Factory {
         address loopStrategyFactory;
         address ggvStrategyFactory;
         address dummyImplementation;
+        address timelockFactory;
+    }
+
+    struct TimelockConfig {
+        uint256 minDelaySeconds;
     }
 
     IVaultFactory public immutable VAULT_FACTORY;
@@ -41,7 +47,9 @@ contract Factory {
     WithdrawalQueueFactory public immutable WITHDRAWAL_QUEUE_FACTORY;
     LoopStrategyFactory public immutable LOOP_STRATEGY_FACTORY;
     GGVStrategyFactory public immutable GGV_STRATEGY_FACTORY;
+    TimelockFactory public immutable TIMELOCK_FACTORY;
     address public immutable DUMMY_IMPLEMENTATION;
+    uint256 public immutable TIMELOCK_MIN_DELAY;
     string constant NAME = "Staked ETH Vault Wrapper";
     string constant SYMBOL = "stvToken";
 
@@ -60,24 +68,26 @@ contract Factory {
         GGV_STRATEGY
     }
 
-    constructor(WrapperConfig memory a) {
-        VAULT_FACTORY = IVaultFactory(a.vaultFactory);
-        STETH = a.steth;
-        WSTETH = a.wsteth;
-        LAZY_ORACLE = a.lazyOracle;
-        WRAPPER_A_FACTORY = WrapperAFactory(a.wrapperAFactory);
-        WRAPPER_B_FACTORY = WrapperBFactory(a.wrapperBFactory);
-        WRAPPER_C_FACTORY = WrapperCFactory(a.wrapperCFactory);
-        WITHDRAWAL_QUEUE_FACTORY = WithdrawalQueueFactory(a.withdrawalQueueFactory);
-        LOOP_STRATEGY_FACTORY = LoopStrategyFactory(a.loopStrategyFactory);
-        GGV_STRATEGY_FACTORY = GGVStrategyFactory(a.ggvStrategyFactory);
-        DUMMY_IMPLEMENTATION = a.dummyImplementation;
+    constructor(WrapperConfig memory wrapperConfig, TimelockConfig memory timelockConfig) {
+        VAULT_FACTORY = IVaultFactory(wrapperConfig.vaultFactory);
+        STETH = wrapperConfig.steth;
+        WSTETH = wrapperConfig.wsteth;
+        LAZY_ORACLE = wrapperConfig.lazyOracle;
+        WRAPPER_A_FACTORY = WrapperAFactory(wrapperConfig.wrapperAFactory);
+        WRAPPER_B_FACTORY = WrapperBFactory(wrapperConfig.wrapperBFactory);
+        WRAPPER_C_FACTORY = WrapperCFactory(wrapperConfig.wrapperCFactory);
+        WITHDRAWAL_QUEUE_FACTORY = WithdrawalQueueFactory(wrapperConfig.withdrawalQueueFactory);
+        LOOP_STRATEGY_FACTORY = LoopStrategyFactory(wrapperConfig.loopStrategyFactory);
+        GGV_STRATEGY_FACTORY = GGVStrategyFactory(wrapperConfig.ggvStrategyFactory);
+        DUMMY_IMPLEMENTATION = wrapperConfig.dummyImplementation;
+        TIMELOCK_FACTORY = TimelockFactory(wrapperConfig.timelockFactory);
+
+        TIMELOCK_MIN_DELAY = timelockConfig.minDelaySeconds;
     }
 
     function createVaultWithConfiguredWrapper(
         address _nodeOperator,
         address _nodeOperatorManager,
-        address _upgradeConfirmer,
         uint256 _nodeOperatorFeeBP,
         uint256 _confirmExpiry,
         uint256 _maxFinalizationTime,
@@ -85,7 +95,8 @@ contract Factory {
         WrapperType _configuration,
         address _strategy,
         bool _allowlistEnabled,
-        uint256 _reserveRatioGapBP
+        uint256 _reserveRatioGapBP,
+        address _timelockExecutor
     )
         external
         payable
@@ -110,14 +121,14 @@ contract Factory {
             _reserveRatioGapBP,
             _withdrawalQueueProxy,
             usedStrategy,
-            _wrapperProxy,
-            _upgradeConfirmer
+            _wrapperProxy
         );
 
         _configureAndFinalize(
             _dashboard, wrapper, _wrapperProxy, _withdrawalQueueProxy, vault, _configuration, usedStrategy
         );
 
+        _finalizeGovernance(_wrapperProxy, _withdrawalQueueProxy, _timelockExecutor);
         return (vault, dashboard, _wrapperProxy, _withdrawalQueueProxy);
     }
 
@@ -128,20 +139,62 @@ contract Factory {
     function createVaultWithNoMintingNoStrategy(
         address _nodeOperator,
         address _nodeOperatorManager,
-        address _upgradeConfirmer,
         uint256 _nodeOperatorFeeBP,
         uint256 _confirmExpiry,
         uint256 _maxFinalizationTime,
         uint256 _minWithdrawalDelayTime,
-        bool _allowlistEnabled
+        bool _allowlistEnabled,
+        address _timelockExecutor
     )
         external
         payable
         returns (address vault, address dashboard, address payable wrapperProxy, address withdrawalQueueProxy)
     {
+        return _createVaultWithNoMintingNoStrategy(
+            _nodeOperator,
+            _nodeOperatorManager,
+            _nodeOperatorFeeBP,
+            _confirmExpiry,
+            _maxFinalizationTime,
+            _minWithdrawalDelayTime,
+            _allowlistEnabled,
+            _timelockExecutor
+        );
+    }
+
+    // Backward-compatible overload without timelock executor
+    function createVaultWithNoMintingNoStrategy(
+        address _nodeOperator,
+        address _nodeOperatorManager,
+        uint256 _nodeOperatorFeeBP,
+        uint256 _confirmExpiry,
+        uint256 _maxFinalizationTime,
+        uint256 _minWithdrawalDelayTime,
+        bool _allowlistEnabled
+    ) external payable returns (address vault, address dashboard, address payable wrapperProxy, address withdrawalQueueProxy) {
+        return _createVaultWithNoMintingNoStrategy(
+            _nodeOperator,
+            _nodeOperatorManager,
+            _nodeOperatorFeeBP,
+            _confirmExpiry,
+            _maxFinalizationTime,
+            _minWithdrawalDelayTime,
+            _allowlistEnabled,
+            address(0)
+        );
+    }
+
+    function _createVaultWithNoMintingNoStrategy(
+        address _nodeOperator,
+        address _nodeOperatorManager,
+        uint256 _nodeOperatorFeeBP,
+        uint256 _confirmExpiry,
+        uint256 _maxFinalizationTime,
+        uint256 _minWithdrawalDelayTime,
+        bool _allowlistEnabled,
+        address _timelockExecutor
+    ) internal returns (address vault, address dashboard, address payable _wrapperProxy, address _withdrawalQueueProxy) {
         IDashboard _dashboard;
-        address payable _wrapperProxy;
-        address _withdrawalQueueProxy;
         (vault, dashboard, _dashboard, _wrapperProxy, _withdrawalQueueProxy) = _setupVaultAndProxies(
             _nodeOperator, _nodeOperatorManager, _nodeOperatorFeeBP, _confirmExpiry, _maxFinalizationTime, _minWithdrawalDelayTime
         );
@@ -153,8 +206,7 @@ contract Factory {
             0,
             _withdrawalQueueProxy,
             address(0),
-            _wrapperProxy,
-            _upgradeConfirmer
+            _wrapperProxy
         );
 
         _configureAndFinalize(
@@ -167,27 +219,73 @@ contract Factory {
             address(0)
         );
 
-        return (vault, dashboard, _wrapperProxy, _withdrawalQueueProxy);
+        _finalizeGovernance(_wrapperProxy, _withdrawalQueueProxy, _timelockExecutor);
     }
 
     function createVaultWithMintingNoStrategy(
         address _nodeOperator,
         address _nodeOperatorManager,
-        address _upgradeConfirmer,
+        uint256 _nodeOperatorFeeBP,
+        uint256 _confirmExpiry,
+        uint256 _maxFinalizationTime,
+        uint256 _minWithdrawalDelayTime,
+        bool _allowlistEnabled,
+        uint256 _reserveRatioGapBP,
+        address _timelockExecutor
+    )
+        external
+        payable
+        returns (address vault, address dashboard, address payable wrapperProxy, address withdrawalQueueProxy)
+    {
+        return _createVaultWithMintingNoStrategy(
+            _nodeOperator,
+            _nodeOperatorManager,
+            _nodeOperatorFeeBP,
+            _confirmExpiry,
+            _maxFinalizationTime,
+            _minWithdrawalDelayTime,
+            _allowlistEnabled,
+            _reserveRatioGapBP,
+            _timelockExecutor
+        );
+    }
+
+    // Backward-compatible overload without timelock executor
+    function createVaultWithMintingNoStrategy(
+        address _nodeOperator,
+        address _nodeOperatorManager,
         uint256 _nodeOperatorFeeBP,
         uint256 _confirmExpiry,
         uint256 _maxFinalizationTime,
         uint256 _minWithdrawalDelayTime,
         bool _allowlistEnabled,
         uint256 _reserveRatioGapBP
-    )
-        external
-        payable
-        returns (address vault, address dashboard, address payable wrapperProxy, address withdrawalQueueProxy)
-    {
+    ) external payable returns (address vault, address dashboard, address payable wrapperProxy, address withdrawalQueueProxy) {
+        return _createVaultWithMintingNoStrategy(
+            _nodeOperator,
+            _nodeOperatorManager,
+            _nodeOperatorFeeBP,
+            _confirmExpiry,
+            _maxFinalizationTime,
+            _minWithdrawalDelayTime,
+            _allowlistEnabled,
+            _reserveRatioGapBP,
+            address(0)
+        );
+    }
+
+    function _createVaultWithMintingNoStrategy(
+        address _nodeOperator,
+        address _nodeOperatorManager,
+        uint256 _nodeOperatorFeeBP,
+        uint256 _confirmExpiry,
+        uint256 _maxFinalizationTime,
+        uint256 _minWithdrawalDelayTime,
+        bool _allowlistEnabled,
+        uint256 _reserveRatioGapBP,
+        address _timelockExecutor
+    ) internal returns (address vault, address dashboard, address payable _wrapperProxy, address _withdrawalQueueProxy) {
         IDashboard _dashboard;
-        address payable _wrapperProxy;
-        address _withdrawalQueueProxy;
         (vault, dashboard, _dashboard, _wrapperProxy, _withdrawalQueueProxy) = _setupVaultAndProxies(
             _nodeOperator, _nodeOperatorManager, _nodeOperatorFeeBP, _confirmExpiry, _maxFinalizationTime, _minWithdrawalDelayTime
         );
@@ -199,8 +297,7 @@ contract Factory {
             _reserveRatioGapBP,
             _withdrawalQueueProxy,
             address(0),
-            _wrapperProxy,
-            _upgradeConfirmer
+            _wrapperProxy
         );
 
         _configureAndFinalize(
@@ -213,13 +310,43 @@ contract Factory {
             address(0)
         );
 
-        return (vault, dashboard, _wrapperProxy, _withdrawalQueueProxy);
+        _finalizeGovernance(_wrapperProxy, _withdrawalQueueProxy, _timelockExecutor);
     }
 
     function createVaultWithLoopStrategy(
         address _nodeOperator,
         address _nodeOperatorManager,
-        address _upgradeConfirmer,
+        uint256 _nodeOperatorFeeBP,
+        uint256 _confirmExpiry,
+        uint256 _maxFinalizationTime,
+        uint256 _minWithdrawalDelayTime,
+        bool _allowlistEnabled,
+        uint256 _reserveRatioGapBP,
+        uint256 _loops,
+        address _timelockExecutor
+    )
+        external
+        payable
+        returns (address vault, address dashboard, address payable wrapperProxy, address withdrawalQueueProxy)
+    {
+        return _createVaultWithLoopStrategy(
+            _nodeOperator,
+            _nodeOperatorManager,
+            _nodeOperatorFeeBP,
+            _confirmExpiry,
+            _maxFinalizationTime,
+            _minWithdrawalDelayTime,
+            _allowlistEnabled,
+            _reserveRatioGapBP,
+            _loops,
+            _timelockExecutor
+        );
+    }
+
+    // Backward-compatible overload without timelock executor
+    function createVaultWithLoopStrategy(
+        address _nodeOperator,
+        address _nodeOperatorManager,
         uint256 _nodeOperatorFeeBP,
         uint256 _confirmExpiry,
         uint256 _maxFinalizationTime,
@@ -227,14 +354,34 @@ contract Factory {
         bool _allowlistEnabled,
         uint256 _reserveRatioGapBP,
         uint256 _loops
-    )
-        external
-        payable
-        returns (address vault, address dashboard, address payable wrapperProxy, address withdrawalQueueProxy)
-    {
+    ) external payable returns (address vault, address dashboard, address payable wrapperProxy, address withdrawalQueueProxy) {
+        return _createVaultWithLoopStrategy(
+            _nodeOperator,
+            _nodeOperatorManager,
+            _nodeOperatorFeeBP,
+            _confirmExpiry,
+            _maxFinalizationTime,
+            _minWithdrawalDelayTime,
+            _allowlistEnabled,
+            _reserveRatioGapBP,
+            _loops,
+            address(0)
+        );
+    }
+
+    function _createVaultWithLoopStrategy(
+        address _nodeOperator,
+        address _nodeOperatorManager,
+        uint256 _nodeOperatorFeeBP,
+        uint256 _confirmExpiry,
+        uint256 _maxFinalizationTime,
+        uint256 _minWithdrawalDelayTime,
+        bool _allowlistEnabled,
+        uint256 _reserveRatioGapBP,
+        uint256 _loops,
+        address _timelockExecutor
+    ) internal returns (address vault, address dashboard, address payable _wrapperProxy, address _withdrawalQueueProxy) {
         IDashboard _dashboard;
-        address payable _wrapperProxy;
-        address _withdrawalQueueProxy;
         (vault, dashboard, _dashboard, _wrapperProxy, _withdrawalQueueProxy) = _setupVaultAndProxies(
             _nodeOperator, _nodeOperatorManager, _nodeOperatorFeeBP, _confirmExpiry, _maxFinalizationTime, _minWithdrawalDelayTime
         );
@@ -248,21 +395,52 @@ contract Factory {
             _reserveRatioGapBP,
             _withdrawalQueueProxy,
             loopStrategy,
-            _wrapperProxy,
-            _upgradeConfirmer
+            _wrapperProxy
         );
 
         _configureAndFinalize(
             _dashboard, wrapper, _wrapperProxy, _withdrawalQueueProxy, vault, WrapperType.LOOP_STRATEGY, loopStrategy
         );
 
-        return (vault, dashboard, _wrapperProxy, _withdrawalQueueProxy);
+        _finalizeGovernance(_wrapperProxy, _withdrawalQueueProxy, _timelockExecutor);
     }
 
     function createVaultWithGGVStrategy(
         address _nodeOperator,
         address _nodeOperatorManager,
-        address _upgradeConfirmer,
+        uint256 _nodeOperatorFeeBP,
+        uint256 _confirmExpiry,
+        uint256 _maxFinalizationTime,
+        uint256 _minWithdrawalDelayTime,
+        bool _allowlistEnabled,
+        uint256 _reserveRatioGapBP,
+        address _teller,
+        address _boringQueue,
+        address _timelockExecutor
+    )
+        external
+        payable
+        returns (address vault, address dashboard, address payable wrapperProxy, address withdrawalQueueProxy)
+    {
+        return _createVaultWithGGVStrategy(
+            _nodeOperator,
+            _nodeOperatorManager,
+            _nodeOperatorFeeBP,
+            _confirmExpiry,
+            _maxFinalizationTime,
+            _minWithdrawalDelayTime,
+            _allowlistEnabled,
+            _reserveRatioGapBP,
+            _teller,
+            _boringQueue,
+            _timelockExecutor
+        );
+    }
+
+    // Backward-compatible overload without timelock executor
+    function createVaultWithGGVStrategy(
+        address _nodeOperator,
+        address _nodeOperatorManager,
         uint256 _nodeOperatorFeeBP,
         uint256 _confirmExpiry,
         uint256 _maxFinalizationTime,
@@ -271,14 +449,36 @@ contract Factory {
         uint256 _reserveRatioGapBP,
         address _teller,
         address _boringQueue
-    )
-        external
-        payable
-        returns (address vault, address dashboard, address payable wrapperProxy, address withdrawalQueueProxy)
-    {
+    ) external payable returns (address vault, address dashboard, address payable wrapperProxy, address withdrawalQueueProxy) {
+        return _createVaultWithGGVStrategy(
+            _nodeOperator,
+            _nodeOperatorManager,
+            _nodeOperatorFeeBP,
+            _confirmExpiry,
+            _maxFinalizationTime,
+            _minWithdrawalDelayTime,
+            _allowlistEnabled,
+            _reserveRatioGapBP,
+            _teller,
+            _boringQueue,
+            address(0)
+        );
+    }
+
+    function _createVaultWithGGVStrategy(
+        address _nodeOperator,
+        address _nodeOperatorManager,
+        uint256 _nodeOperatorFeeBP,
+        uint256 _confirmExpiry,
+        uint256 _maxFinalizationTime,
+        uint256 _minWithdrawalDelayTime,
+        bool _allowlistEnabled,
+        uint256 _reserveRatioGapBP,
+        address _teller,
+        address _boringQueue,
+        address _timelockExecutor
+    ) internal returns (address vault, address dashboard, address payable _wrapperProxy, address _withdrawalQueueProxy) {
         IDashboard _dashboard;
-        address payable _wrapperProxy;
-        address _withdrawalQueueProxy;
         (vault, dashboard, _dashboard, _wrapperProxy, _withdrawalQueueProxy) = _setupVaultAndProxies(
             _nodeOperator, _nodeOperatorManager, _nodeOperatorFeeBP, _confirmExpiry, _maxFinalizationTime, _minWithdrawalDelayTime
         );
@@ -292,15 +492,14 @@ contract Factory {
             _reserveRatioGapBP,
             _withdrawalQueueProxy,
             ggvStrategy,
-            _wrapperProxy,
-            _upgradeConfirmer
+            _wrapperProxy
         );
 
         _configureAndFinalize(
             _dashboard, wrapper, _wrapperProxy, _withdrawalQueueProxy, vault, WrapperType.GGV_STRATEGY, ggvStrategy
         );
 
-        return (vault, dashboard, _wrapperProxy, _withdrawalQueueProxy);
+        _finalizeGovernance(_wrapperProxy, _withdrawalQueueProxy, _timelockExecutor);
     }
 
     function _deployWrapper(
@@ -385,17 +584,29 @@ contract Factory {
         uint256 _reserveRatioGapBP,
         address withdrawalQueueProxy,
         address _strategy,
-        address payable wrapperProxy,
-        address _upgradeConfirmer
+        address payable wrapperProxy
     ) internal returns (WrapperBase wrapper) {
         address wrapperImpl = _deployWrapper(
             _configuration, dashboard, _allowlistEnabled, _reserveRatioGapBP, withdrawalQueueProxy, _strategy
         );
 
         OssifiableProxy(wrapperProxy).proxy__upgradeToAndCall(
-            wrapperImpl, abi.encodeCall(WrapperBase.initialize, (address(this), _upgradeConfirmer, NAME, SYMBOL))
+            wrapperImpl, abi.encodeCall(WrapperBase.initialize, (address(this), NAME, SYMBOL))
         );
         wrapper = WrapperBase(payable(address(wrapperProxy)));
+    }
+
+    function _finalizeGovernance(
+        address payable _wrapperProxy,
+        address _withdrawalQueueProxy,
+        address _timelockExecutor
+    ) internal {
+        uint256 minDelay = TIMELOCK_MIN_DELAY;
+        address proposer = msg.sender;
+        address timelock = TIMELOCK_FACTORY.deploy(minDelay, proposer, _timelockExecutor);
+
+        OssifiableProxy(_wrapperProxy).proxy__changeAdmin(timelock);
+        OssifiableProxy(payable(_withdrawalQueueProxy)).proxy__changeAdmin(timelock);
     }
 
     function _configureAndFinalize(

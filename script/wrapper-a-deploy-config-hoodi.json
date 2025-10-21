@@ -7,5 +7,8 @@
   "confirmExpiry": 3600,
   "maxFinalizationTime": 2592000,
   "allowlistEnabled": false,
-  "value": 1000000000000000000
+  "value": 1000000000000000000,
+  "timelock": {
+    "executor": "0x0000000000000000000000000000000000000000"
+  }
 }

@@ -98,7 +98,7 @@ contract WithdrawalQueueTest is Test {
         WrapperA impl = new WrapperA(address(dashboard), false, address(wqProxy));
         wrapperProxy.proxy__upgradeToAndCall(
             address(impl),
-            abi.encodeCall(WrapperBase.initialize, (admin, admin, "Staked ETH Vault Wrapper", "stvETH"))
+            abi.encodeCall(WrapperBase.initialize, (admin, "Staked ETH Vault Wrapper", "stvETH"))
         );
         wrapper = WrapperA(payable(address(wrapperProxy)));
 
@@ -342,20 +342,4 @@ contract WithdrawalQueueTest is Test {
     // Tests withdrawal handling when vault experiences staking rewards/rebases
     // Placeholder for testing share rate changes during withdrawal process
     function test_WithdrawalWithRebase() public {}
-
-    function test_WrapperUpgrade() public {
-        MockUpgradableWq mockUpgradableWq = new MockUpgradableWq(address(wrapper));
-
-        vm.prank(address(wrapper));
-        withdrawalQueue.upgradeTo(address(mockUpgradableWq));
-
-        assertEq(MockUpgradableWq(address(withdrawalQueue)).getImplementation(), address(mockUpgradableWq));
-    }
-
-    function test_revert_WrapperUpgrade_NotWrapper() public {
-        MockUpgradableWq mockUpgradableWq = new MockUpgradableWq(address(wrapper));
-
-        vm.expectRevert(abi.encodeWithSelector(WithdrawalQueue.OnlyWrapperCan.selector));
-        withdrawalQueue.upgradeTo(address(mockUpgradableWq));
-    }
 }

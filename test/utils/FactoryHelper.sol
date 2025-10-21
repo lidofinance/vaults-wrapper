@@ -10,6 +10,7 @@ import {WithdrawalQueueFactory} from "src/factories/WithdrawalQueueFactory.sol";
 import {DummyImplementation} from "src/proxy/DummyImplementation.sol";
 import {LoopStrategyFactory} from "src/factories/LoopStrategyFactory.sol";
 import {GGVStrategyFactory} from "src/factories/GGVStrategyFactory.sol";
+import {TimelockFactory} from "src/factories/TimelockFactory.sol";
 
 contract FactoryHelper {
     address public immutable DUMMY_IMPLEMENTATION;
@@ -19,6 +20,7 @@ contract FactoryHelper {
     address public immutable WITHDRAWAL_QUEUE_FACTORY;
     address public immutable LOOP_STRATEGY_FACTORY;
     address public immutable GGV_STRATEGY_FACTORY;
+    address public immutable TIMELOCK_FACTORY;
 
     constructor() {
         DUMMY_IMPLEMENTATION = address(new DummyImplementation());
@@ -28,6 +30,7 @@ contract FactoryHelper {
         WITHDRAWAL_QUEUE_FACTORY = address(new WithdrawalQueueFactory());
         LOOP_STRATEGY_FACTORY = address(new LoopStrategyFactory());
         GGV_STRATEGY_FACTORY = address(new GGVStrategyFactory());
+        TIMELOCK_FACTORY = address(new TimelockFactory());
     }
 
     /// @notice Deploy main Factory with freshly deployed impl factories
@@ -46,9 +49,15 @@ contract FactoryHelper {
             withdrawalQueueFactory: WITHDRAWAL_QUEUE_FACTORY,
             loopStrategyFactory: LOOP_STRATEGY_FACTORY,
             ggvStrategyFactory: GGV_STRATEGY_FACTORY,
-            dummyImplementation: DUMMY_IMPLEMENTATION
+            dummyImplementation: DUMMY_IMPLEMENTATION,
+            timelockFactory: TIMELOCK_FACTORY
         });
-        factory = new Factory(a);
+        factory = new Factory(
+            a,
+            Factory.TimelockConfig({
+                minDelaySeconds: 7 days
+            })
+        );
     }
 
     /// @notice Deploy LoopStrategy implementation

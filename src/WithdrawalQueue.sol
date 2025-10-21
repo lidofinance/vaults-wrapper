@@ -931,21 +931,6 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
     }
 
     // =================================================================================
-    // UPGRADABILITY
-    // =================================================================================
-
-    /**
-     * @notice Enacts implementation upgrade
-     * @param newImplementation address of the new implementation contract
-     * @dev can only be called by the WRAPPER
-     */
-    function upgradeTo(address newImplementation) external {
-        _checkOnlyWrapper();
-        ERC1967Utils.upgradeToAndCall(newImplementation, new bytes(0));
-        emit ImplementationUpgraded(newImplementation);
-    }
-
-    // =================================================================================
     // EMERGENCY EXIT
     // =================================================================================
 

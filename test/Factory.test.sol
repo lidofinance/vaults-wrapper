@@ -11,6 +11,7 @@ import {WithdrawalQueueFactory} from "src/factories/WithdrawalQueueFactory.sol";
 import {DummyImplementation} from "src/proxy/DummyImplementation.sol";
 import {LoopStrategyFactory} from "src/factories/LoopStrategyFactory.sol";
 import {GGVStrategyFactory} from "src/factories/GGVStrategyFactory.sol";
+import {TimelockFactory} from "src/factories/TimelockFactory.sol";
 import {WrapperBase} from "../src/WrapperBase.sol";
 import {WrapperA} from "../src/WrapperA.sol";
 import {WrapperC} from "../src/WrapperC.sol";
@@ -70,6 +71,7 @@ contract FactoryTest is Test {
         LoopStrategyFactory lsf = new LoopStrategyFactory();
         GGVStrategyFactory ggvf = new GGVStrategyFactory();
         address dummy = address(new DummyImplementation());
+        address timelockFactory = address(new TimelockFactory());
 
         Factory.WrapperConfig memory a = Factory.WrapperConfig({
             vaultFactory: address(vaultFactory),
@@ -82,9 +84,15 @@ contract FactoryTest is Test {
             withdrawalQueueFactory: address(wqf),
             loopStrategyFactory: address(lsf),
             ggvStrategyFactory: address(ggvf),
-            dummyImplementation: dummy
+            dummyImplementation: dummy,
+            timelockFactory: timelockFactory
         });
-        WrapperFactory = new Factory(a);
+        WrapperFactory = new Factory(
+            a,
+            Factory.TimelockConfig({
+                minDelaySeconds: 0
+            })
+        );
     }
 
     function test_canCreateWrapper() public {
@@ -93,7 +101,6 @@ contract FactoryTest is Test {
             .createVaultWithNoMintingNoStrategy{value: connectDeposit}(
             nodeOperator,
             nodeOperatorManager,
-            nodeOperator,
             100, // 1% fee
             3600, // 1 hour confirm expiry
             30 days,
@@ -127,7 +134,6 @@ contract FactoryTest is Test {
         WrapperFactory.createVaultWithNoMintingNoStrategy(
             nodeOperator,
             nodeOperatorManager,
-            nodeOperator,
             100, // 1% fee
             3600, // 1 hour confirm expiry
             30 days,
@@ -142,7 +148,6 @@ contract FactoryTest is Test {
             .createVaultWithLoopStrategy{value: connectDeposit}(
             nodeOperator,
             nodeOperatorManager,
-            nodeOperator,
             100, // 1% fee
             3600, // 1 hour confirm expiry
             30 days,
@@ -170,7 +175,6 @@ contract FactoryTest is Test {
         (,, address payable wrapperProxy,) = WrapperFactory.createVaultWithNoMintingNoStrategy{value: connectDeposit}(
             nodeOperator,
             nodeOperatorManager,
-            nodeOperator,
             100, // 1% fee
             3600, // 1 hour confirm expiry
             30 days,

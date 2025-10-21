@@ -11,6 +11,7 @@ import {WithdrawalQueueFactory} from "src/factories/WithdrawalQueueFactory.sol";
 import {LoopStrategyFactory} from "src/factories/LoopStrategyFactory.sol";
 import {GGVStrategyFactory} from "src/factories/GGVStrategyFactory.sol";
 import {DummyImplementation} from "src/proxy/DummyImplementation.sol";
+import {TimelockFactory} from "src/factories/TimelockFactory.sol";
 
 import {ILidoLocator} from "src/interfaces/ILidoLocator.sol";
 
@@ -34,20 +35,34 @@ contract DeployWrapperFactory is Script {
         core.lazyOracle = locator.lazyOracle();
     }
 
+    function _readTimelockFromJson(string memory paramsPath)
+        internal
+        view
+        returns (Factory.TimelockConfig memory tcfg)
+    {
+        require(vm.isFile(paramsPath), string(abi.encodePacked("FACTORY_PARAMS_JSON file does not exist at: ", paramsPath)));
+        string memory json = vm.readFile(paramsPath);
+
+        tcfg.minDelaySeconds = vm.parseJsonUint(json, "$.timelock.minDelaySeconds");
+    }
+
     function run() external {
         // Expect environment variables for non-interactive deploys
         // REQUIRED: CORE_DEPLOYED_JSON (path to Lido core deployed json, like CoreHarness)
         // OPTIONAL: FACTORY_DEPLOYED_JSON
+        // REQUIRED: FACTORY_PARAMS_JSON (path to config with timelock params)
         string memory deployedJsonPath = vm.envString("CORE_DEPLOYED_JSON");
         string memory outputJsonPath = vm.envOr(
             "FACTORY_DEPLOYED_JSON", string(string.concat("deployments/wrapper-", vm.toString(block.chainid), ".json"))
         );
+        string memory paramsJsonPath = vm.envString("FACTORY_PARAMS_JSON");
 
         if (!vm.isFile(deployedJsonPath)) {
             revert(string(abi.encodePacked("CORE_DEPLOYED_JSON file does not exist at: ", deployedJsonPath)));
         }
 
         CoreAddresses memory core = _readCoreFromJson(deployedJsonPath);
+        Factory.TimelockConfig memory tcfg = _readTimelockFromJson(paramsJsonPath);
 
         vm.startBroadcast();
 
@@ -59,6 +74,7 @@ contract DeployWrapperFactory is Script {
         LoopStrategyFactory lsf = new LoopStrategyFactory();
         GGVStrategyFactory ggvf = new GGVStrategyFactory();
         DummyImplementation dummy = new DummyImplementation();
+        TimelockFactory tlf = new TimelockFactory();
 
         // Build Factory configuration struct
         Factory.WrapperConfig memory cfg = Factory.WrapperConfig({
@@ -72,10 +88,11 @@ contract DeployWrapperFactory is Script {
             withdrawalQueueFactory: address(wqf),
             loopStrategyFactory: address(lsf),
             ggvStrategyFactory: address(ggvf),
-            dummyImplementation: address(dummy)
+            dummyImplementation: address(dummy),
+            timelockFactory: address(tlf)
         });
 
-        Factory factory = new Factory(cfg);
+        Factory factory = new Factory(cfg, tcfg);
 
         vm.stopBroadcast();
 
@@ -94,6 +111,7 @@ contract DeployWrapperFactory is Script {
         facs = vm.serializeAddress("factories", "withdrawalQueueFactory", address(wqf));
         facs = vm.serializeAddress("factories", "loopStrategyFactory", address(lsf));
         facs = vm.serializeAddress("factories", "ggvStrategyFactory", address(ggvf));
+        facs = vm.serializeAddress("factories", "timelockFactory", address(tlf));
 
         string memory meta = "";
         meta = vm.serializeString("meta", "chainId", vm.toString(block.chainid));
@@ -122,7 +140,27 @@ contract DeployWrapperFactory is Script {
         require(core.steth == cfg.steth, "stETH mismatch");
 
         vm.startBroadcast();
-        Factory factory = new Factory(cfg);
+        Factory factory = new Factory(cfg, Factory.TimelockConfig({
+            minDelaySeconds: 0
+        }));
+        vm.stopBroadcast();
+
+        string memory outputJsonPath =
+            string(string.concat("deployments/wrapper-", vm.toString(block.chainid), ".json"));
+        string memory out = vm.serializeAddress("deployment", "factory", address(factory));
+        vm.writeJson(out, outputJsonPath);
+    }
+
+    // Overload with explicit timelock configuration
+    function run(string memory deployedJsonPath, Factory.WrapperConfig memory cfg, Factory.TimelockConfig memory tcfg)
+        external
+    {
+        CoreAddresses memory core = _readCoreFromJson(deployedJsonPath);
+        require(core.vaultFactory == cfg.vaultFactory, "vaultFactory mismatch");
+        require(core.steth == cfg.steth, "stETH mismatch");
+
+        vm.startBroadcast();
+        Factory factory = new Factory(cfg, tcfg);
         vm.stopBroadcast();
 
         string memory outputJsonPath =

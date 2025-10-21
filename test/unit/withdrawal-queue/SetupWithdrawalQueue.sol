@@ -99,7 +99,7 @@ abstract contract SetupWithdrawalQueue is Test {
         wrapperProxy.proxy__upgradeTo(address(wrapperImpl));
 
         // Initialize wrapper
-        wrapper.initialize(owner, address(0), "Test", "stvETH");
+        wrapper.initialize(owner, "Test", "stvETH");
     }
 
     // Helper function to create and finalize a withdrawal request

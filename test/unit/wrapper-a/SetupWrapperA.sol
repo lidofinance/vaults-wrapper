@@ -40,6 +40,6 @@ abstract contract SetupWrapperA is Test {
         ERC1967Proxy wrapperProxy = new ERC1967Proxy(address(wrapperImpl), "");
 
         wrapper = WrapperA(payable(wrapperProxy));
-        wrapper.initialize(owner, address(0), "Test", "stvETH");
+        wrapper.initialize(owner, "Test", "stvETH");
     }
 }

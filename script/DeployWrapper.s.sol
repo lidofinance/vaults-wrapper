@@ -6,13 +6,13 @@ import {Factory} from "src/Factory.sol";
 import {WrapperC} from "src/WrapperC.sol";
 import {IStETH} from "src/interfaces/IStETH.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
+import {IOssifiableProxy} from "src/interfaces/IOssifiableProxy.sol";
 
 contract DeployWrapper is Script {
     struct WrapperParams {
         uint256 wrapperType; // 0:A, 1:B, 2:LOOP, 3:GGV
         address nodeOperator;
         address nodeOperatorManager;
-        address upgradeConfirmer;
         uint256 nodeOperatorFeeBP;
         uint256 confirmExpiry;
         uint256 maxFinalizationTime;
@@ -23,6 +23,7 @@ contract DeployWrapper is Script {
         address teller; // GGV only
         address boringQueue; // GGV only
         uint256 value; // msg.value to send (CONNECT_DEPOSIT)
+        address timelockExecutor; // per deployment
     }
 
     function _readFactoryAddress(string memory path) internal view returns (address factory) {
@@ -37,7 +38,6 @@ contract DeployWrapper is Script {
         p.wrapperType = vm.parseJsonUint(json, "$.wrapperType");
         p.nodeOperator = vm.parseJsonAddress(json, "$.nodeOperator");
         p.nodeOperatorManager = vm.parseJsonAddress(json, "$.nodeOperatorManager");
-        p.upgradeConfirmer = vm.parseJsonAddress(json, "$.upgradeConfirmer");
         p.nodeOperatorFeeBP = vm.parseJsonUint(json, "$.nodeOperatorFeeBP");
         p.confirmExpiry = vm.parseJsonUint(json, "$.confirmExpiry");
         p.maxFinalizationTime = vm.parseJsonUint(json, "$.maxFinalizationTime");
@@ -69,13 +69,7 @@ contract DeployWrapper is Script {
             p.boringQueue = ggvQueue;
         }
         p.value = vm.parseJsonUint(json, "$.value");
-    }
-
-    function _getProxyImplementation(address proxy) internal view returns (address impl) {
-        (bool ok, bytes memory ret) = proxy.staticcall(abi.encodeWithSignature("proxy__getImplementation()"));
-        if (ok && ret.length >= 32) {
-            impl = abi.decode(ret, (address));
-        }
+        p.timelockExecutor = vm.parseJsonAddress(json, "$.timelock.executor");
     }
 
     function run() external {
@@ -145,12 +139,12 @@ contract DeployWrapper is Script {
             }(
                 p.nodeOperator,
                 p.nodeOperatorManager,
-                p.upgradeConfirmer,
                 p.nodeOperatorFeeBP,
                 p.confirmExpiry,
                 p.maxFinalizationTime,
                 p.minWithdrawalDelayTime,
-                p.allowlistEnabled
+                p.allowlistEnabled,
+                p.timelockExecutor
             );
         } else if (p.wrapperType == uint256(Factory.WrapperType.MINTING_NO_STRATEGY)) {
             (vault, dashboard, wrapperProxy, withdrawalQueueProxy) = factory.createVaultWithMintingNoStrategy{
@@ -158,33 +152,32 @@ contract DeployWrapper is Script {
             }(
                 p.nodeOperator,
                 p.nodeOperatorManager,
-                p.upgradeConfirmer,
-                p.nodeOperatorFeeBP,
-                p.confirmExpiry,
-                p.maxFinalizationTime,
-                p.minWithdrawalDelayTime,
-                p.allowlistEnabled,
-                p.reserveRatioGapBP
-            );
-        } else if (p.wrapperType == uint256(Factory.WrapperType.LOOP_STRATEGY)) {
-            (vault, dashboard, wrapperProxy, withdrawalQueueProxy) = factory.createVaultWithLoopStrategy{value: p.value}(
-                p.nodeOperator,
-                p.nodeOperatorManager,
-                p.upgradeConfirmer,
                 p.nodeOperatorFeeBP,
                 p.confirmExpiry,
                 p.maxFinalizationTime,
                 p.minWithdrawalDelayTime,
                 p.allowlistEnabled,
                 p.reserveRatioGapBP,
-                p.loops
+                p.timelockExecutor
+            );
+        } else if (p.wrapperType == uint256(Factory.WrapperType.LOOP_STRATEGY)) {
+            (vault, dashboard, wrapperProxy, withdrawalQueueProxy) = factory.createVaultWithLoopStrategy{value: p.value}(
+                p.nodeOperator,
+                p.nodeOperatorManager,
+                p.nodeOperatorFeeBP,
+                p.confirmExpiry,
+                p.maxFinalizationTime,
+                p.minWithdrawalDelayTime,
+                p.allowlistEnabled,
+                p.reserveRatioGapBP,
+                p.loops,
+                p.timelockExecutor
             );
             strategy = address(WrapperC(wrapperProxy).STRATEGY());
         } else if (p.wrapperType == uint256(Factory.WrapperType.GGV_STRATEGY)) {
             (vault, dashboard, wrapperProxy, withdrawalQueueProxy) = factory.createVaultWithGGVStrategy{value: p.value}(
                 p.nodeOperator,
                 p.nodeOperatorManager,
-                p.upgradeConfirmer,
                 p.nodeOperatorFeeBP,
                 p.confirmExpiry,
                 p.maxFinalizationTime,
@@ -192,7 +185,8 @@ contract DeployWrapper is Script {
                 p.allowlistEnabled,
                 p.reserveRatioGapBP,
                 p.teller,
-                p.boringQueue
+                p.boringQueue,
+                p.timelockExecutor
             );
             strategy = address(WrapperC(wrapperProxy).STRATEGY());
         } else {
@@ -202,8 +196,11 @@ contract DeployWrapper is Script {
         vm.stopBroadcast();
 
         // Read implementation addresses from proxies (OssifiableProxy exposes proxy__getImplementation())
-        wrapperImpl = _getProxyImplementation(wrapperProxy);
-        withdrawalQueueImpl = _getProxyImplementation(address(withdrawalQueueProxy));
+        wrapperImpl = IOssifiableProxy(wrapperProxy).proxy__getImplementation();
+        withdrawalQueueImpl = IOssifiableProxy(address(withdrawalQueueProxy)).proxy__getImplementation();
+
+        // Read admin (timelock) from proxy
+        address timelockAdmin = IOssifiableProxy(wrapperProxy).proxy__getAdmin();
 
         // write artifact
         string memory out = vm.serializeAddress("wrapper", "factory", factoryAddr);
@@ -215,6 +212,7 @@ contract DeployWrapper is Script {
         out = vm.serializeAddress("wrapper", "withdrawalQueueImpl", withdrawalQueueImpl);
         out = vm.serializeUint("wrapper", "wrapperType", p.wrapperType);
         out = vm.serializeAddress("wrapper", "strategy", strategy);
+        out = vm.serializeAddress("wrapper", "timelock", timelockAdmin);
 
         // ------------------------------------------------------------------------------------
         // Compute and save ABI-encoded constructor args for contract verification

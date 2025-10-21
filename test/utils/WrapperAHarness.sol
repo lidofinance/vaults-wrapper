@@ -53,7 +53,6 @@ contract WrapperAHarness is Test {
         uint256 reserveRatioGapBP;
         address nodeOperator;
         address nodeOperatorManager;
-        address upgradeConfirmer;
         uint256 nodeOperatorFeeBP;
         uint256 confirmExpiry;
         uint256 maxFinalizationTime;
@@ -119,7 +118,6 @@ contract WrapperAHarness is Test {
             }(
                 config.nodeOperator,
                 config.nodeOperatorManager,
-                config.upgradeConfirmer,
                 config.nodeOperatorFeeBP,
                 config.confirmExpiry,
                 config.maxFinalizationTime,
@@ -132,7 +130,6 @@ contract WrapperAHarness is Test {
             }(
                 config.nodeOperator,
                 config.nodeOperatorManager,
-                config.upgradeConfirmer,
                 config.nodeOperatorFeeBP,
                 config.confirmExpiry,
                 config.maxFinalizationTime,
@@ -147,7 +144,6 @@ contract WrapperAHarness is Test {
             }(
                 config.nodeOperator,
                 config.nodeOperatorManager,
-                config.upgradeConfirmer,
                 config.nodeOperatorFeeBP,
                 config.confirmExpiry,
                 config.maxFinalizationTime,
@@ -162,7 +158,6 @@ contract WrapperAHarness is Test {
             }(
                 config.nodeOperator,
                 config.nodeOperatorManager,
-                config.upgradeConfirmer,
                 config.nodeOperatorFeeBP,
                 config.confirmExpiry,
                 config.maxFinalizationTime,
@@ -201,7 +196,6 @@ contract WrapperAHarness is Test {
             reserveRatioGapBP: 0,
             nodeOperator: NODE_OPERATOR,
             nodeOperatorManager: NODE_OPERATOR,
-            upgradeConfirmer: NODE_OPERATOR,
             nodeOperatorFeeBP: nodeOperatorFeeBP,
             confirmExpiry: CONFIRM_EXPIRY,
             maxFinalizationTime: 30 days,

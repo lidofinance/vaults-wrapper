@@ -55,7 +55,7 @@ The Factory orchestrates deployment of the entire wrapper system (Vault, Dashboa
   - **Proxy stub**: `DummyImplementation` (for `OssifiableProxy` bootstrap)
 
 - Deploy `Factory` (either deploy the factories yourself or use `script/DeployWrapperFactory.s.sol`):
-  - `new Factory(WrapperConfig{ vaultFactory, stETH, wrapperAFactory, wrapperBFactory, wrapperCFactory, withdrawalQueueFactory, loopStrategyFactory, ggvStrategyFactory, dummyImplementation, maxFinalizationTime })`
+  - `new Factory(WrapperConfig{ vaultFactory, stETH, wstETH, lazyOracle, wrapperAFactory, wrapperBFactory, wrapperCFactory, withdrawalQueueFactory, loopStrategyFactory, ggvStrategyFactory, dummyImplementation, timelockFactory }, TimelockConfig{ minDelaySeconds })`
 
 - Create a complete wrapper system using one of the specialized entrypoints (send `msg.value == VaultHub.CONNECT_DEPOSIT`):
   - `createVaultWithNoMintingNoStrategy(nodeOperator, nodeOperatorManager, nodeOperatorFeeBP, confirmExpiry, allowlistEnabled)`

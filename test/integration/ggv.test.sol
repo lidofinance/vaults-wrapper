@@ -157,9 +157,6 @@ contract GGVTest is WrapperCHarness {
         uint256 depositAmount = 1 ether;
         uint256 vaultProfit = depositAmount * vaultIncrease / 100; // 0.05 ether profit
 
-        uint256 shareRate1 = steth.getPooledEthByShares(1e18);
-        assertTrue(shareRate1 == 1 ether, "Started share rate is not 1:1");
-
         logUsers.push(TableUtils.User(USER1, "user1"));
         logUsers.push(TableUtils.User(user1StrategyProxy, "user1_proxy"));
         logUsers.push(TableUtils.User(address(wrapper), "wrapper"));

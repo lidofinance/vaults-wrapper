@@ -67,11 +67,10 @@ contract WrapperB is WrapperBase {
 
     function initialize(
         address _owner,
-        address _upgradeConfirmer,
         string memory _name,
         string memory _symbol
     ) public override initializer {
-        _initializeWrapperBase(_owner, _upgradeConfirmer, _name, _symbol);
+        _initializeWrapperBase(_owner, _name, _symbol);
 
         // Approve max stETH to the Dashboard for burning
         STETH.approve(address(DASHBOARD), type(uint256).max);

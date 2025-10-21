@@ -11,9 +11,8 @@ import {IStETH} from "./interfaces/IStETH.sol";
 import {IVaultHub} from "./interfaces/IVaultHub.sol";
 import {IDashboard} from "./interfaces/IDashboard.sol";
 import {AllowList} from "./AllowList.sol";
-import {ProposalUpgradable} from "./ProposalUpgradable.sol";
 
-abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, ProposalUpgradable {
+abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList {
     using EnumerableSet for EnumerableSet.UintSet;
 
     // Custom errors
@@ -60,7 +59,7 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
         }
     }
 
-    function withdrawalQueue() public view override returns (WithdrawalQueue) {
+    function withdrawalQueue() public view returns (WithdrawalQueue) {
         return WITHDRAWAL_QUEUE;
     }
 
@@ -96,16 +95,14 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
 
     function initialize(
         address _owner,
-        address _upgradeConfirmer,
         string memory _name,
         string memory _symbol
     ) public virtual initializer {
-        _initializeWrapperBase(_owner, _upgradeConfirmer, _name, _symbol);
+        _initializeWrapperBase(_owner, _name, _symbol);
     }
 
     function _initializeWrapperBase(
         address _owner,
-        address _upgradeConfirmer,
         string memory _name,
         string memory _symbol
     ) internal {
@@ -114,7 +111,6 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
 
         _grantRole(DEFAULT_ADMIN_ROLE, _owner);
         _initializeAllowList(_owner);
-        _initializeProposalUpgradable(_owner, _upgradeConfirmer);
 
         // Initial vault balance must include the connect deposit
         // Minting stv for it to have clear stv math

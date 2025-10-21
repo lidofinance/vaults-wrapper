@@ -21,7 +21,6 @@ contract WrapperBHarness is WrapperAHarness {
             reserveRatioGapBP: reserveRatioGapBP,
             nodeOperator: NODE_OPERATOR,
             nodeOperatorManager: NODE_OPERATOR,
-            upgradeConfirmer: NODE_OPERATOR,
             nodeOperatorFeeBP: nodeOperatorFeeBP,
             confirmExpiry: CONFIRM_EXPIRY,
             maxFinalizationTime: 30 days,
