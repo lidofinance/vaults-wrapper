@@ -448,7 +448,7 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
     /**
      * @notice Claim multiple finalized withdrawal requests
      * @param _requestIds The array of withdrawal request IDs to claim
-     * @param _hints The array of checkpoint hints for each request
+     * @param _hints Checkpoint hints. Can be found with `WQ.findCheckpointHints(_requestIds, 1, getLastCheckpointIndex())`
      * @param _recipient The address to receive the claimed ether
      * @return claimedEth The array of amounts of ether claimed for each request (18 decimals)
      * @dev If _recipient is address(0), it defaults to msg.sender
