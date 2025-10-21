@@ -692,6 +692,7 @@ contract WrapperBTest is WrapperBHarness {
         //
         uint256 user1Deposit = 100 ether;
         uint256 user1MintedShares = _calcMaxMintableStShares(ctx, user1Deposit);
+        user1MintedShares = user1MintedShares / 2 * 2; // make even for easier half transfer
 
         vm.prank(USER1);
         w.depositETH{value: user1Deposit}(USER1, address(0), user1MintedShares);
@@ -744,48 +745,47 @@ contract WrapperBTest is WrapperBHarness {
         //
         // Step 5: Try to transfer remaining stv without transferring remaining liability (should fail)
         //
+        uint256 user1RemainingStv = w.balanceOf(USER1);
+        uint256 user1RemainingShares = w.mintedStethSharesOf(USER1);
+
         vm.startPrank(USER1);
         vm.expectRevert(WrapperB.InsufficientReservedBalance.selector);
-        w.transfer(USER2, w.balanceOf(USER1));
+        w.transfer(USER2, user1RemainingStv);
         vm.stopPrank();
 
-        // TODO: continue with the test
-        // //
-        // // Step 6: Valid transfer - transfer all remaining with full liability
-        // //
-        // uint256 user1RemainingStv = w.balanceOf(USER1);
-        // uint256 user1RemainingShares = w.mintedStethSharesOf(USER1);
+        //
+        // Step 6: Valid transfer - transfer all remaining with full liability
+        //
+        vm.prank(USER1);
+        success = w.transferWithLiability(USER2, user1RemainingStv, user1RemainingShares);
 
-        // vm.prank(USER1);
-        // success = w.transferWithLiability(USER2, user1RemainingStv, user1RemainingShares);
+        assertTrue(success, "Transfer of remaining balance with liability should succeed");
 
-        // assertTrue(success, "Transfer of remaining balance with liability should succeed");
+        // Verify USER1 has no more stv or liability
+        assertEq(w.balanceOf(USER1), 0, "USER1 should have zero stv after full transfer");
+        assertEq(w.mintedStethSharesOf(USER1), 0, "USER1 should have zero liability after full transfer");
 
-        // // Verify USER1 has no more stv or liability
-        // assertEq(w.balanceOf(USER1), 0, "USER1 should have zero stv after full transfer");
-        // assertEq(w.mintedStethSharesOf(USER1), 0, "USER1 should have zero liability after full transfer");
+        // Verify USER2 now has everything
+        assertEq(w.balanceOf(USER2), user1Stv, "USER2 should have all original stv");
+        assertEq(w.mintedStethSharesOf(USER2), user1MintedShares, "USER2 should have all original liability");
 
-        // // Verify USER2 now has everything
-        // assertEq(w.balanceOf(USER2), user1Stv, "USER2 should have all original stv");
-        // assertEq(w.mintedStethSharesOf(USER2), user1MintedShares, "USER2 should have all original liability");
+        _assertUniversalInvariants("Step 6", ctx);
 
-        // _assertUniversalInvariants("Step 6", ctx);
+        //
+        // Step 7: Verify USER2 can now transfer with liability
+        //
+        uint256 user2Shares = w.mintedStethSharesOf(USER2);
+        uint256 sharesToTransfer = user2Shares / 4;
+        uint256 minStvToTransfer = w.calcStvToLockForStethShares(sharesToTransfer);
 
-        // //
-        // // Step 7: Verify USER2 can now transfer with liability
-        // //
-        // uint256 user2Shares = w.mintedStethSharesOf(USER2);
-        // uint256 sharesToTransfer = user2Shares / 4;
-        // uint256 minStvToTransfer = w.calcStvToLockForStethShares(sharesToTransfer);
+        vm.prank(USER2);
+        success = w.transferWithLiability(USER3, minStvToTransfer, sharesToTransfer);
 
-        // vm.prank(USER2);
-        // success = w.transferWithLiability(USER3, minStvToTransfer, sharesToTransfer);
+        assertTrue(success, "USER2 should be able to transfer with liability");
+        assertEq(w.balanceOf(USER3), minStvToTransfer, "USER3 should receive stv");
+        assertEq(w.mintedStethSharesOf(USER3), sharesToTransfer, "USER3 should receive liability");
 
-        // assertTrue(success, "USER2 should be able to transfer with liability");
-        // assertEq(w.balanceOf(USER3), minStvToTransfer, "USER3 should receive stv");
-        // assertEq(w.mintedStethSharesOf(USER3), sharesToTransfer, "USER3 should receive liability");
-
-        // _assertUniversalInvariants("Step 7", ctx);
+        _assertUniversalInvariants("Step 7", ctx);
     }
 
     /**
