@@ -6,7 +6,7 @@ import {IStrategy} from "./interfaces/IStrategy.sol";
 
 /**
  * @title WrapperC
- * @notice Configuration C: Minting functionality with strategy - stvETH shares with stETH minting capability and strategy integration
+ * @notice Configuration C: Minting functionality with strategy - stv with stETH minting capability and strategy integration
  */
 contract WrapperC is WrapperB {
     IStrategy public immutable STRATEGY;

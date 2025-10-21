@@ -7,7 +7,7 @@ error InsufficientShares(uint256 required, uint256 available);
 
 /**
  * @title WrapperA
- * @notice Configuration A: No minting, no strategy - Simple stvETH shares without stETH minting
+ * @notice Configuration A: No minting, no strategy - Simple stv without stETH minting
  */
 contract WrapperA is WrapperBase {
     constructor(

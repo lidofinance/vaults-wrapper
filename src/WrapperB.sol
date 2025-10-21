@@ -13,7 +13,7 @@ import {IStETH} from "./interfaces/IStETH.sol";
 
 /**
  * @title WrapperB
- * @notice Configuration B: Minting, no strategy - stvETH shares + maximum stETH minting for user
+ * @notice Configuration B: Minting, no strategy - stv + maximum stETH minting for user
  */
 contract WrapperB is WrapperBase {
     using EnumerableSet for EnumerableSet.UintSet;
@@ -85,12 +85,12 @@ contract WrapperB is WrapperBase {
     // =================================================================================
 
     /**
-     * @notice Deposit native ETH and receive stvETH shares, optionally minting stETH shares
+     * @notice Deposit native ETH and receive stv, optionally minting stETH shares
      * @param _receiver Address to receive the minted shares
      * @param _referral Address of the referral (if any)
      * @param _stethSharesToMint Amount of stETH shares to mint (up to maximum capacity for this deposit)
      *                           Pass MAX_MINTABLE_AMOUNT to mint maximum available for this deposit
-     * @return stv Amount of stvETH shares minted
+     * @return stv Amount of stv minted
      */
     function depositETH(
         address _receiver,
@@ -142,19 +142,19 @@ contract WrapperB is WrapperBase {
     }
 
     /**
-     * @notice Calculate the amount of stvETH shares that can be withdrawn by an account
+     * @notice Calculate the amount of stv that can be withdrawn by an account
      * @param _account The address of the account
      * @param _stethSharesToBurn The amount of stETH shares to burn
-     * @return stv The amount of stvETH shares that can be withdrawn (18 decimals)
+     * @return stv The amount of stv that can be withdrawn (18 decimals)
      */
     function withdrawableStvOf(address _account, uint256 _stethSharesToBurn) public view returns (uint256 stv) {
         stv = _convertToStv(withdrawableEthOf(_account, _stethSharesToBurn), Math.Rounding.Floor);
     }
 
     /**
-     * @notice Calculate the amount of stvETH shares that can be withdrawn by an account
+     * @notice Calculate the amount of stv that can be withdrawn by an account
      * @param _account The address of the account
-     * @return stv The amount of stvETH shares that can be withdrawn (18 decimals)
+     * @return stv The amount of stv that can be withdrawn (18 decimals)
      * @dev Overridden method to include locked assets
      */
     function withdrawableStvOf(address _account) public view override returns (uint256 stv) {
@@ -162,8 +162,8 @@ contract WrapperB is WrapperBase {
     }
 
     /**
-     * @notice Calculate the amount of stETH shares required for a given amount of stvETH shares to withdraw
-     * @param _stv The amount of stvETH shares to withdraw
+     * @notice Calculate the amount of stETH shares required for a given amount of stv to withdraw
+     * @param _stv The amount of stv to withdraw
      * @return stethShares The corresponding amount of stETH shares needed to burn (18 decimals)
      */
     function stethSharesForWithdrawal(address _account, uint256 _stv) public view returns (uint256 stethShares) {
@@ -509,11 +509,11 @@ contract WrapperB is WrapperBase {
     // =================================================================================
 
     /**
-     * @notice Rebalance the user's minted stETH shares by burning stvETH shares
+     * @notice Rebalance the user's minted stETH shares by burning stv
      * @param _stethShares The amount of stETH shares to rebalance
-     * @param _maxStvToBurn The maximum amount of stvETH shares to burn for rebalancing
-     * @return stvToBurn The actual amount of stvETH shares burned for rebalancing
-     * @dev First, rebalances internally by burning stvETH shares, which decreases exceeding shares (if any)
+     * @param _maxStvToBurn The maximum amount of stv to burn for rebalancing
+     * @return stvToBurn The actual amount of stv burned for rebalancing
+     * @dev First, rebalances internally by burning stv, which decreases exceeding shares (if any)
      * @dev Second, if there are remaining liability shares, rebalances Staking Vault
      * @dev Requires fresh oracle report, which is checked in the Withdrawal Queue
      */
