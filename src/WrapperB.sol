@@ -209,7 +209,7 @@ contract WrapperB is WrapperBase {
 
         if (_stethSharesToRebalance > 0) {
             _checkMinStvToLock(_stvToWithdraw, _stethSharesToRebalance);
-            _transferMintedStethShares(msg.sender, address(WITHDRAWAL_QUEUE), _stethSharesToRebalance);
+            _transferStethSharesLiability(msg.sender, address(WITHDRAWAL_QUEUE), _stethSharesToRebalance);
         }
 
         _transfer(msg.sender, address(WITHDRAWAL_QUEUE), _stvToWithdraw);
@@ -254,7 +254,7 @@ contract WrapperB is WrapperBase {
         }
 
         if (totalStethSharesToTransfer > 0) {
-            _transferMintedStethShares(msg.sender, address(WITHDRAWAL_QUEUE), totalStethSharesToTransfer);
+            _transferStethSharesLiability(msg.sender, address(WITHDRAWAL_QUEUE), totalStethSharesToTransfer);
         }
 
         _transfer(msg.sender, address(WITHDRAWAL_QUEUE), totalStvToTransfer);
@@ -395,7 +395,7 @@ contract WrapperB is WrapperBase {
         emit StethSharesBurned(_account, _stethShares);
     }
 
-    function _transferMintedStethShares(address _from, address _to, uint256 _stethShares) internal {
+    function _transferStethSharesLiability(address _from, address _to, uint256 _stethShares) internal {
         WrapperBStorage storage $ = _getWrapperBStorage();
 
         if (_stethShares == 0) revert ZeroArgument();
@@ -571,7 +571,7 @@ contract WrapperB is WrapperBase {
     function transferWithLiability(address _to, uint256 _stv, uint256 _stethShares) public returns (bool success) {
         _checkMinStvToLock(_stv, _stethShares);
 
-        _transferMintedStethShares(msg.sender, _to, _stethShares);
+        _transferStethSharesLiability(msg.sender, _to, _stethShares);
         _transfer(msg.sender, _to, _stv);
         success = true;
     }
