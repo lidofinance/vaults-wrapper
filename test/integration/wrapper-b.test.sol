@@ -931,8 +931,8 @@ contract WrapperBTest is WrapperBHarness {
         w.transfer(USER2, 1);
         vm.stopPrank();
 
-        // Vault gains 10% value - user now has excess stv
-        reportVaultValueChangeNoFees(ctx, 100_00 + 1000); // +10%
+        // Vault gains 1% value - user now has excess stv
+        reportVaultValueChangeNoFees(ctx, 100_00 + 100); // +1%
 
         // Calculate unlocked stv
         uint256 minRequired = w.calcStvToLockForStethShares(w.mintedStethSharesOf(USER1));
@@ -958,8 +958,8 @@ contract WrapperBTest is WrapperBHarness {
         vm.prank(USER1);
         w.depositETH{value: userDeposit}(USER1, address(0), _calcMaxMintableStShares(ctx, userDeposit));
 
-        // Vault gains 10%
-        reportVaultValueChangeNoFees(ctx, 100_00 + 1000);
+        // Vault gains 1%
+        reportVaultValueChangeNoFees(ctx, 100_00 + 100);
 
         uint256 sharesToTransfer = w.mintedStethSharesOf(USER1) / 2;
         uint256 minStvRequired = w.calcStvToLockForStethShares(sharesToTransfer);
