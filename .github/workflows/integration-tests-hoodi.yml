@@ -11,8 +11,8 @@ jobs:
     timeout-minutes: 10
     env:
       FOUNDRY_PROFILE: test
-      RPC_URL: https://hoodi.drpc.org
-      CORE_DEPLOYED_JSON: deployments/deployed-core-hoodi.json
+      RPC_URL: "https://hoodi.drpc.org"
+      CORE_DEPLOYED_JSON: "deployments/deployed-core-hoodi.json"
 
     steps:
       - uses: actions/checkout@v4

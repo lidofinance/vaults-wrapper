@@ -19,7 +19,7 @@ abstract contract Strategy is IStrategy {
     IWstETH public immutable WSTETH;
     address public immutable STRATEGY_PROXY_IMPL;
 
-    /// @dev WARNING: This ID is used to calculate user proxy addresses. 
+    /// @dev WARNING: This ID is used to calculate user proxy addresses.
     /// Changing this value will break user proxy address calculations.
     bytes32 public constant STRATEGY_ID = keccak256("strategy.ggv.v1");
 
