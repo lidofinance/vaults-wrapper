@@ -568,12 +568,12 @@ contract WrapperB is WrapperBase {
      * @return success True if the transfer was successful
      * @dev Ensures that the transferred stv covers the minimum required to lock for the transferred stETH shares liability
      */
-    function transferWithLiability(address _to, uint256 _stv, uint256 _stethShares) public returns (bool) {
+    function transferWithLiability(address _to, uint256 _stv, uint256 _stethShares) public returns (bool success) {
         _checkMinStvToLock(_stv, _stethShares);
 
         _transferMintedStethShares(msg.sender, _to, _stethShares);
         _transfer(msg.sender, _to, _stv);
-        return true;
+        success = true;
     }
 
     // =================================================================================
