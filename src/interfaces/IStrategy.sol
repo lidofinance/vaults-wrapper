@@ -5,15 +5,18 @@ import {WithdrawalRequest} from "src/strategy/WithdrawalRequest.sol";
 
 interface IStrategy {
     event StrategyExecuted(address indexed user, uint256 stv, uint256 stethShares, uint256 stethAmount, bytes data);
-    event WithdrawalRequested(address indexed user, bytes32 requestId, uint256 stethShares, bytes data);
-    event WithdrawalFinalized(address indexed user, bytes32 requestId, uint256 stethShares);
 
-    function getStrategyProxyAddress(address user) external view returns (address proxy);
+    /// @notice Supplies stETH to the strategy
+    function supply(address _referral, bytes calldata _params) external payable; 
 
-    function execute(address _user, uint256 _stv, uint256 _stethShares, bytes calldata _params) external;
-    function requestExitByStETH(address _user, uint256 _stethAmount, bytes calldata params) external returns (bytes32 requestId);
-    function requestExitByStethShares(address _user, uint256 _stethSharesToBurn, bytes calldata params) external returns (bytes32 requestId);
-    function finalizeExit(address _user, address _receiver, bytes32 _requestId) external;
+    /// @notice Requests a withdrawal from the Withdrawal Queue
+    function requestWithdrawal(
+        uint256 _stvToWithdraw,
+        uint256 _stethSharesToBurn,
+        uint256 _stethSharesToRebalance,
+        address _receiver
+    ) external returns (uint256 requestId);
 
-
+    /// @notice Recovers ERC20 tokens from the strategy
+    function recoverERC20(address _token, address _recipient, uint256 _amount) external;
 }

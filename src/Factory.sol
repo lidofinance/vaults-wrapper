@@ -416,6 +416,7 @@ contract Factory {
             _dashboard.grantRole(_dashboard.BURN_ROLE(), address(wrapperProxy));
         }
 
+        wrapper.grantRole(wrapper.ALLOW_LIST_MANAGER_ROLE(), msg.sender);
         wrapper.grantRole(wrapper.DEFAULT_ADMIN_ROLE(), msg.sender);
         wrapper.revokeRole(wrapper.DEFAULT_ADMIN_ROLE(), address(this));
 

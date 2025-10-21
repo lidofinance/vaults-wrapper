@@ -3,15 +3,18 @@ pragma solidity >=0.8.25;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+
 
 import {IStETH} from "src/interfaces/IStETH.sol";
 import {IWstETH} from "src/interfaces/IWstETH.sol";
 import {IStrategy} from "src/interfaces/IStrategy.sol";
 import {IStrategyProxy} from "src/interfaces/IStrategyProxy.sol";
 import {WrapperC} from "src/WrapperC.sol";
+import {WrapperB} from "src/WrapperB.sol";
 
 abstract contract Strategy is IStrategy {
-    WrapperC public immutable WRAPPER;
+    WrapperB public immutable WRAPPER;
     IStETH public immutable STETH;
     IWstETH public immutable WSTETH;
     address public immutable STRATEGY_PROXY_IMPL;
@@ -24,14 +27,13 @@ abstract contract Strategy is IStrategy {
 
     error ZeroAddress();
     error ZeroArgument(string name);
-    error InsufficientSurplus(uint256 _amount, uint256 _surplus);
     error TokenNotAllowed();
 
     constructor(address _wrapper, address _stETH, address _wstETH, address _strategyProxyImpl) {
         STETH = IStETH(_stETH);
         WSTETH = IWstETH(_wstETH);
         STRATEGY_PROXY_IMPL = _strategyProxyImpl;
-        WRAPPER = WrapperC(payable(_wrapper));
+        WRAPPER = WrapperB(payable(_wrapper));
     }
 
     /// @notice Recovers ERC20 tokens from the strategy
@@ -46,20 +48,7 @@ abstract contract Strategy is IStrategy {
 
         address proxy = getStrategyProxyAddress(msg.sender);
 
-        if (_token == address(STETH)) {
-            uint256 stethSharesBalance = STETH.sharesOf(proxy);
-            uint256 stethLiabilityShares = WRAPPER.mintedStethSharesOf(proxy);
-
-            uint256 surplusInShares = stethSharesBalance > stethLiabilityShares ? stethSharesBalance - stethLiabilityShares : 0;
-            uint256 amountInShares = STETH.getSharesByPooledEth(_amount);
-            if (amountInShares > surplusInShares) {
-                revert InsufficientSurplus(amountInShares, surplusInShares);
-            }
-        }
-
-        //TODO wstETH
-
-        IStrategyProxy(proxy).call(_token, abi.encodeWithSelector(IERC20.transfer.selector, _recipient, _amount));
+        IStrategyProxy(proxy).safeRecoverERC20(_token, _recipient, _amount);
     }
 
     /// @notice Returns the address of the strategy proxy for a given user
