@@ -283,6 +283,7 @@ contract WrapperAHarness is Test {
         uint256 minDelay = ctx.withdrawalQueue.MIN_WITHDRAWAL_DELAY_TIME_IN_SECONDS();
         WithdrawalQueue.WithdrawalRequestStatus memory st = ctx.withdrawalQueue.getWithdrawalStatus(requestId);
         vm.warp(st.timestamp + minDelay + 2);
+        reportVaultValueChangeNoFees(ctx, 10_000);
     }
 
     // TODO: add after report invariants
