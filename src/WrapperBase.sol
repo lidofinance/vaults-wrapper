@@ -528,11 +528,6 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
         depositETH(msg.sender, address(0));
     }
 
-    function requestValidatorExit(bytes calldata _pubkeys) external {
-        _checkOnlyRoleOrEmergencyExit(REQUEST_VALIDATOR_EXIT_ROLE);
-        DASHBOARD.requestValidatorExit(_pubkeys);
-    }
-
     // =================================================================================
     // EMERGENCY WITHDRAWAL FUNCTIONS
     // =================================================================================
@@ -544,6 +539,11 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
     ) external payable {
         _checkOnlyRoleOrEmergencyExit(TRIGGER_VALIDATOR_WITHDRAWAL_ROLE);
         DASHBOARD.triggerValidatorWithdrawals{value: msg.value}(_pubkeys, _amountsInGwei, _refundRecipient);
+    }
+
+    function requestValidatorExit(bytes calldata _pubkeys) external {
+        _checkOnlyRoleOrEmergencyExit(REQUEST_VALIDATOR_EXIT_ROLE);
+        DASHBOARD.requestValidatorExit(_pubkeys);
     }
 
     /// @notice Modifier to check role or Emergency Exit
