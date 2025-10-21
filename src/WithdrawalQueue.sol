@@ -528,7 +528,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
     /**
      * @notice Claim a batch of withdrawal requests
      * @param _requestIds array of request ids to claim
-     * @param _hints checkpoint hints for each request
+     * @param _hints checkpoint hints. can be found with `findCheckpointHints(_requestIds, 1, getLastCheckpointIndex())`
      * @param _requestor address of the request owner, should be equal to msg.sender on Wrapper side
      * @param _recipient address where claimed ether will be sent to
      * @return claimedAmounts array of claimed amounts for each request

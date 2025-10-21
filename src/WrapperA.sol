@@ -19,15 +19,4 @@ contract WrapperA is WrapperBase {
     function wrapperType() public pure override returns (string memory) {
         return "WrapperA";
     }
-
-    /**
-     * @notice Deposit native ETH and receive stvETH shares
-     * @dev Simple deposit with stvETH shares only
-     * @param _receiver Address to receive the minted shares
-     * @param _referral Address to credit for referral (optional)
-     * @return stv Amount of stvETH shares minted
-     */
-    function depositETH(address _receiver, address _referral) public payable override returns (uint256 stv) {
-        stv = _deposit(_receiver, _referral);
-    }
 }

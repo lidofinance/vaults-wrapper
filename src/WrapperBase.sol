@@ -133,19 +133,18 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
     // =================================================================================
 
     /**
-     * @notice Total assets managed by the wrapper
-     * @return Total assets (18 decimals)
+     * @notice Total nominal assets managed by the wrapper
+     * @return assets Total nominal assets (18 decimals)
      * @dev Don't subtract CONNECT_DEPOSIT because we mint tokens for it
      */
-    function totalNominalAssets() public view returns (uint256) {
-        return DASHBOARD.maxLockableValue();
+    function totalNominalAssets() public view returns (uint256 assets) {
+        assets = DASHBOARD.maxLockableValue();
     }
 
     /**
      * @notice Nominal assets owned by an account
      * @param _account The account to query
      * @return assets Amount of account assets (18 decimals)
-     * @dev Overridable method to include other assets if needed
      */
     function nominalAssetsOf(address _account) public view returns (uint256 assets) {
         assets = _getAssetsShare(balanceOf(_account), totalNominalAssets());
@@ -161,6 +160,16 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
     }
 
     /**
+     * @notice Assets owned by an account
+     * @param _account The account to query
+     * @return assets Amount of assets (18 decimals)
+     * @dev Overridable method to include other assets if needed
+     */
+    function assetsOf(address _account) public view virtual returns (uint256 assets) {
+        assets = nominalAssetsOf(_account); /* plus other assets if any */
+    }
+
+    /**
      * @notice Amount of minted stETH exceeding the Staking Vault's liability
      * @return steth Amount of exceeding stETH (18 decimals)
      * @dev May occur if rebalancing happens on the Staking Vault bypassing the Wrapper
@@ -171,57 +180,61 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
     }
 
     /**
-     * @notice Assets owned by an account
-     * @param _account The account to query
-     * @return Amount of assets (18 decimals)
-     * @dev Overridable method to include other assets if needed
+     * @notice Returns the number of decimals used to get its user representation.
+     * @return Number of decimals (27)
      */
-    function assetsOf(address _account) public view virtual returns (uint256) {
-        return nominalAssetsOf(_account); /* plus other assets if any */
-    }
-
     function decimals() public pure override returns (uint8) {
         return uint8(DECIMALS);
     }
 
-    function _convertToStv(uint256 _assetsE18, Math.Rounding rounding) internal view returns (uint256 stv) {
-        uint256 supplyE27 = totalSupply();
-        if (supplyE27 == 0) {
-            return _assetsE18 * EXTRA_DECIMALS_BASE; // 1:1 for the first deposit
-        }
-        stv = Math.mulDiv(_assetsE18, supplyE27, totalAssets(), rounding);
+    function _convertToStv(uint256 _assetsE18, Math.Rounding _rounding) internal view returns (uint256 stv) {
+        uint256 totalAssetsE18 = totalAssets();
+        uint256 totalSupplyE27 = totalSupply();
+
+        if (totalSupplyE27 == 0) return _assetsE18 * EXTRA_DECIMALS_BASE; // 1:1 for the first deposit
+        if (totalAssetsE18 == 0) return 0;
+
+        stv = Math.mulDiv(_assetsE18, totalSupplyE27, totalAssetsE18, _rounding);
     }
 
     function _convertToAssets(uint256 _stv) internal view returns (uint256 assets) {
         assets = _getAssetsShare(_stv, totalAssets());
     }
 
-    function _getAssetsShare(uint256 _stv, uint256 _assets) internal view returns (uint256) {
-        // TODO: check supply
-        uint256 supply = totalSupply();
-        if (supply == 0) {
-            return 0;
-        }
+    function _getAssetsShare(uint256 _stv, uint256 _assetsE18) internal view returns (uint256 assets) {
+        uint256 supplyE27 = totalSupply();
+        if (supplyE27 == 0) return 0;
+
         // TODO: review this Math.Rounding.Ceil
-        uint256 assetsShare = Math.mulDiv(_stv * EXTRA_DECIMALS_BASE, _assets, supply, Math.Rounding.Ceil);
-        return assetsShare / EXTRA_DECIMALS_BASE;
+        uint256 assetsShare = Math.mulDiv(_stv * EXTRA_DECIMALS_BASE, _assetsE18, supplyE27, Math.Rounding.Ceil);
+        assets = assetsShare / EXTRA_DECIMALS_BASE;
     }
 
-    function previewDeposit(uint256 _assets) public view returns (uint256) {
-        return _convertToStv(_assets, Math.Rounding.Floor);
+    /**
+     * @notice Preview the amount of stv that would be received for a given asset amount
+     * @param _assets Amount of assets to deposit (18 decimals)
+     * @return stv Amount of stv that would be minted (27 decimals)
+     */
+    function previewDeposit(uint256 _assets) public view returns (uint256 stv) {
+        stv = _convertToStv(_assets, Math.Rounding.Floor);
     }
 
-    // TODO: get rid of this in favor of previewRedeem?
-    function previewWithdraw(uint256 _assets) public view returns (uint256) {
-        uint256 supply = totalSupply();
-        if (supply == 0) {
-            return 0;
-        }
-        return Math.mulDiv(_assets, supply, totalAssets(), Math.Rounding.Ceil);
+    /**
+     * @notice Preview the amount of stv that would be burned for a given asset withdrawal
+     * @param _assets Amount of assets to withdraw (18 decimals)
+     * @return stv Amount of stv that would be burned (27 decimals)
+     */
+    function previewWithdraw(uint256 _assets) public view returns (uint256 stv) {
+        stv = _convertToStv(_assets, Math.Rounding.Ceil);
     }
 
-    function previewRedeem(uint256 _stv) external view returns (uint256) {
-        return _convertToAssets(_stv);
+    /**
+     * @notice Preview the amount of assets that would be received for a given stv amount
+     * @param _stv Amount of stv to redeem (27 decimals)
+     * @return assets Amount of assets that would be received (18 decimals)
+     */
+    function previewRedeem(uint256 _stv) external view returns (uint256 assets) {
+        assets = _convertToAssets(_stv);
     }
 
     /**
@@ -229,7 +242,7 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
      * @return stv Amount of stv minted
      */
     function depositETH(address _referral) public payable returns (uint256 stv) {
-        return depositETH(msg.sender, _referral);
+        stv = depositETH(msg.sender, _referral);
     }
 
     /**
@@ -237,16 +250,18 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
      * @return stv Amount of stv minted
      */
     function depositETH() public payable returns (uint256 stv) {
-        return depositETH(msg.sender, address(0));
+        stv = depositETH(msg.sender, address(0));
     }
 
     /**
      * @notice Deposit native ETH and receive stv
-     * @dev Implementation depends on specific wrapper configuration
      * @param _receiver Address to receive the minted shares
+     * @param _referral Address of the referral (if any)
      * @return stv Amount of stv minted
      */
-    function depositETH(address _receiver, address _referral) public payable virtual returns (uint256 stv);
+    function depositETH(address _receiver, address _referral) public payable returns (uint256 stv) {
+        stv = _deposit(_receiver, _referral);
+    }
 
     function _deposit(address _receiver, address _referral) internal returns (uint256 stv) {
         if (msg.value == 0) revert WrapperBase.ZeroDeposit();
@@ -336,6 +351,8 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
      * @dev Overridden method from ERC20 to prevent updates if there are unassigned liability
      */
     function _update(address _from, address _to, uint256 _value) internal virtual override {
+        // In rare scenarios, the vault could have liability shares that are not assigned to any wrapper users
+        // In such cases, it prevents any transfers until the unassigned liability is rebalanced
         _checkNoUnassignedLiability();
         super._update(_from, _to, _value);
     }
@@ -350,7 +367,7 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
      * @return ethAmount The amount of ETH that can be withdrawn (18 decimals)
      * @dev Overridable method to include locked assets if needed
      */
-    function withdrawableEth(address _account) public view virtual returns (uint256 ethAmount) {
+    function withdrawableEthOf(address _account) public view virtual returns (uint256 ethAmount) {
         ethAmount = assetsOf(_account);
     }
 
@@ -360,8 +377,8 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
      * @return stv The amount of stv that can be withdrawn (18 decimals)
      * @dev Overridable method to include locked assets if needed
      */
-    function withdrawableStv(address _account) public view virtual returns (uint256 stv) {
-        stv = _convertToStv(withdrawableEth(_account), Math.Rounding.Floor);
+    function withdrawableStvOf(address _account) public view virtual returns (uint256 stv) {
+        stv = _convertToStv(withdrawableEthOf(_account), Math.Rounding.Floor);
     }
 
     /**
@@ -433,7 +450,7 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
     /**
      * @notice Claim multiple finalized withdrawal requests
      * @param _requestIds The array of withdrawal request IDs to claim
-     * @param _hints The array of checkpoint hints for each request
+     * @param _hints Checkpoint hints. Can be found with `WQ.findCheckpointHints(_requestIds, 1, getLastCheckpointIndex())`
      * @param _recipient The address to receive the claimed ether
      * @return claimedEth The array of amounts of ether claimed for each request (18 decimals)
      * @dev If _recipient is address(0), it defaults to msg.sender
@@ -513,11 +530,6 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
         depositETH(msg.sender, address(0));
     }
 
-    function requestValidatorExit(bytes calldata _pubkeys) external {
-        _checkOnlyRoleOrEmergencyExit(REQUEST_VALIDATOR_EXIT_ROLE);
-        DASHBOARD.requestValidatorExit(_pubkeys);
-    }
-
     // =================================================================================
     // EMERGENCY WITHDRAWAL FUNCTIONS
     // =================================================================================
@@ -529,6 +541,11 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList, Pro
     ) external payable {
         _checkOnlyRoleOrEmergencyExit(TRIGGER_VALIDATOR_WITHDRAWAL_ROLE);
         DASHBOARD.triggerValidatorWithdrawals{value: msg.value}(_pubkeys, _amountsInGwei, _refundRecipient);
+    }
+
+    function requestValidatorExit(bytes calldata _pubkeys) external {
+        _checkOnlyRoleOrEmergencyExit(REQUEST_VALIDATOR_EXIT_ROLE);
+        DASHBOARD.requestValidatorExit(_pubkeys);
     }
 
     /// @notice Modifier to check role or Emergency Exit

@@ -214,9 +214,9 @@ contract GGVStrategy is Strategy, IStrategyExitAsync, ERC165 {
     /// @param _user The user to calculate the amount of stvETH shares to withdraw for
     /// @param _stethSharesToBurn The amount of stETH shares to burn
     /// @return stv The amount of stvETH shares that can be withdrawn
-    function proxyWithdrawableStv(address _user, uint256 _stethSharesToBurn) external view returns(uint256 stv) {
+    function proxyWithdrawableStvOf(address _user, uint256 _stethSharesToBurn) external view returns(uint256 stv) {
         address proxy = getStrategyProxyAddress(_user);
-        stv = WRAPPER.withdrawableStv(proxy, _stethSharesToBurn);
+        stv = WRAPPER.withdrawableStvOf(proxy, _stethSharesToBurn);
     }
 
     /// @notice Requests a withdrawal from the Withdrawal Queue

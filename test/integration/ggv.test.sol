@@ -240,7 +240,7 @@ contract GGVTest is WrapperCHarness {
 
         uint256 _stethSharesToBurn = ggvStrategy.proxyStethSharesOf(USER1);
         uint256 _stethSharesToRebalance = ggvStrategy.proxyStethSharesToRebalance(USER1);
-        uint256 _stvToWithdraw = ggvStrategy.proxyWithdrawableStv(USER1, _stethSharesToRebalance + _stethSharesToBurn);
+        uint256 _stvToWithdraw = ggvStrategy.proxyWithdrawableStvOf(USER1, _stethSharesToRebalance + _stethSharesToBurn);
 
         vm.startPrank(USER1);
         ggvStrategy.requestWithdrawal(_stvToWithdraw, _stethSharesToBurn, _stethSharesToRebalance, USER1);
