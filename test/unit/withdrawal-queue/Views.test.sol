@@ -40,7 +40,7 @@ contract ViewsTest is Test, SetupWithdrawalQueue {
         ids[0] = requestId1;
         ids[1] = requestId2;
 
-        WithdrawalQueue.WithdrawalRequestStatus[] memory statuses = withdrawalQueue.getWithdrawalStatus(ids);
+        WithdrawalQueue.WithdrawalRequestStatus[] memory statuses = withdrawalQueue.getWithdrawalsStatus(ids);
         assertEq(statuses.length, 2);
         assertEq(statuses[0].amountOfStv, 10 ** STV_DECIMALS);
         assertEq(statuses[1].amountOfStv, 2 * 10 ** STV_DECIMALS);
@@ -56,7 +56,7 @@ contract ViewsTest is Test, SetupWithdrawalQueue {
         assertTrue(statusSingle.isFinalized);
         assertFalse(statusSingle.isClaimed);
 
-        statuses = withdrawalQueue.getWithdrawalStatus(ids);
+        statuses = withdrawalQueue.getWithdrawalsStatus(ids);
         assertTrue(statuses[0].isFinalized);
         assertFalse(statuses[0].isClaimed);
         assertFalse(statuses[1].isFinalized);
@@ -69,7 +69,7 @@ contract ViewsTest is Test, SetupWithdrawalQueue {
         uint256[] memory ids = new uint256[](1);
         ids[0] = 0;
         vm.expectRevert(abi.encodeWithSelector(WithdrawalQueue.InvalidRequestId.selector, 0));
-        withdrawalQueue.getWithdrawalStatus(ids);
+        withdrawalQueue.getWithdrawalsStatus(ids);
     }
 
     function test_GetClaimableEther_ViewLifecycle() public {

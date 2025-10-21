@@ -71,7 +71,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
         uint256 stethShareRate;
     }
 
-    /// @notice output format struct for `getWithdrawalStatus()` method
+    /// @notice output format struct for `getWithdrawalStatus()` / `getWithdrawalsStatus()` methods
     struct WithdrawalRequestStatus {
         /// @notice amount of stv locked for this request
         uint256 amountOfStv;
@@ -802,7 +802,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
      * @param _requestIds array of withdrawal request ids
      * @return statuses array of withdrawal request statuses
      */
-    function getWithdrawalStatus(
+    function getWithdrawalsStatus(
         uint256[] calldata _requestIds
     ) external view returns (WithdrawalRequestStatus[] memory statuses) {
         statuses = new WithdrawalRequestStatus[](_requestIds.length);
