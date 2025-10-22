@@ -1,5 +1,5 @@
 {
-  "wrapperType": 0,
+  "poolType": 3,
   "nodeOperator": "0x22896Bfc68814BFD855b1a167255eE497006e730",
   "nodeOperatorManager": "0x22896Bfc68814BFD855b1a167255eE497006e730",
   "upgradeConformer": "0x22896Bfc68814BFD855b1a167255eE497006e730",
@@ -7,8 +7,10 @@
   "confirmExpiry": 3600,
   "maxFinalizationTime": 2592000,
   "allowlistEnabled": false,
-  "value": 1000000000000000000,
-  "timelock": {
-    "executor": "0x0000000000000000000000000000000000000000"
-  }
+  "reserveRatioGapBP": 1000,
+  "ggv": {
+    "teller": "0x0Da4DF9e9C8227964d862e772F6ba409dd52964d",
+    "boringOnChainQueue": "0x0909EB1dc30ee60CFa9AbCE83673AB995110ac38"
+  },
+  "value": 1000000000000000000
 }

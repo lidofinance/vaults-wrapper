@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity >=0.8.25;
 
-import {WrapperAHarness} from "test/utils/WrapperAHarness.sol";
-import {WrapperB} from "src/WrapperB.sol";
+import {StvPoolHarness} from "test/utils/StvPoolHarness.sol";
+import {StvStETHPool} from "src/StvStETHPool.sol";
 import {Factory} from "src/Factory.sol";
 
 /**
- * @title WrapperBHarness
- * @notice Helper contract for integration tests that provides common setup for WrapperB (minting, no strategy)
+ * @title StvStETHPoolHarness
+ * @notice Helper contract for integration tests that provides common setup for StvStETHPool (minting, no strategy)
  */
-contract WrapperBHarness is WrapperAHarness {
-    function _deployWrapperB(bool enableAllowlist, uint256 nodeOperatorFeeBP, uint256 reserveRatioGapBP)
+contract StvStETHPoolHarness is StvPoolHarness {
+    function _deployStvStETHPool(bool enableAllowlist, uint256 nodeOperatorFeeBP, uint256 reserveRatioGapBP)
         internal
         returns (WrapperContext memory)
     {
@@ -38,7 +38,7 @@ contract WrapperBHarness is WrapperAHarness {
         // Call parent checks first
         super._checkInitialState(ctx);
 
-        // WrapperB specific: has minting capacity
+        // StvStETHPool specific: has minting capacity
         // Note: Cannot check mintableStShares for users with no deposits as it would cause underflow
         // Minting capacity checks are performed in individual tests after deposits are made
         assertEq(ctx.dashboard.totalMintingCapacityShares(), 0, "Total minting capacity should be equal to 0");
@@ -49,7 +49,7 @@ contract WrapperBHarness is WrapperAHarness {
         // Call parent invariants
         super._assertUniversalInvariants(_context, _ctx);
 
-        // TODO: check minting capacity of wrapper which owns connect deposit stv shares
+        // TODO: check minting capacity of pool which owns connect deposit stv shares
 
         address[] memory holders = _allPossibleStvHolders(_ctx);
 
@@ -57,27 +57,27 @@ contract WrapperBHarness is WrapperAHarness {
             // Check none can mint beyond mintable capacity
             for (uint256 i = 0; i < holders.length; i++) {
                 address holder = holders[i];
-                uint256 mintableStShares = wrapperB(_ctx).mintingCapacitySharesOf(holder);
+                uint256 mintableStShares = stvStETHPool(_ctx).mintingCapacitySharesOf(holder);
 
                 vm.startPrank(holder);
-                vm.expectRevert(WrapperB.InsufficientMintingCapacity.selector);
-                wrapperB(_ctx).mintStethShares(mintableStShares + 1);
+                vm.expectRevert(StvStETHPool.InsufficientMintingCapacity.selector);
+                stvStETHPool(_ctx).mintStethShares(mintableStShares + 1);
                 vm.stopPrank();
             }
         }
     }
 
-    // Helper function to access WrapperB-specific functionality from context
-    function wrapperB(WrapperContext memory ctx) internal pure returns (WrapperB) {
-        return WrapperB(payable(address(ctx.wrapper)));
+    // Helper function to access StvStETHPool-specific functionality from context
+    function stvStETHPool(WrapperContext memory ctx) internal pure returns (StvStETHPool) {
+        return StvStETHPool(payable(address(ctx.pool)));
     }
 
     /**
      * @notice Calculate max mintable stETH shares for a given ETH amount
-     * @dev Uses WRAPPER_RR_BP from WrapperB which includes the wrapper gap
+     * @dev Uses WRAPPER_RR_BP from StvStETHPool which includes the pool gap
      */
     function _calcMaxMintableStShares(WrapperContext memory ctx, uint256 _eth) public view returns (uint256) {
-        uint256 wrapperRrBp = wrapperB(ctx).WRAPPER_RR_BP();
+        uint256 wrapperRrBp = stvStETHPool(ctx).WRAPPER_RR_BP();
         return steth.getSharesByPooledEth(_eth * (TOTAL_BASIS_POINTS - wrapperRrBp) / TOTAL_BASIS_POINTS);
     }
 }

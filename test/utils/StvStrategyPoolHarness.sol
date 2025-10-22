@@ -1,19 +1,19 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity >=0.8.25;
 
-import {WrapperBHarness} from "test/utils/WrapperBHarness.sol";
-import {WrapperC} from "src/WrapperC.sol";
+import {StvStETHPoolHarness} from "test/utils/StvStETHPoolHarness.sol";
+import {StvStrategyPool} from "src/StvStrategyPool.sol";
 import {IStrategy} from "src/interfaces/IStrategy.sol";
 import {Factory} from "src/Factory.sol";
 
 /**
- * @title WrapperCHarness
- * @notice Helper contract for integration tests that provides common setup for WrapperC (minting with strategy)
+ * @title StvStrategyPoolHarness
+ * @notice Helper contract for integration tests that provides common setup for StvStrategyPool (minting with strategy)
  */
-contract WrapperCHarness is WrapperBHarness {
+contract StvStrategyPoolHarness is StvStETHPoolHarness {
     IStrategy public strategy;
 
-    function _deployWrapperC(
+    function _deployStvStrategyPool(
         bool enableAllowlist,
         uint256 nodeOperatorFeeBP,
         address strategy_,
@@ -59,9 +59,9 @@ contract WrapperCHarness is WrapperBHarness {
         // Call parent checks first
         super._checkInitialState(ctx);
 
-        // WrapperC specific: has strategy checks
+        // StvStrategyPool specific: has strategy checks
         if (address(strategy) != address(0)) {
-            assertEq(address(wrapperC(ctx).STRATEGY()), address(strategy), "Strategy should be set correctly");
+            assertEq(address(stvStrategyPool(ctx).STRATEGY()), address(strategy), "Strategy should be set correctly");
             // Additional strategy-specific initial state checks can go here
         }
     }
@@ -70,15 +70,15 @@ contract WrapperCHarness is WrapperBHarness {
         // Call parent invariants
         super._assertUniversalInvariants(_context, _ctx);
 
-        // WrapperC specific: strategy-related invariants
+        // StvStrategyPool specific: strategy-related invariants
         if (address(strategy) != address(0)) {
             // Add strategy-specific invariants here if needed
             // For example, checking strategy positions, health factors, etc.
         }
     }
 
-    // Helper function to access WrapperC-specific functionality from context
-    function wrapperC(WrapperContext memory ctx) internal pure returns (WrapperC) {
-        return WrapperC(payable(address(ctx.wrapper)));
+    // Helper function to access StvStrategyPool-specific functionality from context
+    function stvStrategyPool(WrapperContext memory ctx) internal pure returns (StvStrategyPool) {
+        return StvStrategyPool(payable(address(ctx.pool)));
     }
 }

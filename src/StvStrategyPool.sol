@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >=0.8.25;
 
-import {WrapperB} from "./WrapperB.sol";
+import {StvStETHPool} from "./StvStETHPool.sol";
 import {IStrategy} from "./interfaces/IStrategy.sol";
 
 /**
- * @title WrapperC
+ * @title StvStrategyPool
  * @notice Configuration C: Minting functionality with strategy - stv with stETH minting capability and strategy integration
  */
-contract WrapperC is WrapperB {
+contract StvStrategyPool is StvStETHPool {
     IStrategy public immutable STRATEGY;
 
     constructor(
@@ -17,11 +17,11 @@ contract WrapperC is WrapperB {
         address _strategy,
         uint256 _reserveRatioGapBP,
         address _withdrawalQueue
-    ) WrapperB(_dashboard, _allowListEnabled, _reserveRatioGapBP, _withdrawalQueue) {
+    ) StvStETHPool(_dashboard, _allowListEnabled, _reserveRatioGapBP, _withdrawalQueue) {
         STRATEGY = IStrategy(_strategy);
     }
 
     function wrapperType() external pure virtual override returns (string memory) {
-        return "WrapperC";
+        return "StvStrategyPool";
     }
 }

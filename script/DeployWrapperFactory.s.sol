@@ -4,9 +4,9 @@ pragma solidity >=0.8.25;
 import "forge-std/Script.sol";
 
 import {Factory} from "src/Factory.sol";
-import {WrapperAFactory} from "src/factories/WrapperAFactory.sol";
-import {WrapperBFactory} from "src/factories/WrapperBFactory.sol";
-import {WrapperCFactory} from "src/factories/WrapperCFactory.sol";
+import {StvPoolFactory} from "src/factories/StvPoolFactory.sol";
+import {StvStETHPoolFactory} from "src/factories/StvStETHPoolFactory.sol";
+import {StvStrategyPoolFactory} from "src/factories/StvStrategyPoolFactory.sol";
 import {WithdrawalQueueFactory} from "src/factories/WithdrawalQueueFactory.sol";
 import {LoopStrategyFactory} from "src/factories/LoopStrategyFactory.sol";
 import {GGVStrategyFactory} from "src/factories/GGVStrategyFactory.sol";
@@ -53,7 +53,7 @@ contract DeployWrapperFactory is Script {
         // REQUIRED: FACTORY_PARAMS_JSON (path to config with timelock params)
         string memory deployedJsonPath = vm.envString("CORE_DEPLOYED_JSON");
         string memory outputJsonPath = vm.envOr(
-            "FACTORY_DEPLOYED_JSON", string(string.concat("deployments/wrapper-", vm.toString(block.chainid), ".json"))
+            "FACTORY_DEPLOYED_JSON", string(string.concat("deployments/pool-", vm.toString(block.chainid), ".json"))
         );
         string memory paramsJsonPath = vm.envString("FACTORY_PARAMS_JSON");
 
@@ -67,9 +67,9 @@ contract DeployWrapperFactory is Script {
         vm.startBroadcast();
 
         // Deploy implementation factories and proxy stub
-        WrapperAFactory waf = new WrapperAFactory();
-        WrapperBFactory wbf = new WrapperBFactory();
-        WrapperCFactory wcf = new WrapperCFactory();
+        StvPoolFactory poolFac = new StvPoolFactory();
+        StvStETHPoolFactory stethPoolFac = new StvStETHPoolFactory();
+        StvStrategyPoolFactory strategyPoolFac = new StvStrategyPoolFactory();
         WithdrawalQueueFactory wqf = new WithdrawalQueueFactory();
         LoopStrategyFactory lsf = new LoopStrategyFactory();
         GGVStrategyFactory ggvf = new GGVStrategyFactory();
@@ -82,9 +82,9 @@ contract DeployWrapperFactory is Script {
             steth: core.steth,
             wsteth: core.wsteth,
             lazyOracle: core.lazyOracle,
-            wrapperAFactory: address(waf),
-            wrapperBFactory: address(wbf),
-            wrapperCFactory: address(wcf),
+            stvPoolFactory: address(poolFac),
+            stvStETHPoolFactory: address(stethPoolFac),
+            stvStrategyPoolFactory: address(strategyPoolFac),
             withdrawalQueueFactory: address(wqf),
             loopStrategyFactory: address(lsf),
             ggvStrategyFactory: address(ggvf),
@@ -105,9 +105,9 @@ contract DeployWrapperFactory is Script {
         root = vm.serializeAddress("core", "lazyOracle", core.lazyOracle);
 
         string memory facs = "";
-        facs = vm.serializeAddress("factories", "wrapperAFactory", address(waf));
-        facs = vm.serializeAddress("factories", "wrapperBFactory", address(wbf));
-        facs = vm.serializeAddress("factories", "wrapperCFactory", address(wcf));
+        facs = vm.serializeAddress("factories", "stvPoolFactory", address(poolFac));
+        facs = vm.serializeAddress("factories", "stvStETHPoolFactory", address(stethPoolFac));
+        facs = vm.serializeAddress("factories", "stvStrategyPoolFactory", address(strategyPoolFac));
         facs = vm.serializeAddress("factories", "withdrawalQueueFactory", address(wqf));
         facs = vm.serializeAddress("factories", "loopStrategyFactory", address(lsf));
         facs = vm.serializeAddress("factories", "ggvStrategyFactory", address(ggvf));
@@ -146,7 +146,7 @@ contract DeployWrapperFactory is Script {
         vm.stopBroadcast();
 
         string memory outputJsonPath =
-            string(string.concat("deployments/wrapper-", vm.toString(block.chainid), ".json"));
+            string(string.concat("deployments/pool-", vm.toString(block.chainid), ".json"));
         string memory out = vm.serializeAddress("deployment", "factory", address(factory));
         vm.writeJson(out, outputJsonPath);
     }
@@ -164,7 +164,7 @@ contract DeployWrapperFactory is Script {
         vm.stopBroadcast();
 
         string memory outputJsonPath =
-            string(string.concat("deployments/wrapper-", vm.toString(block.chainid), ".json"));
+            string(string.concat("deployments/pool-", vm.toString(block.chainid), ".json"));
         string memory out = vm.serializeAddress("deployment", "factory", address(factory));
         vm.writeJson(out, outputJsonPath);
     }

@@ -5,19 +5,19 @@ import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
 import {Test, console} from "forge-std/Test.sol";
 
-import {WrapperBHarness} from "test/utils/WrapperBHarness.sol";
+import {StvStETHPoolHarness} from "test/utils/StvStETHPoolHarness.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
 import {Factory} from "src/Factory.sol";
-import {WrapperA} from "src/WrapperA.sol";
-import {WrapperB} from "src/WrapperB.sol";
+import {StvPool} from "src/StvPool.sol";
+import {StvStETHPool} from "src/StvStETHPool.sol";
 import {IVaultHub} from "src/interfaces/IVaultHub.sol";
 import {IStETH} from "src/interfaces/IStETH.sol";
 
 /**
- * @title WrapperBTest
- * @notice Integration tests for WrapperB (minting, no strategy)
+ * @title StvStETHPoolTest
+ * @notice Integration tests for StvStETHPool (minting, no strategy)
  */
-contract WrapperBTest is WrapperBHarness {
+contract StvStETHPoolTest is StvStETHPoolHarness {
     function setUp() public {
         _initializeCore();
     }
@@ -25,7 +25,7 @@ contract WrapperBTest is WrapperBHarness {
     uint256 public constant DEFAULT_WRAPPER_RR_GAP = 1000; // 10%
 
     function test_single_user_mints_full_in_one_step() public {
-        WrapperContext memory ctx = _deployWrapperB(false, 0, 0);
+        WrapperContext memory ctx = _deployStvStETHPool(false, 0, 0);
         _assertUniversalInvariants("Step 0", ctx);
         _checkInitialState(ctx);
 
@@ -36,18 +36,18 @@ contract WrapperBTest is WrapperBHarness {
         uint256 user1ExpectedMintableStethShares = _calcMaxMintableStShares(ctx, user1Deposit);
 
         vm.prank(USER1);
-        wrapperB(ctx).depositETH{value: user1Deposit}(USER1, address(0), 0);
+        stvStETHPool(ctx).depositETH{value: user1Deposit}(USER1, address(0), 0);
 
         _assertUniversalInvariants("Step 1", ctx);
 
         assertEq(steth.sharesOf(USER1), 0, "stETH shares balance of USER1 should be equal to 0");
         assertEq(
-            wrapperB(ctx).mintingCapacitySharesOf(USER1),
+            stvStETHPool(ctx).mintingCapacitySharesOf(USER1),
             user1ExpectedMintableStethShares,
             "Mintable stETH shares should equal capacity derived from assets"
         );
         assertEq(
-            wrapperB(ctx).stethSharesForWithdrawal(USER1, ctx.wrapper.balanceOf(USER1)),
+            stvStETHPool(ctx).stethSharesForWithdrawal(USER1, ctx.pool.balanceOf(USER1)),
             0,
             "stETH shares for withdrawal should be equal to 0"
         );
@@ -65,7 +65,7 @@ contract WrapperBTest is WrapperBHarness {
         //
 
         vm.prank(USER1);
-        wrapperB(ctx).mintStethShares(user1ExpectedMintableStethShares);
+        stvStETHPool(ctx).mintStethShares(user1ExpectedMintableStethShares);
 
         vm.clearMockedCalls();
 
@@ -77,7 +77,7 @@ contract WrapperBTest is WrapperBHarness {
             "stETH shares balance of USER1 should be equal to user1ExpectedMintableStethShares"
         );
         assertEq(
-            wrapperB(ctx).stethSharesForWithdrawal(USER1, ctx.wrapper.balanceOf(USER1)),
+            stvStETHPool(ctx).stethSharesForWithdrawal(USER1, ctx.pool.balanceOf(USER1)),
             user1ExpectedMintableStethShares,
             "stETH shares for withdrawal should be equal to user1ExpectedMintableStethShares"
         );
@@ -90,11 +90,11 @@ contract WrapperBTest is WrapperBHarness {
         assertGt(
             ctx.dashboard.remainingMintingCapacityShares(0), 0, "Remaining minting capacity should be greater than 0"
         );
-        assertEq(wrapperB(ctx).mintingCapacitySharesOf(USER1), 0, "Mintable stETH shares should be equal to 0");
+        assertEq(stvStETHPool(ctx).mintingCapacitySharesOf(USER1), 0, "Mintable stETH shares should be equal to 0");
     }
 
     function test_depositETH_with_max_mintable_amount() public {
-        WrapperContext memory ctx = _deployWrapperB(false, 0, 0);
+        WrapperContext memory ctx = _deployStvStETHPool(false, 0, 0);
 
         //
         // Step 1: User deposits ETH and mints max stETH shares in one transaction using MAX_MINTABLE_AMOUNT
@@ -103,7 +103,7 @@ contract WrapperBTest is WrapperBHarness {
         uint256 user1ExpectedMintableStethShares = _calcMaxMintableStShares(ctx, user1Deposit);
 
         vm.prank(USER1);
-        wrapperB(ctx).depositETH{value: user1Deposit}(USER1, address(0), wrapperB(ctx).MAX_MINTABLE_AMOUNT());
+        stvStETHPool(ctx).depositETH{value: user1Deposit}(USER1, address(0), stvStETHPool(ctx).MAX_MINTABLE_AMOUNT());
 
         _assertUniversalInvariants("Step 1", ctx);
 
@@ -113,7 +113,7 @@ contract WrapperBTest is WrapperBHarness {
             "stETH shares balance of USER1 should equal max mintable for deposit"
         );
         assertEq(
-            wrapperB(ctx).mintedStethSharesOf(USER1),
+            stvStETHPool(ctx).mintedStethSharesOf(USER1),
             user1ExpectedMintableStethShares,
             "Minted stETH shares should equal expected"
         );
@@ -122,7 +122,7 @@ contract WrapperBTest is WrapperBHarness {
             user1ExpectedMintableStethShares,
             "Vault's liability shares should equal minted shares"
         );
-        assertEq(wrapperB(ctx).mintingCapacitySharesOf(USER1), 0, "No additional mintable shares should remain");
+        assertEq(stvStETHPool(ctx).mintingCapacitySharesOf(USER1), 0, "No additional mintable shares should remain");
 
         //
         // Step 2: User deposits more ETH and mints max for new deposit
@@ -131,7 +131,7 @@ contract WrapperBTest is WrapperBHarness {
         uint256 user1ExpectedMintableStethShares2 = _calcMaxMintableStShares(ctx, user1Deposit2);
 
         vm.prank(USER1);
-        wrapperB(ctx).depositETH{value: user1Deposit2}(USER1, address(0), wrapperB(ctx).MAX_MINTABLE_AMOUNT());
+        stvStETHPool(ctx).depositETH{value: user1Deposit2}(USER1, address(0), stvStETHPool(ctx).MAX_MINTABLE_AMOUNT());
 
         _assertUniversalInvariants("Step 2", ctx);
 
@@ -148,7 +148,7 @@ contract WrapperBTest is WrapperBHarness {
     }
 
     function test_single_user_mints_full_in_two_steps() public {
-        WrapperContext memory ctx = _deployWrapperB(false, 0, 0);
+        WrapperContext memory ctx = _deployStvStETHPool(false, 0, 0);
 
         //
         // Step 1
@@ -157,18 +157,18 @@ contract WrapperBTest is WrapperBHarness {
         uint256 user1ExpectedMintableStethShares = _calcMaxMintableStShares(ctx, user1Deposit);
 
         vm.prank(USER1);
-        wrapperB(ctx).depositETH{value: user1Deposit}(USER1, address(0), 0);
+        stvStETHPool(ctx).depositETH{value: user1Deposit}(USER1, address(0), 0);
 
         // _assertUniversalInvariants("Step 1");
 
         assertEq(steth.sharesOf(USER1), 0, "stETH shares balance of USER1 should be equal to 0");
         assertEq(
-            wrapperB(ctx).mintingCapacitySharesOf(USER1),
+            stvStETHPool(ctx).mintingCapacitySharesOf(USER1),
             user1ExpectedMintableStethShares,
             "Mintable stETH shares should be equal to 0"
         );
         assertEq(
-            wrapperB(ctx).stethSharesForWithdrawal(USER1, ctx.wrapper.balanceOf(USER1)),
+            stvStETHPool(ctx).stethSharesForWithdrawal(USER1, ctx.pool.balanceOf(USER1)),
             0,
             "stETH shares for withdrawal should be equal to 0"
         );
@@ -187,7 +187,7 @@ contract WrapperBTest is WrapperBHarness {
         uint256 user1StSharesPart1 = user1ExpectedMintableStethShares / 3;
 
         vm.prank(USER1);
-        wrapperB(ctx).mintStethShares(user1StSharesPart1);
+        stvStETHPool(ctx).mintStethShares(user1StSharesPart1);
 
         _assertUniversalInvariants("Step 2", ctx);
 
@@ -197,7 +197,7 @@ contract WrapperBTest is WrapperBHarness {
             "stETH shares balance of USER1 should be equal to user1StSharesToMint"
         );
         assertEq(
-            wrapperB(ctx).stethSharesForWithdrawal(USER1, ctx.wrapper.balanceOf(USER1)),
+            stvStETHPool(ctx).stethSharesForWithdrawal(USER1, ctx.pool.balanceOf(USER1)),
             user1StSharesPart1,
             "stETH shares for withdrawal should be equal to user1StSharesToMint"
         );
@@ -213,7 +213,7 @@ contract WrapperBTest is WrapperBHarness {
             "Remaining minting capacity should be equal to user1ExpectedMintableStethShares - user1StSharesToMint"
         );
         assertEq(
-            wrapperB(ctx).mintingCapacitySharesOf(USER1),
+            stvStETHPool(ctx).mintingCapacitySharesOf(USER1),
             user1ExpectedMintableStethShares - user1StSharesPart1,
             "Remaining mintable should reduce exactly by minted part"
         );
@@ -224,7 +224,7 @@ contract WrapperBTest is WrapperBHarness {
         // Step 3
         //
         vm.prank(USER1);
-        wrapperB(ctx).mintStethShares(user1StSharesPart2);
+        stvStETHPool(ctx).mintStethShares(user1StSharesPart2);
 
         _assertUniversalInvariants("Step 3", ctx);
 
@@ -234,7 +234,7 @@ contract WrapperBTest is WrapperBHarness {
             "stETH shares balance of USER1 should be equal to user1StSharesToMint"
         );
         assertEq(
-            wrapperB(ctx).stethSharesForWithdrawal(USER1, ctx.wrapper.balanceOf(USER1)),
+            stvStETHPool(ctx).stethSharesForWithdrawal(USER1, ctx.pool.balanceOf(USER1)),
             user1ExpectedMintableStethShares,
             "stETH shares for withdrawal should be equal to user1StSharesToMint"
         );
@@ -245,11 +245,11 @@ contract WrapperBTest is WrapperBHarness {
         );
         // Still remaining capacity is higher due to CONNECT_DEPOSIT
         assertGt(ctx.dashboard.remainingMintingCapacityShares(0), 0, "Remaining minting capacity should be equal to 0");
-        assertEq(wrapperB(ctx).mintingCapacitySharesOf(USER1), 0, "Mintable stETH shares should be equal to 0");
+        assertEq(stvStETHPool(ctx).mintingCapacitySharesOf(USER1), 0, "Mintable stETH shares should be equal to 0");
     }
 
     function test_two_users_mint_full_in_two_steps() public {
-        WrapperContext memory ctx = _deployWrapperB(false, 0, 0);
+        WrapperContext memory ctx = _deployStvStETHPool(false, 0, 0);
 
         //
         // Step 1: User1 deposits ETH
@@ -258,11 +258,11 @@ contract WrapperBTest is WrapperBHarness {
         uint256 user1ExpectedMintableStethShares = _calcMaxMintableStShares(ctx, user1Deposit);
 
         vm.prank(USER1);
-        wrapperB(ctx).depositETH{value: user1Deposit}(USER1, address(0), 0);
+        stvStETHPool(ctx).depositETH{value: user1Deposit}(USER1, address(0), 0);
 
         assertEq(steth.sharesOf(USER1), 0, "stETH shares balance of USER1 should be equal to 0");
         assertEq(
-            wrapperB(ctx).mintingCapacitySharesOf(USER1),
+            stvStETHPool(ctx).mintingCapacitySharesOf(USER1),
             user1ExpectedMintableStethShares,
             "Mintable stETH shares for USER1 should equal expected"
         );
@@ -275,11 +275,11 @@ contract WrapperBTest is WrapperBHarness {
         uint256 user2ExpectedMintableStethShares = _calcMaxMintableStShares(ctx, user2Deposit);
 
         vm.prank(USER2);
-        wrapperB(ctx).depositETH{value: user2Deposit}(USER2, address(0), 0);
+        stvStETHPool(ctx).depositETH{value: user2Deposit}(USER2, address(0), 0);
 
         assertEq(steth.sharesOf(USER2), 0, "stETH shares balance of USER2 should be equal to 0");
         assertEq(
-            wrapperB(ctx).mintingCapacitySharesOf(USER2),
+            stvStETHPool(ctx).mintingCapacitySharesOf(USER2),
             user2ExpectedMintableStethShares,
             "Mintable stETH shares for USER2 should equal expected"
         );
@@ -304,18 +304,18 @@ contract WrapperBTest is WrapperBHarness {
         uint256 user1StSharesPart1 = user1ExpectedMintableStethShares / 3;
 
         vm.prank(USER1);
-        wrapperB(ctx).mintStethShares(user1StSharesPart1);
+        stvStETHPool(ctx).mintStethShares(user1StSharesPart1);
 
         _assertUniversalInvariants("Step 3", ctx);
 
         assertEq(steth.sharesOf(USER1), user1StSharesPart1, "USER1 stETH shares should equal part1 minted");
         assertEq(
-            wrapperB(ctx).stethSharesForWithdrawal(USER1, ctx.wrapper.balanceOf(USER1)),
+            stvStETHPool(ctx).stethSharesForWithdrawal(USER1, ctx.pool.balanceOf(USER1)),
             user1StSharesPart1,
             "USER1 stSharesForWithdrawal should equal part1 minted"
         );
         assertEq(
-            wrapperB(ctx).mintingCapacitySharesOf(USER1),
+            stvStETHPool(ctx).mintingCapacitySharesOf(USER1),
             user1ExpectedMintableStethShares - user1StSharesPart1,
             "USER1 remaining mintable should decrease by part1"
         );
@@ -329,18 +329,18 @@ contract WrapperBTest is WrapperBHarness {
         uint256 user2StSharesPart1 = user2ExpectedMintableStethShares / 3;
 
         vm.prank(USER2);
-        wrapperB(ctx).mintStethShares(user2StSharesPart1);
+        stvStETHPool(ctx).mintStethShares(user2StSharesPart1);
 
         _assertUniversalInvariants("Step 4", ctx);
 
         assertEq(steth.sharesOf(USER2), user2StSharesPart1, "USER2 stETH shares should equal part1 minted");
         assertEq(
-            wrapperB(ctx).stethSharesForWithdrawal(USER2, ctx.wrapper.balanceOf(USER2)),
+            stvStETHPool(ctx).stethSharesForWithdrawal(USER2, ctx.pool.balanceOf(USER2)),
             user2StSharesPart1,
             "USER2 stSharesForWithdrawal should equal part1 minted"
         );
         assertEq(
-            wrapperB(ctx).mintingCapacitySharesOf(USER2),
+            stvStETHPool(ctx).mintingCapacitySharesOf(USER2),
             user2ExpectedMintableStethShares - user2StSharesPart1,
             "USER2 remaining mintable should decrease by part1"
         );
@@ -356,7 +356,7 @@ contract WrapperBTest is WrapperBHarness {
         uint256 user1StSharesPart2 = user1ExpectedMintableStethShares - user1StSharesPart1;
 
         vm.prank(USER1);
-        wrapperB(ctx).mintStethShares(user1StSharesPart2);
+        stvStETHPool(ctx).mintStethShares(user1StSharesPart2);
 
         _assertUniversalInvariants("Step 5", ctx);
 
@@ -366,11 +366,11 @@ contract WrapperBTest is WrapperBHarness {
             "USER1 stETH shares should equal full expected after second mint"
         );
         assertEq(
-            wrapperB(ctx).stethSharesForWithdrawal(USER1, ctx.wrapper.balanceOf(USER1)),
+            stvStETHPool(ctx).stethSharesForWithdrawal(USER1, ctx.pool.balanceOf(USER1)),
             user1ExpectedMintableStethShares,
             "USER1 stSharesForWithdrawal should equal full expected"
         );
-        assertEq(wrapperB(ctx).mintingCapacitySharesOf(USER1), 0, "USER1 remaining mintable should be zero");
+        assertEq(stvStETHPool(ctx).mintingCapacitySharesOf(USER1), 0, "USER1 remaining mintable should be zero");
         assertEq(
             ctx.dashboard.liabilityShares(),
             user1ExpectedMintableStethShares + user2StSharesPart1,
@@ -383,7 +383,7 @@ contract WrapperBTest is WrapperBHarness {
         uint256 user2StSharesPart2 = user2ExpectedMintableStethShares - user2StSharesPart1;
 
         vm.prank(USER2);
-        wrapperB(ctx).mintStethShares(user2StSharesPart2);
+        stvStETHPool(ctx).mintStethShares(user2StSharesPart2);
 
         _assertUniversalInvariants("Step 6", ctx);
 
@@ -393,11 +393,11 @@ contract WrapperBTest is WrapperBHarness {
             "USER2 stETH shares should equal full expected after second mint"
         );
         assertEq(
-            wrapperB(ctx).stethSharesForWithdrawal(USER2, ctx.wrapper.balanceOf(USER2)),
+            stvStETHPool(ctx).stethSharesForWithdrawal(USER2, ctx.pool.balanceOf(USER2)),
             user2ExpectedMintableStethShares,
             "USER2 stSharesForWithdrawal should equal full expected"
         );
-        assertEq(wrapperB(ctx).mintingCapacitySharesOf(USER2), 0, "USER2 remaining mintable should be zero");
+        assertEq(stvStETHPool(ctx).mintingCapacitySharesOf(USER2), 0, "USER2 remaining mintable should be zero");
         // Still remaining capacity is higher due to CONNECT_DEPOSIT
         assertGt(
             ctx.dashboard.remainingMintingCapacityShares(0), 0, "Remaining minting capacity should be greater than 0"
@@ -410,7 +410,7 @@ contract WrapperBTest is WrapperBHarness {
     }
 
     function test_vault_underperforms() public {
-        WrapperContext memory ctx = _deployWrapperB(false, 0, 0);
+        WrapperContext memory ctx = _deployStvStETHPool(false, 0, 0);
 
         //
         // Step 1: User1 deposits
@@ -418,10 +418,10 @@ contract WrapperBTest is WrapperBHarness {
         uint256 user1Deposit = 200 ether;
         uint256 user1ExpectedMintable = _calcMaxMintableStShares(ctx, user1Deposit);
         vm.prank(USER1);
-        wrapperB(ctx).depositETH{value: user1Deposit}(USER1, address(0), user1ExpectedMintable);
+        stvStETHPool(ctx).depositETH{value: user1Deposit}(USER1, address(0), user1ExpectedMintable);
 
         assertEq(steth.sharesOf(USER1), user1ExpectedMintable, "USER1 stETH shares should equal expected minted");
-        assertEq(wrapperB(ctx).mintingCapacitySharesOf(USER1), 0, "USER1 remaining mintable should be zero");
+        assertEq(stvStETHPool(ctx).mintingCapacitySharesOf(USER1), 0, "USER1 remaining mintable should be zero");
         assertGt(
             ctx.dashboard.remainingMintingCapacityShares(0),
             0,
@@ -435,12 +435,12 @@ contract WrapperBTest is WrapperBHarness {
 
         uint256 user2Deposit = 10_000 wei;
         vm.prank(USER2);
-        wrapperB(ctx).depositETH{value: user2Deposit}(USER2, address(0), 0);
+        stvStETHPool(ctx).depositETH{value: user2Deposit}(USER2, address(0), 0);
 
         {
             uint256 user2ExpectedMintableStethShares = _calcMaxMintableStShares(ctx, user2Deposit);
             assertLe(
-                wrapperB(ctx).mintingCapacitySharesOf(USER2),
+                stvStETHPool(ctx).mintingCapacitySharesOf(USER2),
                 user2ExpectedMintableStethShares,
                 "USER2 mintable stETH shares should not exceed expected after underperformance"
             );
@@ -453,8 +453,8 @@ contract WrapperBTest is WrapperBHarness {
     }
 
     function test_user_withdraws_without_burning() public {
-        WrapperContext memory ctx = _deployWrapperB(false, 0, 0);
-        WrapperB w = wrapperB(ctx);
+        WrapperContext memory ctx = _deployStvStETHPool(false, 0, 0);
+        StvStETHPool w = stvStETHPool(ctx);
 
         //
         // Step 1: User1 deposits
@@ -568,7 +568,7 @@ contract WrapperBTest is WrapperBHarness {
         assertGt(w.balanceOf(USER1), stvFor1Wei, "USER1 stv balance should be greater than stvFor1Wei");
 
         vm.startPrank(USER1);
-        vm.expectRevert(WrapperB.InsufficientReservedBalance.selector);
+        vm.expectRevert(StvStETHPool.InsufficientReservedBalance.selector);
         w.requestWithdrawal(stvFor1Wei);
         vm.stopPrank();
 
@@ -580,11 +580,11 @@ contract WrapperBTest is WrapperBHarness {
 
         vm.startPrank(USER1);
 
-        vm.expectRevert(WrapperB.InsufficientReservedBalance.selector);
+        vm.expectRevert(StvStETHPool.InsufficientReservedBalance.selector);
         w.requestWithdrawal(stvForMinWithdrawal);
 
         steth.approve(address(w), steth.getPooledEthByShares(stethSharesToBurn));
-        vm.expectRevert(WrapperB.InsufficientReservedBalance.selector);
+        vm.expectRevert(StvStETHPool.InsufficientReservedBalance.selector);
         w.requestWithdrawal(stvForMinWithdrawal);
 
         steth.increaseAllowance(address(w), steth.getPooledEthByShares(1));
@@ -671,11 +671,11 @@ contract WrapperBTest is WrapperBHarness {
 
     /**
      * @notice Test transferWithLiability enforces reserve ratio for sender
-     * @dev Verifies that after transfer with liability, sender cannot decrease collateral below wrapper RR
+     * @dev Verifies that after transfer with liability, sender cannot decrease collateral below pool RR
      */
     function test_transferWithLiability_maintains_sender_reserve_ratio() public {
-        WrapperContext memory ctx = _deployWrapperB(false, 0, DEFAULT_WRAPPER_RR_GAP);
-        WrapperB w = wrapperB(ctx);
+        WrapperContext memory ctx = _deployStvStETHPool(false, 0, DEFAULT_WRAPPER_RR_GAP);
+        StvStETHPool w = stvStETHPool(ctx);
 
         //
         // Step 1: USER1 deposits and mints stETH shares
@@ -704,7 +704,7 @@ contract WrapperBTest is WrapperBHarness {
         uint256 excessiveStvToTransfer = user1Stv - minStvForHalfShares + 1;
 
         vm.startPrank(USER1);
-        vm.expectRevert(WrapperB.InsufficientReservedBalance.selector);
+        vm.expectRevert(StvStETHPool.InsufficientReservedBalance.selector);
         w.transferWithLiability(USER2, excessiveStvToTransfer, user1MintedShares / 2);
         vm.stopPrank();
 
@@ -739,7 +739,7 @@ contract WrapperBTest is WrapperBHarness {
         uint256 user1RemainingShares = w.mintedStethSharesOf(USER1);
 
         vm.startPrank(USER1);
-        vm.expectRevert(WrapperB.InsufficientReservedBalance.selector);
+        vm.expectRevert(StvStETHPool.InsufficientReservedBalance.selector);
         w.transfer(USER2, user1RemainingStv);
         vm.stopPrank();
 
@@ -782,8 +782,8 @@ contract WrapperBTest is WrapperBHarness {
      * @notice Test regular transfer reverts when sender would have insufficient collateral for minted shares
      */
     function test_transfer_reverts_when_insufficient_collateral_for_minted_shares() public {
-        WrapperContext memory ctx = _deployWrapperB(false, 0, DEFAULT_WRAPPER_RR_GAP);
-        WrapperB w = wrapperB(ctx);
+        WrapperContext memory ctx = _deployStvStETHPool(false, 0, DEFAULT_WRAPPER_RR_GAP);
+        StvStETHPool w = stvStETHPool(ctx);
 
         // User deposits and mints maximum stETH shares
         uint256 userDeposit = 100 ether;
@@ -792,7 +792,7 @@ contract WrapperBTest is WrapperBHarness {
         w.depositETH{value: userDeposit}(USER1, address(0), _calcMaxMintableStShares(ctx, userDeposit));
 
         vm.startPrank(USER1);
-        vm.expectRevert(WrapperB.InsufficientReservedBalance.selector);
+        vm.expectRevert(StvStETHPool.InsufficientReservedBalance.selector);
         w.transfer(USER2, 1);
         vm.stopPrank();
     }
@@ -801,8 +801,8 @@ contract WrapperBTest is WrapperBHarness {
      * @notice Test transferWithLiability fails when stv is insufficient for liability being transferred
      */
     function test_transferWithLiability_reverts_when_stv_insufficient_for_liability() public {
-        WrapperContext memory ctx = _deployWrapperB(false, 0, DEFAULT_WRAPPER_RR_GAP);
-        WrapperB w = wrapperB(ctx);
+        WrapperContext memory ctx = _deployStvStETHPool(false, 0, DEFAULT_WRAPPER_RR_GAP);
+        StvStETHPool w = stvStETHPool(ctx);
 
         uint256 user1Deposit = 50 ether;
         vm.prank(USER1);
@@ -813,7 +813,7 @@ contract WrapperBTest is WrapperBHarness {
 
         // Transfer with insufficient stv fails
         vm.startPrank(USER1);
-        vm.expectRevert(WrapperB.InsufficientStv.selector);
+        vm.expectRevert(StvStETHPool.InsufficientStv.selector);
         w.transferWithLiability(USER2, minStvRequired - 1, sharesToTransfer);
         vm.stopPrank();
 
@@ -823,11 +823,11 @@ contract WrapperBTest is WrapperBHarness {
     }
 
     /**
-     * @notice Test behavior after vault loss causes collateral to drop below wrapper RR
+     * @notice Test behavior after vault loss causes collateral to drop below pool RR
      */
     function test_after_vault_loss_user_below_reserve_ratio() public {
-        WrapperContext memory ctx = _deployWrapperB(false, 0, DEFAULT_WRAPPER_RR_GAP);
-        WrapperB w = wrapperB(ctx);
+        WrapperContext memory ctx = _deployStvStETHPool(false, 0, DEFAULT_WRAPPER_RR_GAP);
+        StvStETHPool w = stvStETHPool(ctx);
 
         // User deposits and mints max shares
         uint256 userDeposit = 100 ether;
@@ -842,7 +842,7 @@ contract WrapperBTest is WrapperBHarness {
 
         // Regular transfer fails - insufficient collateral
         vm.startPrank(USER1);
-        vm.expectRevert(WrapperB.InsufficientReservedBalance.selector);
+        vm.expectRevert(StvStETHPool.InsufficientReservedBalance.selector);
         w.transfer(USER2, 1);
         vm.stopPrank();
 
@@ -862,7 +862,7 @@ contract WrapperBTest is WrapperBHarness {
         } else {
             // Need to transfer more liability to make it work
             vm.startPrank(USER1);
-            vm.expectRevert(WrapperB.InsufficientReservedBalance.selector);
+            vm.expectRevert(StvStETHPool.InsufficientReservedBalance.selector);
             w.transferWithLiability(USER2, minStvForTransfer, sharesToTransfer);
             vm.stopPrank();
         }
@@ -872,8 +872,8 @@ contract WrapperBTest is WrapperBHarness {
      * @notice Test burning stETH shares restores ability to transfer after vault loss
      */
     function test_burning_shares_after_vault_loss_allows_transfer() public {
-        WrapperContext memory ctx = _deployWrapperB(false, 0, DEFAULT_WRAPPER_RR_GAP);
-        WrapperB w = wrapperB(ctx);
+        WrapperContext memory ctx = _deployStvStETHPool(false, 0, DEFAULT_WRAPPER_RR_GAP);
+        StvStETHPool w = stvStETHPool(ctx);
         IStETH steth = core.steth();
 
         // User deposits and mints max shares
@@ -887,7 +887,7 @@ contract WrapperBTest is WrapperBHarness {
 
         // Transfer fails
         vm.startPrank(USER1);
-        vm.expectRevert(WrapperB.InsufficientReservedBalance.selector);
+        vm.expectRevert(StvStETHPool.InsufficientReservedBalance.selector);
         w.transfer(USER2, 1 ether);
 
         // Burn enough shares to restore ratio
@@ -907,8 +907,8 @@ contract WrapperBTest is WrapperBHarness {
      * @notice Test user can transfer excess stv after vault gains without transferring liability
      */
     function test_after_vault_gains_can_transfer_excess_without_liability() public {
-        WrapperContext memory ctx = _deployWrapperB(false, 0, DEFAULT_WRAPPER_RR_GAP);
-        WrapperB w = wrapperB(ctx);
+        WrapperContext memory ctx = _deployStvStETHPool(false, 0, DEFAULT_WRAPPER_RR_GAP);
+        StvStETHPool w = stvStETHPool(ctx);
 
         // User deposits and mints max shares
         uint256 userDeposit = 100 ether;
@@ -917,7 +917,7 @@ contract WrapperBTest is WrapperBHarness {
 
         // Initially can't transfer - at exact reserve ratio
         vm.startPrank(USER1);
-        vm.expectRevert(WrapperB.InsufficientReservedBalance.selector);
+        vm.expectRevert(StvStETHPool.InsufficientReservedBalance.selector);
         w.transfer(USER2, 1);
         vm.stopPrank();
 
@@ -940,8 +940,8 @@ contract WrapperBTest is WrapperBHarness {
      * @notice Test user can transfer more stv than required with liability (overpaying)
      */
     function test_transferWithLiability_can_overpay_stv() public {
-        WrapperContext memory ctx = _deployWrapperB(false, 0, DEFAULT_WRAPPER_RR_GAP);
-        WrapperB w = wrapperB(ctx);
+        WrapperContext memory ctx = _deployStvStETHPool(false, 0, DEFAULT_WRAPPER_RR_GAP);
+        StvStETHPool w = stvStETHPool(ctx);
 
         // User deposits and mints
         uint256 userDeposit = 100 ether;
@@ -965,8 +965,8 @@ contract WrapperBTest is WrapperBHarness {
      * @notice Test user with no minted shares can transfer freely
      */
     function test_user_with_no_minted_shares_can_transfer_freely() public {
-        WrapperContext memory ctx = _deployWrapperB(false, 0, DEFAULT_WRAPPER_RR_GAP);
-        WrapperB w = wrapperB(ctx);
+        WrapperContext memory ctx = _deployStvStETHPool(false, 0, DEFAULT_WRAPPER_RR_GAP);
+        StvStETHPool w = stvStETHPool(ctx);
 
         // User deposits WITHOUT minting shares
         vm.prank(USER1);
@@ -986,8 +986,8 @@ contract WrapperBTest is WrapperBHarness {
      * @notice Test after vault gains user can mint additional shares from rewards
      */
     function xtest_after_vault_gains_can_mint_from_rewards() public {
-        WrapperContext memory ctx = _deployWrapperB(false, 0, DEFAULT_WRAPPER_RR_GAP);
-        WrapperB w = wrapperB(ctx);
+        WrapperContext memory ctx = _deployStvStETHPool(false, 0, DEFAULT_WRAPPER_RR_GAP);
+        StvStETHPool w = stvStETHPool(ctx);
 
         // User deposits and mints max
         uint256 userDeposit = 100 ether;
@@ -1016,8 +1016,8 @@ contract WrapperBTest is WrapperBHarness {
      * @notice Test transferring all liability with all stv works
      */
     function test_transferWithLiability_all_stv_and_liability() public {
-        WrapperContext memory ctx = _deployWrapperB(false, 0, DEFAULT_WRAPPER_RR_GAP);
-        WrapperB w = wrapperB(ctx);
+        WrapperContext memory ctx = _deployStvStETHPool(false, 0, DEFAULT_WRAPPER_RR_GAP);
+        StvStETHPool w = stvStETHPool(ctx);
 
         // User deposits and mints
         vm.prank(USER1);

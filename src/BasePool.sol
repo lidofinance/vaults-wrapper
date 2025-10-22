@@ -12,7 +12,7 @@ import {IVaultHub} from "./interfaces/IVaultHub.sol";
 import {IDashboard} from "./interfaces/IDashboard.sol";
 import {AllowList} from "./AllowList.sol";
 
-abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList {
+abstract contract BasePool is Initializable, ERC20Upgradeable, AllowList {
     using EnumerableSet for EnumerableSet.UintSet;
 
     // Custom errors
@@ -44,18 +44,18 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList {
 
     WithdrawalQueue public immutable WITHDRAWAL_QUEUE;
 
-    /// @custom:storage-location erc7201:wrapper.base.storage
-    struct WrapperBaseStorage {
+    /// @custom:storage-location erc7201:base.pool.storage
+    struct BasePoolStorage {
         bool vaultDisconnected;
     }
 
-    // keccak256(abi.encode(uint256(keccak256("wrapper.base.storage")) - 1)) & ~bytes32(uint256(0xff))
-    bytes32 private constant WRAPPER_BASE_STORAGE_LOCATION =
+    // keccak256(abi.encode(uint256(keccak256("base.pool.storage")) - 1)) & ~bytes32(uint256(0xff))
+    bytes32 private constant BASE_POOL_STORAGE_LOCATION =
         0x8405b42399982e28cdd42aed39df9522715c70c841209124c7b936e15fd30300;
 
-    function _getWrapperBaseStorage() internal pure returns (WrapperBaseStorage storage $) {
+    function _getBasePoolStorage() internal pure returns (BasePoolStorage storage $) {
         assembly {
-            $.slot := WRAPPER_BASE_STORAGE_LOCATION
+            $.slot := BASE_POOL_STORAGE_LOCATION
         }
     }
 
@@ -64,7 +64,7 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList {
     }
 
     function vaultDisconnected() public view returns (bool) {
-        return _getWrapperBaseStorage().vaultDisconnected;
+        return _getBasePoolStorage().vaultDisconnected;
     }
 
     event VaultFunded(uint256 amount);
@@ -98,10 +98,10 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList {
         string memory _name,
         string memory _symbol
     ) public virtual initializer {
-        _initializeWrapperBase(_owner, _name, _symbol);
+        _initializeBasePool(_owner, _name, _symbol);
     }
 
-    function _initializeWrapperBase(
+    function _initializeBasePool(
         address _owner,
         string memory _name,
         string memory _symbol
@@ -129,7 +129,7 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList {
     // =================================================================================
 
     /**
-     * @notice Total nominal assets managed by the wrapper
+     * @notice Total nominal assets managed by the pool
      * @return assets Total nominal assets (18 decimals)
      * @dev Don't subtract CONNECT_DEPOSIT because we mint tokens for it
      */
@@ -147,7 +147,7 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList {
     }
 
     /**
-     * @notice Total assets managed by the wrapper
+     * @notice Total assets managed by the pool
      * @return assets Total assets (18 decimals)
      * @dev Overridable method to include other assets if needed
      */
@@ -260,8 +260,8 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList {
     }
 
     function _deposit(address _receiver, address _referral) internal returns (uint256 stv) {
-        if (msg.value == 0) revert WrapperBase.ZeroDeposit();
-        if (_receiver == address(0)) revert WrapperBase.InvalidReceiver();
+        if (msg.value == 0) revert BasePool.ZeroDeposit();
+        if (_receiver == address(0)) revert BasePool.InvalidReceiver();
         _checkAllowList();
 
         stv = previewDeposit(msg.value);
@@ -347,7 +347,7 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList {
      * @dev Overridden method from ERC20 to prevent updates if there are unassigned liability
      */
     function _update(address _from, address _to, uint256 _value) internal virtual override {
-        // In rare scenarios, the vault could have liability shares that are not assigned to any wrapper users
+        // In rare scenarios, the vault could have liability shares that are not assigned to any pool users
         // In such cases, it prevents any transfers until the unassigned liability is rebalanced
         _checkNoUnassignedLiability();
         super._update(_from, _to, _value);
@@ -507,7 +507,7 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList {
             revert("Vault not disconnected yet");
         }
 
-        _getWrapperBaseStorage().vaultDisconnected = true;
+        _getBasePoolStorage().vaultDisconnected = true;
 
         // After disconnection, the connect deposit is available in the vault
         uint256 vaultBalance = address(STAKING_VAULT).balance;

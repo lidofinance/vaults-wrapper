@@ -13,7 +13,7 @@ test-integration-a:
 	FOUNDRY_PROFILE=test \
 	CORE_DEPLOYED_JSON="$$CORE_DEPLOYED_JSON" \
 	forge test \
-		test/integration/wrapper-a.test.sol \
+		test/integration/stv-pool.test.sol \
 		-$(VERBOSITY) \
 		--fork-url "$$RPC_URL"
 
@@ -22,7 +22,7 @@ test-integration-b:
 	FOUNDRY_PROFILE=test \
 	CORE_DEPLOYED_JSON="$$CORE_DEPLOYED_JSON" \
 	forge test \
-		test/integration/wrapper-b.test.sol \
+		test/integration/stv-steth-pool.test.sol \
 		-$(VERBOSITY) \
 		--fork-url "$$RPC_URL"
 
@@ -130,10 +130,10 @@ publish-wrapper-sources:
 	fi; \
 	if [ -z "$$WRAPPER_CONTRACT" ]; then \
 		case "$$WRAPPER_TYPE" in \
-			"0") WRAPPER_CONTRACT="src/WrapperA.sol:WrapperA";; \
-			"1") WRAPPER_CONTRACT="src/WrapperB.sol:WrapperB";; \
-			"2"|"3") WRAPPER_CONTRACT="src/WrapperC.sol:WrapperC";; \
-			*) WRAPPER_CONTRACT="src/WrapperA.sol:WrapperA";; \
+			"0") WRAPPER_CONTRACT="src/StvPool.sol:StvPool";; \
+			"1") WRAPPER_CONTRACT="src/StvStETHPool.sol:StvStETHPool";; \
+			"2"|"3") WRAPPER_CONTRACT="src/StvStrategyPool.sol:StvStrategyPool";; \
+			*) WRAPPER_CONTRACT="src/StvPool.sol:StvPool";; \
 		esac; \
 	fi; \
 		forge verify-contract $$ADDR_WRAPPER src/proxy/OssifiableProxy.sol:OssifiableProxy \

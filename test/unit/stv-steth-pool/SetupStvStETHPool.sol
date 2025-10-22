@@ -3,25 +3,29 @@ pragma solidity >=0.8.25;
 
 import {Test} from "forge-std/Test.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
-import {WrapperA} from "src/WrapperA.sol";
+
+import {StvStETHPool} from "src/StvStETHPool.sol";
 import {MockDashboard, MockDashboardFactory} from "test/mocks/MockDashboard.sol";
 import {MockStETH} from "test/mocks/MockStETH.sol";
 
-abstract contract SetupWrapperA is Test {
-    WrapperA public wrapper;
+abstract contract SetupStvStETHPool is Test {
+    StvStETHPool public pool;
     MockDashboard public dashboard;
     MockStETH public steth;
 
     address public owner;
+    address public withdrawalQueue;
     address public userAlice;
     address public userBob;
 
     uint256 public constant initialDeposit = 1 ether;
+    uint256 public constant reserveRatioGapBP = 5_00; // 5%
 
     function setUp() public virtual {
         owner = makeAddr("owner");
         userAlice = makeAddr("userAlice");
         userBob = makeAddr("userBob");
+        withdrawalQueue = makeAddr("withdrawalQueue");
 
         // Fund accounts
         vm.deal(owner, 100 ether);
@@ -35,11 +39,11 @@ abstract contract SetupWrapperA is Test {
         // Fund the dashboard with 1 ETH
         dashboard.fund{value: initialDeposit}();
 
-        // Deploy the wrapper
-        WrapperA wrapperImpl = new WrapperA(address(dashboard), false, address(0));
-        ERC1967Proxy wrapperProxy = new ERC1967Proxy(address(wrapperImpl), "");
+        // Deploy the pool with mock withdrawal queue
+        StvStETHPool poolImpl = new StvStETHPool(address(dashboard), false, reserveRatioGapBP, withdrawalQueue);
+        ERC1967Proxy poolProxy = new ERC1967Proxy(address(poolImpl), "");
 
-        wrapper = WrapperA(payable(wrapperProxy));
-        wrapper.initialize(owner, "Test", "stvETH");
+        pool = StvStETHPool(payable(poolProxy));
+        pool.initialize(owner, "Test", "stvETH");
     }
 }

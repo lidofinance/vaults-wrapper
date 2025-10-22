@@ -5,7 +5,7 @@ import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
 
 contract WithdrawalQueueFactory {
     function deploy(
-        address _wrapper,
+        address _pool,
         address _dashboard,
         address _vaultHub,
         address _steth,
@@ -18,7 +18,7 @@ contract WithdrawalQueueFactory {
         returns (address impl)
     {
         impl = address(new WithdrawalQueue(
-            _wrapper,
+            _pool,
             _dashboard,
             _vaultHub,
             _steth,

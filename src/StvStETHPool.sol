@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >=0.8.25;
 
-import {WrapperBase} from "./WrapperBase.sol";
+import {BasePool} from "./BasePool.sol";
 import {ERC20Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
@@ -12,10 +12,10 @@ import {WithdrawalQueue} from "./WithdrawalQueue.sol";
 import {IStETH} from "./interfaces/IStETH.sol";
 
 /**
- * @title WrapperB
+ * @title StvStETHPool
  * @notice Configuration B: Minting, no strategy - stv + maximum stETH minting for user
  */
-contract WrapperB is WrapperBase {
+contract StvStETHPool is BasePool {
     using EnumerableSet for EnumerableSet.UintSet;
 
     event StethSharesMinted(address indexed account, uint256 stethShares);
@@ -33,24 +33,24 @@ contract WrapperB is WrapperBase {
     error MintingForThanTargetStSharesShareIsNotAllowed();
     error ArraysLengthMismatch(uint256 firstArrayLength, uint256 secondArrayLength);
 
-    uint256 public immutable WRAPPER_RR_BP; // vault's reserve ratio plus gap for wrapper
+    uint256 public immutable WRAPPER_RR_BP; // vault's reserve ratio plus gap for pool
 
     /// @notice Sentinel value for depositETH to mint maximum available stETH shares for the deposit
     uint256 public constant MAX_MINTABLE_AMOUNT = type(uint256).max;
 
-    /// @custom:storage-location erc7201:wrapper.b.storage
-    struct WrapperBStorage {
+    /// @custom:storage-location erc7201:pool.b.storage
+    struct StvStETHPoolStorage {
         mapping(address => uint256) mintedStethShares;
         uint256 totalMintedStethShares;
     }
 
-    // keccak256(abi.encode(uint256(keccak256("wrapper.b.storage")) - 1)) & ~bytes32(uint256(0xff))
-    bytes32 private constant WRAPPER_B_STORAGE_LOCATION =
+    // keccak256(abi.encode(uint256(keccak256("pool.b.storage")) - 1)) & ~bytes32(uint256(0xff))
+    bytes32 private constant STV_STETH_POOL_STORAGE_LOCATION =
         0x68280b7606a1a98bf19dd7ad4cb88029b355c2c81a554f53b998c73f934e4400;
 
-    function _getWrapperBStorage() internal pure returns (WrapperBStorage storage $) {
+    function _getStvStETHPoolStorage() internal pure returns (StvStETHPoolStorage storage $) {
         assembly {
-            $.slot := WRAPPER_B_STORAGE_LOCATION
+            $.slot := STV_STETH_POOL_STORAGE_LOCATION
         }
     }
 
@@ -59,7 +59,7 @@ contract WrapperB is WrapperBase {
         bool _allowListEnabled,
         uint256 _reserveRatioGapBP,
         address _withdrawalQueue
-    ) WrapperBase(_dashboard, _allowListEnabled, _withdrawalQueue) {
+    ) BasePool(_dashboard, _allowListEnabled, _withdrawalQueue) {
         uint256 vaultRR = DASHBOARD.vaultConnection().reserveRatioBP;
         require(_reserveRatioGapBP < TOTAL_BASIS_POINTS - vaultRR, "Reserve ratio gap too high");
         WRAPPER_RR_BP = vaultRR + _reserveRatioGapBP;
@@ -70,14 +70,14 @@ contract WrapperB is WrapperBase {
         string memory _name,
         string memory _symbol
     ) public override initializer {
-        _initializeWrapperBase(_owner, _name, _symbol);
+        _initializeBasePool(_owner, _name, _symbol);
 
         // Approve max stETH to the Dashboard for burning
         STETH.approve(address(DASHBOARD), type(uint256).max);
     }
 
     function wrapperType() external pure virtual override returns (string memory) {
-        return "WrapperB";
+        return "StvStETHPool";
     }
 
     // =================================================================================
@@ -190,7 +190,7 @@ contract WrapperB is WrapperBase {
         uint256 _stethSharesToRebalance,
         address _receiver
     ) public virtual returns (uint256 requestId) {
-        if (_stvToWithdraw == 0) revert WrapperBase.ZeroStv();
+        if (_stvToWithdraw == 0) revert BasePool.ZeroStv();
 
         if (_stethSharesToBurn > 0) {
             _burnStethShares(msg.sender, _stethSharesToBurn);
@@ -260,7 +260,7 @@ contract WrapperB is WrapperBase {
     // =================================================================================
 
     /**
-     * @notice Total assets managed by the wrapper
+     * @notice Total assets managed by the pool
      * @return assets Total assets (18 decimals)
      * @dev Includes totalAssets + total exceeding minted stETH shares
      */
@@ -293,20 +293,20 @@ contract WrapperB is WrapperBase {
     // =================================================================================
 
     /**
-     * @notice Total stETH shares minted by the wrapper
+     * @notice Total stETH shares minted by the pool
      * @return stethShares Total stETH shares minted (18 decimals)
      */
     function totalMintedStethShares() public view returns (uint256 stethShares) {
-        stethShares = _getWrapperBStorage().totalMintedStethShares;
+        stethShares = _getStvStETHPoolStorage().totalMintedStethShares;
     }
 
     /**
-     * @notice Amount of stETH shares minted by the wrapper for a specific account
+     * @notice Amount of stETH shares minted by the pool for a specific account
      * @param _account The address of the account
      * @return stethShares Amount of stETH shares minted (18 decimals)
      */
     function mintedStethSharesOf(address _account) public view returns (uint256 stethShares) {
-        stethShares = _getWrapperBStorage().mintedStethShares[_account];
+        stethShares = _getStvStETHPoolStorage().mintedStethShares[_account];
     }
 
     /**
@@ -350,7 +350,7 @@ contract WrapperB is WrapperBase {
 
         DASHBOARD.mintShares(_account, _stethShares);
 
-        WrapperBStorage storage $ = _getWrapperBStorage();
+        StvStETHPoolStorage storage $ = _getStvStETHPoolStorage();
         $.totalMintedStethShares += _stethShares;
         $.mintedStethShares[_account] += _stethShares;
 
@@ -373,7 +373,7 @@ contract WrapperB is WrapperBase {
     }
 
     function _decreaseMintedStethShares(address _account, uint256 _stethShares) internal {
-        WrapperBStorage storage $ = _getWrapperBStorage();
+        StvStETHPoolStorage storage $ = _getStvStETHPoolStorage();
 
         if (_stethShares == 0) revert ZeroArgument();
         if ($.mintedStethShares[_account] < _stethShares) revert InsufficientMintedShares();
@@ -385,7 +385,7 @@ contract WrapperB is WrapperBase {
     }
 
     function _transferStethSharesLiability(address _from, address _to, uint256 _stethShares) internal {
-        WrapperBStorage storage $ = _getWrapperBStorage();
+        StvStETHPoolStorage storage $ = _getStvStETHPoolStorage();
 
         if (_stethShares == 0) revert ZeroArgument();
         if ($.mintedStethShares[_from] < _stethShares) revert InsufficientMintedShares();
@@ -497,7 +497,7 @@ contract WrapperB is WrapperBase {
     /**
      * @notice Total unassigned liability shares in the Staking Vault
      * @return unassignedLiabilityShares Total unassigned liability shares (18 decimals)
-     * @dev Overridden method from WrapperBase to include unassigned liability shares
+     * @dev Overridden method from BasePool to include unassigned liability shares
      * @dev May occur if liability was transferred from another Staking Vault
      */
     function totalUnassignedLiabilityShares() public view override returns (uint256 unassignedLiabilityShares) {

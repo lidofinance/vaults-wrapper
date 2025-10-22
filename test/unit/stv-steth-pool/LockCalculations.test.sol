@@ -4,28 +4,28 @@ pragma solidity >=0.8.25;
 import {Test} from "forge-std/Test.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
-import {SetupWrapperB} from "./SetupWrapperB.sol";
+import {SetupStvStETHPool} from "./SetupStvStETHPool.sol";
 
-contract LockCalculationsTest is Test, SetupWrapperB {
+contract LockCalculationsTest is Test, SetupStvStETHPool {
     function setUp() public override {
         super.setUp();
-        wrapper.depositETH{value: 10 ether}();
+        pool.depositETH{value: 10 ether}();
     }
 
     function test_CalcAssetsToLockForStethShares_Zero() public view {
-        assertEq(wrapper.calcAssetsToLockForStethShares(0), 0);
+        assertEq(pool.calcAssetsToLockForStethShares(0), 0);
     }
 
     function test_CalcStvToLockForStethShares_Zero() public view {
-        assertEq(wrapper.calcStvToLockForStethShares(0), 0);
+        assertEq(pool.calcStvToLockForStethShares(0), 0);
     }
 
     function test_CalcStethSharesToMintForStv_Zero() public view {
-        assertEq(wrapper.calcStethSharesToMintForStv(0), 0);
+        assertEq(pool.calcStethSharesToMintForStv(0), 0);
     }
 
     function test_CalcStethSharesToMintForAssets_Zero() public view {
-        assertEq(wrapper.calcStethSharesToMintForAssets(0), 0);
+        assertEq(pool.calcStethSharesToMintForAssets(0), 0);
     }
 
     function test_CalcAssetsToLockForStethShares_Calculation() public view {
@@ -34,12 +34,12 @@ contract LockCalculationsTest is Test, SetupWrapperB {
         uint256 steth = steth.getPooledEthBySharesRoundUp(shares); // rounds up
         uint256 expectedAssets = Math.mulDiv(
             steth,
-            wrapper.TOTAL_BASIS_POINTS(),
-            wrapper.TOTAL_BASIS_POINTS() - wrapper.WRAPPER_RR_BP(),
+            pool.TOTAL_BASIS_POINTS(),
+            pool.TOTAL_BASIS_POINTS() - pool.WRAPPER_RR_BP(),
             Math.Rounding.Ceil // rounds up
         );
 
-        assertEq(wrapper.calcAssetsToLockForStethShares(shares), expectedAssets);
+        assertEq(pool.calcAssetsToLockForStethShares(shares), expectedAssets);
     }
 
     function test_CalcStvToLockForStethShares_Calculation() public view {
@@ -48,33 +48,33 @@ contract LockCalculationsTest is Test, SetupWrapperB {
         uint256 steth = steth.getPooledEthBySharesRoundUp(shares); // rounds up
         uint256 expectedAssets = Math.mulDiv(
             steth,
-            wrapper.TOTAL_BASIS_POINTS(),
-            wrapper.TOTAL_BASIS_POINTS() - wrapper.WRAPPER_RR_BP(),
+            pool.TOTAL_BASIS_POINTS(),
+            pool.TOTAL_BASIS_POINTS() - pool.WRAPPER_RR_BP(),
             Math.Rounding.Ceil // rounds up
         );
         uint256 expectedStv = Math.mulDiv(
             expectedAssets,
-            wrapper.totalSupply(),
-            wrapper.totalAssets(),
+            pool.totalSupply(),
+            pool.totalAssets(),
             Math.Rounding.Ceil // rounds up
         );
 
-        assertEq(wrapper.calcStvToLockForStethShares(shares), expectedStv);
+        assertEq(pool.calcStvToLockForStethShares(shares), expectedStv);
     }
 
     function test_CalcStethSharesToMintForStv_Calculation() public view {
         uint256 stv = 1e27;
 
-        uint256 assets = Math.mulDiv(stv, wrapper.totalAssets(), wrapper.totalSupply(), Math.Rounding.Floor);
+        uint256 assets = Math.mulDiv(stv, pool.totalAssets(), pool.totalSupply(), Math.Rounding.Floor);
         uint256 maxStethToMint = Math.mulDiv(
             assets,
-            wrapper.TOTAL_BASIS_POINTS() - wrapper.WRAPPER_RR_BP(),
-            wrapper.TOTAL_BASIS_POINTS(),
+            pool.TOTAL_BASIS_POINTS() - pool.WRAPPER_RR_BP(),
+            pool.TOTAL_BASIS_POINTS(),
             Math.Rounding.Floor // rounds down
         );
         uint256 expectedStethShares = steth.getSharesByPooledEth(maxStethToMint); // rounds down
 
-        assertEq(wrapper.calcStethSharesToMintForStv(stv), expectedStethShares);
+        assertEq(pool.calcStethSharesToMintForStv(stv), expectedStethShares);
     }
 
     function test_CalcStethSharesToMintForAssets_Calculation() public view {
@@ -82,12 +82,12 @@ contract LockCalculationsTest is Test, SetupWrapperB {
 
         uint256 maxStethToMint = Math.mulDiv(
             assets,
-            wrapper.TOTAL_BASIS_POINTS() - wrapper.WRAPPER_RR_BP(),
-            wrapper.TOTAL_BASIS_POINTS(),
+            pool.TOTAL_BASIS_POINTS() - pool.WRAPPER_RR_BP(),
+            pool.TOTAL_BASIS_POINTS(),
             Math.Rounding.Floor // rounds down
         );
         uint256 expectedStethShares = steth.getSharesByPooledEth(maxStethToMint); // rounds down
 
-        assertEq(wrapper.calcStethSharesToMintForAssets(assets), expectedStethShares);
+        assertEq(pool.calcStethSharesToMintForAssets(assets), expectedStethShares);
     }
 }

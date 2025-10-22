@@ -3,14 +3,14 @@ pragma solidity >=0.8.25;
 
 import "forge-std/Script.sol";
 import {Factory} from "src/Factory.sol";
-import {WrapperC} from "src/WrapperC.sol";
+import {StvStrategyPool} from "src/StvStrategyPool.sol";
 import {IStETH} from "src/interfaces/IStETH.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
 import {IOssifiableProxy} from "src/interfaces/IOssifiableProxy.sol";
 
 contract DeployWrapper is Script {
     struct WrapperParams {
-        uint256 wrapperType; // 0:A, 1:B, 2:LOOP, 3:GGV
+        uint256 poolType; // 0:A, 1:B, 2:LOOP, 3:GGV
         address nodeOperator;
         address nodeOperatorManager;
         uint256 nodeOperatorFeeBP;
@@ -35,7 +35,7 @@ contract DeployWrapper is Script {
 
     function _readWrapperParams(string memory path) internal view returns (WrapperParams memory p) {
         string memory json = vm.readFile(path);
-        p.wrapperType = vm.parseJsonUint(json, "$.wrapperType");
+        p.poolType = vm.parseJsonUint(json, "$.poolType");
         p.nodeOperator = vm.parseJsonAddress(json, "$.nodeOperator");
         p.nodeOperatorManager = vm.parseJsonAddress(json, "$.nodeOperatorManager");
         p.nodeOperatorFeeBP = vm.parseJsonUint(json, "$.nodeOperatorFeeBP");
@@ -43,18 +43,18 @@ contract DeployWrapper is Script {
         p.maxFinalizationTime = vm.parseJsonUint(json, "$.maxFinalizationTime");
         p.minWithdrawalDelayTime = vm.parseJsonUint(json, "$.minWithdrawalDelayTime");
         p.allowlistEnabled = vm.parseJsonBool(json, "$.allowlistEnabled");
-        // Parse only fields relevant to the wrapper type
+        // Parse only fields relevant to the pool type
         if (
-            p.wrapperType == uint256(Factory.WrapperType.MINTING_NO_STRATEGY)
-                || p.wrapperType == uint256(Factory.WrapperType.LOOP_STRATEGY)
-                || p.wrapperType == uint256(Factory.WrapperType.GGV_STRATEGY)
+            p.poolType == uint256(Factory.WrapperType.MINTING_NO_STRATEGY)
+                || p.poolType == uint256(Factory.WrapperType.LOOP_STRATEGY)
+                || p.poolType == uint256(Factory.WrapperType.GGV_STRATEGY)
         ) {
             p.reserveRatioGapBP = vm.parseJsonUint(json, "$.reserveRatioGapBP");
         }
-        if (p.wrapperType == uint256(Factory.WrapperType.LOOP_STRATEGY)) {
+        if (p.poolType == uint256(Factory.WrapperType.LOOP_STRATEGY)) {
             p.loops = vm.parseJsonUint(json, "$.loops");
         }
-        if (p.wrapperType == uint256(Factory.WrapperType.GGV_STRATEGY)) {
+        if (p.poolType == uint256(Factory.WrapperType.GGV_STRATEGY)) {
             address ggvTeller = address(0);
             address ggvQueue = address(0);
             try vm.parseJsonAddress(json, "$.ggv.teller") returns (address t) {
@@ -127,14 +127,14 @@ contract DeployWrapper is Script {
 
         address vault;
         address dashboard;
-        address payable wrapperProxy;
+        address payable poolProxy;
         address withdrawalQueueProxy;
-        address wrapperImpl;
+        address poolImpl;
         address withdrawalQueueImpl;
         address strategy = address(0);
 
-        if (p.wrapperType == uint256(Factory.WrapperType.NO_MINTING_NO_STRATEGY)) {
-            (vault, dashboard, wrapperProxy, withdrawalQueueProxy) = factory.createVaultWithNoMintingNoStrategy{
+        if (p.poolType == uint256(Factory.WrapperType.NO_MINTING_NO_STRATEGY)) {
+            (vault, dashboard, poolProxy, withdrawalQueueProxy) = factory.createVaultWithNoMintingNoStrategy{
                 value: p.value
             }(
                 p.nodeOperator,
@@ -146,8 +146,8 @@ contract DeployWrapper is Script {
                 p.allowlistEnabled,
                 p.timelockExecutor
             );
-        } else if (p.wrapperType == uint256(Factory.WrapperType.MINTING_NO_STRATEGY)) {
-            (vault, dashboard, wrapperProxy, withdrawalQueueProxy) = factory.createVaultWithMintingNoStrategy{
+        } else if (p.poolType == uint256(Factory.WrapperType.MINTING_NO_STRATEGY)) {
+            (vault, dashboard, poolProxy, withdrawalQueueProxy) = factory.createVaultWithMintingNoStrategy{
                 value: p.value
             }(
                 p.nodeOperator,
@@ -160,8 +160,8 @@ contract DeployWrapper is Script {
                 p.reserveRatioGapBP,
                 p.timelockExecutor
             );
-        } else if (p.wrapperType == uint256(Factory.WrapperType.LOOP_STRATEGY)) {
-            (vault, dashboard, wrapperProxy, withdrawalQueueProxy) = factory.createVaultWithLoopStrategy{value: p.value}(
+        } else if (p.poolType == uint256(Factory.WrapperType.LOOP_STRATEGY)) {
+            (vault, dashboard, poolProxy, withdrawalQueueProxy) = factory.createVaultWithLoopStrategy{value: p.value}(
                 p.nodeOperator,
                 p.nodeOperatorManager,
                 p.nodeOperatorFeeBP,
@@ -173,9 +173,9 @@ contract DeployWrapper is Script {
                 p.loops,
                 p.timelockExecutor
             );
-            strategy = address(WrapperC(wrapperProxy).STRATEGY());
-        } else if (p.wrapperType == uint256(Factory.WrapperType.GGV_STRATEGY)) {
-            (vault, dashboard, wrapperProxy, withdrawalQueueProxy) = factory.createVaultWithGGVStrategy{value: p.value}(
+            strategy = address(StvStrategyPool(poolProxy).STRATEGY());
+        } else if (p.poolType == uint256(Factory.WrapperType.GGV_STRATEGY)) {
+            (vault, dashboard, poolProxy, withdrawalQueueProxy) = factory.createVaultWithGGVStrategy{value: p.value}(
                 p.nodeOperator,
                 p.nodeOperatorManager,
                 p.nodeOperatorFeeBP,
@@ -188,53 +188,53 @@ contract DeployWrapper is Script {
                 p.boringQueue,
                 p.timelockExecutor
             );
-            strategy = address(WrapperC(wrapperProxy).STRATEGY());
+            strategy = address(StvStrategyPool(poolProxy).STRATEGY());
         } else {
-            revert("invalid wrapperType");
+            revert("invalid poolType");
         }
 
         vm.stopBroadcast();
 
         // Read implementation addresses from proxies (OssifiableProxy exposes proxy__getImplementation())
-        wrapperImpl = IOssifiableProxy(wrapperProxy).proxy__getImplementation();
+        poolImpl = IOssifiableProxy(poolProxy).proxy__getImplementation();
         withdrawalQueueImpl = IOssifiableProxy(address(withdrawalQueueProxy)).proxy__getImplementation();
 
         // Read admin (timelock) from proxy
-        address timelockAdmin = IOssifiableProxy(wrapperProxy).proxy__getAdmin();
+        address timelockAdmin = IOssifiableProxy(poolProxy).proxy__getAdmin();
 
         // write artifact
-        string memory out = vm.serializeAddress("wrapper", "factory", factoryAddr);
-        out = vm.serializeAddress("wrapper", "vault", vault);
-        out = vm.serializeAddress("wrapper", "dashboard", dashboard);
-        out = vm.serializeAddress("wrapper", "wrapperProxy", wrapperProxy);
-        out = vm.serializeAddress("wrapper", "wrapperImpl", wrapperImpl);
-        out = vm.serializeAddress("wrapper", "withdrawalQueue", withdrawalQueueProxy);
-        out = vm.serializeAddress("wrapper", "withdrawalQueueImpl", withdrawalQueueImpl);
-        out = vm.serializeUint("wrapper", "wrapperType", p.wrapperType);
-        out = vm.serializeAddress("wrapper", "strategy", strategy);
-        out = vm.serializeAddress("wrapper", "timelock", timelockAdmin);
+        string memory out = vm.serializeAddress("pool", "factory", factoryAddr);
+        out = vm.serializeAddress("pool", "vault", vault);
+        out = vm.serializeAddress("pool", "dashboard", dashboard);
+        out = vm.serializeAddress("pool", "poolProxy", poolProxy);
+        out = vm.serializeAddress("pool", "poolImpl", poolImpl);
+        out = vm.serializeAddress("pool", "withdrawalQueue", withdrawalQueueProxy);
+        out = vm.serializeAddress("pool", "withdrawalQueueImpl", withdrawalQueueImpl);
+        out = vm.serializeUint("pool", "poolType", p.poolType);
+        out = vm.serializeAddress("pool", "strategy", strategy);
+        out = vm.serializeAddress("pool", "timelock", timelockAdmin);
 
         // ------------------------------------------------------------------------------------
         // Compute and save ABI-encoded constructor args for contract verification
         // ------------------------------------------------------------------------------------
         // Proxy constructor args: (address implementation, address admin, bytes data)
-        bytes memory wrapperProxyCtorArgs = abi.encode(factoryView.DUMMY_IMPLEMENTATION(), factoryAddr, bytes(""));
-        out = vm.serializeBytes("wrapper", "wrapperProxyCtorArgs", wrapperProxyCtorArgs);
+        bytes memory poolProxyCtorArgs = abi.encode(factoryView.DUMMY_IMPLEMENTATION(), factoryAddr, bytes(""));
+        out = vm.serializeBytes("pool", "poolProxyCtorArgs", poolProxyCtorArgs);
 
         // WithdrawalQueue proxy constructor args: (impl, admin, abi.encodeCall(WithdrawalQueue.initialize, (...)))
         bytes memory wqInitData = abi.encodeCall(WithdrawalQueue.initialize, (p.nodeOperator, p.nodeOperator));
         bytes memory withdrawalQueueProxyCtorArgs = abi.encode(withdrawalQueueImpl, factoryAddr, wqInitData);
-        out = vm.serializeBytes("wrapper", "withdrawalQueueProxyCtorArgs", withdrawalQueueProxyCtorArgs);
+        out = vm.serializeBytes("pool", "withdrawalQueueProxyCtorArgs", withdrawalQueueProxyCtorArgs);
 
-        // Wrapper implementation constructor args depend on wrapper type
-        bytes memory wrapperImplCtorArgs;
-        if (p.wrapperType == uint256(Factory.WrapperType.NO_MINTING_NO_STRATEGY)) {
-            wrapperImplCtorArgs = abi.encode(dashboard, p.allowlistEnabled, withdrawalQueueProxy);
-        } else if (p.wrapperType == uint256(Factory.WrapperType.MINTING_NO_STRATEGY)) {
-            wrapperImplCtorArgs =
+        // Wrapper implementation constructor args depend on pool type
+        bytes memory poolImplCtorArgs;
+        if (p.poolType == uint256(Factory.WrapperType.NO_MINTING_NO_STRATEGY)) {
+            poolImplCtorArgs = abi.encode(dashboard, p.allowlistEnabled, withdrawalQueueProxy);
+        } else if (p.poolType == uint256(Factory.WrapperType.MINTING_NO_STRATEGY)) {
+            poolImplCtorArgs =
                 abi.encode(dashboard, stethAddr, p.allowlistEnabled, p.reserveRatioGapBP, withdrawalQueueProxy);
-        } else if (p.wrapperType == uint256(Factory.WrapperType.LOOP_STRATEGY)) {
-            wrapperImplCtorArgs = abi.encode(
+        } else if (p.poolType == uint256(Factory.WrapperType.LOOP_STRATEGY)) {
+            poolImplCtorArgs = abi.encode(
                 dashboard,
                 stethAddr,
                 p.allowlistEnabled,
@@ -242,8 +242,8 @@ contract DeployWrapper is Script {
                 p.reserveRatioGapBP,
                 withdrawalQueueProxy
             );
-        } else if (p.wrapperType == uint256(Factory.WrapperType.GGV_STRATEGY)) {
-            wrapperImplCtorArgs = abi.encode(
+        } else if (p.poolType == uint256(Factory.WrapperType.GGV_STRATEGY)) {
+            poolImplCtorArgs = abi.encode(
                 dashboard,
                 stethAddr,
                 p.allowlistEnabled,
@@ -252,12 +252,12 @@ contract DeployWrapper is Script {
                 withdrawalQueueProxy
             );
         }
-        out = vm.serializeBytes("wrapper", "wrapperImplCtorArgs", wrapperImplCtorArgs);
+        out = vm.serializeBytes("pool", "poolImplCtorArgs", poolImplCtorArgs);
 
-        // WithdrawalQueue implementation constructor args: (wrapper, lazyOracle, maxFinalizationTime, minWithdrawalDelayTime)
+        // WithdrawalQueue implementation constructor args: (pool, lazyOracle, maxFinalizationTime, minWithdrawalDelayTime)
         bytes memory withdrawalQueueImplCtorArgs =
-            abi.encode(wrapperProxy, factoryView.LAZY_ORACLE(), p.maxFinalizationTime, p.minWithdrawalDelayTime);
-        out = vm.serializeBytes("wrapper", "withdrawalQueueImplCtorArgs", withdrawalQueueImplCtorArgs);
+            abi.encode(poolProxy, factoryView.LAZY_ORACLE(), p.maxFinalizationTime, p.minWithdrawalDelayTime);
+        out = vm.serializeBytes("pool", "withdrawalQueueImplCtorArgs", withdrawalQueueImplCtorArgs);
 
         // Strategy constructor args (if any)
         if (strategy != address(0)) {
@@ -269,13 +269,13 @@ contract DeployWrapper is Script {
                 strategyProxyImpl = abi.decode(retSpi, (address));
             }
             bytes memory strategyCtorArgs =
-                abi.encode(strategyProxyImpl, wrapperProxy, stethAddr, wstethAddr, p.teller, p.boringQueue);
-            out = vm.serializeBytes("wrapper", "strategyCtorArgs", strategyCtorArgs);
+                abi.encode(strategyProxyImpl, poolProxy, stethAddr, wstethAddr, p.teller, p.boringQueue);
+            out = vm.serializeBytes("pool", "strategyCtorArgs", strategyCtorArgs);
         }
         vm.writeJson(out, outputJsonPath);
 
         console2.log("Wrapper deployed: vault", vault);
-        console2.log("Wrapper proxy:", wrapperProxy);
+        console2.log("Wrapper proxy:", poolProxy);
         console2.log("WithdrawalQueue:", withdrawalQueueProxy);
         if (strategy != address(0)) console2.log("Strategy:", strategy);
         console2.log("Output written to", outputJsonPath);

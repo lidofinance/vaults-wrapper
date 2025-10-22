@@ -11,16 +11,16 @@ import {ILido} from "src/interfaces/ILido.sol";
 import {IWstETH} from "src/interfaces/IWstETH.sol";
 import {ILazyOracle} from "src/interfaces/ILazyOracle.sol";
 
-import {WrapperA} from "src/WrapperA.sol";
+import {StvPool} from "src/StvPool.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
 import {Factory} from "src/Factory.sol";
 import {FactoryHelper} from "test/utils/FactoryHelper.sol";
 
 /**
- * @title WrapperAHarness
- * @notice Helper contract for integration tests that provides common setup for WrapperA (no minting, no strategy)
+ * @title StvPoolHarness
+ * @notice Helper contract for integration tests that provides common setup for StvPool (no minting, no strategy)
  */
-contract WrapperAHarness is Test {
+contract StvPoolHarness is Test {
     CoreHarness public core;
 
     // Core contracts
@@ -62,7 +62,7 @@ contract WrapperAHarness is Test {
     }
 
     struct WrapperContext {
-        WrapperA wrapper;
+        StvPool pool;
         WithdrawalQueue withdrawalQueue;
         IDashboard dashboard;
         IStakingVault vault;
@@ -87,7 +87,7 @@ contract WrapperAHarness is Test {
     function _deployWrapperSystem(DeploymentConfig memory config) internal returns (WrapperContext memory) {
         address vault_;
         address dashboard_;
-        address payable wrapperAddress;
+        address payable poolAddress;
         address withdrawalQueue_;
 
         require(address(core) != address(0), "CoreHarness not initialized");
@@ -95,7 +95,7 @@ contract WrapperAHarness is Test {
         address vaultFactory = core.locator().vaultFactory();
         address lazyOracle = core.locator().lazyOracle();
 
-        // Decide whether to deploy a new wrapper Factory or use a pre-deployed one
+        // Decide whether to deploy a new pool Factory or use a pre-deployed one
         Factory factory;
         string memory factoryJsonPath = "";
         try vm.envString("FACTORY_DEPLOYED_JSON") returns (string memory p) {
@@ -118,7 +118,7 @@ contract WrapperAHarness is Test {
 
         vm.startPrank(config.nodeOperator);
         if (config.configuration == Factory.WrapperType.NO_MINTING_NO_STRATEGY) {
-            (vault_, dashboard_, wrapperAddress, withdrawalQueue_) = factory.createVaultWithNoMintingNoStrategy{
+            (vault_, dashboard_, poolAddress, withdrawalQueue_) = factory.createVaultWithNoMintingNoStrategy{
                 value: CONNECT_DEPOSIT
             }(
                 config.nodeOperator,
@@ -130,7 +130,7 @@ contract WrapperAHarness is Test {
                 config.enableAllowlist
             );
         } else if (config.configuration == Factory.WrapperType.MINTING_NO_STRATEGY) {
-            (vault_, dashboard_, wrapperAddress, withdrawalQueue_) = factory.createVaultWithMintingNoStrategy{
+            (vault_, dashboard_, poolAddress, withdrawalQueue_) = factory.createVaultWithMintingNoStrategy{
                 value: CONNECT_DEPOSIT
             }(
                 config.nodeOperator,
@@ -144,7 +144,7 @@ contract WrapperAHarness is Test {
             );
         } else if (config.configuration == Factory.WrapperType.LOOP_STRATEGY) {
             uint256 loops = 1;
-            (vault_, dashboard_, wrapperAddress, withdrawalQueue_) = factory.createVaultWithLoopStrategy{
+            (vault_, dashboard_, poolAddress, withdrawalQueue_) = factory.createVaultWithLoopStrategy{
                 value: CONNECT_DEPOSIT
             }(
                 config.nodeOperator,
@@ -158,7 +158,7 @@ contract WrapperAHarness is Test {
                 loops
             );
         } else if (config.configuration == Factory.WrapperType.GGV_STRATEGY) {
-            (vault_, dashboard_, wrapperAddress, withdrawalQueue_) = factory.createVaultWithGGVStrategy{
+            (vault_, dashboard_, poolAddress, withdrawalQueue_) = factory.createVaultWithGGVStrategy{
                 value: CONNECT_DEPOSIT
             }(
                 config.nodeOperator,
@@ -181,7 +181,7 @@ contract WrapperAHarness is Test {
         core.applyVaultReport(vault_, CONNECT_DEPOSIT, 0, 0, 0);
 
         WrapperContext memory ctx = WrapperContext({
-            wrapper: WrapperA(payable(wrapperAddress)),
+            pool: StvPool(payable(poolAddress)),
             withdrawalQueue: WithdrawalQueue(payable(withdrawalQueue_)),
             dashboard: IDashboard(payable(dashboard_)),
             vault: IStakingVault(vault_)
@@ -190,7 +190,7 @@ contract WrapperAHarness is Test {
         return ctx;
     }
 
-    function _deployWrapperA(bool enableAllowlist, uint256 nodeOperatorFeeBP)
+    function _deployStvPool(bool enableAllowlist, uint256 nodeOperatorFeeBP)
         internal
         returns (WrapperContext memory context)
     {
@@ -215,21 +215,21 @@ contract WrapperAHarness is Test {
     }
 
     function _checkInitialState(WrapperContext memory ctx) internal virtual {
-        // Basic checks common to all wrappers
-        assertEq(ctx.wrapper.EXTRA_DECIMALS_BASE(), EXTRA_BASE, "EXTRA_DECIMALS_BASE should match EXTRA_BASE constant");
+        // Basic checks common to all pools
+        assertEq(ctx.pool.EXTRA_DECIMALS_BASE(), EXTRA_BASE, "EXTRA_DECIMALS_BASE should match EXTRA_BASE constant");
 
         assertEq(
-            ctx.wrapper.totalSupply(),
+            ctx.pool.totalSupply(),
             CONNECT_DEPOSIT * EXTRA_BASE,
             "Total stvETH supply should be equal to CONNECT_DEPOSIT"
         );
         assertEq(
-            ctx.wrapper.balanceOf(address(ctx.wrapper)),
+            ctx.pool.balanceOf(address(ctx.pool)),
             CONNECT_DEPOSIT * EXTRA_BASE,
             "Wrapper stvETH balance should be equal to CONNECT_DEPOSIT"
         );
 
-        assertEq(ctx.wrapper.balanceOf(NODE_OPERATOR), 0, "stvETH balance of NODE_OPERATOR should be zero");
+        assertEq(ctx.pool.balanceOf(NODE_OPERATOR), 0, "stvETH balance of NODE_OPERATOR should be zero");
         assertEq(steth.balanceOf(NODE_OPERATOR), 0, "stETH balance of node operator should be zero");
 
         assertEq(ctx.dashboard.locked(), CONNECT_DEPOSIT, "Vault's locked should be CONNECT_DEPOSIT");
@@ -237,7 +237,7 @@ contract WrapperAHarness is Test {
         assertEq(ctx.dashboard.withdrawableValue(), 0, "Vault's withdrawable value should be zero");
         assertEq(ctx.dashboard.liabilityShares(), 0, "Vault's liability shares should be zero");
 
-        // WrapperA specific: no minting capacity
+        // StvPool specific: no minting capacity
         assertEq(ctx.dashboard.remainingMintingCapacityShares(0), 0, "Remaining minting capacity should be zero");
         assertEq(ctx.dashboard.totalMintingCapacityShares(), 0, "Total minting capacity should be zero");
 
@@ -296,15 +296,15 @@ contract WrapperAHarness is Test {
         holders[0] = USER1;
         holders[1] = USER2;
         holders[2] = USER3;
-        holders[3] = address(ctx.wrapper);
+        holders[3] = address(ctx.pool);
         holders[4] = address(ctx.withdrawalQueue);
         return holders;
     }
 
     function _assertUniversalInvariants(string memory _context, WrapperContext memory _ctx) internal virtual {
         assertEq(
-            _ctx.wrapper.previewRedeem(_ctx.wrapper.totalSupply()),
-            _ctx.wrapper.totalAssets(),
+            _ctx.pool.previewRedeem(_ctx.pool.totalSupply()),
+            _ctx.pool.totalAssets(),
             _contextMsg(_context, "previewRedeem(totalSupply) should equal totalAssets")
         );
 
@@ -312,11 +312,11 @@ contract WrapperAHarness is Test {
         {
             uint256 totalBalance = 0;
             for (uint256 i = 0; i < holders.length; i++) {
-                totalBalance += _ctx.wrapper.balanceOf(holders[i]);
+                totalBalance += _ctx.pool.balanceOf(holders[i]);
             }
             assertEq(
                 totalBalance,
-                _ctx.wrapper.totalSupply(),
+                _ctx.pool.totalSupply(),
                 _contextMsg(_context, "Sum of all holders' balances should equal totalSupply")
             );
         }
@@ -324,9 +324,9 @@ contract WrapperAHarness is Test {
         {
             uint256 totalPreviewRedeem = 0;
             for (uint256 i = 0; i < holders.length; i++) {
-                totalPreviewRedeem += _ctx.wrapper.previewRedeem(_ctx.wrapper.balanceOf(holders[i]));
+                totalPreviewRedeem += _ctx.pool.previewRedeem(_ctx.pool.balanceOf(holders[i]));
             }
-            uint256 totalAssets = _ctx.wrapper.totalAssets();
+            uint256 totalAssets = _ctx.pool.totalAssets();
             uint256 diff =
                 totalPreviewRedeem > totalAssets ? totalPreviewRedeem - totalAssets : totalAssets - totalPreviewRedeem;
             assertTrue(
@@ -338,7 +338,7 @@ contract WrapperAHarness is Test {
         }
 
         {
-            // The sum of all stETH balances (users + wrapper) should approximately equal the stETH minted for all liability shares
+            // The sum of all stETH balances (users + pool) should approximately equal the stETH minted for all liability shares
             uint256 totalStethBalance = 0;
             for (uint256 i = 0; i < holders.length; i++) {
                 totalStethBalance += steth.balanceOf(holders[i]);
@@ -351,7 +351,7 @@ contract WrapperAHarness is Test {
                 holders.length * WEI_ROUNDING_TOLERANCE,
                 _contextMsg(
                     _context,
-                    "Sum of all stETH balances (users + wrapper) should approximately equal stETH minted for liability shares"
+                    "Sum of all stETH balances (users + pool) should approximately equal stETH minted for liability shares"
                 )
             );
         }

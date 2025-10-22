@@ -2,43 +2,43 @@
 pragma solidity >=0.8.25;
 
 import {Test, console} from "forge-std/Test.sol";
-import {SetupWrapperA} from "./SetupWrapperA.sol";
-import {WrapperBase} from "src/WrapperBase.sol";
+import {SetupStvPool} from "./SetupStvPool.sol";
+import {BasePool} from "src/BasePool.sol";
 
-contract RebalanceUnassignedWithSharesTest is Test, SetupWrapperA {
+contract RebalanceUnassignedWithSharesTest is Test, SetupStvPool {
     function test_DecreasesUnassignedLiability() public {
         uint256 liabilityToTransfer = 100;
         uint256 liabilityToRebalance = 15;
 
         dashboard.mock_increaseLiability(liabilityToTransfer);
-        wrapper.rebalanceUnassignedLiability(liabilityToRebalance);
+        pool.rebalanceUnassignedLiability(liabilityToRebalance);
 
-        assertEq(wrapper.totalUnassignedLiabilityShares(), liabilityToTransfer - liabilityToRebalance);
+        assertEq(pool.totalUnassignedLiabilityShares(), liabilityToTransfer - liabilityToRebalance);
     }
 
     function test_DecreasesTotalValue() public {
         uint256 liabilityToTransfer = 100;
-        uint256 totalAssetsBefore = wrapper.totalAssets();
+        uint256 totalAssetsBefore = pool.totalAssets();
 
         dashboard.mock_increaseLiability(liabilityToTransfer);
-        wrapper.rebalanceUnassignedLiability(liabilityToTransfer);
+        pool.rebalanceUnassignedLiability(liabilityToTransfer);
 
         uint256 expectedEthToWithdraw = steth.getPooledEthBySharesRoundUp(liabilityToTransfer);
-        assertEq(wrapper.totalAssets(), totalAssetsBefore - expectedEthToWithdraw);
+        assertEq(pool.totalAssets(), totalAssetsBefore - expectedEthToWithdraw);
     }
 
     function test_RevertIfMoreThanUnassignedLiability() public {
         uint256 liabilityToTransfer = 100;
         dashboard.mock_increaseLiability(liabilityToTransfer);
 
-        vm.expectRevert(WrapperBase.NotEnoughToRebalance.selector);
-        wrapper.rebalanceUnassignedLiability(liabilityToTransfer + 1);
+        vm.expectRevert(BasePool.NotEnoughToRebalance.selector);
+        pool.rebalanceUnassignedLiability(liabilityToTransfer + 1);
     }
 
     function test_RevertIfZeroShares() public {
         dashboard.mock_increaseLiability(100);
 
-        vm.expectRevert(WrapperBase.NotEnoughToRebalance.selector);
-        wrapper.rebalanceUnassignedLiability(0);
+        vm.expectRevert(BasePool.NotEnoughToRebalance.selector);
+        pool.rebalanceUnassignedLiability(0);
     }
 }
