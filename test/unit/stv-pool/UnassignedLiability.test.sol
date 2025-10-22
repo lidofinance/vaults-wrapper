@@ -36,7 +36,7 @@ contract UnassignedLiabilityTest is Test, SetupStvPool {
 
     // unavailable user operations tests
 
-    function test_DoesNotRevertOnDeposits() public {
+    function test_RevertOnDeposits() public {
         dashboard.mock_increaseLiability(100);
 
         vm.prank(userAlice);
@@ -44,7 +44,7 @@ contract UnassignedLiabilityTest is Test, SetupStvPool {
         pool.depositETH{value: 1 ether}(userAlice, address(0));
     }
 
-    function test_DoesNotRevertOnTransfers() public {
+    function test_RevertOnTransfers() public {
         vm.prank(userAlice);
         pool.depositETH{value: 1 ether}(userAlice, address(0));
 
