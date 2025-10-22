@@ -111,6 +111,11 @@ contract WrapperAHarness is Test {
             factory = helper.deployMainFactory(vaultFactory, address(steth), address(wsteth), lazyOracle);
         }
 
+        if (bytes(factoryJsonPath).length > 0) {
+            console.log("factoryJsonPath", factoryJsonPath);
+            console.log("NB: using existingFactory for testing: %s", address(factory));
+        }
+
         vm.startPrank(config.nodeOperator);
         if (config.configuration == Factory.WrapperType.NO_MINTING_NO_STRATEGY) {
             (vault_, dashboard_, wrapperAddress, withdrawalQueue_) = factory.createVaultWithNoMintingNoStrategy{

@@ -623,9 +623,9 @@ contract WrapperBTest is WrapperBHarness {
         );
         totalClaimed += status.amountOfAssets;
 
-        // 
+        //
         // Step 3: Withdraw the rest fully
-        // 
+        //
         uint256 remainingStv = w.balanceOf(USER1);
         if (remainingStv > 0) {
             uint256 burnForRest = w.stethSharesForWithdrawal(USER1, remainingStv);
