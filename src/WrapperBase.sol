@@ -26,10 +26,7 @@ abstract contract WrapperBase is Initializable, ERC20Upgradeable, AllowList {
     error NotEnoughToRebalance();
     error UnassignedLiabilityOnVault();
 
-    // keccak256("REQUEST_VALIDATOR_EXIT_ROLE")
-    bytes32 public immutable REQUEST_VALIDATOR_EXIT_ROLE =
-        0x2bbd6da7b06270fd63c039b4a14614f791d085d02c5a2e297591df95b05e4185;
-
+    bytes32 public immutable REQUEST_VALIDATOR_EXIT_ROLE = keccak256("REQUEST_VALIDATOR_EXIT_ROLE");
     bytes32 public immutable TRIGGER_VALIDATOR_WITHDRAWAL_ROLE = keccak256("TRIGGER_VALIDATOR_WITHDRAWAL_ROLE");
 
     uint256 public immutable DECIMALS = 27;
