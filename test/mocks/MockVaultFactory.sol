@@ -37,11 +37,11 @@ contract MockVaultFactory is IVaultFactory {
         }
         vault = address(new MockStakingVault());
         dashboard = address(new MockDashboard(address(0), VAULT_HUB, vault, _admin));
-        
+
         // Send the connect deposit to the vault to simulate the real factory behavior
         (bool success, ) = vault.call{value: msg.value}("");
         require(success, "Transfer to vault failed");
-        
+
         return (vault, dashboard);
     }
 

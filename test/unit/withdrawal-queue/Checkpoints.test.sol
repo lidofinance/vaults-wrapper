@@ -9,8 +9,8 @@ contract CheckpointsTest is Test, SetupWithdrawalQueue {
     function setUp() public override {
         super.setUp();
 
-        // Deposit initial ETH to wrapper for withdrawals
-        wrapper.depositETH{value: 1000 ether}();
+        // Deposit initial ETH to pool for withdrawals
+        pool.depositETH{value: 1000 ether}();
     }
 
     // Basic Checkpoint Operations
@@ -21,7 +21,7 @@ contract CheckpointsTest is Test, SetupWithdrawalQueue {
     }
 
     function test_Checkpoints_CreatedOnFinalization() public {
-        wrapper.requestWithdrawal(10 ** STV_DECIMALS);
+        pool.requestWithdrawal(10 ** STV_DECIMALS);
 
         // No checkpoints before finalization
         assertEq(withdrawalQueue.getLastCheckpointIndex(), 0);
@@ -34,9 +34,9 @@ contract CheckpointsTest is Test, SetupWithdrawalQueue {
 
     function test_Checkpoints_MultipleFinalizationsCreateMultipleCheckpoints() public {
         // Create 3 separate requests
-        wrapper.requestWithdrawal(10 ** STV_DECIMALS);
-        wrapper.requestWithdrawal(10 ** STV_DECIMALS);
-        wrapper.requestWithdrawal(10 ** STV_DECIMALS);
+        pool.requestWithdrawal(10 ** STV_DECIMALS);
+        pool.requestWithdrawal(10 ** STV_DECIMALS);
+        pool.requestWithdrawal(10 ** STV_DECIMALS);
 
         // Finalize first request
         _finalizeRequests(1);
@@ -53,9 +53,9 @@ contract CheckpointsTest is Test, SetupWithdrawalQueue {
 
     function test_Checkpoints_BatchFinalizationCreatesSingleCheckpoint() public {
         // Create 3 separate requests
-        wrapper.requestWithdrawal(10 ** STV_DECIMALS);
-        wrapper.requestWithdrawal(10 ** STV_DECIMALS);
-        wrapper.requestWithdrawal(10 ** STV_DECIMALS);
+        pool.requestWithdrawal(10 ** STV_DECIMALS);
+        pool.requestWithdrawal(10 ** STV_DECIMALS);
+        pool.requestWithdrawal(10 ** STV_DECIMALS);
 
         // Batch finalize all requests
         _finalizeRequests(3);
@@ -105,7 +105,7 @@ contract CheckpointsTest is Test, SetupWithdrawalQueue {
         _requestWithdrawalAndFinalize(10 ** STV_DECIMALS);
 
         // Create a second request but do not finalize
-        uint256 requestId2 = wrapper.requestWithdrawal(10 ** STV_DECIMALS);
+        uint256 requestId2 = pool.requestWithdrawal(10 ** STV_DECIMALS);
 
         uint256[] memory requestIds = new uint256[](1);
         requestIds[0] = requestId2; // Second request not finalized
@@ -163,9 +163,9 @@ contract CheckpointsTest is Test, SetupWithdrawalQueue {
 
     function test_CheckpointHints_EdgeCaseBoundaries() public {
         uint256[] memory requestIds = new uint256[](3);
-        requestIds[0] = wrapper.requestWithdrawal(10 ** STV_DECIMALS);
-        requestIds[1] = wrapper.requestWithdrawal(10 ** STV_DECIMALS);
-        requestIds[2] = wrapper.requestWithdrawal(10 ** STV_DECIMALS);
+        requestIds[0] = pool.requestWithdrawal(10 ** STV_DECIMALS);
+        requestIds[1] = pool.requestWithdrawal(10 ** STV_DECIMALS);
+        requestIds[2] = pool.requestWithdrawal(10 ** STV_DECIMALS);
 
         _finalizeRequests(3); // All requests in one checkpoint
 

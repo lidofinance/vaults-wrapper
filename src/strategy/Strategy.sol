@@ -10,11 +10,11 @@ import {IStETH} from "src/interfaces/IStETH.sol";
 import {IWstETH} from "src/interfaces/IWstETH.sol";
 import {IStrategy} from "src/interfaces/IStrategy.sol";
 import {IStrategyProxy} from "src/interfaces/IStrategyProxy.sol";
-import {WrapperC} from "src/WrapperC.sol";
-import {WrapperB} from "src/WrapperB.sol";
+import {StvStrategyPool} from "src/StvStrategyPool.sol";
+import {StvStETHPool} from "src/StvStETHPool.sol";
 
 abstract contract Strategy is IStrategy {
-    WrapperB public immutable WRAPPER;
+    StvStETHPool public immutable WRAPPER;
     IStETH public immutable STETH;
     IWstETH public immutable WSTETH;
     address public immutable STRATEGY_PROXY_IMPL;
@@ -29,11 +29,11 @@ abstract contract Strategy is IStrategy {
     error ZeroArgument(string name);
     error TokenNotAllowed();
 
-    constructor(address _wrapper, address _stETH, address _wstETH, address _strategyProxyImpl) {
+    constructor(address _pool, address _stETH, address _wstETH, address _strategyProxyImpl) {
         STETH = IStETH(_stETH);
         WSTETH = IWstETH(_wstETH);
         STRATEGY_PROXY_IMPL = _strategyProxyImpl;
-        WRAPPER = WrapperB(payable(_wrapper));
+        WRAPPER = StvStETHPool(payable(_pool));
     }
 
     /// @notice Recovers ERC20 tokens from the strategy

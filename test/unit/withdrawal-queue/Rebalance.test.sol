@@ -10,7 +10,7 @@ import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
 contract FinalizationTest is Test, SetupWithdrawalQueue {
     function setUp() public override {
         super.setUp();
-        wrapper.depositETH{value: 100_000 ether}();
+        pool.depositETH{value: 100_000 ether}();
     }
 
     // Initial state
@@ -22,8 +22,8 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
         assertEq(withdrawalQueue.unfinalizedAssets(), 0);
         assertEq(withdrawalQueue.unfinalizedStv(), 0);
 
-        assertEq(wrapper.balanceOf(address(withdrawalQueue)), 0);
-        assertEq(wrapper.totalMintedStethShares(), 0);
+        assertEq(pool.balanceOf(address(withdrawalQueue)), 0);
+        assertEq(pool.totalMintedStethShares(), 0);
     }
 
     // Basic finalization with rebalance
@@ -31,8 +31,8 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
     function test_RebalanceFinalization_RequestAndFinalization() public {
         uint256 mintedStethShares = 10 ** ASSETS_DECIMALS;
         uint256 stvToRequest = 2 * 10 ** STV_DECIMALS;
-        wrapper.mintStethShares(mintedStethShares);
-        uint256 requestId = wrapper.requestWithdrawal(stvToRequest, 0, mintedStethShares, address(this));
+        pool.mintStethShares(mintedStethShares);
+        uint256 requestId = pool.requestWithdrawal(stvToRequest, 0, mintedStethShares, address(this));
 
         // Verify request was created
         assertEq(requestId, 1);
@@ -40,9 +40,9 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
         assertEq(withdrawalQueue.getLastFinalizedRequestId(), 0);
 
         // Stv and debt are transferred to WQ
-        assertEq(wrapper.totalMintedStethShares(), mintedStethShares);
-        assertEq(wrapper.balanceOf(address(withdrawalQueue)), stvToRequest);
-        assertEq(wrapper.mintedStethSharesOf(address(this)), 0);
+        assertEq(pool.totalMintedStethShares(), mintedStethShares);
+        assertEq(pool.balanceOf(address(withdrawalQueue)), stvToRequest);
+        assertEq(pool.mintedStethSharesOf(address(this)), 0);
 
         // Check request status - should not be finalized yet
         WithdrawalQueue.WithdrawalRequestStatus memory status = withdrawalQueue.getWithdrawalStatus(requestId);
@@ -53,9 +53,9 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
         vm.warp(block.timestamp + MIN_WITHDRAWAL_DELAY_TIME + 1);
 
         // Finalize the request
-        uint256 totalAssets = wrapper.previewRedeem(stvToRequest);
-        uint256 assetsToRebalance = wrapper.STETH().getPooledEthBySharesRoundUp(mintedStethShares);
-        uint256 stvToRebalance = wrapper.previewWithdraw(assetsToRebalance);
+        uint256 totalAssets = pool.previewRedeem(stvToRequest);
+        uint256 assetsToRebalance = pool.STETH().getPooledEthBySharesRoundUp(mintedStethShares);
+        uint256 stvToRebalance = pool.previewWithdraw(assetsToRebalance);
 
         vm.prank(finalizeRoleHolder);
         vm.expectEmit(true, true, true, true);
@@ -80,8 +80,8 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
         assertFalse(status.isClaimed);
 
         // Check balances after finalization
-        assertEq(wrapper.balanceOf(address(withdrawalQueue)), 0);
-        assertEq(wrapper.totalMintedStethShares(), 0);
+        assertEq(pool.balanceOf(address(withdrawalQueue)), 0);
+        assertEq(pool.totalMintedStethShares(), 0);
     }
 
     function test_RebalanceFinalization_RewardsWithMultipleRequests() public {
@@ -89,43 +89,43 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
         uint256 stvToRequest = 2 * 10 ** STV_DECIMALS;
 
         // Simulate rewards to increase stvRate
-        wrapper.mintStethShares(5 * mintedStethShares);
+        pool.mintStethShares(5 * mintedStethShares);
         dashboard.mock_simulateRewards(1234566789);
 
-        wrapper.requestWithdrawal(stvToRequest, 0, mintedStethShares, address(this));
-        wrapper.requestWithdrawal(stvToRequest, 0, mintedStethShares, address(this));
-        wrapper.requestWithdrawal(stvToRequest, 0, mintedStethShares, address(this));
-        wrapper.requestWithdrawal(stvToRequest, 0, mintedStethShares, address(this));
-        wrapper.requestWithdrawal(stvToRequest, 0, mintedStethShares, address(this));
+        pool.requestWithdrawal(stvToRequest, 0, mintedStethShares, address(this));
+        pool.requestWithdrawal(stvToRequest, 0, mintedStethShares, address(this));
+        pool.requestWithdrawal(stvToRequest, 0, mintedStethShares, address(this));
+        pool.requestWithdrawal(stvToRequest, 0, mintedStethShares, address(this));
+        pool.requestWithdrawal(stvToRequest, 0, mintedStethShares, address(this));
 
         // Finalize all requests
         _finalizeRequests(5);
 
         // Make sure that rounding issues do not leave dust in WQ
-        assertEq(wrapper.balanceOf(address(withdrawalQueue)), 0);
-        assertEq(wrapper.totalMintedStethShares(), 0);
+        assertEq(pool.balanceOf(address(withdrawalQueue)), 0);
+        assertEq(pool.totalMintedStethShares(), 0);
     }
 
     // Penalties before finalization
 
     function test_RebalanceFinalization_SmallPenaltiesDoNotAffectUnrelatedUsers() public {
         vm.prank(userAlice);
-        wrapper.depositETH{value: 10 ether}();
+        pool.depositETH{value: 10 ether}();
 
         uint256 mintedStethShares = 10 ** ASSETS_DECIMALS;
         uint256 stvToRequest = 2 * 10 ** STV_DECIMALS;
-        wrapper.mintStethShares(mintedStethShares);
+        pool.mintStethShares(mintedStethShares);
 
         // Request withdrawal
-        wrapper.requestWithdrawal(stvToRequest, 0, mintedStethShares, address(this));
+        pool.requestWithdrawal(stvToRequest, 0, mintedStethShares, address(this));
 
         // Simulate small penalties before finalization
         dashboard.mock_simulateRewards(-1 ether);
 
         // Finalize request
-        uint256 strangerAssetsBefore = wrapper.previewRedeem(wrapper.balanceOf(address(userAlice)));
+        uint256 strangerAssetsBefore = pool.previewRedeem(pool.balanceOf(address(userAlice)));
         _finalizeRequests(1);
-        uint256 strangerAssetsAfter = wrapper.previewRedeem(wrapper.balanceOf(address(userAlice)));
+        uint256 strangerAssetsAfter = pool.previewRedeem(pool.balanceOf(address(userAlice)));
 
         // Make sure that finalization that has rebalance does not affect unrelated users
         assertLe(strangerAssetsBefore, strangerAssetsAfter);
@@ -133,23 +133,23 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
 
     function test_RebalanceFinalization_HugePenaltiesSocialization() public {
         vm.prank(userAlice);
-        wrapper.depositETH{value: 10 ether}();
+        pool.depositETH{value: 10 ether}();
 
         uint256 mintedStethShares = 10 ** ASSETS_DECIMALS;
         uint256 stvToRequest = 2 * 10 ** STV_DECIMALS;
-        wrapper.mintStethShares(mintedStethShares);
+        pool.mintStethShares(mintedStethShares);
 
         // Request withdrawal
-        uint256 requestId = wrapper.requestWithdrawal(stvToRequest, 0, mintedStethShares, address(this));
+        uint256 requestId = pool.requestWithdrawal(stvToRequest, 0, mintedStethShares, address(this));
 
         // Simulate huge penalties before finalization
         // which result in the request exceeding the reserve ratio
         dashboard.mock_simulateRewards(-90_000 ether);
 
         // Finalize request
-        uint256 strangerAssetsBefore = wrapper.previewRedeem(wrapper.balanceOf(address(userAlice)));
+        uint256 strangerAssetsBefore = pool.previewRedeem(pool.balanceOf(address(userAlice)));
         _finalizeRequests(1);
-        uint256 strangerAssetsAfter = wrapper.previewRedeem(wrapper.balanceOf(address(userAlice)));
+        uint256 strangerAssetsAfter = pool.previewRedeem(pool.balanceOf(address(userAlice)));
 
         // Check that there is nothing to claim
         uint256 claimableEther = withdrawalQueue.getClaimableEther(requestId);
@@ -164,21 +164,21 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
     function test_RebalanceFinalization_VaultRebalanceBefore() public {
         uint256 mintedStethShares = 10 ** ASSETS_DECIMALS;
         uint256 stvToRequest = 2 * 10 ** STV_DECIMALS;
-        wrapper.mintStethShares(mintedStethShares);
+        pool.mintStethShares(mintedStethShares);
 
         // Request withdrawal
-        wrapper.requestWithdrawal(stvToRequest, 0, mintedStethShares, address(this));
+        pool.requestWithdrawal(stvToRequest, 0, mintedStethShares, address(this));
 
         // Simulate vault rebalance before finalization
-        assertEq(wrapper.totalExceedingMintedStethShares(), 0);
+        assertEq(pool.totalExceedingMintedStethShares(), 0);
         dashboard.rebalanceVaultWithShares(dashboard.liabilityShares());
-        assertEq(wrapper.totalExceedingMintedStethShares(), mintedStethShares);
+        assertEq(pool.totalExceedingMintedStethShares(), mintedStethShares);
 
         // Finalize request
         _finalizeRequests(1);
 
         // Make sure that exceeding minted shares are used in rebalance
-        assertEq(wrapper.totalMintedStethShares(), 0);
-        assertEq(wrapper.totalExceedingMintedStethShares(), 0);
+        assertEq(pool.totalMintedStethShares(), 0);
+        assertEq(pool.totalExceedingMintedStethShares(), 0);
     }
 }

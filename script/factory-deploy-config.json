@@ -1,5 +1,5 @@
 {
   "timelock": {
-    "minDelaySeconds": 604800
+    "minDelaySeconds": 300
   }
 }

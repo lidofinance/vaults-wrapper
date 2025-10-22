@@ -47,17 +47,17 @@ $ anvil
 
 ### Deployment
 
-The Factory orchestrates deployment of the entire wrapper system (Vault, Dashboard, Wrapper, Withdrawal Queue, and optionally a Strategy) via dedicated implementation factories and proxies.
+The Factory orchestrates deployment of the entire pool system (Vault, Dashboard, Wrapper, Withdrawal Queue, and optionally a Strategy) via dedicated implementation factories and proxies.
 
 - Prerequisites (addresses required to deploy `Factory`):
   - **Core**: `IVaultFactory` (Lido `VaultFactory`), `stETH` token address
-  - **Implementation factories**: `WrapperAFactory`, `WrapperBFactory`, `WrapperCFactory`, `WithdrawalQueueFactory`, `LoopStrategyFactory`, `GGVStrategyFactory`
+  - **Implementation factories**: `StvPoolFactory`, `StvStETHPoolFactory`, `StvStrategyPoolFactory`, `WithdrawalQueueFactory`, `LoopStrategyFactory`, `GGVStrategyFactory`
   - **Proxy stub**: `DummyImplementation` (for `OssifiableProxy` bootstrap)
 
 - Deploy `Factory` (either deploy the factories yourself or use `script/DeployWrapperFactory.s.sol`):
-  - `new Factory(WrapperConfig{ vaultFactory, stETH, wstETH, lazyOracle, wrapperAFactory, wrapperBFactory, wrapperCFactory, withdrawalQueueFactory, loopStrategyFactory, ggvStrategyFactory, dummyImplementation, timelockFactory }, TimelockConfig{ minDelaySeconds })`
+  - `new Factory(WrapperConfig{ vaultFactory, stETH, wstETH, lazyOracle, stvPoolFactory, stvStETHPoolFactory, stvStrategyPoolFactory, withdrawalQueueFactory, loopStrategyFactory, ggvStrategyFactory, dummyImplementation, timelockFactory }, TimelockConfig{ minDelaySeconds })`
 
-- Create a complete wrapper system using one of the specialized entrypoints (send `msg.value == VaultHub.CONNECT_DEPOSIT`):
+- Create a complete pool system using one of the specialized entrypoints (send `msg.value == VaultHub.CONNECT_DEPOSIT`):
   - `createVaultWithNoMintingNoStrategy(nodeOperator, nodeOperatorManager, nodeOperatorFeeBP, confirmExpiry, allowlistEnabled)`
   - `createVaultWithMintingNoStrategy(nodeOperator, nodeOperatorManager, nodeOperatorFeeBP, confirmExpiry, allowlistEnabled, reserveRatioGapBP)`
   - `createVaultWithLoopStrategy(nodeOperator, nodeOperatorManager, nodeOperatorFeeBP, confirmExpiry, allowlistEnabled, reserveRatioGapBP, loops)`
@@ -72,41 +72,41 @@ What gets deployed and by whom
 2) Wrapper proxy and Withdrawal Queue proxy
 - By: `Factory`
 - Wrapper proxy: `new OssifiableProxy(DummyImplementation, Factory, "")`
-- Withdrawal Queue: impl via `WithdrawalQueueFactory.deploy(wrapperProxy, MAX_FINALIZATION_TIME)`, proxied and initialized with `initialize(nodeOperator, nodeOperator)`
+- Withdrawal Queue: impl via `WithdrawalQueueFactory.deploy(poolProxy, MAX_FINALIZATION_TIME)`, proxied and initialized with `initialize(nodeOperator, nodeOperator)`
 
 3) Wrapper implementation (selected by configuration)
 - By: `Factory` using the implementation factory
-  - A: `WrapperAFactory.deploy(dashboard, allowlistEnabled, withdrawalQueue)`
-  - B: `WrapperBFactory.deploy(dashboard, stETH, allowlistEnabled, reserveRatioGapBP, withdrawalQueue)`
-  - C (strategy): `WrapperCFactory.deploy(dashboard, stETH, allowlistEnabled, strategy, reserveRatioGapBP, withdrawalQueue)`
+  - A: `StvPoolFactory.deploy(dashboard, allowlistEnabled, withdrawalQueue)`
+  - B: `StvStETHPoolFactory.deploy(dashboard, stETH, allowlistEnabled, reserveRatioGapBP, withdrawalQueue)`
+  - C (strategy): `StvStrategyPoolFactory.deploy(dashboard, stETH, allowlistEnabled, strategy, reserveRatioGapBP, withdrawalQueue)`
 
 4) Strategy (only for C)
-- Loop: `LoopStrategyFactory.deploy(stETH, wrapperProxy, loops)` (wrapper address required)
+- Loop: `LoopStrategyFactory.deploy(stETH, poolProxy, loops)` (pool address required)
 - GGV: `GGVStrategyFactory.deploy(stETH, teller, boringQueue)`
 
-5) Initialize wrapper proxy and wire roles
-- Proxy upgrade + init: `proxy__upgradeToAndCall(wrapperImpl, abi.encodeCall(WrapperBase.initialize, (Factory, NAME, SYMBOL)))`
-- Dashboard roles: grant `FUND_ROLE` to wrapper, `WITHDRAW_ROLE` to withdrawal queue; for B/C also grant `MINT_ROLE` and `BURN_ROLE`
-- Admin handover: transfer `DEFAULT_ADMIN_ROLE` on wrapper and dashboard from `Factory` to `msg.sender`
-- Event: `VaultWrapperCreated(vault, wrapper, withdrawalQueue, strategy, configuration)`
+5) Initialize pool proxy and wire roles
+- Proxy upgrade + init: `proxy__upgradeToAndCall(poolImpl, abi.encodeCall(BasePool.initialize, (Factory, NAME, SYMBOL)))`
+- Dashboard roles: grant `FUND_ROLE` to pool, `WITHDRAW_ROLE` to withdrawal queue; for B/C also grant `MINT_ROLE` and `BURN_ROLE`
+- Admin handover: transfer `DEFAULT_ADMIN_ROLE` on pool and dashboard from `Factory` to `msg.sender`
+- Event: `VaultWrapperCreated(vault, pool, withdrawalQueue, strategy, configuration)`
 
 Configuration summary
 
 - Common: `nodeOperator`, `nodeOperatorManager`, `nodeOperatorFeeBP`, `confirmExpiry`, `allowlistEnabled`
 - B/C only: `reserveRatioGapBP` (extra reserve ratio on top of vault RR)
-- Loop strategy: `loops` (leverage cycles); strategy address is auto-deployed and passed to `WrapperC`
+- Loop strategy: `loops` (leverage cycles); strategy address is auto-deployed and passed to `StvStrategyPool`
 - GGV strategy: `teller`, `boringQueue`
 - Funding: `msg.value` must equal `VaultHub.CONNECT_DEPOSIT`
 
 Note on circular dependencies and gas savings
 
-- Wrapper ↔ Withdrawal Queue and WrapperC ↔ Strategy have apparent circular dependencies (each needs the other's address).
+- Wrapper ↔ Withdrawal Queue and StvStrategyPool ↔ Strategy have apparent circular dependencies (each needs the other's address).
 - This is solved by pre-deploying proxies first:
-  - Deploy wrapper proxy upfront (with `DummyImplementation`), obtain its address
-  - Deploy Withdrawal Queue implementation passing the wrapper proxy address; then proxy + initialize
-  - For Loop strategy, deploy the strategy with the wrapper proxy address
-  - Finally, deploy wrapper implementation with concrete dependencies (WQ, strategy) and upgrade the wrapper proxy to it
-- Because the definitive addresses are known at constructor-time for implementations, contracts store them as `immutable` (e.g., `WrapperBase` references, `WrapperC.STRATEGY`, strategy’s `WRAPPER`). This reduces storage reads and saves gas on regular transactions.
+  - Deploy pool proxy upfront (with `DummyImplementation`), obtain its address
+  - Deploy Withdrawal Queue implementation passing the pool proxy address; then proxy + initialize
+  - For Loop strategy, deploy the strategy with the pool proxy address
+  - Finally, deploy pool implementation with concrete dependencies (WQ, strategy) and upgrade the pool proxy to it
+- Because the definitive addresses are known at constructor-time for implementations, contracts store them as `immutable` (e.g., `BasePool` references, `StvStrategyPool.STRATEGY`, strategy’s `WRAPPER`). This reduces storage reads and saves gas on regular transactions.
 
 Dedicated factories for wrappers, withdrawal queue and strategies are required to keep Factory contract bytecode size withing the limit.
 
@@ -115,8 +115,8 @@ Local deployment (quickstart)
 - Files/scripts:
   - `lido-core/deployed-local.json` (core addresses produced by `make core-deploy`)
   - `script/HarnessCore.s.sol` + `script/harness-core.sh` (prepares core via impersonation: sets epoch, resumes Lido, submits initial ETH)
-  - `script/DeployWrapperFactory.s.sol` (deploys Factory + implementation factories; writes `deployments/wrapper-local.json`)
-  - `script/DeployWrapper.s.sol` (deploys a wrapper instance from the Factory using `script/deploy-local-config.json`)
+  - `script/DeployWrapperFactory.s.sol` (deploys Factory + implementation factories; writes `deployments/pool-local.json`)
+  - `script/DeployWrapper.s.sol` (deploys a pool instance from the Factory using `script/deploy-local-config.json`)
   - `foundry.toml` (`fs_permissions` allow writing to `deployments/`)
 - Procedure:
   - Start RPC (e.g., Anvil on `http://localhost:9123`).
@@ -124,8 +124,8 @@ Local deployment (quickstart)
   - `bash script/harness-core.sh` (prepares core; default initial submission ≈ 15k ETH; override `INITIAL_LIDO_SUBMISSION` if needed).
   - `bash script/deploy-local.sh` (deploys Factory and then a Wrapper using `script/deploy-local-config.json`).
   - Artifacts:
-    - `deployments/wrapper-local.json`: deployed `Factory` and implementation factory addresses
-    - `deployments/wrapper-instance.json`: deployed Vault, Dashboard, Wrapper proxy, Withdrawal Queue, and Strategy (if applicable)
+    - `deployments/pool-local.json`: deployed `Factory` and implementation factory addresses
+    - `deployments/pool-instance.json`: deployed Vault, Dashboard, Wrapper proxy, Withdrawal Queue, and Strategy (if applicable)
 
 ### Cast
 

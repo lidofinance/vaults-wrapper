@@ -12,7 +12,7 @@ import {IStrategy} from "src/interfaces/IStrategy.sol";
 import {IStrategyProxy} from "src/interfaces/IStrategyProxy.sol";
 import {IStrategyExitAsync} from "src/interfaces/IStrategyExitAsync.sol";
 import {WithdrawalRequest} from "src/strategy/WithdrawalRequest.sol";
-import {WrapperB} from "src/WrapperB.sol";
+import {StvStETHPool} from "src/StvStETHPool.sol";
 
 contract GGVStrategy is Strategy, IStrategyExitAsync, ERC165 {
 
@@ -44,12 +44,12 @@ contract GGVStrategy is Strategy, IStrategyExitAsync, ERC165 {
 
     constructor(
         address _strategyProxyImplementation,
-        address _wrapper,
+        address _pool,
         address _stETH,
         address _wstETH,
         address _teller,
         address _boringQueue
-    ) Strategy(_wrapper, _stETH, _wstETH, _strategyProxyImplementation) {
+    ) Strategy(_pool, _stETH, _wstETH, _strategyProxyImplementation) {
         TELLER = ITellerWithMultiAssetSupport(_teller);
         BORING_QUEUE = IBoringOnChainQueue(_boringQueue);
     }
@@ -238,11 +238,11 @@ contract GGVStrategy is Strategy, IStrategyExitAsync, ERC165 {
             abi.encodeWithSelector(WSTETH.unwrap.selector, WSTETH.balanceOf(proxy))
         );
 
-        // request withdrawal from wrapper
+        // request withdrawal from pool
         bytes memory withdrawalData = IStrategyProxy(proxy).call(
             address(WRAPPER),
             abi.encodeWithSelector(
-                WrapperB.requestWithdrawal.selector,
+                StvStETHPool.requestWithdrawal.selector,
                 _stvToWithdraw,
                 _stethSharesToBurn,
                 _stethSharesToRebalance,

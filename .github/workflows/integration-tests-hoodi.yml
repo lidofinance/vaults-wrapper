@@ -20,10 +20,10 @@ jobs:
       - name: Common setup
         uses: ./.github/workflows/setup
 
-      - name: Run integration tests for WrapperA
+      - name: Run integration tests for StvPool
         run: make test-integration-a
 
-      - name: Run integration tests for WrapperB
+      - name: Run integration tests for StvStETHPool
         run: make test-integration-b
 
       - name: Run integration tests for GGV

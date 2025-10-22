@@ -9,8 +9,8 @@ contract EmergencyExitTest is Test, SetupWithdrawalQueue {
     function setUp() public override {
         super.setUp();
 
-        // Deposit initial ETH to wrapper for withdrawals
-        wrapper.depositETH{value: 1000 ether}();
+        // Deposit initial ETH to pool for withdrawals
+        pool.depositETH{value: 1000 ether}();
     }
 
     // Basic Emergency Exit State
@@ -41,7 +41,7 @@ contract EmergencyExitTest is Test, SetupWithdrawalQueue {
     // Queue Stuck Detection
 
     function test_EmergencyExit_QueueBecomesStuck() public {
-        wrapper.requestWithdrawal(10 ** STV_DECIMALS);
+        pool.requestWithdrawal(10 ** STV_DECIMALS);
 
         // Initially not stuck
         assertFalse(withdrawalQueue.isWithdrawalQueueStuck());
@@ -56,9 +56,9 @@ contract EmergencyExitTest is Test, SetupWithdrawalQueue {
     }
 
     function test_EmergencyExit_QueueStuckWithMultipleRequests() public {
-        wrapper.requestWithdrawal(10 ** STV_DECIMALS);
-        wrapper.requestWithdrawal(10 ** STV_DECIMALS);
-        wrapper.requestWithdrawal(10 ** STV_DECIMALS);
+        pool.requestWithdrawal(10 ** STV_DECIMALS);
+        pool.requestWithdrawal(10 ** STV_DECIMALS);
+        pool.requestWithdrawal(10 ** STV_DECIMALS);
 
         // Advance time past max acceptable time for first request
         vm.warp(block.timestamp + withdrawalQueue.MAX_ACCEPTABLE_WQ_FINALIZATION_TIME_IN_SECONDS() + 1);
@@ -69,7 +69,7 @@ contract EmergencyExitTest is Test, SetupWithdrawalQueue {
     // Emergency Exit Activation
 
     function test_EmergencyExit_SuccessfulActivation() public {
-        wrapper.requestWithdrawal(10 ** STV_DECIMALS);
+        pool.requestWithdrawal(10 ** STV_DECIMALS);
 
         // Make queue stuck
         vm.warp(block.timestamp + withdrawalQueue.MAX_ACCEPTABLE_WQ_FINALIZATION_TIME_IN_SECONDS() + 1);
@@ -85,7 +85,7 @@ contract EmergencyExitTest is Test, SetupWithdrawalQueue {
     }
 
     function test_EmergencyExit_RevertWhenNotStuck() public {
-        wrapper.requestWithdrawal(10 ** STV_DECIMALS);
+        pool.requestWithdrawal(10 ** STV_DECIMALS);
 
         // Queue is not stuck yet
         assertFalse(withdrawalQueue.isWithdrawalQueueStuck());
@@ -96,7 +96,7 @@ contract EmergencyExitTest is Test, SetupWithdrawalQueue {
     }
 
     function test_EmergencyExit_RevertAlreadyActivated() public {
-        wrapper.requestWithdrawal(10 ** STV_DECIMALS);
+        pool.requestWithdrawal(10 ** STV_DECIMALS);
 
         // Make queue stuck and activate
         vm.warp(block.timestamp + withdrawalQueue.MAX_ACCEPTABLE_WQ_FINALIZATION_TIME_IN_SECONDS() + 1);
@@ -110,7 +110,7 @@ contract EmergencyExitTest is Test, SetupWithdrawalQueue {
     // Emergency Exit Effects on Operations
 
     function test_EmergencyExit_RequestsWorkWhenPaused() public {
-        wrapper.requestWithdrawal(10 ** STV_DECIMALS);
+        pool.requestWithdrawal(10 ** STV_DECIMALS);
 
         // Make queue stuck and activate emergency exit
         vm.warp(block.timestamp + withdrawalQueue.MAX_ACCEPTABLE_WQ_FINALIZATION_TIME_IN_SECONDS() + 1);
@@ -121,12 +121,12 @@ contract EmergencyExitTest is Test, SetupWithdrawalQueue {
         withdrawalQueue.pause();
 
         // Should still be able to create requests in emergency exit
-        wrapper.requestWithdrawal(10 ** STV_DECIMALS);
+        pool.requestWithdrawal(10 ** STV_DECIMALS);
         assertEq(withdrawalQueue.getLastRequestId(), 2);
     }
 
     function test_EmergencyExit_FinalizationBypassesRoles() public {
-        wrapper.requestWithdrawal(10 ** STV_DECIMALS);
+        pool.requestWithdrawal(10 ** STV_DECIMALS);
 
         // Make queue stuck and activate emergency exit
         vm.warp(block.timestamp + MIN_WITHDRAWAL_DELAY_TIME + 1);
@@ -140,7 +140,7 @@ contract EmergencyExitTest is Test, SetupWithdrawalQueue {
     }
 
     function test_EmergencyExit_FinalizationBypassesPause() public {
-        wrapper.requestWithdrawal(10 ** STV_DECIMALS);
+        pool.requestWithdrawal(10 ** STV_DECIMALS);
 
         // Make queue stuck and activate emergency exit
         vm.warp(block.timestamp + MIN_WITHDRAWAL_DELAY_TIME + 1);

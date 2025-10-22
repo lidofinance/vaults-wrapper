@@ -23,7 +23,7 @@ library TableUtils {
     Vm private constant vm = Vm(address(uint160(uint256(keccak256("hevm cheat code")))));
 
     struct Context {
-        IWrapper wrapper;
+        IWrapper pool;
         IERC20 boringVault;
         IStETH steth;
         IWstETH wsteth;
@@ -37,13 +37,13 @@ library TableUtils {
 
     function init(
         Context storage self,
-        address _wrapper,
+        address _pool,
         address _boringVault,
         address _steth,
         address _wsteth,
         address _boringQueue
     ) internal {
-        self.wrapper = IWrapper(_wrapper);
+        self.pool = IWrapper(_pool);
         self.boringVault = IERC20(_boringVault);
         self.steth = IStETH(_steth);
         self.wsteth = IWstETH(_wsteth);
@@ -91,15 +91,15 @@ library TableUtils {
 
         console.log(unicode"─────────────────────────────────────────────────");
         console.log("  stETH Share Rate:", formatETH(stethShareRate));
-        console.log("wrapper totalSupply", formatETH(self.wrapper.totalSupply()));
-        console.log("wrapper totalAssets", formatETH(self.wrapper.totalAssets()));
+        console.log("pool totalSupply", formatETH(self.pool.totalSupply()));
+        console.log("pool totalAssets", formatETH(self.pool.totalAssets()));
     }
 
     function printUserRow(Context storage self, string memory userName, address _user, uint256 _discount) internal view {
         uint256 balance = _user.balance;
-        uint256 stv = self.wrapper.balanceOf(_user);
-        uint256 assets = self.wrapper.previewRedeem(stv);
-        uint256 debtSteth = self.wrapper.mintedStethSharesOf(_user);
+        uint256 stv = self.pool.balanceOf(_user);
+        uint256 assets = self.pool.previewRedeem(stv);
+        uint256 debtSteth = self.pool.mintedStethSharesOf(_user);
         uint256 ggv = self.boringVault.balanceOf(_user);
         uint256 ggvStethOut = self.boringQueue.previewAssetsOut(address(self.wsteth), uint128(ggv), uint16(_discount));
         uint256 wsteth = self.wsteth.balanceOf(_user);
