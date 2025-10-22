@@ -11,13 +11,13 @@ contract RequestCreationTest is Test, SetupWithdrawalQueue {
         super.setUp();
 
         vm.prank(userAlice);
-        wrapper.depositETH{value: 100 ether}();
+        pool.depositETH{value: 100 ether}();
 
         vm.prank(userBob);
-        wrapper.depositETH{value: 100 ether}();
+        pool.depositETH{value: 100 ether}();
 
         // from test contract
-        wrapper.depositETH{value: 100_000 ether}();
+        pool.depositETH{value: 100_000 ether}();
     }
 
     // Initial State Tests
@@ -45,7 +45,7 @@ contract RequestCreationTest is Test, SetupWithdrawalQueue {
 
     function test_RequestWithdrawal_SingleRequest() public {
         uint256 stvToRequest = 10 ** STV_DECIMALS;
-        uint256 requestId = wrapper.requestWithdrawal(stvToRequest);
+        uint256 requestId = pool.requestWithdrawal(stvToRequest);
 
         assertEq(requestId, 1);
         assertEq(withdrawalQueue.getLastRequestId(), 1);
@@ -64,19 +64,19 @@ contract RequestCreationTest is Test, SetupWithdrawalQueue {
     }
 
     function test_RequestWithdrawal_EmitsCorrectEvent() public {
-        uint256 expectedAssets = wrapper.previewRedeem(10 ** STV_DECIMALS);
+        uint256 expectedAssets = pool.previewRedeem(10 ** STV_DECIMALS);
 
         vm.expectEmit(true, true, true, true);
         emit WithdrawalQueue.WithdrawalRequested(1, address(this), 10 ** STV_DECIMALS, 0, expectedAssets);
 
-        wrapper.requestWithdrawal(10 ** STV_DECIMALS);
+        pool.requestWithdrawal(10 ** STV_DECIMALS);
     }
 
     function test_RequestWithdrawal_WithStethShares() public {
         uint256 mintedStethShares = 10 ** ASSETS_DECIMALS;
         uint256 stvToRequest = 2 * 10 ** STV_DECIMALS;
-        wrapper.mintStethShares(mintedStethShares);
-        uint256 requestId = wrapper.requestWithdrawal(stvToRequest, 0, mintedStethShares, address(this));
+        pool.mintStethShares(mintedStethShares);
+        uint256 requestId = pool.requestWithdrawal(stvToRequest, 0, mintedStethShares, address(this));
 
         WithdrawalQueue.WithdrawalRequestStatus memory status = withdrawalQueue.getWithdrawalStatus(requestId);
         assertEq(status.amountOfStv, stvToRequest);
@@ -86,10 +86,10 @@ contract RequestCreationTest is Test, SetupWithdrawalQueue {
 
     function test_RequestWithdrawal_UpdatesCumulativeValues() public {
         vm.prank(userAlice);
-        wrapper.requestWithdrawal(10 ** STV_DECIMALS);
+        pool.requestWithdrawal(10 ** STV_DECIMALS);
 
         vm.prank(userBob);
-        wrapper.requestWithdrawal(10 ** STV_DECIMALS * 2);
+        pool.requestWithdrawal(10 ** STV_DECIMALS * 2);
 
         assertEq(withdrawalQueue.unfinalizedStv(), 10 ** STV_DECIMALS * 3);
         assertEq(withdrawalQueue.getLastRequestId(), 2);
@@ -103,8 +103,8 @@ contract RequestCreationTest is Test, SetupWithdrawalQueue {
     }
 
     function test_RequestWithdrawal_AddToUserRequests() public {
-        uint256 requestId1 = wrapper.requestWithdrawal(10 ** STV_DECIMALS);
-        uint256 requestId2 = wrapper.requestWithdrawal(10 ** STV_DECIMALS);
+        uint256 requestId1 = pool.requestWithdrawal(10 ** STV_DECIMALS);
+        uint256 requestId2 = pool.requestWithdrawal(10 ** STV_DECIMALS);
 
         uint256[] memory requests = withdrawalQueue.getWithdrawalRequests(address(this));
         assertEq(requests.length, 2);
@@ -124,7 +124,7 @@ contract RequestCreationTest is Test, SetupWithdrawalQueue {
         amounts[1] = 10 ** STV_DECIMALS * 2;
         amounts[2] = 10 ** STV_DECIMALS;
 
-        uint256[] memory requestIds = wrapper.requestWithdrawals(amounts, userAlice);
+        uint256[] memory requestIds = pool.requestWithdrawals(amounts, userAlice);
 
         assertEq(requestIds.length, 3);
         assertEq(requestIds[0], 1);
@@ -144,13 +144,13 @@ contract RequestCreationTest is Test, SetupWithdrawalQueue {
 
     function test_RequestWithdrawals_DifferentUsers() public {
         vm.prank(userAlice);
-        wrapper.requestWithdrawal(10 ** STV_DECIMALS);
+        pool.requestWithdrawal(10 ** STV_DECIMALS);
 
         vm.prank(userBob);
-        wrapper.requestWithdrawal(2 * 10 ** STV_DECIMALS);
+        pool.requestWithdrawal(2 * 10 ** STV_DECIMALS);
 
         vm.prank(userAlice);
-        wrapper.requestWithdrawal(10 ** STV_DECIMALS);
+        pool.requestWithdrawal(10 ** STV_DECIMALS);
 
         uint256[] memory aliceRequests = withdrawalQueue.getWithdrawalRequests(userAlice);
         uint256[] memory bobRequests = withdrawalQueue.getWithdrawalRequests(userBob);
@@ -172,31 +172,31 @@ contract RequestCreationTest is Test, SetupWithdrawalQueue {
         uint256[] memory stethShares = new uint256[](1);
         stethShares[0] = 10 ** ASSETS_DECIMALS;
 
-        vm.prank(address(wrapper));
+        vm.prank(address(pool));
         vm.expectRevert(abi.encodeWithSelector(WithdrawalQueue.ArraysLengthMismatch.selector, 2, 1));
         withdrawalQueue.requestWithdrawals(stvAmounts, stethShares, address(this));
     }
 
     function test_RequestWithdrawal_RevertOnTooSmallAmount() public {
-        uint256 tinyStvAmount = wrapper.previewWithdraw(withdrawalQueue.MIN_WITHDRAWAL_AMOUNT()) - 1;
-        uint256 expectedAssets = wrapper.previewRedeem(tinyStvAmount);
+        uint256 tinyStvAmount = pool.previewWithdraw(withdrawalQueue.MIN_WITHDRAWAL_AMOUNT()) - 1;
+        uint256 expectedAssets = pool.previewRedeem(tinyStvAmount);
 
         vm.expectRevert(abi.encodeWithSelector(WithdrawalQueue.RequestAmountTooSmall.selector, expectedAssets));
-        wrapper.requestWithdrawal(tinyStvAmount, userAlice);
+        pool.requestWithdrawal(tinyStvAmount, userAlice);
     }
 
     function test_RequestWithdrawal_RevertOnTooLargeAmount() public {
         uint256 extraAssetsWei = 10 ** (STV_DECIMALS - ASSETS_DECIMALS);
-        uint256 hugeStvAmount = wrapper.previewWithdraw(withdrawalQueue.MAX_WITHDRAWAL_AMOUNT()) + extraAssetsWei;
-        uint256 expectedAssets = wrapper.previewRedeem(hugeStvAmount);
+        uint256 hugeStvAmount = pool.previewWithdraw(withdrawalQueue.MAX_WITHDRAWAL_AMOUNT()) + extraAssetsWei;
+        uint256 expectedAssets = pool.previewRedeem(hugeStvAmount);
 
         vm.expectRevert(abi.encodeWithSelector(WithdrawalQueue.RequestAmountTooLarge.selector, expectedAssets));
-        wrapper.requestWithdrawal(hugeStvAmount, userAlice);
+        pool.requestWithdrawal(hugeStvAmount, userAlice);
     }
 
-    function test_RequestWithdrawal_RevertOnlyWrapper() public {
+    function test_RequestWithdrawal_RevertOnlyPool() public {
         vm.prank(userAlice);
-        vm.expectRevert(WithdrawalQueue.OnlyWrapperCan.selector);
+        vm.expectRevert(WithdrawalQueue.OnlyStvStrategyPoolan.selector);
         withdrawalQueue.requestWithdrawal(10 ** STV_DECIMALS, 0, userAlice);
     }
 
@@ -204,7 +204,7 @@ contract RequestCreationTest is Test, SetupWithdrawalQueue {
         vm.prank(pauseRoleHolder);
         withdrawalQueue.pause();
 
-        vm.prank(address(wrapper));
+        vm.prank(address(pool));
         vm.expectRevert(abi.encodeWithSelector(PausableUpgradeable.EnforcedPause.selector));
         withdrawalQueue.requestWithdrawal(10 ** STV_DECIMALS, 0, userAlice);
     }
@@ -215,7 +215,7 @@ contract RequestCreationTest is Test, SetupWithdrawalQueue {
         uint256[] memory amounts = new uint256[](1);
         amounts[0] = 10 ** STV_DECIMALS;
 
-        uint256[] memory requestIds = wrapper.requestWithdrawals(amounts, address(0));
+        uint256[] memory requestIds = pool.requestWithdrawals(amounts, address(0));
 
         WithdrawalQueue.WithdrawalRequestStatus memory status = withdrawalQueue.getWithdrawalStatus(requestIds[0]);
         assertEq(status.owner, address(this)); // Should default to msg.sender
@@ -224,37 +224,37 @@ contract RequestCreationTest is Test, SetupWithdrawalQueue {
     function test_RequestWithdrawal_ExactMinAmount() public {
         // Calculate STV amount needed for MIN_WITHDRAWAL_AMOUNT
         uint256 minAmount = withdrawalQueue.MIN_WITHDRAWAL_AMOUNT();
-        uint256 stvAmount = wrapper.previewWithdraw(minAmount);
+        uint256 stvAmount = pool.previewWithdraw(minAmount);
 
         // This should succeed
-        uint256 requestId = wrapper.requestWithdrawal(stvAmount);
+        uint256 requestId = pool.requestWithdrawal(stvAmount);
         assertEq(requestId, 1);
     }
 
     function test_RequestWithdrawal_ExactMaxAmount() public {
         // Calculate STV amount needed for MAX_WITHDRAWAL_AMOUNT
         uint256 maxAmount = withdrawalQueue.MAX_WITHDRAWAL_AMOUNT();
-        uint256 stvAmount = wrapper.previewWithdraw(maxAmount);
+        uint256 stvAmount = pool.previewWithdraw(maxAmount);
 
         // This should succeed
-        uint256 requestId = wrapper.requestWithdrawal(stvAmount);
+        uint256 requestId = pool.requestWithdrawal(stvAmount);
         assertEq(requestId, 1);
     }
 
     function test_GetWithdrawalRequestsLength_RemovesEntriesAfterClaim() public {
         vm.prank(userAlice);
-        uint256 requestId1 = wrapper.requestWithdrawal(10 ** STV_DECIMALS);
+        uint256 requestId1 = pool.requestWithdrawal(10 ** STV_DECIMALS);
 
         vm.prank(userAlice);
-        uint256 requestId2 = wrapper.requestWithdrawal(2 * 10 ** STV_DECIMALS);
+        uint256 requestId2 = pool.requestWithdrawal(2 * 10 ** STV_DECIMALS);
 
         assertEq(withdrawalQueue.getWithdrawalRequestsLength(userAlice), 2);
 
         _finalizeRequests(2);
 
         vm.startPrank(userAlice);
-        wrapper.claimWithdrawal(requestId1, userAlice);
-        wrapper.claimWithdrawal(requestId2, userAlice);
+        pool.claimWithdrawal(requestId1, userAlice);
+        pool.claimWithdrawal(requestId2, userAlice);
         vm.stopPrank();
 
         assertEq(withdrawalQueue.getWithdrawalRequestsLength(userAlice), 0);
@@ -263,13 +263,13 @@ contract RequestCreationTest is Test, SetupWithdrawalQueue {
 
     function test_GetWithdrawalRequests_PaginationReturnsSlice() public {
         vm.prank(userAlice);
-        uint256 requestId1 = wrapper.requestWithdrawal(10 ** STV_DECIMALS);
+        uint256 requestId1 = pool.requestWithdrawal(10 ** STV_DECIMALS);
 
         vm.prank(userAlice);
-        uint256 requestId2 = wrapper.requestWithdrawal(2 * 10 ** STV_DECIMALS);
+        uint256 requestId2 = pool.requestWithdrawal(2 * 10 ** STV_DECIMALS);
 
         vm.prank(userAlice);
-        uint256 requestId3 = wrapper.requestWithdrawal(3 * 10 ** STV_DECIMALS);
+        uint256 requestId3 = pool.requestWithdrawal(3 * 10 ** STV_DECIMALS);
 
         uint256[] memory page = withdrawalQueue.getWithdrawalRequests(userAlice, 1, 3);
 
@@ -288,11 +288,11 @@ contract RequestCreationTest is Test, SetupWithdrawalQueue {
         uint256 stvAmount1 = 10 ** STV_DECIMALS;
         uint256 stvAmount2 = 3 * 10 ** STV_DECIMALS;
 
-        uint256 expectedAssets1 = wrapper.previewRedeem(stvAmount1);
-        uint256 expectedAssets2 = wrapper.previewRedeem(stvAmount2);
+        uint256 expectedAssets1 = pool.previewRedeem(stvAmount1);
+        uint256 expectedAssets2 = pool.previewRedeem(stvAmount2);
 
-        wrapper.requestWithdrawal(stvAmount1);
-        wrapper.requestWithdrawal(stvAmount2);
+        pool.requestWithdrawal(stvAmount1);
+        pool.requestWithdrawal(stvAmount2);
 
         assertEq(withdrawalQueue.unfinalizedStv(), stvAmount1 + stvAmount2);
         assertEq(withdrawalQueue.unfinalizedAssets(), expectedAssets1 + expectedAssets2);

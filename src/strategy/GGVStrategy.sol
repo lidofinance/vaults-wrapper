@@ -12,7 +12,7 @@ import {IStrategy} from "src/interfaces/IStrategy.sol";
 import {IStrategyProxy} from "src/interfaces/IStrategyProxy.sol";
 import {IStrategyExitAsync} from "src/interfaces/IStrategyExitAsync.sol";
 import {WithdrawalRequest} from "src/strategy/WithdrawalRequest.sol";
-import {WrapperB} from "src/WrapperB.sol";
+import {StvStETHPool} from "src/StvStETHPool.sol";
 
 contract GGVStrategy is Strategy, IStrategyExitAsync, ERC165 {
 
@@ -44,19 +44,19 @@ contract GGVStrategy is Strategy, IStrategyExitAsync, ERC165 {
 
     constructor(
         address _strategyProxyImplementation,
-        address _wrapper,
+        address _pool,
         address _stETH,
         address _wstETH,
         address _teller,
         address _boringQueue
-    ) Strategy(_wrapper, _stETH, _wstETH, _strategyProxyImplementation) {
+    ) Strategy(_pool, _stETH, _wstETH, _strategyProxyImplementation) {
         TELLER = ITellerWithMultiAssetSupport(_teller);
         BORING_QUEUE = IBoringOnChainQueue(_boringQueue);
     }
 
     function supportsInterface(bytes4 interfaceId) public view virtual override returns (bool) {
-        return interfaceId == type(IStrategy).interfaceId 
-            || interfaceId == type(IStrategyExitAsync).interfaceId 
+        return interfaceId == type(IStrategy).interfaceId
+            || interfaceId == type(IStrategyExitAsync).interfaceId
             || super.supportsInterface(interfaceId);
     }
 
@@ -78,7 +78,7 @@ contract GGVStrategy is Strategy, IStrategyExitAsync, ERC165 {
         GGVParams memory params = abi.decode(_params, (GGVParams));
 
         bytes memory data = IStrategyProxy(proxy).call(
-            address(TELLER),    
+            address(TELLER),
             abi.encodeWithSelector(TELLER.deposit.selector, address(STETH), stethAmount, params.minimumMint)
         );
         uint256 ggvShares = abi.decode(data, (uint256));
@@ -102,9 +102,9 @@ contract GGVStrategy is Strategy, IStrategyExitAsync, ERC165 {
     /// @param _stethSharesToBurn The amount of steth shares to burn
     /// @param _params The parameters for the withdrawal
     /// @return requestId The request id
-    function requestExitByStethShares(uint256 _stethSharesToBurn, bytes calldata _params) 
-        public 
-        returns (bytes32 requestId) 
+    function requestExitByStethShares(uint256 _stethSharesToBurn, bytes calldata _params)
+        public
+        returns (bytes32 requestId)
     {
         bytes32 withdrawalRequestId = exitRequest[msg.sender];
         if (withdrawalRequestId != bytes32(0)) revert AlreadyRequested();
@@ -175,7 +175,7 @@ contract GGVStrategy is Strategy, IStrategyExitAsync, ERC165 {
     function finalizeRequestExit(address /*_receiver*/, bytes32 _requestId) external {
         // GGV does not provide a way to check request status, so we cannot verify if the request
         // was actually finalized in GGV Queue. Additionally, GGV allows multiple withdrawal requests,
-        // so it's possible to have request->finalize->request sequence where 2 unfinalised requests 
+        // so it's possible to have request->finalize->request sequence where 2 unfinalised requests
         // exist in GGV at the same time.
         if (_requestId != exitRequest[msg.sender]) revert InvalidRequestId();
         exitRequest[msg.sender] = bytes32(0);
@@ -210,20 +210,20 @@ contract GGVStrategy is Strategy, IStrategyExitAsync, ERC165 {
         }
     }
 
-    /// @notice Calculates the amount of stvETH shares that can be withdrawn
-    /// @param _user The user to calculate the amount of stvETH shares to withdraw for
+    /// @notice Calculates the amount of stv that can be withdrawn
+    /// @param _user The user to calculate the amount of stv to withdraw for
     /// @param _stethSharesToBurn The amount of stETH shares to burn
-    /// @return stv The amount of stvETH shares that can be withdrawn
+    /// @return stv The amount of stv that can be withdrawn
     function proxyWithdrawableStvOf(address _user, uint256 _stethSharesToBurn) external view returns(uint256 stv) {
         address proxy = getStrategyProxyAddress(_user);
         stv = WRAPPER.withdrawableStvOf(proxy, _stethSharesToBurn);
     }
 
     /// @notice Requests a withdrawal from the Withdrawal Queue
-    /// @param _stvToWithdraw The amount of stvETH shares to withdraw
+    /// @param _stvToWithdraw The amount of stv to withdraw
     /// @param _stethSharesToBurn The amount of stETH shares to burn
     /// @param _stethSharesToRebalance The amount of stETH shares to rebalance
-    /// @param _receiver The address to receive the stvETH shares
+    /// @param _receiver The address to receive the stv
     /// @return requestId The Withdrawal Queue request ID
     function requestWithdrawal(
         uint256 _stvToWithdraw,
@@ -238,11 +238,11 @@ contract GGVStrategy is Strategy, IStrategyExitAsync, ERC165 {
             abi.encodeWithSelector(WSTETH.unwrap.selector, WSTETH.balanceOf(proxy))
         );
 
-        // request withdrawal from wrapper
+        // request withdrawal from pool
         bytes memory withdrawalData = IStrategyProxy(proxy).call(
             address(WRAPPER),
             abi.encodeWithSelector(
-                WrapperB.requestWithdrawal.selector,
+                StvStETHPool.requestWithdrawal.selector,
                 _stvToWithdraw,
                 _stethSharesToBurn,
                 _stethSharesToRebalance,

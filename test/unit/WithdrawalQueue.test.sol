@@ -5,8 +5,8 @@ import {Test, console} from "forge-std/Test.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
-import {WrapperBase} from "src/WrapperBase.sol";
-import {WrapperA} from "src/WrapperA.sol";
+import {BasePool} from "src/BasePool.sol";
+import {StvPool} from "src/StvPool.sol";
 import {OssifiableProxy} from "src/proxy/OssifiableProxy.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
 import {MockDashboard} from "../mocks/MockDashboard.sol";
@@ -18,7 +18,7 @@ import {MockUpgradableWq} from "../mocks/MockUpgradableWq.sol";
 contract WithdrawalQueueTest is Test {
     WithdrawalQueue public withdrawalQueue;
     MockVaultHub public vaultHub;
-    WrapperA public wrapper;
+    StvPool public pool;
     MockStakingVault public stakingVault;
     MockDashboard public dashboard;
     MockLazyOracle public lazyOracle;
@@ -65,20 +65,20 @@ contract WithdrawalQueueTest is Test {
         // Initialize vault hub to reflect the staking vault balance
         vaultHub.mock_setVaultBalance(address(stakingVault), 1 ether);
 
-        // Deploy wrapper
+        // Deploy pool
         uint256 maxAcceptableWQFinalizationTimeInSeconds = 60 days;
         uint256 minWithdrawalDelayTime = 1 days;
 
-        // Precreate wrapper proxy with empty implementation
-        OssifiableProxy wrapperProxy = new OssifiableProxy(address(0), admin, bytes(""));
+        // Precreate pool proxy with empty implementation
+        OssifiableProxy poolProxy = new OssifiableProxy(address(0), admin, bytes(""));
 
         lazyOracle = new MockLazyOracle();
         vm.label(address(lazyOracle), "LazyOracle");
 
-        // Deploy WQ implementation with immutable wrapper; proxy it and initialize
+        // Deploy WQ implementation with immutable pool; proxy it and initialize
         address wqImpl = address(
             new WithdrawalQueue(
-                address(wrapperProxy),
+                address(poolProxy),
                 address(dashboard),
                 address(vaultHub),
                 address(0),
@@ -94,48 +94,48 @@ contract WithdrawalQueueTest is Test {
             abi.encodeCall(WithdrawalQueue.initialize, (admin, operator))
         );
 
-        // Deploy wrapper implementation with immutable WQ, then upgrade wrapper proxy and initialize
-        WrapperA impl = new WrapperA(address(dashboard), false, address(wqProxy));
-        wrapperProxy.proxy__upgradeToAndCall(
+        // Deploy pool implementation with immutable WQ, then upgrade pool proxy and initialize
+        StvPool impl = new StvPool(address(dashboard), false, address(wqProxy));
+        poolProxy.proxy__upgradeToAndCall(
             address(impl),
-            abi.encodeCall(WrapperBase.initialize, (admin, admin, "Staked ETH Vault Wrapper", "stvETH"))
+            abi.encodeCall(BasePool.initialize, (admin, "Staked ETH Vault Wrapper", "stvETH"))
         );
-        wrapper = WrapperA(payable(address(wrapperProxy)));
+        pool = StvPool(payable(address(poolProxy)));
 
         withdrawalQueue = WithdrawalQueue(payable(address(wqProxy)));
         vm.label(address(wqProxy), "WithdrawalQueue");
 
-        // Grant necessary roles to wrapper for dashboard operations
+        // Grant necessary roles to pool for dashboard operations
         vm.startPrank(admin);
-        dashboard.grantRole(dashboard.FUND_ROLE(), address(wrapper));
+        dashboard.grantRole(dashboard.FUND_ROLE(), address(pool));
         dashboard.grantRole(dashboard.WITHDRAW_ROLE(), address(withdrawalQueue));
         vm.stopPrank();
 
-        // No need to set in wrapper; it is immutable now
+        // No need to set in pool; it is immutable now
     }
 
     // Tests the complete withdrawal queue flow from deposit to final ETH claim
     // Verifies: user deposits → withdrawal requests → validator operations → finalization → claiming
     function test_CompleteWithdrawalFlow() public {
         vm.startPrank(user1);
-        wrapper.depositETH{value: USER1_DEPOSIT}(user1);
-        uint256 user1Shares = wrapper.balanceOf(user1);
+        pool.depositETH{value: USER1_DEPOSIT}(user1);
+        uint256 user1Shares = pool.balanceOf(user1);
         vm.stopPrank();
 
         vm.startPrank(user2);
-        wrapper.depositETH{value: USER2_DEPOSIT}(user2);
-        uint256 user2Shares = wrapper.balanceOf(user2);
+        pool.depositETH{value: USER2_DEPOSIT}(user2);
+        uint256 user2Shares = pool.balanceOf(user2);
         vm.stopPrank();
 
         console.log("user1Shares", user1Shares);
         console.log("user2Shares", user2Shares);
 
         // Verify deposits
-        assertEq(wrapper.balanceOf(user1), user1Shares);
-        assertEq(wrapper.balanceOf(user2), user2Shares);
+        assertEq(pool.balanceOf(user1), user1Shares);
+        assertEq(pool.balanceOf(user2), user2Shares);
 
         vm.startPrank(user1);
-        wrapper.approve(address(withdrawalQueue), USER1_DEPOSIT);
+        pool.approve(address(withdrawalQueue), USER1_DEPOSIT);
 
         uint256[] memory user1Amounts = new uint256[](1);
         user1Amounts[0] = USER1_DEPOSIT;
@@ -143,7 +143,7 @@ contract WithdrawalQueueTest is Test {
         vm.stopPrank();
 
         vm.startPrank(user2);
-        wrapper.approve(address(withdrawalQueue), USER2_DEPOSIT);
+        pool.approve(address(withdrawalQueue), USER2_DEPOSIT);
         uint256[] memory user2Amounts = new uint256[](1);
         user2Amounts[0] = USER2_DEPOSIT;
         uint256[] memory user2RequestIds = withdrawalQueue.requestWithdrawals(user2Amounts, new uint256[](1), user2);
@@ -167,9 +167,9 @@ contract WithdrawalQueueTest is Test {
         assertEq(user1RequestIds.length, 1);
         assertEq(user2RequestIds.length, 1);
 
-        // Verify stvTokens were burned by wrapper
-        assertEq(wrapper.balanceOf(user1), 0);
-        assertEq(wrapper.balanceOf(user2), 0);
+        // Verify stvTokens were burned by pool
+        assertEq(pool.balanceOf(user1), 0);
+        assertEq(pool.balanceOf(user2), 0);
 
         // Check request status
         WithdrawalQueue.WithdrawalRequestStatus memory user1Status = withdrawalQueue.getWithdrawalStatus(
@@ -206,11 +206,11 @@ contract WithdrawalQueueTest is Test {
         console.log("Vault balance after:", address(stakingVault).balance);
         console.log("BeaconChain balance after:", address(beaconChain).balance);
 
-        console.log("Wrapper balance before:", address(wrapper).balance);
-        console.log("Wrapper totalSupply before:", wrapper.totalSupply());
-        console.log("Wrapper totalAssets before:", wrapper.totalAssets());
+        console.log("Wrapper balance before:", address(pool).balance);
+        console.log("Wrapper totalSupply before:", pool.totalSupply());
+        console.log("Wrapper totalAssets before:", pool.totalAssets());
         console.log("WithdrawalQueue balance ETH:", address(withdrawalQueue).balance);
-        console.log("WithdrawalQueue balance stvETH:", wrapper.balanceOf(address(withdrawalQueue)));
+        console.log("WithdrawalQueue balance stvETH:", pool.balanceOf(address(withdrawalQueue)));
         console.log("unfinalizedRequestNumber before", withdrawalQueue.unfinalizedRequestNumber());
 
         vm.prank(operator);
@@ -225,11 +225,11 @@ contract WithdrawalQueueTest is Test {
 
         console.log("--------------step1------------------");
 
-        console.log("Wrapper balance before:", address(wrapper).balance);
-        console.log("Wrapper totalSupply before:", wrapper.totalSupply());
-        console.log("Wrapper totalAssets before:", wrapper.totalAssets());
+        console.log("Wrapper balance before:", address(pool).balance);
+        console.log("Wrapper totalSupply before:", pool.totalSupply());
+        console.log("Wrapper totalAssets before:", pool.totalAssets());
         console.log("WithdrawalQueue balance ETH:", address(withdrawalQueue).balance);
-        console.log("WithdrawalQueue balance stvETH:", wrapper.balanceOf(address(withdrawalQueue)));
+        console.log("WithdrawalQueue balance stvETH:", pool.balanceOf(address(withdrawalQueue)));
 
         assertEq(user1.balance, initialBalance - USER1_DEPOSIT);
         assertEq(user2.balance, initialBalance - USER2_DEPOSIT);
@@ -250,32 +250,32 @@ contract WithdrawalQueueTest is Test {
         vm.stopPrank();
 
         console.log("--------------step2------------------");
-        console.log("Wrapper balance before:", address(wrapper).balance);
-        console.log("Wrapper totalSupply before:", wrapper.totalSupply());
-        console.log("Wrapper totalAssets before:", wrapper.totalAssets());
+        console.log("Wrapper balance before:", address(pool).balance);
+        console.log("Wrapper totalSupply before:", pool.totalSupply());
+        console.log("Wrapper totalAssets before:", pool.totalAssets());
         console.log("WithdrawalQueue balance ETH:", address(withdrawalQueue).balance);
-        console.log("WithdrawalQueue balance stvETH:", wrapper.balanceOf(address(withdrawalQueue)));
+        console.log("WithdrawalQueue balance stvETH:", pool.balanceOf(address(withdrawalQueue)));
         console.log("user1 balance:", user1.balance);
         console.log("user2 balance:", user2.balance);
 
         assertEq(user1.balance, initialBalance);
         assertEq(user2.balance, initialBalance);
-        assertEq(wrapper.balanceOf(address(withdrawalQueue)), 0);
-        assertEq(wrapper.balanceOf(user1), 0);
-        assertEq(wrapper.balanceOf(user2), 0);
-        assertEq(wrapper.totalSupply(), 0);
-        assertEq(wrapper.totalAssets(), 0);
+        assertEq(pool.balanceOf(address(withdrawalQueue)), 0);
+        assertEq(pool.balanceOf(user1), 0);
+        assertEq(pool.balanceOf(user2), 0);
+        assertEq(pool.totalSupply(), 0);
+        assertEq(pool.totalAssets(), 0);
         assertEq(address(withdrawalQueue).balance, 0);
-        assertEq(address(wrapper).balance, 0);
+        assertEq(address(pool).balance, 0);
     }
 
     // function test_EmergencyExit() public {
     //     vm.startPrank(user1);
-    //     uint256 user1Shares = wrapper.depositETH{value: USER1_DEPOSIT}(user1);
+    //     uint256 user1Shares = pool.depositETH{value: USER1_DEPOSIT}(user1);
     //     vm.stopPrank();
 
     //     vm.startPrank(user2);
-    //     uint256 user2Shares = wrapper.depositETH{value: USER2_DEPOSIT}(user2);
+    //     uint256 user2Shares = pool.depositETH{value: USER2_DEPOSIT}(user2);
     //     vm.stopPrank();
 
     //     console.log("user1Shares", user1Shares);
@@ -283,7 +283,7 @@ contract WithdrawalQueueTest is Test {
 
     //     vm.startPrank(user1);
     //     uint256 halfUser1Deposit = USER1_DEPOSIT/2;
-    //     wrapper.approve(address(withdrawalQueue), halfUser1Deposit);
+    //     pool.approve(address(withdrawalQueue), halfUser1Deposit);
     //     uint256 user1RequestId = withdrawalQueue.requestWithdrawal(
     //         user1,
     //         halfUser1Deposit
@@ -342,20 +342,4 @@ contract WithdrawalQueueTest is Test {
     // Tests withdrawal handling when vault experiences staking rewards/rebases
     // Placeholder for testing share rate changes during withdrawal process
     function test_WithdrawalWithRebase() public {}
-
-    function test_WrapperUpgrade() public {
-        MockUpgradableWq mockUpgradableWq = new MockUpgradableWq(address(wrapper));
-
-        vm.prank(address(wrapper));
-        withdrawalQueue.upgradeTo(address(mockUpgradableWq));
-
-        assertEq(MockUpgradableWq(address(withdrawalQueue)).getImplementation(), address(mockUpgradableWq));
-    }
-
-    function test_revert_WrapperUpgrade_NotWrapper() public {
-        MockUpgradableWq mockUpgradableWq = new MockUpgradableWq(address(wrapper));
-
-        vm.expectRevert(abi.encodeWithSelector(WithdrawalQueue.OnlyWrapperCan.selector));
-        withdrawalQueue.upgradeTo(address(mockUpgradableWq));
-    }
 }

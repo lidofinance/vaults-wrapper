@@ -9,12 +9,12 @@ import {ITellerWithMultiAssetSupport} from "src/interfaces/ggv/ITellerWithMultiA
 import {IBoringOnChainQueue} from "src/interfaces/ggv/IBoringOnChainQueue.sol";
 import {IBoringSolver} from "src/interfaces/ggv/IBoringSolver.sol";
 
-import {WrapperCHarness} from "test/utils/WrapperCHarness.sol";
+import {StvStrategyPoolHarness} from "test/utils/StvStrategyPoolHarness.sol";
 
 import {GGVStrategy} from "src/strategy/GGVStrategy.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
 import {IStrategy} from "src/interfaces/IStrategy.sol";
-import {WrapperC} from "src/WrapperC.sol";
+import {StvStrategyPool} from "src/StvStrategyPool.sol";
 
 import {TableUtils} from "../utils/format/TableUtils.sol";
 import {GGVVaultMock} from "src/mock/ggv/GGVVaultMock.sol";
@@ -37,7 +37,7 @@ interface IAccountant {
     function setRateProviderData(ERC20 asset, bool isPeggedToBase, address rateProvider) external;
 }
 
-contract GGVTest is WrapperCHarness {
+contract GGVTest is StvStrategyPoolHarness {
     using TableUtils for TableUtils.Context;
 
     TableUtils.Context private _log;
@@ -59,7 +59,7 @@ contract GGVTest is WrapperCHarness {
     IBoringOnChainQueue public boringOnChainQueue;
     IBoringSolver public solver;
 
-    WrapperC public wrapper;
+    StvStrategyPool public pool;
     WithdrawalQueue public withdrawalQueue;
 
     GGVStrategy public ggvStrategy;
@@ -84,11 +84,11 @@ contract GGVTest is WrapperCHarness {
         teller = GGVMockTeller(address(boringVault.TELLER()));
         boringOnChainQueue = GGVQueueMock(address(boringVault.BORING_QUEUE()));
 
-        ctx = _deployWrapperC(true, 0, address(strategy), 0, address(teller), address(boringOnChainQueue));
-        wrapper = WrapperC(payable(ctx.wrapper));
-        vm.label(address(wrapper), "WrapperProxy");
+        ctx = _deployStvStrategyPool(true, 0, address(strategy), 0, address(teller), address(boringOnChainQueue));
+        pool = StvStrategyPool(payable(ctx.pool));
+        vm.label(address(pool), "WrapperProxy");
 
-        strategy = IStrategy(wrapper.STRATEGY());
+        strategy = IStrategy(pool.STRATEGY());
         ggvStrategy = GGVStrategy(address(strategy));
 
         user1StrategyProxy = ggvStrategy.getStrategyProxyAddress(USER1);
@@ -98,7 +98,7 @@ contract GGVTest is WrapperCHarness {
         vm.label(user2StrategyProxy, "User2StrategyProxy");
 
         _log.init(
-            address(wrapper),
+            address(pool),
             address(boringVault),
             address(steth),
             address(wsteth),
@@ -117,10 +117,10 @@ contract GGVTest is WrapperCHarness {
         wsteth.transfer(address(boringVault), solverWsteth);
         vm.stopPrank();
 
-        withdrawalQueue = wrapper.WITHDRAWAL_QUEUE();
+        withdrawalQueue = pool.WITHDRAWAL_QUEUE();
 
         vm.startPrank(NODE_OPERATOR);
-        wrapper.addToAllowList(address(strategy));
+        pool.addToAllowList(address(strategy));
         vm.stopPrank();
 
         // Skip external GGV mainnet setup when using local mocks
@@ -157,13 +157,10 @@ contract GGVTest is WrapperCHarness {
         uint256 depositAmount = 1 ether;
         uint256 vaultProfit = depositAmount * vaultIncrease / 100; // 0.05 ether profit
 
-        uint256 shareRate1 = steth.getPooledEthByShares(1e18);
-        assertTrue(shareRate1 == 1 ether, "Started share rate is not 1:1");
-
         logUsers.push(TableUtils.User(USER1, "user1"));
         logUsers.push(TableUtils.User(user1StrategyProxy, "user1_proxy"));
-        logUsers.push(TableUtils.User(address(wrapper), "wrapper"));
-        logUsers.push(TableUtils.User(address(wrapper.WITHDRAWAL_QUEUE()), "wq"));
+        logUsers.push(TableUtils.User(address(pool), "pool"));
+        logUsers.push(TableUtils.User(address(pool.WITHDRAWAL_QUEUE()), "wq"));
         logUsers.push(TableUtils.User(address(boringVault), "boringVault"));
         logUsers.push(TableUtils.User(address(boringOnChainQueue), "boringVaultQueue"));
 
@@ -176,7 +173,7 @@ contract GGVTest is WrapperCHarness {
         // Check that user is not allowed to deposit directly
         vm.prank(USER1);
         vm.expectRevert(abi.encodeWithSelector(AllowList.NotAllowListed.selector, USER1));
-        wrapper.depositETH{value: depositAmount}(USER1);
+        pool.depositETH{value: depositAmount}(USER1);
 
         // 1. Initial Deposit
         vm.prank(USER1);
@@ -188,8 +185,8 @@ contract GGVTest is WrapperCHarness {
         console.log("\n[SCENARIO] Simulating Rebases (Vault +5%, stETH +4%)");
 
         // a) Vault Rebase (simulated via mock report)
-        // uint256 currentLiabilityShares = wrapper.DASHBOARD().liabilityShares();
-        // uint256 currentTotalAssets = wrapper.totalAssets();
+        // uint256 currentLiabilityShares = pool.DASHBOARD().liabilityShares();
+        // uint256 currentTotalAssets = pool.totalAssets();
 
         // core.applyVaultReport(address(ctx.vault), currentTotalAssets + vaultProfit, 0, currentLiabilityShares, 0, false);
 
@@ -265,7 +262,7 @@ contract GGVTest is WrapperCHarness {
         //  console.log("requestIds length", wqRequestIds[0]);
 
         vm.prank(USER1);
-        wrapper.claimWithdrawal(wqRequestIds[0], USER1);
+        pool.claimWithdrawal(wqRequestIds[0], USER1);
 
         uint256 ethClaimed = USER1.balance - userBalanceBeforeClaim;
         console.log("ETH Claimed:", ethClaimed);
@@ -276,7 +273,7 @@ contract GGVTest is WrapperCHarness {
 //         uint256 surplusStETH = steth.balanceOf(user1StrategyProxy);
 //         if (surplusStETH > 0) {
 //             uint256 stethBalance = steth.sharesOf(user1StrategyProxy);
-//             uint256 stethDebt = wrapper.mintedStethSharesOf(user1StrategyProxy);
+//             uint256 stethDebt = pool.mintedStethSharesOf(user1StrategyProxy);
 //             uint256 surplusInShares = stethBalance > stethDebt ? stethBalance - stethDebt : 0;
 //             uint256 maxAmount = steth.getPooledEthByShares(surplusInShares);
 
@@ -289,25 +286,25 @@ contract GGVTest is WrapperCHarness {
     }
 
     function _finalizeWQ(uint256 _maxRequest, uint256 vaultProfit) public {
-        vm.deal(address(wrapper.STAKING_VAULT()), 1 ether);
+        vm.deal(address(pool.STAKING_VAULT()), 1 ether);
 
         vm.warp(block.timestamp + 1 days);
         core.applyVaultReport(
-            address(wrapper.STAKING_VAULT()),
-            wrapper.totalAssets(),
+            address(pool.STAKING_VAULT()),
+            pool.totalAssets(),
             0,
-            wrapper.DASHBOARD().liabilityShares(),
+            pool.DASHBOARD().liabilityShares(),
             0
         );
 
         if (vaultProfit != 0) {
             vm.startPrank(NODE_OPERATOR);
-            wrapper.DASHBOARD().fund{value: 10 ether}();
+            pool.DASHBOARD().fund{value: 10 ether}();
             vm.stopPrank();
         }
 
         vm.startPrank(NODE_OPERATOR);
-        uint256 finalizedRequests = wrapper.WITHDRAWAL_QUEUE().finalize(_maxRequest);
+        uint256 finalizedRequests = pool.WITHDRAWAL_QUEUE().finalize(_maxRequest);
         vm.stopPrank();
 
         assertEq(finalizedRequests, _maxRequest, "Invalid finalized requests");

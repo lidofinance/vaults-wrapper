@@ -32,9 +32,9 @@ contract ViewsTest is Test, SetupWithdrawalQueue {
     }
 
     function test_GetWithdrawalStatus_ArrayMatchesSingle() public {
-        wrapper.depositETH{value: 100 ether}();
-        uint256 requestId1 = wrapper.requestWithdrawal(10 ** STV_DECIMALS);
-        uint256 requestId2 = wrapper.requestWithdrawal(2 * 10 ** STV_DECIMALS);
+        pool.depositETH{value: 100 ether}();
+        uint256 requestId1 = pool.requestWithdrawal(10 ** STV_DECIMALS);
+        uint256 requestId2 = pool.requestWithdrawal(2 * 10 ** STV_DECIMALS);
 
         uint256[] memory ids = new uint256[](2);
         ids[0] = requestId1;
@@ -73,8 +73,8 @@ contract ViewsTest is Test, SetupWithdrawalQueue {
     }
 
     function test_GetClaimableEther_ViewLifecycle() public {
-        wrapper.depositETH{value: 100 ether}();
-        uint256 requestId = wrapper.requestWithdrawal(10 ** STV_DECIMALS);
+        pool.depositETH{value: 100 ether}();
+        uint256 requestId = pool.requestWithdrawal(10 ** STV_DECIMALS);
 
         assertEq(withdrawalQueue.getClaimableEther(requestId), 0);
 
@@ -97,7 +97,7 @@ contract ViewsTest is Test, SetupWithdrawalQueue {
         uint256[] memory batchClaimable = withdrawalQueue.getClaimableEther(requestIds, hints);
         assertEq(batchClaimable[0], claimable);
 
-        wrapper.claimWithdrawal(requestId, address(this));
+        pool.claimWithdrawal(requestId, address(this));
         assertEq(withdrawalQueue.getClaimableEther(requestId), 0);
 
         batchClaimable = withdrawalQueue.getClaimableEther(requestIds, hints);
@@ -105,8 +105,8 @@ contract ViewsTest is Test, SetupWithdrawalQueue {
     }
 
     function test_GetClaimableEtherBatch_ReturnsZeroForUnfinalized() public {
-        wrapper.depositETH{value: 100 ether}();
-        uint256 requestId = wrapper.requestWithdrawal(10 ** STV_DECIMALS);
+        pool.depositETH{value: 100 ether}();
+        uint256 requestId = pool.requestWithdrawal(10 ** STV_DECIMALS);
 
         uint256[] memory requestIds = new uint256[](1);
         requestIds[0] = requestId;

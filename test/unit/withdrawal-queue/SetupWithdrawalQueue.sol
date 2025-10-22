@@ -4,14 +4,14 @@ pragma solidity >=0.8.25;
 import {Test} from "forge-std/Test.sol";
 import {OssifiableProxy} from "src/proxy/OssifiableProxy.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
-import {WrapperB} from "src/WrapperB.sol";
+import {StvStETHPool} from "src/StvStETHPool.sol";
 import {MockLazyOracle} from "test/mocks/MockLazyOracle.sol";
 import {MockDashboard, MockDashboardFactory} from "test/mocks/MockDashboard.sol";
 import {MockStETH} from "test/mocks/MockStETH.sol";
 
 abstract contract SetupWithdrawalQueue is Test {
     WithdrawalQueue public withdrawalQueue;
-    WrapperB public wrapper;
+    StvStETHPool public pool;
     MockLazyOracle public lazyOracle;
     MockDashboard public dashboard;
     MockStETH public steth;
@@ -53,14 +53,14 @@ abstract contract SetupWithdrawalQueue is Test {
         // Fund dashboard
         dashboard.fund{value: initialDeposit}();
 
-        // Deploy WrapperB proxy with temporary implementation
-        WrapperB tempImpl = new WrapperB(address(dashboard), false, reserveRatioGapBP, address(0));
-        OssifiableProxy wrapperProxy = new OssifiableProxy(address(tempImpl), owner, "");
-        wrapper = WrapperB(payable(wrapperProxy));
+        // Deploy StvStETHPool proxy with temporary implementation
+        StvStETHPool tempImpl = new StvStETHPool(address(dashboard), false, reserveRatioGapBP, address(0));
+        OssifiableProxy poolProxy = new OssifiableProxy(address(tempImpl), owner, "");
+        pool = StvStETHPool(payable(poolProxy));
 
-        // Deploy WithdrawalQueue with correct wrapper address
+        // Deploy WithdrawalQueue with correct pool address
         WithdrawalQueue wqImpl = new WithdrawalQueue(
-            address(wrapper),
+            address(pool),
             address(dashboard),
             address(dashboard.VAULT_HUB()),
             address(steth),
@@ -94,18 +94,18 @@ abstract contract SetupWithdrawalQueue is Test {
         lazyOracle.mock__updateLatestReportTimestamp(block.timestamp);
 
         // Deploy Wrapper implementation
-        WrapperB wrapperImpl = new WrapperB(address(dashboard), false, reserveRatioGapBP, address(withdrawalQueue));
+        StvStETHPool poolImpl = new StvStETHPool(address(dashboard), false, reserveRatioGapBP, address(withdrawalQueue));
         vm.prank(owner);
-        wrapperProxy.proxy__upgradeTo(address(wrapperImpl));
+        poolProxy.proxy__upgradeTo(address(poolImpl));
 
-        // Initialize wrapper
-        wrapper.initialize(owner, address(0), "Test", "stvETH");
+        // Initialize pool
+        pool.initialize(owner, "Test", "stvETH");
     }
 
     // Helper function to create and finalize a withdrawal request
 
     function _requestWithdrawalAndFinalize(uint256 _stvAmount) internal returns (uint256 requestId) {
-        requestId = wrapper.requestWithdrawal(_stvAmount);
+        requestId = pool.requestWithdrawal(_stvAmount);
         _finalizeRequests(1);
     }
 

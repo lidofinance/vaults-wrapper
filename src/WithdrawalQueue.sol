@@ -89,7 +89,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
         bool isClaimed;
     }
 
-    /// @custom:storage-location erc7201:wrapper.storage.WithdrawalQueue
+    /// @custom:storage-location erc7201:pool.storage.WithdrawalQueue
     struct WithdrawalQueueStorage {
         // ### 1st slot
         /// @dev queue for withdrawal requests, indexes (requestId) start from 1
@@ -114,7 +114,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
         uint96 totalLockedAssets;
     }
 
-    // keccak256(abi.encode(uint256(keccak256("wrapper.storage.WithdrawalQueue")) - 1)) & ~bytes32(uint256(0xff))
+    // keccak256(abi.encode(uint256(keccak256("pool.storage.WithdrawalQueue")) - 1)) & ~bytes32(uint256(0xff))
     bytes32 private constant WithdrawalQueueStorageLocation =
         0xff0bcb2d6a043ff95a84af574799a6cec022695552f02c53d70e4e5aa1e06100;
 
@@ -152,7 +152,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
     event ImplementationUpgraded(address newImplementation);
 
     error ZeroAddress();
-    error OnlyWrapperCan();
+    error OnlyStvStrategyPoolan();
     error RequestAmountTooSmall(uint256 amount);
     error RequestAmountTooLarge(uint256 amount);
     error InvalidRequestId(uint256 requestId);
@@ -169,7 +169,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
     error NotOwner(address _requestor, address _owner);
 
     constructor(
-        address _wrapper,
+        address _pool,
         address _dashboard,
         address _vaultHub,
         address _steth,
@@ -178,7 +178,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
         uint256 _maxAcceptableWQFinalizationTimeInSeconds,
         uint256 _minWithdrawalDelayTimeInSeconds
     ) {
-        WRAPPER = IWrapper(payable(_wrapper));
+        WRAPPER = IWrapper(payable(_pool));
         DASHBOARD = IDashboard(payable(_dashboard));
         VAULT_HUB = IVaultHub(_vaultHub);
         STETH = IStETH(_steth);
@@ -528,7 +528,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
     /**
      * @notice Claim a batch of withdrawal requests
      * @param _requestIds array of request ids to claim
-     * @param _hints checkpoint hints for each request
+     * @param _hints checkpoint hints. can be found with `findCheckpointHints(_requestIds, 1, getLastCheckpointIndex())`
      * @param _requestor address of the request owner, should be equal to msg.sender on Wrapper side
      * @param _recipient address where claimed ether will be sent to
      * @return claimedAmounts array of claimed amounts for each request
@@ -931,21 +931,6 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
     }
 
     // =================================================================================
-    // UPGRADABILITY
-    // =================================================================================
-
-    /**
-     * @notice Enacts implementation upgrade
-     * @param newImplementation address of the new implementation contract
-     * @dev can only be called by the WRAPPER
-     */
-    function upgradeTo(address newImplementation) external {
-        _checkOnlyWrapper();
-        ERC1967Utils.upgradeToAndCall(newImplementation, new bytes(0));
-        emit ImplementationUpgraded(newImplementation);
-    }
-
-    // =================================================================================
     // EMERGENCY EXIT
     // =================================================================================
 
@@ -992,7 +977,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
     // =================================================================================
 
     function _checkOnlyWrapper() internal view {
-        if (msg.sender != address(WRAPPER)) revert OnlyWrapperCan();
+        if (msg.sender != address(WRAPPER)) revert OnlyStvStrategyPoolan();
     }
 
     function _checkResumedOrEmergencyExit() internal view {

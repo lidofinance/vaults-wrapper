@@ -7,7 +7,7 @@ interface IStrategy {
     event StrategyExecuted(address indexed user, uint256 stv, uint256 stethShares, uint256 stethAmount, bytes data);
 
     /// @notice Supplies stETH to the strategy
-    function supply(address _referral, bytes calldata _params) external payable; 
+    function supply(address _referral, bytes calldata _params) external payable;
 
     /// @notice Requests a withdrawal from the Withdrawal Queue
     function requestWithdrawal(

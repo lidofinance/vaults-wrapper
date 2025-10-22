@@ -15,7 +15,7 @@ contract MockStETH is ERC20 {
         totalPooledEth = 1e18;
     }
 
-    // 
+    //
     // simple shares
     //
 
@@ -27,7 +27,7 @@ contract MockStETH is ERC20 {
 
 
     function getPooledEthByShares(uint256 _sharesAmount) public view returns (uint256) {
-      
+
         return _sharesAmount
             * totalPooledEth // numerator in ether
             / totalShares; // denominator in shares
@@ -36,10 +36,10 @@ contract MockStETH is ERC20 {
     function getPooledEthBySharesRoundUp(uint256 _sharesAmount) public view returns (uint256) {
         return Math.mulDiv(_sharesAmount, totalPooledEth, totalShares, Math.Rounding.Ceil);
     }
-    
+
     function transferSharesFrom(address from, address to, uint256 amount) external returns (bool) {
         require(shares[from] >= amount, "Not enough shares");
-        
+
         uint256 steth = getPooledEthByShares(amount);
         uint256 allowance = allowance(from, msg.sender);
         require(allowance >= steth, "Not enough allowance");
@@ -48,7 +48,7 @@ contract MockStETH is ERC20 {
 
         shares[from] -= amount;
         shares[to] += amount;
-        
+
         return true;
     }
 
@@ -58,7 +58,7 @@ contract MockStETH is ERC20 {
         shares[to] += amount;
         return true;
     }
-    
+
     function sharesOf(address account) external view returns (uint256) {
         return shares[account];
     }
@@ -78,7 +78,7 @@ contract MockStETH is ERC20 {
         return true;
     }
 
-    
+
     function submit(address) external payable returns (uint256) {
         uint256 sharesToMint = getPooledEthByShares(msg.value);
         shares[msg.sender] += sharesToMint;

@@ -10,13 +10,13 @@ import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
 contract FinalizationTest is Test, SetupWithdrawalQueue {
     function setUp() public override {
         super.setUp();
-        wrapper.depositETH{value: 100_000 ether}();
+        pool.depositETH{value: 100_000 ether}();
     }
 
     // Basic Finalization
 
     function test_Finalize_SimpleRequestAndFinalization() public {
-        uint256 requestId = wrapper.requestWithdrawal(10 ** STV_DECIMALS);
+        uint256 requestId = pool.requestWithdrawal(10 ** STV_DECIMALS);
 
         // Verify request was created
         assertEq(requestId, 1);
@@ -46,9 +46,9 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
     }
 
     function test_Finalize_MultipleRequests() public {
-        wrapper.requestWithdrawal(10 ** STV_DECIMALS);
-        wrapper.requestWithdrawal(10 ** STV_DECIMALS);
-        wrapper.requestWithdrawal(10 ** STV_DECIMALS);
+        pool.requestWithdrawal(10 ** STV_DECIMALS);
+        pool.requestWithdrawal(10 ** STV_DECIMALS);
+        pool.requestWithdrawal(10 ** STV_DECIMALS);
 
         // Verify all requests created
         assertEq(withdrawalQueue.getLastRequestId(), 3);
@@ -74,9 +74,9 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
     }
 
     function test_Finalize_PartialFinalization() public {
-        wrapper.requestWithdrawal(10 ** STV_DECIMALS);
-        wrapper.requestWithdrawal(10 ** STV_DECIMALS);
-        wrapper.requestWithdrawal(10 ** STV_DECIMALS);
+        pool.requestWithdrawal(10 ** STV_DECIMALS);
+        pool.requestWithdrawal(10 ** STV_DECIMALS);
+        pool.requestWithdrawal(10 ** STV_DECIMALS);
 
         assertEq(withdrawalQueue.getLastRequestId(), 3);
 
@@ -96,7 +96,7 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
     // Restrictions
 
     function test_Finalize_RevertMinDelayNotPassed() public {
-        wrapper.requestWithdrawal(10 ** STV_DECIMALS);
+        pool.requestWithdrawal(10 ** STV_DECIMALS);
 
         // Don't advance time enough
         vm.warp(block.timestamp + MIN_WITHDRAWAL_DELAY_TIME - 1);
@@ -114,7 +114,7 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
         // Move time forward and create request after report
         vm.warp(block.timestamp + 1 hours);
 
-        wrapper.requestWithdrawal(10 ** STV_DECIMALS);
+        pool.requestWithdrawal(10 ** STV_DECIMALS);
 
         vm.warp(block.timestamp + MIN_WITHDRAWAL_DELAY_TIME + 1);
 
@@ -125,7 +125,7 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
     }
 
     function test_Finalize_RevertOnlyFinalizeRole() public {
-        wrapper.requestWithdrawal(10 ** STV_DECIMALS);
+        pool.requestWithdrawal(10 ** STV_DECIMALS);
 
         vm.warp(block.timestamp + MIN_WITHDRAWAL_DELAY_TIME + 1);
 
@@ -142,7 +142,7 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
     }
 
     function test_Finalize_RevertWhenPaused() public {
-        wrapper.requestWithdrawal(10 ** STV_DECIMALS);
+        pool.requestWithdrawal(10 ** STV_DECIMALS);
 
         vm.warp(block.timestamp + MIN_WITHDRAWAL_DELAY_TIME + 1);
 
@@ -157,7 +157,7 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
 
     function test_Finalize_ReturnsZeroWhenWithdrawableInsufficient() public {
         uint256 stvToRequest = 10 ** STV_DECIMALS;
-        wrapper.requestWithdrawal(stvToRequest);
+        pool.requestWithdrawal(stvToRequest);
 
         vm.warp(block.timestamp + MIN_WITHDRAWAL_DELAY_TIME + 1);
 
@@ -175,12 +175,12 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
         uint256 stvRequest1 = 10 ** STV_DECIMALS;
         uint256 stvRequest2 = 2 * 10 ** STV_DECIMALS;
 
-        wrapper.requestWithdrawal(stvRequest1);
-        wrapper.requestWithdrawal(stvRequest2);
+        pool.requestWithdrawal(stvRequest1);
+        pool.requestWithdrawal(stvRequest2);
 
         vm.warp(block.timestamp + MIN_WITHDRAWAL_DELAY_TIME + 1);
 
-        uint256 expectedEthFirst = wrapper.previewRedeem(stvRequest1);
+        uint256 expectedEthFirst = pool.previewRedeem(stvRequest1);
         address stakingVault = address(dashboard.STAKING_VAULT());
         uint256 vaultBalance = stakingVault.balance;
         dashboard.mock_setLocked(vaultBalance - expectedEthFirst);
@@ -198,13 +198,13 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
         uint256 mintedStethShares = 10 ** ASSETS_DECIMALS;
         uint256 stvToRequest = 2 * 10 ** STV_DECIMALS;
 
-        wrapper.mintStethShares(mintedStethShares);
-        wrapper.requestWithdrawal(stvToRequest, 0, mintedStethShares, address(this));
+        pool.mintStethShares(mintedStethShares);
+        pool.requestWithdrawal(stvToRequest, 0, mintedStethShares, address(this));
 
         vm.warp(block.timestamp + MIN_WITHDRAWAL_DELAY_TIME + 1);
 
-        uint256 assetsPreview = wrapper.previewRedeem(stvToRequest);
-        uint256 assetsToRebalance = wrapper.STETH().getPooledEthBySharesRoundUp(mintedStethShares);
+        uint256 assetsPreview = pool.previewRedeem(stvToRequest);
+        uint256 assetsToRebalance = pool.STETH().getPooledEthBySharesRoundUp(mintedStethShares);
 
         address stakingVault = address(dashboard.STAKING_VAULT());
         vm.deal(stakingVault, assetsPreview);
@@ -220,13 +220,13 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
         uint256 mintedStethShares = 10 ** ASSETS_DECIMALS;
         uint256 stvToRequest = 2 * 10 ** STV_DECIMALS;
 
-        wrapper.mintStethShares(mintedStethShares);
-        wrapper.requestWithdrawal(stvToRequest, 0, mintedStethShares, address(this));
+        pool.mintStethShares(mintedStethShares);
+        pool.requestWithdrawal(stvToRequest, 0, mintedStethShares, address(this));
 
         vm.warp(block.timestamp + MIN_WITHDRAWAL_DELAY_TIME + 1);
 
-        uint256 assetsPreview = wrapper.previewRedeem(stvToRequest);
-        uint256 assetsToRebalance = wrapper.STETH().getPooledEthBySharesRoundUp(mintedStethShares);
+        uint256 assetsPreview = pool.previewRedeem(stvToRequest);
+        uint256 assetsToRebalance = pool.STETH().getPooledEthBySharesRoundUp(mintedStethShares);
 
         address stakingVault = address(dashboard.STAKING_VAULT());
         vm.deal(stakingVault, assetsPreview);
@@ -240,15 +240,15 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
         uint256 mintedStethShares = 10 ** ASSETS_DECIMALS;
         uint256 stvToRequest = 2 * 10 ** STV_DECIMALS;
 
-        wrapper.mintStethShares(mintedStethShares);
-        uint256 requestId1 = wrapper.requestWithdrawal(stvToRequest, 0, mintedStethShares, address(this));
+        pool.mintStethShares(mintedStethShares);
+        uint256 requestId1 = pool.requestWithdrawal(stvToRequest, 0, mintedStethShares, address(this));
 
-        wrapper.mintStethShares(mintedStethShares);
-        uint256 requestId2 = wrapper.requestWithdrawal(stvToRequest, 0, mintedStethShares, address(this));
+        pool.mintStethShares(mintedStethShares);
+        uint256 requestId2 = pool.requestWithdrawal(stvToRequest, 0, mintedStethShares, address(this));
 
         vm.warp(block.timestamp + MIN_WITHDRAWAL_DELAY_TIME + 1);
 
-        uint256 assetsRequired = wrapper.previewRedeem(stvToRequest);
+        uint256 assetsRequired = pool.previewRedeem(stvToRequest);
         address stakingVault = address(dashboard.STAKING_VAULT());
         vm.deal(stakingVault, assetsRequired);
         dashboard.mock_setLocked(0);
@@ -264,7 +264,7 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
     // Edge Cases
 
     function test_Finalize_ZeroMaxRequests() public {
-        wrapper.requestWithdrawal(10 ** STV_DECIMALS);
+        pool.requestWithdrawal(10 ** STV_DECIMALS);
 
         vm.warp(block.timestamp + MIN_WITHDRAWAL_DELAY_TIME + 1);
 
@@ -280,7 +280,7 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
     }
 
     function test_Finalize_AlreadyFullyFinalized() public {
-        wrapper.requestWithdrawal(10 ** STV_DECIMALS);
+        pool.requestWithdrawal(10 ** STV_DECIMALS);
 
         vm.warp(block.timestamp + MIN_WITHDRAWAL_DELAY_TIME + 1);
 
@@ -295,7 +295,7 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
     }
 
     function test_Finalize_RevertWhenReportStale() public {
-        wrapper.requestWithdrawal(10 ** STV_DECIMALS);
+        pool.requestWithdrawal(10 ** STV_DECIMALS);
 
         vm.warp(block.timestamp + MIN_WITHDRAWAL_DELAY_TIME + 1);
 
@@ -309,7 +309,7 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
     // Checkpoint Tests
 
     function test_Finalize_CreatesCheckpoint() public {
-        wrapper.requestWithdrawal(10 ** STV_DECIMALS);
+        pool.requestWithdrawal(10 ** STV_DECIMALS);
 
         // Verify no checkpoints initially
         assertEq(withdrawalQueue.getLastCheckpointIndex(), 0);
@@ -326,7 +326,7 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
     // Emergency Exit
 
     function test_Finalize_DuringEmergencyExit() public {
-        wrapper.requestWithdrawal(10 ** STV_DECIMALS);
+        pool.requestWithdrawal(10 ** STV_DECIMALS);
 
         // Set very old timestamp to make queue "stuck"
         vm.warp(block.timestamp + withdrawalQueue.MAX_ACCEPTABLE_WQ_FINALIZATION_TIME_IN_SECONDS() + 1);
@@ -346,13 +346,13 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
 
     function test_Finalize_RewardsDoNotAffectFinalizationRate() public {
         uint256 stvToRequest = 10 ** STV_DECIMALS;
-        uint256 expectedEth = wrapper.previewRedeem(stvToRequest);
-        uint256 requestId = wrapper.requestWithdrawal(stvToRequest);
+        uint256 expectedEth = pool.previewRedeem(stvToRequest);
+        uint256 requestId = pool.requestWithdrawal(stvToRequest);
 
         // Simulate rewards
-        uint256 totalAssetsBefore = wrapper.totalAssets();
+        uint256 totalAssetsBefore = pool.totalAssets();
         dashboard.mock_simulateRewards(10 ether);
-        uint256 totalAssetsAfter = wrapper.totalAssets();
+        uint256 totalAssetsAfter = pool.totalAssets();
         assertEq(totalAssetsAfter, totalAssetsBefore + 10 ether);
 
         // Finalize request
@@ -366,16 +366,16 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
 
     function test_Finalize_PenaltiesAffectFinalizationRate() public {
         uint256 stvToRequest = 10 ** STV_DECIMALS;
-        uint256 requestId = wrapper.requestWithdrawal(stvToRequest);
+        uint256 requestId = pool.requestWithdrawal(stvToRequest);
 
         // Simulate penalties
-        uint256 totalAssetsBefore = wrapper.totalAssets();
+        uint256 totalAssetsBefore = pool.totalAssets();
         dashboard.mock_simulateRewards(-10 ether);
-        uint256 totalAssetsAfter = wrapper.totalAssets();
+        uint256 totalAssetsAfter = pool.totalAssets();
         assertEq(totalAssetsAfter, totalAssetsBefore - 10 ether);
 
         // Expected ETH should be lower due to penalties
-        uint256 expectedEth = wrapper.previewRedeem(stvToRequest);
+        uint256 expectedEth = pool.previewRedeem(stvToRequest);
 
         // Finalize request
         vm.warp(block.timestamp + MIN_WITHDRAWAL_DELAY_TIME + 1);
