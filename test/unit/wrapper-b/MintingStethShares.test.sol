@@ -29,7 +29,7 @@ contract MintingStethSharesTest is Test, SetupWrapperB {
 
     function test_InitialState_CorrectMintingCapacityCalculation() public view {
         uint256 capacity = wrapper.mintingCapacitySharesOf(address(this));
-        uint256 expectedReservedPart = (ethToDeposit * wrapper.WRAPPER_RR_BP()) / wrapper.TOTAL_BASIS_POINTS();
+        uint256 expectedReservedPart = (ethToDeposit * wrapper.reserveRatioBP()) / wrapper.TOTAL_BASIS_POINTS();
         uint256 expectedUnreservedPart = ethToDeposit - expectedReservedPart;
         uint256 expectedCapacity = steth.getSharesByPooledEth(expectedUnreservedPart);
         assertEq(capacity, expectedCapacity);
@@ -179,7 +179,7 @@ contract MintingStethSharesTest is Test, SetupWrapperB {
         uint256 capacity = wrapper.mintingCapacitySharesOf(address(this));
 
         // Verify that reserve ratio is respected
-        uint256 expectedReservedPart = (assets * wrapper.WRAPPER_RR_BP()) / wrapper.TOTAL_BASIS_POINTS();
+        uint256 expectedReservedPart = (assets * wrapper.reserveRatioBP()) / wrapper.TOTAL_BASIS_POINTS();
         uint256 expectedUnreservedPart = assets - expectedReservedPart;
         uint256 expectedCapacity = steth.getSharesByPooledEth(expectedUnreservedPart);
 

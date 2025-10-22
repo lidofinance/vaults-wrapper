@@ -237,7 +237,7 @@ contract TransferBlockingTest is Test, SetupWrapperB {
 
     function test_Transfer_ReserveRatioImpactOnCalculations() public view {
         uint256 testShares = 1 ether;
-        uint256 reserveRatio = wrapper.WRAPPER_RR_BP();
+        uint256 reserveRatio = wrapper.reserveRatioBP();
         uint256 totalBasisPoints = wrapper.TOTAL_BASIS_POINTS();
 
         // Verify reserve ratio is configured correctly

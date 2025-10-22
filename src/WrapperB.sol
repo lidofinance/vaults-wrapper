@@ -10,6 +10,7 @@ import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet
 import {WithdrawalQueue} from "./WithdrawalQueue.sol";
 
 import {IStETH} from "./interfaces/IStETH.sol";
+import {IVaultHub} from "./interfaces/IVaultHub.sol";
 
 /**
  * @title WrapperB
@@ -22,6 +23,7 @@ contract WrapperB is WrapperBase {
     event StethSharesBurned(address indexed account, uint256 stethShares);
     event StethSharesRebalanced(uint256 stethShares, uint256 stvBurned);
     event SocializedLoss(uint256 stv, uint256 assets);
+    event VaultConnectionUpdated(uint256 newReserveRatioBP, uint256 newForcedRebalanceThresholdBP);
 
     error InsufficientMintingCapacity();
     error InsufficientStethShares();
@@ -32,8 +34,12 @@ contract WrapperB is WrapperBase {
     error ZeroArgument();
     error MintingForThanTargetStSharesShareIsNotAllowed();
     error ArraysLengthMismatch(uint256 firstArrayLength, uint256 secondArrayLength);
+    error InvalidReserveRatioGap(uint256 reserveRatioGapBP);
+    error InvalidReserveRatio(uint256 reserveRatioBP);
+    error InvalidForcedRebalanceThreshold(uint256 forcedRebalanceThresholdBP);
 
-    uint256 public immutable WRAPPER_RR_BP; // vault's reserve ratio plus gap for wrapper
+    /// @notice Reserve ratio gap in basis points for Wrapper
+    uint256 public immutable RESERVE_RATIO_GAP_BP;
 
     /// @notice Sentinel value for depositETH to mint maximum available stETH shares for the deposit
     uint256 public constant MAX_MINTABLE_AMOUNT = type(uint256).max;
@@ -42,6 +48,8 @@ contract WrapperB is WrapperBase {
     struct WrapperBStorage {
         mapping(address => uint256) mintedStethShares;
         uint256 totalMintedStethShares;
+        uint256 reserveRatioBP;
+        uint256 forcedRebalanceThresholdBP;
     }
 
     // keccak256(abi.encode(uint256(keccak256("wrapper.b.storage")) - 1)) & ~bytes32(uint256(0xff))
@@ -60,20 +68,18 @@ contract WrapperB is WrapperBase {
         uint256 _reserveRatioGapBP,
         address _withdrawalQueue
     ) WrapperBase(_dashboard, _allowListEnabled, _withdrawalQueue) {
-        uint256 vaultRR = DASHBOARD.vaultConnection().reserveRatioBP;
-        require(_reserveRatioGapBP < TOTAL_BASIS_POINTS - vaultRR, "Reserve ratio gap too high");
-        WRAPPER_RR_BP = vaultRR + _reserveRatioGapBP;
+        if (_reserveRatioGapBP >= TOTAL_BASIS_POINTS) revert InvalidReserveRatioGap(_reserveRatioGapBP);
+        RESERVE_RATIO_GAP_BP = _reserveRatioGapBP;
     }
 
-    function initialize(
-        address _owner,
-        string memory _name,
-        string memory _symbol
-    ) public override initializer {
+    function initialize(address _owner, string memory _name, string memory _symbol) public override initializer {
         _initializeWrapperBase(_owner, _name, _symbol);
 
         // Approve max stETH to the Dashboard for burning
         STETH.approve(address(DASHBOARD), type(uint256).max);
+
+        // Update reserve ratio and forced rebalance threshold from the VaultHub
+        updateVaultConnection();
     }
 
     function wrapperType() external pure virtual override returns (string memory) {
@@ -405,7 +411,7 @@ contract WrapperB is WrapperBase {
     function calcStethSharesToMintForAssets(uint256 _assets) public view returns (uint256 stethShares) {
         uint256 maxStethToMint = Math.mulDiv(
             _assets,
-            TOTAL_BASIS_POINTS - WRAPPER_RR_BP,
+            TOTAL_BASIS_POINTS - reserveRatioBP(),
             TOTAL_BASIS_POINTS,
             Math.Rounding.Floor
         );
@@ -431,7 +437,12 @@ contract WrapperB is WrapperBase {
     function calcAssetsToLockForStethShares(uint256 _stethShares) public view returns (uint256 assetsToLock) {
         if (_stethShares == 0) return 0;
         uint256 steth = STETH.getPooledEthBySharesRoundUp(_stethShares);
-        assetsToLock = Math.mulDiv(steth, TOTAL_BASIS_POINTS, TOTAL_BASIS_POINTS - WRAPPER_RR_BP, Math.Rounding.Ceil);
+        assetsToLock = Math.mulDiv(
+            steth,
+            TOTAL_BASIS_POINTS,
+            TOTAL_BASIS_POINTS - reserveRatioBP(),
+            Math.Rounding.Ceil
+        );
     }
 
     /**
@@ -442,6 +453,51 @@ contract WrapperB is WrapperBase {
     function calcStvToLockForStethShares(uint256 _stethShares) public view returns (uint256 stvToLock) {
         uint256 assetsToLock = calcAssetsToLockForStethShares(_stethShares);
         stvToLock = _convertToStv(assetsToLock, Math.Rounding.Ceil);
+    }
+
+    // =================================================================================
+    // RESERVE RATIO & FORCED REBALANCE THRESHOLD
+    // =================================================================================
+
+    /**
+     * @notice Reserve ratio in basis points
+     * @return reserveRatio The reserve ratio in basis points
+     */
+    function reserveRatioBP() public view returns (uint256 reserveRatio) {
+        reserveRatio = _getWrapperBStorage().reserveRatioBP;
+    }
+
+    /**
+     * @notice Forced rebalance threshold in basis points
+     * @return threshold The forced rebalance threshold in basis points
+     */
+    function forcedRebalanceThresholdBP() public view returns (uint256 threshold) {
+        threshold = _getWrapperBStorage().forcedRebalanceThresholdBP;
+    }
+
+    /**
+     * @notice Update Wrapper's reserve ratio and forced rebalance threshold from VaultHub
+     * @dev Permissionless method to keep Wrapper's reserve ratio and forced rebalance threshold in sync with VaultHub
+     * @dev Adds a gap defined by RESERVE_RATIO_GAP_BP to VaultHub's values
+     * @dev Reverts if the new reserve ratio or forced rebalance threshold is invalid (>= TOTAL_BASIS_POINTS)
+     */
+    function updateVaultConnection() public {
+        IVaultHub.VaultConnection memory connection = DASHBOARD.vaultConnection();
+
+        uint256 newReserveRatioBP = connection.reserveRatioBP + RESERVE_RATIO_GAP_BP;
+        uint256 newThresholdBP = connection.forcedRebalanceThresholdBP + RESERVE_RATIO_GAP_BP;
+
+        WrapperBStorage storage $ = _getWrapperBStorage();
+
+        if (newReserveRatioBP == $.reserveRatioBP && newThresholdBP == $.forcedRebalanceThresholdBP) return;
+
+        if (newReserveRatioBP >= TOTAL_BASIS_POINTS) revert InvalidReserveRatio(newReserveRatioBP);
+        if (newThresholdBP >= TOTAL_BASIS_POINTS) revert InvalidForcedRebalanceThreshold(newThresholdBP);
+
+        $.reserveRatioBP = newReserveRatioBP;
+        $.forcedRebalanceThresholdBP = newThresholdBP;
+
+        emit VaultConnectionUpdated(newReserveRatioBP, newThresholdBP);
     }
 
     // =================================================================================

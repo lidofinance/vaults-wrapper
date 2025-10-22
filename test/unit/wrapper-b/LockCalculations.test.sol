@@ -35,7 +35,7 @@ contract LockCalculationsTest is Test, SetupWrapperB {
         uint256 expectedAssets = Math.mulDiv(
             steth,
             wrapper.TOTAL_BASIS_POINTS(),
-            wrapper.TOTAL_BASIS_POINTS() - wrapper.WRAPPER_RR_BP(),
+            wrapper.TOTAL_BASIS_POINTS() - wrapper.reserveRatioBP(),
             Math.Rounding.Ceil // rounds up
         );
 
@@ -49,7 +49,7 @@ contract LockCalculationsTest is Test, SetupWrapperB {
         uint256 expectedAssets = Math.mulDiv(
             steth,
             wrapper.TOTAL_BASIS_POINTS(),
-            wrapper.TOTAL_BASIS_POINTS() - wrapper.WRAPPER_RR_BP(),
+            wrapper.TOTAL_BASIS_POINTS() - wrapper.reserveRatioBP(),
             Math.Rounding.Ceil // rounds up
         );
         uint256 expectedStv = Math.mulDiv(
@@ -68,7 +68,7 @@ contract LockCalculationsTest is Test, SetupWrapperB {
         uint256 assets = Math.mulDiv(stv, wrapper.totalAssets(), wrapper.totalSupply(), Math.Rounding.Floor);
         uint256 maxStethToMint = Math.mulDiv(
             assets,
-            wrapper.TOTAL_BASIS_POINTS() - wrapper.WRAPPER_RR_BP(),
+            wrapper.TOTAL_BASIS_POINTS() - wrapper.reserveRatioBP(),
             wrapper.TOTAL_BASIS_POINTS(),
             Math.Rounding.Floor // rounds down
         );
@@ -82,7 +82,7 @@ contract LockCalculationsTest is Test, SetupWrapperB {
 
         uint256 maxStethToMint = Math.mulDiv(
             assets,
-            wrapper.TOTAL_BASIS_POINTS() - wrapper.WRAPPER_RR_BP(),
+            wrapper.TOTAL_BASIS_POINTS() - wrapper.reserveRatioBP(),
             wrapper.TOTAL_BASIS_POINTS(),
             Math.Rounding.Floor // rounds down
         );
