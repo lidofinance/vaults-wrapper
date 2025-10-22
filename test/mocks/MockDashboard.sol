@@ -130,6 +130,7 @@ contract MockDashboardFactory {
     function createMockDashboard(address _owner) external returns (MockDashboard) {
         MockVaultHub vaultHub = new MockVaultHub();
         MockStakingVault stakingVault = new MockStakingVault();
+        vaultHub.mock_setConnectionParameters(address(stakingVault), 10_00, 10_25); // 10% reserve, 10.25% forced rebalance
 
         MockStETH steth = MockStETH(vaultHub.LIDO());
         steth.mock_setTotalPooled(1000 ether, 800 * 10 ** 18);

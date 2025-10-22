@@ -23,7 +23,7 @@ contract WrapperB is WrapperBase {
     event StethSharesBurned(address indexed account, uint256 stethShares);
     event StethSharesRebalanced(uint256 stethShares, uint256 stvBurned);
     event SocializedLoss(uint256 stv, uint256 assets);
-    event VaultConnectionUpdated(uint256 newReserveRatioBP, uint256 newForcedRebalanceThresholdBP);
+    event VaultParametersUpdated(uint256 newReserveRatioBP, uint256 newForcedRebalanceThresholdBP);
 
     error InsufficientMintingCapacity();
     error InsufficientStethShares();
@@ -78,8 +78,8 @@ contract WrapperB is WrapperBase {
         // Approve max stETH to the Dashboard for burning
         STETH.approve(address(DASHBOARD), type(uint256).max);
 
-        // Update reserve ratio and forced rebalance threshold from the VaultHub
-        updateVaultConnection();
+        // Sync reserve ratio and forced rebalance threshold from the VaultHub
+        syncVaultParameters();
     }
 
     function wrapperType() external pure virtual override returns (string memory) {
@@ -456,11 +456,11 @@ contract WrapperB is WrapperBase {
     }
 
     // =================================================================================
-    // RESERVE RATIO & FORCED REBALANCE THRESHOLD
+    // VAULT PARAMETERS
     // =================================================================================
 
     /**
-     * @notice Reserve ratio in basis points
+     * @notice Reserve ratio in basis points with the gap applied
      * @return reserveRatio The reserve ratio in basis points
      */
     function reserveRatioBP() public view returns (uint256 reserveRatio) {
@@ -476,12 +476,12 @@ contract WrapperB is WrapperBase {
     }
 
     /**
-     * @notice Update Wrapper's reserve ratio and forced rebalance threshold from VaultHub
+     * @notice Sync Wrapper's reserve ratio and forced rebalance threshold from VaultHub
      * @dev Permissionless method to keep Wrapper's reserve ratio and forced rebalance threshold in sync with VaultHub
      * @dev Adds a gap defined by RESERVE_RATIO_GAP_BP to VaultHub's values
      * @dev Reverts if the new reserve ratio or forced rebalance threshold is invalid (>= TOTAL_BASIS_POINTS)
      */
-    function updateVaultConnection() public {
+    function syncVaultParameters() public {
         IVaultHub.VaultConnection memory connection = DASHBOARD.vaultConnection();
 
         uint256 newReserveRatioBP = connection.reserveRatioBP + RESERVE_RATIO_GAP_BP;
@@ -497,7 +497,7 @@ contract WrapperB is WrapperBase {
         $.reserveRatioBP = newReserveRatioBP;
         $.forcedRebalanceThresholdBP = newThresholdBP;
 
-        emit VaultConnectionUpdated(newReserveRatioBP, newThresholdBP);
+        emit VaultParametersUpdated(newReserveRatioBP, newThresholdBP);
     }
 
     // =================================================================================
