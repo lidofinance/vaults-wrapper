@@ -10,6 +10,7 @@ import {WithdrawalQueue} from "./WithdrawalQueue.sol";
 import {IStETH} from "./interfaces/IStETH.sol";
 import {IVaultHub} from "./interfaces/IVaultHub.sol";
 import {IDashboard} from "./interfaces/IDashboard.sol";
+import {IStakingVault} from "./interfaces/IStakingVault.sol";
 import {AllowList} from "./AllowList.sol";
 
 abstract contract BasePool is Initializable, ERC20Upgradeable, AllowList {
@@ -37,7 +38,7 @@ abstract contract BasePool is Initializable, ERC20Upgradeable, AllowList {
     IStETH public immutable STETH;
     IDashboard public immutable DASHBOARD;
     IVaultHub public immutable VAULT_HUB;
-    address public immutable STAKING_VAULT;
+    IStakingVault public immutable STAKING_VAULT;
 
     WithdrawalQueue public immutable WITHDRAWAL_QUEUE;
 
@@ -82,7 +83,7 @@ abstract contract BasePool is Initializable, ERC20Upgradeable, AllowList {
     constructor(address _dashboard, bool _allowListEnabled, address _withdrawalQueue) AllowList(_allowListEnabled) {
         DASHBOARD = IDashboard(payable(_dashboard));
         VAULT_HUB = IVaultHub(DASHBOARD.VAULT_HUB());
-        STAKING_VAULT = address(DASHBOARD.stakingVault());
+        STAKING_VAULT = IStakingVault(DASHBOARD.stakingVault());
         WITHDRAWAL_QUEUE = WithdrawalQueue(payable(_withdrawalQueue));
         STETH = IStETH(payable(DASHBOARD.STETH()));
 
@@ -492,7 +493,7 @@ abstract contract BasePool is Initializable, ERC20Upgradeable, AllowList {
         _checkRole(DEFAULT_ADMIN_ROLE, msg.sender);
 
         // Check if vault has been disconnected
-        if (STAKING_VAULT == address(DASHBOARD.stakingVault())) {
+        if (address(STAKING_VAULT) == address(DASHBOARD.stakingVault())) {
             revert("Vault not disconnected yet");
         }
 

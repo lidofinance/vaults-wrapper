@@ -28,7 +28,7 @@ contract VaultParametersTest is Test, SetupStvStETHPool {
         MockVaultHub vaultHub = dashboard.VAULT_HUB();
         address stakingVault = dashboard.stakingVault();
         uint16 baseReserveRatioBP = 1_000;
-        uint16 baseForcedThresholdBP = 1_200;
+        uint16 baseForcedThresholdBP = 800;
         vaultHub.mock_setConnectionParameters(stakingVault, baseReserveRatioBP, baseForcedThresholdBP);
 
         pool.syncVaultParameters();
@@ -41,7 +41,7 @@ contract VaultParametersTest is Test, SetupStvStETHPool {
         MockVaultHub vaultHub = dashboard.VAULT_HUB();
         address stakingVault = dashboard.stakingVault();
         uint16 baseReserveRatioBP = 1_000;
-        uint16 baseForcedThresholdBP = 1_200;
+        uint16 baseForcedThresholdBP = 800;
         vaultHub.mock_setConnectionParameters(stakingVault, baseReserveRatioBP, baseForcedThresholdBP);
 
         vm.expectEmit(false, false, false, true);
@@ -67,12 +67,7 @@ contract VaultParametersTest is Test, SetupStvStETHPool {
         uint16 baseForcedThresholdBP = 0;
         vaultHub.mock_setConnectionParameters(stakingVault, baseReserveRatioBP, baseForcedThresholdBP);
 
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                StvStETHPool.InvalidReserveRatio.selector,
-                uint256(baseReserveRatioBP + reserveRatioGapBP)
-            )
-        );
+        vm.expectRevert(0x01); // assertion failure
         pool.syncVaultParameters();
     }
 
@@ -83,12 +78,7 @@ contract VaultParametersTest is Test, SetupStvStETHPool {
         uint16 baseForcedThresholdBP = 9_700;
         vaultHub.mock_setConnectionParameters(stakingVault, baseReserveRatioBP, baseForcedThresholdBP);
 
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                StvStETHPool.InvalidForcedRebalanceThreshold.selector,
-                uint256(baseForcedThresholdBP + reserveRatioGapBP)
-            )
-        );
+        vm.expectRevert(0x01); // assertion failure
         pool.syncVaultParameters();
     }
 }

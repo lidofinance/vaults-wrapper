@@ -94,8 +94,8 @@ contract RebalanceMintedStethSharesTest is Test, SetupStvStETHPool {
         _mintStethSharesToWQ(sharesToMint);
 
         // Only check that event is emitted with correct shares parameter (without exact stv amount)
-        vm.expectEmit(true, true, false, false);
-        emit StvStETHPool.StethSharesRebalanced(sharesToMint, 0);
+        vm.expectEmit(true, true, true, false);
+        emit StvStETHPool.StethSharesRebalanced(withdrawalQueue, sharesToMint, 0);
 
         vm.prank(withdrawalQueue);
         pool.rebalanceMintedStethShares(sharesToMint, unlimitedStvToBurn);

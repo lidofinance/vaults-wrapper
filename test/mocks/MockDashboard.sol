@@ -99,10 +99,11 @@ contract MockDashboard is AccessControlEnumerable {
         // Mock implementation
     }
 
-    function triggerValidatorWithdrawals(bytes calldata pubkeys, uint64[] calldata amountsInGwei, address refundRecipient)
-        external
-        payable
-    {
+    function triggerValidatorWithdrawals(
+        bytes calldata pubkeys,
+        uint64[] calldata amountsInGwei,
+        address refundRecipient
+    ) external payable {
         // Mock implementation
     }
 
@@ -130,7 +131,7 @@ contract MockDashboardFactory {
     function createMockDashboard(address _owner) external returns (MockDashboard) {
         MockVaultHub vaultHub = new MockVaultHub();
         MockStakingVault stakingVault = new MockStakingVault();
-        vaultHub.mock_setConnectionParameters(address(stakingVault), 10_00, 10_25); // 10% reserve, 10.25% forced rebalance
+        vaultHub.mock_setConnectionParameters(address(stakingVault), 10_00, 9_75); // 10% reserve, 9.75% forced rebalance
 
         MockStETH steth = MockStETH(vaultHub.LIDO());
         steth.mock_setTotalPooled(1000 ether, 800 * 10 ** 18);
