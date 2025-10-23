@@ -70,12 +70,17 @@ deploy-factory:
 		--sig 'run()' \
 		--non-interactive
 
-# Usage: make deploy-wrapper-from-factory PARAMS_JSON=./myparams.json
-deploy-wrapper-from-factory:
+# Usage: make deploy-pool-from-factory PARAMS_JSON=./myparams.json
+deploy-pool-from-factory:
 	[ -f .env ] && . .env; \
 	if [ ! -f "$$PARAMS_JSON" ]; then \
-		echo "Error: PARAMS_JSON must be set and point to an existing file (e.g. make deploy-wrapper-from-factory PARAMS_JSON=./myparams.json)"; \
+		echo "Error: PARAMS_JSON must be set and point to an existing file (e.g. make deploy-pool-from-factory PARAMS_JSON=./myparams.json)"; \
 		exit 1; \
+	fi; \
+	VERIFY_FLAGS=""; \
+	if [ -n "$$PUBLISH_SOURCES" ]; then \
+		export ETHERSCAN_API_KEY="$${ETHERSCAN_API_KEY:-$${ETHERSCAN_TOKEN}}"; \
+		VERIFY_FLAGS="--verify --verifier etherscan"; \
 	fi; \
 	export WRAPPER_PARAMS_JSON="$$PARAMS_JSON"; \
 	forge script script/DeployWrapper.s.sol:DeployWrapper \
@@ -84,40 +89,41 @@ deploy-wrapper-from-factory:
 		--broadcast \
 		--sender $${DEPLOYER:-$(DEPLOYER)} \
 		--private-key $${PRIVATE_KEY:-$(PRIVATE_KEY)} \
+		$$VERIFY_FLAGS \
 		--slow \
 		-vvvv \
 		--sig 'run()' \
 		--non-interactive
 
 
-publish-wrapper-sources:
+publish-pool-sources:
 	[ -f .env ] && . .env; \
 	if [ -z "$$ETHERSCAN_API_KEY" ] && [ -z "$$ETHERSCAN_TOKEN" ]; then \
 		echo "ETHERSCAN_API_KEY or ETHERSCAN_TOKEN must be set"; \
 		exit 1; \
 	fi; \
 	export ETHERSCAN_API_KEY="$${ETHERSCAN_API_KEY:-$${ETHERSCAN_TOKEN}}"; \
-	FILE=$${WRAPPER_DEPLOYED_JSON:-$${WRAPPER_DEPLOYED_JSON:-./deployments/wrapper-deployed-$${NETWORK:-$(NETWORK)}.json}}; \
+	FILE=$${WRAPPER_DEPLOYED_JSON:-$${WRAPPER_DEPLOYED_JSON:-./deployments/pool-deployed-$${NETWORK:-$(NETWORK)}.json}}; \
 	if [ ! -f "$$FILE" ]; then \
 		echo "Wrapper artifact not found: $$FILE"; \
 		exit 1; \
 	fi; \
-		ADDR_WRAPPER=$$(jq -r '.wrapper // .wrapperProxy // .deployment.wrapper // empty' $$FILE 2>/dev/null); \
+		ADDR_WRAPPER=$$(jq -r '.pool // .poolProxy // .deployment.pool // empty' $$FILE 2>/dev/null); \
 		ADDR_WQ=$$(jq -r '.withdrawalQueue // .deployment.withdrawalQueue // empty' $$FILE 2>/dev/null); \
-		ADDR_WRAPPER_IMPL=$$(jq -r '.wrapperImpl // .deployment.wrapperImpl // empty' $$FILE 2>/dev/null); \
+		ADDR_WRAPPER_IMPL=$$(jq -r '.poolImpl // .deployment.poolImpl // empty' $$FILE 2>/dev/null); \
 		ADDR_WQ_IMPL=$$(jq -r '.withdrawalQueueImpl // .deployment.withdrawalQueueImpl // empty' $$FILE 2>/dev/null); \
 		ADDR_STRATEGY=$$(jq -r '.strategy // .deployment.strategy // empty' $$FILE 2>/dev/null); \
-		WRAPPER_PROXY_ARGS=$$(jq -r '.wrapperProxyCtorArgs // empty' $$FILE 2>/dev/null | sed 's/^null$$//'); \
+		WRAPPER_PROXY_ARGS=$$(jq -r '.poolProxyCtorArgs // empty' $$FILE 2>/dev/null | sed 's/^null$$//'); \
 		WQ_PROXY_ARGS=$$(jq -r '.withdrawalQueueProxyCtorArgs // empty' $$FILE 2>/dev/null | sed 's/^null$$//'); \
-		WRAPPER_IMPL_ARGS=$$(jq -r '.wrapperImplCtorArgs // empty' $$FILE 2>/dev/null | sed 's/^null$$//'); \
+		WRAPPER_IMPL_ARGS=$$(jq -r '.poolImplCtorArgs // empty' $$FILE 2>/dev/null | sed 's/^null$$//'); \
 		WQ_IMPL_ARGS=$$(jq -r '.withdrawalQueueImplCtorArgs // empty' $$FILE 2>/dev/null | sed 's/^null$$//'); \
 		STRATEGY_ARGS=$$(jq -r '.strategyCtorArgs // empty' $$FILE 2>/dev/null | sed 's/^null$$//'); \
-	WRAPPER_TYPE=$$(jq -r '.wrapperType // .wrapper.wrapperType // empty' $$FILE 2>/dev/null); \
+	WRAPPER_TYPE=$$(jq -r '.poolType // .pool.poolType // empty' $$FILE 2>/dev/null); \
 	WRAPPER_CONTRACT=$${WRAPPER_IMPL_CONTRACT}; \
 	echo "Using artifact: $$FILE"; \
 	echo "Parsed addresses:"; \
-	echo "  wrapper proxy: $$ADDR_WRAPPER"; \
-	echo "  wrapper impl:  $$ADDR_WRAPPER_IMPL"; \
+	echo "  pool proxy: $$ADDR_WRAPPER"; \
+	echo "  pool impl:  $$ADDR_WRAPPER_IMPL"; \
 	echo "  wq proxy:      $$ADDR_WQ"; \
 	echo "  wq impl:       $$ADDR_WQ_IMPL"; \
 	echo "  strategy:      $$ADDR_STRATEGY"; \
@@ -164,7 +170,6 @@ publish-wrapper-sources:
 			-vvvv || true; \
 	fi
 
-
 deploy-ggv-mocks:
 	[ -f .env ] && . .env; \
 	OUTPUT_JSON=$${GGV_MOCKS_DEPLOYED_JSON:-deployments/ggv-mocks-$${NETWORK:-$(NETWORK)}.json}; \
@@ -178,25 +183,6 @@ deploy-ggv-mocks:
 		--non-interactive \
 		--json; \
 	echo "Mocks written to $$OUTPUT_JSON (see logs for exact path if overridden)"
-
-
-do-entire-flow-with-core-deploy:
-	export NETWORK=$(NETWORK) && \
-	export RPC_URL=$(RPC_URL) && \
-	export PRIVATE_KEY=$(PRIVATE_KEY) && \
-	export DEPLOYER=$(DEPLOYER) && \
-	export CORE_DEPLOYED_JSON=$(CORE_DEPLOYED_JSON) && \
-	export OUTPUT_JSON=$(OUTPUT_JSON) && \
-	export WRAPPER_PARAMS_JSON=$(WRAPPER_PARAMS_JSON) && \
-	make core-deploy && \
-	rm -f $(CORE_SUBDIR)/deployed-$(NETWORK).json && \
-	mv $(CORE_SUBDIR)/deployed-local.json $(CORE_SUBDIR)/deployed-$(NETWORK).json && \
-	make harness-core && \
-	make deploy-factory && \
-	make deploy-wrapper-from-factory && \
-	if [ -n "$$PUBLISH_SOURCES" ]; then \
-		make publish-wrapper-sources; \
-	fi
 
 # Requires entr util
 test-watch:
