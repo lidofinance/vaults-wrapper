@@ -16,7 +16,6 @@ contract StvStrategyPoolHarness is StvStETHPoolHarness {
     function _deployStvStrategyPool(
         bool enableAllowlist,
         uint256 nodeOperatorFeeBP,
-        address, // strategy_ - unused, kept for backwards compatibility
         uint256 reserveRatioGapBP,
         address _teller,
         address _boringQueue

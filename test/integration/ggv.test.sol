@@ -84,7 +84,7 @@ contract GGVTest is StvStrategyPoolHarness {
         teller = GGVMockTeller(address(boringVault.TELLER()));
         boringOnChainQueue = GGVQueueMock(address(boringVault.BORING_QUEUE()));
 
-        ctx = _deployStvStrategyPool(true, 0, address(0), 0, address(teller), address(boringOnChainQueue));
+        ctx = _deployStvStrategyPool(true, 0, 0, address(teller), address(boringOnChainQueue));
         pool = StvStrategyPool(payable(ctx.pool));
         vm.label(address(pool), "WrapperProxy");
 
