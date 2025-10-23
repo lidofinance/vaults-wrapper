@@ -84,11 +84,11 @@ contract GGVTest is StvStrategyPoolHarness {
         teller = GGVMockTeller(address(boringVault.TELLER()));
         boringOnChainQueue = GGVQueueMock(address(boringVault.BORING_QUEUE()));
 
-        ctx = _deployStvStrategyPool(true, 0, address(strategy), 0, address(teller), address(boringOnChainQueue));
+        ctx = _deployStvStrategyPool(true, 0, address(0), 0, address(teller), address(boringOnChainQueue));
         pool = StvStrategyPool(payable(ctx.pool));
         vm.label(address(pool), "WrapperProxy");
 
-        strategy = IStrategy(pool.STRATEGY());
+        strategy = IStrategy(ctx.strategy);
         ggvStrategy = GGVStrategy(address(strategy));
 
         user1StrategyProxy = ggvStrategy.getStrategyProxyAddress(USER1);
@@ -118,10 +118,6 @@ contract GGVTest is StvStrategyPoolHarness {
         vm.stopPrank();
 
         withdrawalQueue = pool.WITHDRAWAL_QUEUE();
-
-        vm.startPrank(NODE_OPERATOR);
-        pool.addToAllowList(address(strategy));
-        vm.stopPrank();
 
         // Skip external GGV mainnet setup when using local mocks
         // _setupGGV();

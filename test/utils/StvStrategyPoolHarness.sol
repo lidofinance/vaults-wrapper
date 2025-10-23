@@ -16,14 +16,13 @@ contract StvStrategyPoolHarness is StvStETHPoolHarness {
     function _deployStvStrategyPool(
         bool enableAllowlist,
         uint256 nodeOperatorFeeBP,
-        address strategy_,
+        address, // strategy_ - unused, kept for backwards compatibility
         uint256 reserveRatioGapBP,
         address _teller,
         address _boringQueue
     ) internal returns (WrapperContext memory) {
         DeploymentConfig memory config = DeploymentConfig({
             configuration: Factory.WrapperType.GGV_STRATEGY,
-            strategy: strategy_,
             enableAllowlist: enableAllowlist,
             reserveRatioGapBP: reserveRatioGapBP,
             nodeOperator: NODE_OPERATOR,
@@ -38,7 +37,7 @@ contract StvStrategyPoolHarness is StvStETHPoolHarness {
 
         WrapperContext memory ctx = _deployWrapperSystem(config);
 
-        strategy = IStrategy(payable(strategy_));
+        strategy = IStrategy(payable(ctx.strategy));
 
         return ctx;
     }
@@ -61,7 +60,7 @@ contract StvStrategyPoolHarness is StvStETHPoolHarness {
 
         // StvStrategyPool specific: has strategy checks
         if (address(strategy) != address(0)) {
-            assertEq(address(stvStrategyPool(ctx).STRATEGY()), address(strategy), "Strategy should be set correctly");
+            assertTrue(ctx.pool.isAllowListed(address(strategy)), "Strategy should be added to allowlist");
             // Additional strategy-specific initial state checks can go here
         }
     }

@@ -327,7 +327,7 @@ contract Factory {
     )
         external
         payable
-        returns (address vault, address dashboard, address payable poolProxy, address withdrawalQueueProxy)
+        returns (address vault, address dashboard, address payable poolProxy, address withdrawalQueueProxy, address strategy)
     {
         return _createVaultWithLoopStrategy(
             _nodeOperator,
@@ -354,7 +354,7 @@ contract Factory {
         bool _allowlistEnabled,
         uint256 _reserveRatioGapBP,
         uint256 _loops
-    ) external payable returns (address vault, address dashboard, address payable poolProxy, address withdrawalQueueProxy) {
+    ) external payable returns (address vault, address dashboard, address payable poolProxy, address withdrawalQueueProxy, address strategy) {
         return _createVaultWithLoopStrategy(
             _nodeOperator,
             _nodeOperatorManager,
@@ -380,13 +380,13 @@ contract Factory {
         uint256 _reserveRatioGapBP,
         uint256 _loops,
         address _timelockExecutor
-    ) internal returns (address vault, address dashboard, address payable _poolProxy, address _withdrawalQueueProxy) {
+    ) internal returns (address vault, address dashboard, address payable _poolProxy, address _withdrawalQueueProxy, address loopStrategy) {
         IDashboard _dashboard;
         (vault, dashboard, _dashboard, _poolProxy, _withdrawalQueueProxy) = _setupVaultAndProxies(
             _nodeOperator, _nodeOperatorManager, _nodeOperatorFeeBP, _confirmExpiry, _maxFinalizationTime, _minWithdrawalDelayTime
         );
 
-        address loopStrategy = LOOP_STRATEGY_FACTORY.deploy(STETH, address(_poolProxy), _loops);
+        loopStrategy = LOOP_STRATEGY_FACTORY.deploy(STETH, address(_poolProxy), _loops);
 
         BasePool pool = _deployAndInitWrapper(
             WrapperType.LOOP_STRATEGY,
@@ -420,7 +420,7 @@ contract Factory {
     )
         external
         payable
-        returns (address vault, address dashboard, address payable poolProxy, address withdrawalQueueProxy)
+        returns (address vault, address dashboard, address payable poolProxy, address withdrawalQueueProxy, address strategy)
     {
         return _createVaultWithGGVStrategy(
             _nodeOperator,
@@ -449,7 +449,7 @@ contract Factory {
         uint256 _reserveRatioGapBP,
         address _teller,
         address _boringQueue
-    ) external payable returns (address vault, address dashboard, address payable poolProxy, address withdrawalQueueProxy) {
+    ) external payable returns (address vault, address dashboard, address payable poolProxy, address withdrawalQueueProxy, address strategy) {
         return _createVaultWithGGVStrategy(
             _nodeOperator,
             _nodeOperatorManager,
@@ -477,13 +477,13 @@ contract Factory {
         address _teller,
         address _boringQueue,
         address _timelockExecutor
-    ) internal returns (address vault, address dashboard, address payable _poolProxy, address _withdrawalQueueProxy) {
+    ) internal returns (address vault, address dashboard, address payable _poolProxy, address _withdrawalQueueProxy, address ggvStrategy) {
         IDashboard _dashboard;
         (vault, dashboard, _dashboard, _poolProxy, _withdrawalQueueProxy) = _setupVaultAndProxies(
             _nodeOperator, _nodeOperatorManager, _nodeOperatorFeeBP, _confirmExpiry, _maxFinalizationTime, _minWithdrawalDelayTime
         );
 
-        address ggvStrategy = GGV_STRATEGY_FACTORY.deploy(_poolProxy, STETH, WSTETH, _teller, _boringQueue);
+        ggvStrategy = GGV_STRATEGY_FACTORY.deploy(_poolProxy, STETH, WSTETH, _teller, _boringQueue);
 
         BasePool pool = _deployAndInitWrapper(
             WrapperType.GGV_STRATEGY,
@@ -521,7 +521,6 @@ contract Factory {
             poolImpl = STV_STRATEGY_POOL_FACTORY.deploy(
                 dashboard,
                 _allowlistEnabled,
-                _strategy,
                 _reserveRatioGapBP,
                 withdrawalQueueProxy
             );
@@ -625,6 +624,11 @@ contract Factory {
         if (_configuration != WrapperType.NO_MINTING_NO_STRATEGY) {
             _dashboard.grantRole(_dashboard.MINT_ROLE(), address(poolProxy));
             _dashboard.grantRole(_dashboard.BURN_ROLE(), address(poolProxy));
+        }
+
+        // Add strategy to allowlist if provided
+        if (_strategy != address(0)) {
+            pool.grantRole(pool.DEPOSIT_ROLE(), _strategy);
         }
 
         pool.grantRole(pool.ALLOW_LIST_MANAGER_ROLE(), msg.sender);

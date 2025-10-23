@@ -14,7 +14,6 @@ import {GGVStrategyFactory} from "src/factories/GGVStrategyFactory.sol";
 import {TimelockFactory} from "src/factories/TimelockFactory.sol";
 import {BasePool} from "../src/BasePool.sol";
 import {StvPool} from "../src/StvPool.sol";
-import {StvStrategyPool} from "../src/StvStrategyPool.sol";
 import {WithdrawalQueue} from "../src/WithdrawalQueue.sol";
 
 import {MockERC20} from "./mocks/MockERC20.sol";
@@ -144,7 +143,7 @@ contract FactoryTest is Test {
 
     function test_canCreateWithStrategy() public {
         vm.startPrank(admin);
-        (, address dashboard, address payable poolProxy,) = WrapperFactory
+        (, address dashboard, address payable poolProxy,, address strategy) = WrapperFactory
             .createVaultWithLoopStrategy{value: connectDeposit}(
             nodeOperator,
             nodeOperatorManager,
@@ -159,9 +158,9 @@ contract FactoryTest is Test {
 
         BasePool pool = BasePool(poolProxy);
 
-        StvStrategyPool strategyPool = StvStrategyPool(payable(address(pool)));
-        // Strategy is deployed internally for loop strategy
-        assertTrue(address(strategyPool.STRATEGY()) != address(0));
+        // Strategy is deployed internally for loop strategy and added to allowlist
+        assertTrue(strategy != address(0));
+        assertTrue(pool.isAllowListed(strategy));
 
         MockDashboard mockDashboard = MockDashboard(payable(dashboard));
 
