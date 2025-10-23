@@ -186,8 +186,8 @@ contract StVaultWrapperV3Test is Test {
         uint256 borrowedEth1 = (borrowedEth0 * borrowRatio) / totalBasisPoints;
 
         // Final calculated values (computed inline to avoid stack too deep)
-        // expectedWrapperStvShares = user1shares + borrowedEth0 (shares accumulated from minting)
-        // expectedStrategyStvShares = borrowedEth1 (remaining from last deposit)
+        // expectedWrapperStv = user1shares + borrowedEth0 (shares accumulated from minting)
+        // expectedStrategyStv = borrowedEth1 (remaining from last deposit)
         // expectedStakingVaultETH = initialETH + borrowedEth0 + borrowedEth1
         // expectedLenderMockETH = 1234 ether - (borrowedEth0 + borrowedEth1)
         // expectedLenderMockStETH = user1shares + borrowedEth0 (total stETH minted)

@@ -4,17 +4,16 @@ pragma solidity >=0.8.25;
 import "forge-std/Script.sol";
 
 import {Factory} from "src/Factory.sol";
-import {WrapperAFactory} from "src/factories/WrapperAFactory.sol";
-import {WrapperBFactory} from "src/factories/WrapperBFactory.sol";
-import {WrapperCFactory} from "src/factories/WrapperCFactory.sol";
+import {StvPoolFactory} from "src/factories/StvPoolFactory.sol";
+import {StvStETHPoolFactory} from "src/factories/StvStETHPoolFactory.sol";
+import {StvStrategyPoolFactory} from "src/factories/StvStrategyPoolFactory.sol";
 import {WithdrawalQueueFactory} from "src/factories/WithdrawalQueueFactory.sol";
 import {LoopStrategyFactory} from "src/factories/LoopStrategyFactory.sol";
 import {GGVStrategyFactory} from "src/factories/GGVStrategyFactory.sol";
 import {DummyImplementation} from "src/proxy/DummyImplementation.sol";
+import {TimelockFactory} from "src/factories/TimelockFactory.sol";
 
 import {ILidoLocator} from "src/interfaces/ILidoLocator.sol";
-import {IVaultFactory} from "src/interfaces/IVaultFactory.sol";
-import {ILido} from "src/interfaces/ILido.sol";
 
 contract DeployWrapperFactory is Script {
     struct CoreAddresses {
@@ -32,34 +31,50 @@ contract DeployWrapperFactory is Script {
         ILidoLocator locator = ILidoLocator(core.locator);
         core.vaultFactory = locator.vaultFactory();
         core.steth = address(locator.lido());
-        core.wsteth = locator.wstETH();
+        core.wsteth = address(locator.wstETH());
         core.lazyOracle = locator.lazyOracle();
+    }
+
+    function _readTimelockFromJson(string memory paramsPath)
+        internal
+        view
+        returns (Factory.TimelockConfig memory tcfg)
+    {
+        require(vm.isFile(paramsPath), string(abi.encodePacked("FACTORY_PARAMS_JSON file does not exist at: ", paramsPath)));
+        string memory json = vm.readFile(paramsPath);
+
+        tcfg.minDelaySeconds = vm.parseJsonUint(json, "$.timelock.minDelaySeconds");
     }
 
     function run() external {
         // Expect environment variables for non-interactive deploys
         // REQUIRED: CORE_DEPLOYED_JSON (path to Lido core deployed json, like CoreHarness)
         // OPTIONAL: FACTORY_DEPLOYED_JSON
+        // REQUIRED: FACTORY_PARAMS_JSON (path to config with timelock params)
         string memory deployedJsonPath = vm.envString("CORE_DEPLOYED_JSON");
-        string memory outputJsonPath = vm.envOr("FACTORY_DEPLOYED_JSON", string(string.concat("deployments/wrapper-", vm.toString(block.chainid), ".json")));
+        string memory outputJsonPath = vm.envOr(
+            "FACTORY_DEPLOYED_JSON", string(string.concat("deployments/pool-", vm.toString(block.chainid), ".json"))
+        );
+        string memory paramsJsonPath = vm.envString("FACTORY_PARAMS_JSON");
 
         if (!vm.isFile(deployedJsonPath)) {
             revert(string(abi.encodePacked("CORE_DEPLOYED_JSON file does not exist at: ", deployedJsonPath)));
         }
 
-
         CoreAddresses memory core = _readCoreFromJson(deployedJsonPath);
+        Factory.TimelockConfig memory tcfg = _readTimelockFromJson(paramsJsonPath);
 
         vm.startBroadcast();
 
         // Deploy implementation factories and proxy stub
-        WrapperAFactory waf = new WrapperAFactory();
-        WrapperBFactory wbf = new WrapperBFactory();
-        WrapperCFactory wcf = new WrapperCFactory();
+        StvPoolFactory poolFac = new StvPoolFactory();
+        StvStETHPoolFactory stethPoolFac = new StvStETHPoolFactory();
+        StvStrategyPoolFactory strategyPoolFac = new StvStrategyPoolFactory();
         WithdrawalQueueFactory wqf = new WithdrawalQueueFactory();
         LoopStrategyFactory lsf = new LoopStrategyFactory();
         GGVStrategyFactory ggvf = new GGVStrategyFactory();
         DummyImplementation dummy = new DummyImplementation();
+        TimelockFactory tlf = new TimelockFactory();
 
         // Build Factory configuration struct
         Factory.WrapperConfig memory cfg = Factory.WrapperConfig({
@@ -67,16 +82,17 @@ contract DeployWrapperFactory is Script {
             steth: core.steth,
             wsteth: core.wsteth,
             lazyOracle: core.lazyOracle,
-            wrapperAFactory: address(waf),
-            wrapperBFactory: address(wbf),
-            wrapperCFactory: address(wcf),
+            stvPoolFactory: address(poolFac),
+            stvStETHPoolFactory: address(stethPoolFac),
+            stvStrategyPoolFactory: address(strategyPoolFac),
             withdrawalQueueFactory: address(wqf),
             loopStrategyFactory: address(lsf),
             ggvStrategyFactory: address(ggvf),
-            dummyImplementation: address(dummy)
+            dummyImplementation: address(dummy),
+            timelockFactory: address(tlf)
         });
 
-        Factory factory = new Factory(cfg);
+        Factory factory = new Factory(cfg, tcfg);
 
         vm.stopBroadcast();
 
@@ -89,12 +105,13 @@ contract DeployWrapperFactory is Script {
         root = vm.serializeAddress("core", "lazyOracle", core.lazyOracle);
 
         string memory facs = "";
-        facs = vm.serializeAddress("factories", "wrapperAFactory", address(waf));
-        facs = vm.serializeAddress("factories", "wrapperBFactory", address(wbf));
-        facs = vm.serializeAddress("factories", "wrapperCFactory", address(wcf));
+        facs = vm.serializeAddress("factories", "stvPoolFactory", address(poolFac));
+        facs = vm.serializeAddress("factories", "stvStETHPoolFactory", address(stethPoolFac));
+        facs = vm.serializeAddress("factories", "stvStrategyPoolFactory", address(strategyPoolFac));
         facs = vm.serializeAddress("factories", "withdrawalQueueFactory", address(wqf));
         facs = vm.serializeAddress("factories", "loopStrategyFactory", address(lsf));
         facs = vm.serializeAddress("factories", "ggvStrategyFactory", address(ggvf));
+        facs = vm.serializeAddress("factories", "timelockFactory", address(tlf));
 
         string memory meta = "";
         meta = vm.serializeString("meta", "chainId", vm.toString(block.chainid));
@@ -123,13 +140,32 @@ contract DeployWrapperFactory is Script {
         require(core.steth == cfg.steth, "stETH mismatch");
 
         vm.startBroadcast();
-        Factory factory = new Factory(cfg);
+        Factory factory = new Factory(cfg, Factory.TimelockConfig({
+            minDelaySeconds: 0
+        }));
         vm.stopBroadcast();
 
-        string memory outputJsonPath = string(string.concat("deployments/wrapper-", vm.toString(block.chainid), ".json"));
+        string memory outputJsonPath =
+            string(string.concat("deployments/pool-", vm.toString(block.chainid), ".json"));
+        string memory out = vm.serializeAddress("deployment", "factory", address(factory));
+        vm.writeJson(out, outputJsonPath);
+    }
+
+    // Overload with explicit timelock configuration
+    function run(string memory deployedJsonPath, Factory.WrapperConfig memory cfg, Factory.TimelockConfig memory tcfg)
+        external
+    {
+        CoreAddresses memory core = _readCoreFromJson(deployedJsonPath);
+        require(core.vaultFactory == cfg.vaultFactory, "vaultFactory mismatch");
+        require(core.steth == cfg.steth, "stETH mismatch");
+
+        vm.startBroadcast();
+        Factory factory = new Factory(cfg, tcfg);
+        vm.stopBroadcast();
+
+        string memory outputJsonPath =
+            string(string.concat("deployments/pool-", vm.toString(block.chainid), ".json"));
         string memory out = vm.serializeAddress("deployment", "factory", address(factory));
         vm.writeJson(out, outputJsonPath);
     }
 }
-
-

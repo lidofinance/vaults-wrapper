@@ -1,13 +1,22 @@
 // SPDX-License-Identifier: MIT
-pragma solidity >= 0.5.0;
+pragma solidity >=0.8.25;
+
+import {WithdrawalRequest} from "src/strategy/WithdrawalRequest.sol";
 
 interface IStrategy {
-    function execute(address _user, uint256 _stvShares, uint256 _stethShares) external;
+    event StrategyExecuted(address indexed user, uint256 stv, uint256 stethShares, uint256 stethAmount, bytes data);
 
-    function strategyId() external view returns (bytes32);
-    function requestWithdrawByETH(address _user, uint256 _ethAmount) external returns (uint256 requestId);
-    function finalizeWithdrawal(address _receiver, uint256 stETHAmount) external;
-    function getWithdrawableAmount(address _address) external view returns (uint256);
+    /// @notice Supplies stETH to the strategy
+    function supply(address _referral, bytes calldata _params) external payable;
 
-    function getStrategyProxyAddress(address user) external  view returns (address proxy);
+    /// @notice Requests a withdrawal from the Withdrawal Queue
+    function requestWithdrawal(
+        uint256 _stvToWithdraw,
+        uint256 _stethSharesToBurn,
+        uint256 _stethSharesToRebalance,
+        address _receiver
+    ) external returns (uint256 requestId);
+
+    /// @notice Recovers ERC20 tokens from the strategy
+    function recoverERC20(address _token, address _recipient, uint256 _amount) external;
 }

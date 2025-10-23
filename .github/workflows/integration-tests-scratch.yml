@@ -11,6 +11,8 @@ jobs:
     timeout-minutes: 10
     env:
       FOUNDRY_PROFILE: test
+      RPC_URL: http://localhost:9123
+      CORE_DEPLOYED_JSON: lido-core/deployed-local.json
 
     services:
       hardhat-node:
@@ -27,14 +29,18 @@ jobs:
       - name: Initialize Lido Core
         run: make core-init
         env:
-          CORE_BRANCH: "feat/testnet-2"
+          CORE_BRANCH: "feat/vaults"
 
       - name: Deploy Lido Core
         run: make core-deploy
         env:
           CORE_RPC_PORT: 9123
 
-      - name: Run integration tests
-        run: make test-integration
-        env:
-          CORE_RPC_PORT: 9123
+      - name: Run integration tests for StvPool
+        run: make test-integration-a
+
+      - name: Run integration tests for StvStETHPool
+        run: make test-integration-b
+
+      - name: Run integration tests for GGV
+        run: make test-integration-ggv

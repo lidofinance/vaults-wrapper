@@ -3,6 +3,14 @@
 
 pragma solidity >=0.8.0;
 
+interface IDepositContract {
+    function deposit(
+        bytes calldata pubkey,
+        bytes calldata withdrawal_credentials,
+        bytes calldata signature,
+        bytes32 deposit_data_root
+    ) external payable;
+}
 
 /**
  * @title IStakingVault
@@ -25,7 +33,7 @@ interface IStakingVault {
         bytes32 depositDataRoot;
     }
 
-    function DEPOSIT_CONTRACT() external view returns (address);
+    function DEPOSIT_CONTRACT() external view returns (IDepositContract);
     function initialize(address _owner, address _nodeOperator, address _depositor) external;
     function version() external pure returns (uint64);
     function getInitializedVersion() external view returns (uint64);
@@ -38,7 +46,6 @@ interface IStakingVault {
 
     function nodeOperator() external view returns (address);
     function depositor() external view returns (address);
-    function isOssified() external view returns (bool);
     function calculateValidatorWithdrawalFee(uint256 _keysCount) external view returns (uint256);
     function fund() external payable;
     function withdraw(address _recipient, uint256 _ether) external;
@@ -46,11 +53,18 @@ interface IStakingVault {
     function beaconChainDepositsPaused() external view returns (bool);
     function pauseBeaconChainDeposits() external;
     function resumeBeaconChainDeposits() external;
-    function depositToBeaconChain(Deposit[] calldata _deposits) external;
+    function depositToBeaconChain(Deposit calldata _deposits) external;
 
     function requestValidatorExit(bytes calldata _pubkeys) external;
-    function triggerValidatorWithdrawals(bytes calldata _pubkeys, uint64[] calldata _amounts, address _refundRecipient) external payable;
+    function triggerValidatorWithdrawals(bytes calldata _pubkeys, uint64[] calldata _amountsInGwei, address _refundRecipient) external payable;
     function ejectValidators(bytes calldata _pubkeys, address _refundRecipient) external payable;
     function setDepositor(address _depositor) external;
     function ossify() external;
+    function collectERC20(address _token, address _recipient, uint256 _amount) external;
+
+    function availableBalance() external view returns (uint256);
+    function stagedBalance() external view returns (uint256);
+    function stage(uint256 _ether) external;
+    function unstage(uint256 _ether) external;
+    function depositFromStaged(Deposit calldata _deposit, uint256 _additionalAmount) external;
 }

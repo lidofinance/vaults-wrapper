@@ -1,0 +1,15 @@
+{
+  "poolType": 1,
+  "nodeOperator": "0xcc95b0Dbe1519AfaC58d954444839A80700380a2",
+  "nodeOperatorManager": "0xcc95b0Dbe1519AfaC58d954444839A80700380a2",
+  "nodeOperatorFeeBP": 10,
+  "confirmExpiry": 3601,
+  "maxFinalizationTime": 2592000,
+  "minWithdrawalDelayTime": 180,
+  "allowlistEnabled": false,
+  "reserveRatioGapBP": 1000,
+  "connectDepositWei": 1000000000000000000,
+  "timelock": {
+    "executor": "0xcc95b0Dbe1519AfaC58d954444839A80700380a2"
+  }
+}

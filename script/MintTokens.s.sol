@@ -7,7 +7,7 @@ import {MockERC20} from "../test/mocks/MockERC20.sol";
 contract MintTokensScript is Script {
     function run() external {
         address tokenAddress = 0x262e2b50219620226C5fB5956432A88fffd94Ba7;
-        address distributorAddress = 0x10e38eE9dd4C549b61400Fc19347D00eD3edAfC4; 
+        address distributorAddress = 0x10e38eE9dd4C549b61400Fc19347D00eD3edAfC4;
         uint256 amount = 9999999999;
         uint256 privateKey = 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80;
 
@@ -32,4 +32,4 @@ contract MintTokensScript is Script {
 
         console.log("Minting completed successfully!");
     }
-} 
+}

@@ -2,9 +2,9 @@
 pragma solidity >=0.8.25;
 
 import {IVaultFactory} from "../../src/interfaces/IVaultFactory.sol";
-
 import {MockDashboard} from "./MockDashboard.sol";
 import {MockStakingVault} from "./MockStakingVault.sol";
+import {MockVaultHub} from "./MockVaultHub.sol";
 
 contract MockVaultFactory is IVaultFactory {
     address public VAULT_HUB;
@@ -27,36 +27,38 @@ contract MockVaultFactory is IVaultFactory {
 
     function createVaultWithDashboard(
         address _admin,
-        address _nodeOperator,
-        address _nodeOperatorManager,
-        uint256 _nodeOperatorFeeBP,
-        uint256 _confirmExpiry,
-        IVaultFactory.RoleAssignment[] memory _roleAssignments
+        address /* _nodeOperator */,
+        address /* _nodeOperatorManager */,
+        uint256 /* _nodeOperatorFeeBP */,
+        uint256 /* _confirmExpiry */,
+        IVaultFactory.RoleAssignment[] memory /* _roleAssignments */
     ) external payable returns (address vault, address dashboard) {
         if (msg.value != 1 ether) {
             revert InsufficientFunds();
         }
         vault = address(new MockStakingVault());
-        dashboard = address(new MockDashboard(VAULT_HUB, vault, _admin));
-        
+        address steth = address(MockVaultHub(payable(VAULT_HUB)).LIDO());
+        dashboard = address(new MockDashboard(steth, VAULT_HUB, vault, _admin));
+
         // Send the connect deposit to the vault to simulate the real factory behavior
         (bool success, ) = vault.call{value: msg.value}("");
         require(success, "Transfer to vault failed");
-        
+
         return (vault, dashboard);
     }
 
     function createVaultWithDashboardWithoutConnectingToVaultHub(
         address _admin,
-        address _nodeOperator,
-        address _nodeOperatorManager,
-        uint256 _nodeOperatorFeeBP,
-        uint256 _confirmExpiry,
-        RoleAssignment[] calldata _roleAssignments
+        address /* _nodeOperator */,
+        address /* _nodeOperatorManager */,
+        uint256 /* _nodeOperatorFeeBP */,
+        uint256 /* _confirmExpiry */,
+        RoleAssignment[] calldata /* _roleAssignments */
     ) external payable returns (address vault, address dashboard) {
         require(msg.value == 0 ether, "invalid value sent");
         vault = address(new MockStakingVault());
-        dashboard = address(new MockDashboard(VAULT_HUB, vault, _admin));
+        address steth = address(MockVaultHub(payable(VAULT_HUB)).LIDO());
+        dashboard = address(new MockDashboard(steth, VAULT_HUB, vault, _admin));
         return (vault, dashboard);
     }
 }

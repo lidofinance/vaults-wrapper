@@ -1,19 +1,48 @@
 .ONESHELL:
 
 CORE_RPC_PORT ?= 9123
-CORE_BRANCH ?= feat/testnet-2
+CORE_BRANCH ?= feat/vaults
 CORE_SUBDIR ?= lido-core
 NETWORK ?= local
 VERBOSITY ?= vv
 DEBUG_TEST ?= test_debug
 
 
+test-integration-a:
+	[ -f .env ] && . .env; \
+	FOUNDRY_PROFILE=test \
+	CORE_DEPLOYED_JSON="$$CORE_DEPLOYED_JSON" \
+	forge test \
+		test/integration/stv-pool.test.sol \
+		-$(VERBOSITY) \
+		--fork-url "$$RPC_URL"
+
+test-integration-b:
+	[ -f .env ] && . .env; \
+	FOUNDRY_PROFILE=test \
+	CORE_DEPLOYED_JSON="$$CORE_DEPLOYED_JSON" \
+	forge test \
+		test/integration/stv-steth-pool.test.sol \
+		-$(VERBOSITY) \
+		--fork-url "$$RPC_URL"
+
+
+test-integration-ggv:
+	[ -f .env ] && . .env; \
+	FOUNDRY_PROFILE=test \
+	CORE_DEPLOYED_JSON="$$CORE_DEPLOYED_JSON" \
+	forge test \
+		test/integration/ggv.test.sol \
+		-$(VERBOSITY) \
+		--fork-url "$$RPC_URL"
+
 test-integration:
-	FOUNDRY_PROFILE=test forge test test/integration/**/*.test.sol -$(VERBOSITY) --fork-url $(RPC_URL)
+	[ -f .env ] && . .env; \
+	FOUNDRY_PROFILE=test CORE_DEPLOYED_JSON="$$CORE_DEPLOYED_JSON" forge test test/integration/**/*.test.sol -$(VERBOSITY) --fork-url "$$RPC_URL"
 
 test-integration-debug:
-	FOUNDRY_PROFILE=test forge test --match-test $(DEBUG_TEST) -$(VERBOSITY) --fork-url $(RPC_URL)
-	# FOUNDRY_PROFILE=test forge test test/integration/**/*.test.sol -vv --fork-url $(RPC_URL)
+	[ -f .env ] && . .env; \
+	FOUNDRY_PROFILE=test CORE_DEPLOYED_JSON="$$CORE_DEPLOYED_JSON" forge test --match-test $(DEBUG_TEST) -$(VERBOSITY) --fork-url "$$RPC_URL"
 
 test-unit:
 	FOUNDRY_PROFILE=test forge test -$(VERBOSITY) --no-match-path 'test/integration/*' test
@@ -23,7 +52,7 @@ test-all:
 	make test-integration
 
 deploy-factory:
-	. .env 2>/dev/null || true; \
+	[ -f .env ] && . .env; \
 	VERIFY_FLAGS=""; \
 	if [ -n "$$PUBLISH_SOURCES" ]; then \
 		export ETHERSCAN_API_KEY="$${ETHERSCAN_API_KEY:-$${ETHERSCAN_TOKEN}}"; \
@@ -41,49 +70,60 @@ deploy-factory:
 		--sig 'run()' \
 		--non-interactive
 
-deploy-wrapper-from-factory:
-	. .env 2>/dev/null || true; \
-	FACTORY_JSON=$${FACTORY_JSON:-$(OUTPUT_JSON)} \
-	WRAPPER_PARAMS_JSON=$${WRAPPER_PARAMS_JSON:-$(WRAPPER_PARAMS_JSON)} \
+# Usage: make deploy-pool-from-factory PARAMS_JSON=./myparams.json
+deploy-pool-from-factory:
+	[ -f .env ] && . .env; \
+	if [ ! -f "$$PARAMS_JSON" ]; then \
+		echo "Error: PARAMS_JSON must be set and point to an existing file (e.g. make deploy-pool-from-factory PARAMS_JSON=./myparams.json)"; \
+		exit 1; \
+	fi; \
+	VERIFY_FLAGS=""; \
+	if [ -n "$$PUBLISH_SOURCES" ]; then \
+		export ETHERSCAN_API_KEY="$${ETHERSCAN_API_KEY:-$${ETHERSCAN_TOKEN}}"; \
+		VERIFY_FLAGS="--verify --verifier etherscan"; \
+	fi; \
+	export WRAPPER_PARAMS_JSON="$$PARAMS_JSON"; \
 	forge script script/DeployWrapper.s.sol:DeployWrapper \
+		BUMP_CORE_FACTORY_NONCE=$${BUMP_CORE_FACTORY_NONCE:-0} \
 		--rpc-url $${RPC_URL} \
 		--broadcast \
 		--sender $${DEPLOYER:-$(DEPLOYER)} \
 		--private-key $${PRIVATE_KEY:-$(PRIVATE_KEY)} \
+		$$VERIFY_FLAGS \
 		--slow \
 		-vvvv \
 		--sig 'run()' \
 		--non-interactive
 
 
-publish-wrapper-sources:
-	. .env 2>/dev/null || true; \
+publish-pool-sources:
+	[ -f .env ] && . .env; \
 	if [ -z "$$ETHERSCAN_API_KEY" ] && [ -z "$$ETHERSCAN_TOKEN" ]; then \
 		echo "ETHERSCAN_API_KEY or ETHERSCAN_TOKEN must be set"; \
 		exit 1; \
 	fi; \
 	export ETHERSCAN_API_KEY="$${ETHERSCAN_API_KEY:-$${ETHERSCAN_TOKEN}}"; \
-	FILE=$${WRAPPER_DEPLOYED_JSON:-$${WRAPPER_DEPLOYED_JSON:-./deployments/wrapper-deployed-$${NETWORK:-$(NETWORK)}.json}}; \
+	FILE=$${WRAPPER_DEPLOYED_JSON:-$${WRAPPER_DEPLOYED_JSON:-./deployments/pool-deployed-$${NETWORK:-$(NETWORK)}.json}}; \
 	if [ ! -f "$$FILE" ]; then \
 		echo "Wrapper artifact not found: $$FILE"; \
 		exit 1; \
 	fi; \
-		ADDR_WRAPPER=$$(jq -r '.wrapper // .wrapperProxy // .deployment.wrapper // empty' $$FILE 2>/dev/null); \
+		ADDR_WRAPPER=$$(jq -r '.pool // .poolProxy // .deployment.pool // empty' $$FILE 2>/dev/null); \
 		ADDR_WQ=$$(jq -r '.withdrawalQueue // .deployment.withdrawalQueue // empty' $$FILE 2>/dev/null); \
-		ADDR_WRAPPER_IMPL=$$(jq -r '.wrapperImpl // .deployment.wrapperImpl // empty' $$FILE 2>/dev/null); \
+		ADDR_WRAPPER_IMPL=$$(jq -r '.poolImpl // .deployment.poolImpl // empty' $$FILE 2>/dev/null); \
 		ADDR_WQ_IMPL=$$(jq -r '.withdrawalQueueImpl // .deployment.withdrawalQueueImpl // empty' $$FILE 2>/dev/null); \
 		ADDR_STRATEGY=$$(jq -r '.strategy // .deployment.strategy // empty' $$FILE 2>/dev/null); \
-		WRAPPER_PROXY_ARGS=$$(jq -r '.wrapperProxyCtorArgs // empty' $$FILE 2>/dev/null | sed 's/^null$$//'); \
+		WRAPPER_PROXY_ARGS=$$(jq -r '.poolProxyCtorArgs // empty' $$FILE 2>/dev/null | sed 's/^null$$//'); \
 		WQ_PROXY_ARGS=$$(jq -r '.withdrawalQueueProxyCtorArgs // empty' $$FILE 2>/dev/null | sed 's/^null$$//'); \
-		WRAPPER_IMPL_ARGS=$$(jq -r '.wrapperImplCtorArgs // empty' $$FILE 2>/dev/null | sed 's/^null$$//'); \
+		WRAPPER_IMPL_ARGS=$$(jq -r '.poolImplCtorArgs // empty' $$FILE 2>/dev/null | sed 's/^null$$//'); \
 		WQ_IMPL_ARGS=$$(jq -r '.withdrawalQueueImplCtorArgs // empty' $$FILE 2>/dev/null | sed 's/^null$$//'); \
 		STRATEGY_ARGS=$$(jq -r '.strategyCtorArgs // empty' $$FILE 2>/dev/null | sed 's/^null$$//'); \
-	WRAPPER_TYPE=$$(jq -r '.wrapperType // .wrapper.wrapperType // empty' $$FILE 2>/dev/null); \
+	WRAPPER_TYPE=$$(jq -r '.poolType // .pool.poolType // empty' $$FILE 2>/dev/null); \
 	WRAPPER_CONTRACT=$${WRAPPER_IMPL_CONTRACT}; \
 	echo "Using artifact: $$FILE"; \
 	echo "Parsed addresses:"; \
-	echo "  wrapper proxy: $$ADDR_WRAPPER"; \
-	echo "  wrapper impl:  $$ADDR_WRAPPER_IMPL"; \
+	echo "  pool proxy: $$ADDR_WRAPPER"; \
+	echo "  pool impl:  $$ADDR_WRAPPER_IMPL"; \
 	echo "  wq proxy:      $$ADDR_WQ"; \
 	echo "  wq impl:       $$ADDR_WQ_IMPL"; \
 	echo "  strategy:      $$ADDR_STRATEGY"; \
@@ -96,10 +136,10 @@ publish-wrapper-sources:
 	fi; \
 	if [ -z "$$WRAPPER_CONTRACT" ]; then \
 		case "$$WRAPPER_TYPE" in \
-			"0") WRAPPER_CONTRACT="src/WrapperA.sol:WrapperA";; \
-			"1") WRAPPER_CONTRACT="src/WrapperB.sol:WrapperB";; \
-			"2"|"3") WRAPPER_CONTRACT="src/WrapperC.sol:WrapperC";; \
-			*) WRAPPER_CONTRACT="src/WrapperA.sol:WrapperA";; \
+			"0") WRAPPER_CONTRACT="src/StvPool.sol:StvPool";; \
+			"1") WRAPPER_CONTRACT="src/StvStETHPool.sol:StvStETHPool";; \
+			"2"|"3") WRAPPER_CONTRACT="src/StvStrategyPool.sol:StvStrategyPool";; \
+			*) WRAPPER_CONTRACT="src/StvPool.sol:StvPool";; \
 		esac; \
 	fi; \
 		forge verify-contract $$ADDR_WRAPPER src/proxy/OssifiableProxy.sol:OssifiableProxy \
@@ -130,24 +170,19 @@ publish-wrapper-sources:
 			-vvvv || true; \
 	fi
 
-
-do-entire-flow-with-core-deploy:
-	export NETWORK=$(NETWORK) && \
-	export RPC_URL=$(RPC_URL) && \
-	export PRIVATE_KEY=$(PRIVATE_KEY) && \
-	export DEPLOYER=$(DEPLOYER) && \
-	export CORE_DEPLOYED_JSON=$(CORE_DEPLOYED_JSON) && \
-	export OUTPUT_JSON=$(OUTPUT_JSON) && \
-	export WRAPPER_PARAMS_JSON=$(WRAPPER_PARAMS_JSON) && \
-	make core-deploy && \
-	rm -f $(CORE_SUBDIR)/deployed-$(NETWORK).json && \
-	mv $(CORE_SUBDIR)/deployed-local.json $(CORE_SUBDIR)/deployed-$(NETWORK).json && \
-	make harness-core && \
-	make deploy-factory && \
-	make deploy-wrapper-from-factory && \
-	if [ -n "$$PUBLISH_SOURCES" ]; then \
-		make publish-wrapper-sources; \
-	fi
+deploy-ggv-mocks:
+	[ -f .env ] && . .env; \
+	OUTPUT_JSON=$${GGV_MOCKS_DEPLOYED_JSON:-deployments/ggv-mocks-$${NETWORK:-$(NETWORK)}.json}; \
+	forge script script/DeployGGVMocks.s.sol:DeployGGVMocks \
+		--rpc-url $${RPC_URL} \
+		--broadcast \
+		--sender $${DEPLOYER:-$(DEPLOYER)} \
+		--private-key $${PRIVATE_KEY:-$(PRIVATE_KEY)} \
+		-vvvv \
+		--sig 'run()' \
+		--non-interactive \
+		--json; \
+	echo "Mocks written to $$OUTPUT_JSON (see logs for exact path if overridden)"
 
 # Requires entr util
 test-watch:
@@ -158,7 +193,6 @@ core-init:
 	git clone https://github.com/lidofinance/core.git -b $(CORE_BRANCH) --depth 1 $(CORE_SUBDIR)
 
 	cd $(CORE_SUBDIR) && \
-	git apply ../test/core-mocking.patch && \
 	corepack enable && \
 	yarn install --frozen-lockfile
 
@@ -184,9 +218,13 @@ start-fork:
 start-fork-no-size-limit:
 	anvil --chain-id 1 --auto-impersonate --port $(CORE_RPC_PORT) --disable-code-size-limit
 
-core-save-patch:
-	cd $(CORE_SUBDIR) && \
-	git diff > ../test/core-mocking.patch
+start-fork-from-rpc:
+	[ -f .env ] && . .env; \
+	if [ -z "$$RPC_URL_TO_FORK" ]; then \
+		echo "RPC_URL_TO_FORK must be set"; \
+		exit 1; \
+	fi; \
+	anvil --fork-url "$$RPC_URL_TO_FORK" --auto-impersonate --port $(CORE_RPC_PORT)
 
 mock-deploy:
 	PRIVATE_KEY=$(PRIVATE_KEY) \

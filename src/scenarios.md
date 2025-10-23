@@ -1,7 +1,7 @@
 
 # Cases
 
-## Case 0. Connection of wrapper to already created vault
+## Case 0. Connection of pool to already created vault
 - q: what's about connect deposit?
 
 ## Case 1. Two users can mint up to the full vault capacity
@@ -35,7 +35,7 @@
 
 ## Case 9. Withdraw eth without burning stShares due to rewards
 
-## Case 10. Scenario for WrapperA with manual calculation
+## Case 10. Scenario for StvPool with manual calculation
 
 ## Case 11. User gets less stShares due to vault underperformance
 
@@ -54,7 +54,7 @@ user2 deposits
 
 - rounding issues
 
-### wrapper side
+### pool side
 
 - multiple users
 - user mints full and not full capacity
@@ -87,7 +87,7 @@ There are multiple possible Wrapper configurations to be chosen from upon deploy
 - (B) minting, no strategy
 - (C) minting and strategy
 
-Each configuration is represented by its own contract which inherits WrapperBase contract implementing features that are common between all configurations.
+Each configuration is represented by its own contract which inherits BasePool contract implementing features that are common between all configurations.
 The common features include:
 - non-transferrable ERC-20
 - access control
@@ -105,9 +105,9 @@ In (C) user gets record in Wrapper which represents the position. The record con
 
 ### Withdrawals
 
-There are different withdraw functions for (A), (B) and (C). For calling each of them user must have "enough" stvShares.
+There are different withdraw functions for (A), (B) and (C). For calling each of them user must have "enough" stv.
 
-In (A) and (B) user may withdraw part of his Vault share by specifying stvShares amount (must own at least that shares).
+In (A) and (B) user may withdraw part of his Vault share by specifying stv amount (must own at least that shares).
 In (C) user may with withdraw only his Vault share corresponding to an entire strategy position
 
 - (A) withdraw(stvETHShares)
