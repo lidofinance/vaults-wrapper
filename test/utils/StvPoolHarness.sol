@@ -216,7 +216,7 @@ contract StvPoolHarness is Test {
 
     function _checkInitialState(WrapperContext memory ctx) internal virtual {
         // Basic checks common to all pools
-        assertEq(ctx.pool.decimals() - 18, EXTRA_BASE, "should match EXTRA_BASE constant");
+        assertEq(10 ** (ctx.pool.decimals() - 18), EXTRA_BASE, "should match EXTRA_BASE constant");
 
         assertEq(
             ctx.pool.totalSupply(),
