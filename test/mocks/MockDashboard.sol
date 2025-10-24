@@ -21,6 +21,7 @@ contract MockDashboard is AccessControlEnumerable {
     bytes32 public constant BURN_ROLE = keccak256("BURN_ROLE");
     bytes32 public constant FUND_ROLE = keccak256("FUND_ROLE");
     bytes32 public constant WITHDRAW_ROLE = keccak256("WITHDRAW_ROLE");
+    bytes32 public constant REBALANCE_ROLE = keccak256("REBALANCE_ROLE");
 
     constructor(address _steth, address _vaultHub, address _stakingVault, address _admin) {
         STETH = MockStETH(_steth);

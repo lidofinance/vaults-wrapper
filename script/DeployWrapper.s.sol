@@ -43,6 +43,8 @@ contract DeployWrapper is Script {
         p.maxFinalizationTime = vm.parseJsonUint(json, "$.maxFinalizationTime");
         p.minWithdrawalDelayTime = vm.parseJsonUint(json, "$.minWithdrawalDelayTime");
         p.allowlistEnabled = vm.parseJsonBool(json, "$.allowlistEnabled");
+        p.value = vm.parseJsonUint(json, "$.connectDepositWei");
+
         // Parse only fields relevant to the pool type
         if (
             p.poolType == uint256(Factory.WrapperType.MINTING_NO_STRATEGY)
@@ -68,7 +70,6 @@ contract DeployWrapper is Script {
             p.teller = ggvTeller;
             p.boringQueue = ggvQueue;
         }
-        p.value = vm.parseJsonUint(json, "$.value");
         p.timelockExecutor = vm.parseJsonAddress(json, "$.timelock.executor");
     }
 
