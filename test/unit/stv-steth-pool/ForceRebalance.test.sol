@@ -9,6 +9,7 @@ import {SetupStvStETHPool} from "./SetupStvStETHPool.sol";
 import {StvStETHPool} from "src/StvStETHPool.sol";
 import {MockStETH} from "test/mocks/MockStETH.sol";
 import {MockVaultHub} from "test/mocks/MockVaultHub.sol";
+import {MockStakingVault} from "test/mocks/MockStakingVault.sol";
 
 contract ForceRebalanceTest is Test, SetupStvStETHPool {
     uint256 internal constant DEPOSIT_AMOUNT = 20 ether;
@@ -22,8 +23,9 @@ contract ForceRebalanceTest is Test, SetupStvStETHPool {
 
         socializer = makeAddr("socializer");
 
+        bytes32 ROLE_SOCIALIZER = pool.LOSS_SOCIALIZER_ROLE();
         vm.prank(owner);
-        pool.grantRole(pool.LOSS_SOCIALIZER_ROLE(), socializer);
+        pool.grantRole(ROLE_SOCIALIZER, socializer);
     }
 
     function _mintMaxStethShares(address _account) internal {
@@ -131,14 +133,12 @@ contract ForceRebalanceTest is Test, SetupStvStETHPool {
 
         uint256 totalValue = dashboard.maxLockableValue();
         assertGt(totalValue, 1 ether, "unexpected vault value");
-        _simulateLoss(totalValue - 1 ether);
+        _simulateLoss(4 ether);
 
-        (uint256 stethShares, uint256 stvToRebalance, bool isUndercollateralized) = pool.previewForceRebalance(
-            userAlice
-        );
+        (uint256 stethShares, uint256 stv, bool isUndercollateralized) = pool.previewForceRebalance(userAlice);
         assertEq(stethShares, pool.mintedStethSharesOf(userAlice), "unexpected steth shares to rebalance");
-        assertEq(stvToRebalance, pool.balanceOf(userAlice), "unexpected stv to rebalance");
-        assertFalse(isUndercollateralized, "expected not undercollateralized");
+        assertEq(stv, pool.balanceOf(userAlice), "unexpected stv to rebalance");
+        assertTrue(isUndercollateralized, "expected undercollateralized");
     }
 
     function test_ForceRebalance_RevertIfAccountIsUndercollateralized() public {

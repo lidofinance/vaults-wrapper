@@ -92,6 +92,7 @@ contract MockVaultHub {
                 vaultBalances[_vault] = 0;
             } else {
                 vaultBalances[_vault] -= loss;
+                IStakingVault(_vault).withdraw(address(0), loss);
             }
         }
     }

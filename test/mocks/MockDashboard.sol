@@ -31,6 +31,7 @@ contract MockDashboard is AccessControlEnumerable {
 
         // Set default report freshness to true
         VAULT_HUB.mock_setReportFreshness(STAKING_VAULT, true);
+        VAULT_HUB.mock_setConnectionParameters(STAKING_VAULT, 10_00, 9_75); // 10% reserve, 9.75% forced rebalance
     }
 
     function fund() external payable {
@@ -132,7 +133,6 @@ contract MockDashboardFactory {
     function createMockDashboard(address _owner) external returns (MockDashboard) {
         MockVaultHub vaultHub = new MockVaultHub();
         MockStakingVault stakingVault = new MockStakingVault();
-        vaultHub.mock_setConnectionParameters(address(stakingVault), 10_00, 9_75); // 10% reserve, 9.75% forced rebalance
 
         MockStETH steth = MockStETH(vaultHub.LIDO());
         steth.mock_setTotalPooled(1000 ether, 800 * 10 ** 18);
