@@ -37,6 +37,8 @@ contract StvStETHPool is BasePool {
     error InvalidReserveRatioGap(uint256 reserveRatioGapBP);
     error NothingToRebalance();
     error VaultReportStale();
+    error UndercollateralizedAccount();
+    error CollateralizedAccount();
 
     bytes32 public immutable LOSS_SOCIALIZER_ROLE = keccak256("LOSS_SOCIALIZER_ROLE");
 
@@ -293,7 +295,7 @@ contract StvStETHPool is BasePool {
         ///
         /// Thus, in rare situations, Staking Vault may have two assets: ETH and stETH, which are
         /// distributed among all users in proportion to their shares.
-        assets = nominalAssetsOf(_account) + exceedingMintedStethOf(_account);
+        assets = _convertToAssets(balanceOf(_account));
     }
 
     // =================================================================================
@@ -599,48 +601,91 @@ contract StvStETHPool is BasePool {
      * @dev Requires fresh oracle report to price stv accurately
      */
     function forceRebalance(address _account) public returns (uint256 stvBurned) {
+        (uint256 stethShares, uint256 stv, bool isUndercollateralized) = previewForceRebalance(_account);
+
+        if (stethShares == 0) revert NothingToRebalance();
+        if (isUndercollateralized) revert UndercollateralizedAccount();
+
+        stvBurned = _rebalanceMintedStethShares(_account, stethShares, stv);
+    }
+
+    /**
+     * @notice Force rebalance undercollateralized account and socialize the remaining loss to all pool participants
+     * @param _account The address of the account to rebalance
+     * @return stvBurned The actual amount of stv burned for rebalancing
+     * @dev Requires fresh oracle report to price stv accurately
+     */
+    function forceRebalanceAndSocializeLoss(address _account) public returns (uint256 stvBurned) {
+        _checkRole(LOSS_SOCIALIZER_ROLE, msg.sender);
+
+        (uint256 stethShares, uint256 stv, bool isUndercollateralized) = previewForceRebalance(_account);
+        if (!isUndercollateralized) revert CollateralizedAccount();
+
+        stvBurned = _rebalanceMintedStethShares(_account, stethShares, stv);
+    }
+
+    /**
+     * @notice Preview the amount of stETH shares and stv needed to force rebalance the user's position
+     * @param _account The address of the account to preview
+     * @return stethShares The amount of stETH shares to rebalance, limited by available assets
+     * @return stv The amount of stv needed to burn in exchange for the stETH shares, limited by user's stv balance
+     * @return isUndercollateralized True if the user's assets are insufficient to cover the liability
+     * @dev Requires fresh oracle report to price stv accurately
+     */
+    function previewForceRebalance(
+        address _account
+    ) public view returns (uint256 stethShares, uint256 stv, bool isUndercollateralized) {
         _checkFreshReport();
 
         uint256 stethSharesLiability = mintedStethSharesOf(_account);
         uint256 stvBalance = balanceOf(_account);
-        uint256 assets = _convertToAssets(stvBalance);
+        uint256 assets = assetsOf(_account);
 
-        if (!_isThresholdBreached(assets, stethSharesLiability)) revert NothingToRebalance();
+        /// Position is healthy, nothing to rebalance
+        if (!_isThresholdBreached(assets, stethSharesLiability)) return (0, 0, false);
 
         /// Rebalance (swap steth liability for stv at the current rate) user to the reserve ratio level
         ///
         /// To calculate how much eth to rebalance to reach the target reserve ratio, we can set up the equation:
-        /// reserveRatio = (liability - x) / (assets - x)
+        /// (1 - reserveRatio) = (liability - x) / (assets - x)
         ///
         /// Rearranging the equation to solve for x gives us:
-        /// x = (liability - reserveRatio * assets) / (1 - reserveRatio)
-
+        /// x = (liability - (1 - reserveRatio) * assets) / reserveRatio
         uint256 reserveRatioBP_ = reserveRatioBP();
         uint256 stethLiability = STETH.getPooledEthBySharesRoundUp(stethSharesLiability);
+        uint256 targetStethToRebalance = Math.ceilDiv(
+            /// Shouldn't underflow as threshold breach is already checked
+            stethLiability * TOTAL_BASIS_POINTS - (TOTAL_BASIS_POINTS - reserveRatioBP_) * assets,
+            reserveRatioBP_
+        );
 
-        /// Should not underflow since _isThresholdBreached check passed and reserveRatio > forcedRebalanceThreshold
-        /// Negative numerator indicates that the user is already below the target reserve ratio
-        uint256 numerator = stethLiability * TOTAL_BASIS_POINTS - reserveRatioBP_ * assets;
-        uint256 denominator = TOTAL_BASIS_POINTS - reserveRatioBP_;
-        uint256 targetStethToRebalance = Math.ceilDiv(numerator, denominator);
+        /// If the target rebalance amount exceeds the liability itself, the user is undercollateralized
+        if (targetStethToRebalance > stethLiability) {
+            targetStethToRebalance = stethLiability;
+            isUndercollateralized = true;
+        }
 
         /// Limit rebalance to available assets
         ///
         /// First, the rebalancing will use exceeding minted steth, bringing the vault closer to minted steth == liability,
         /// then the rebalancing mechanism on the vault, which is limited by available balance in the staking vault
-        uint256 maxStethToRebalance = totalExceedingMintedSteth() + STAKING_VAULT.availableBalance();
+        uint256 stethToRebalance = totalExceedingMintedSteth() + STAKING_VAULT.availableBalance();
+        stethToRebalance = Math.min(targetStethToRebalance, stethToRebalance);
 
-        uint256 stethToRebalance = Math.min(targetStethToRebalance, maxStethToRebalance);
-        uint256 stvToRebalance = _convertToStv(stethToRebalance, Math.Rounding.Ceil);
-        uint256 stethSharesToRebalance = STETH.getSharesByPooledEth(stethToRebalance);
+        uint256 stvRequired = _convertToStv(stethToRebalance, Math.Rounding.Ceil);
 
-        /// The user's liability exceeds the value of the assets they hold in stv
-        if (stvToRebalance > stvBalance) {
-            _checkRole(LOSS_SOCIALIZER_ROLE, msg.sender);
-            stvToRebalance = stvBalance;
-        }
+        stethShares = STETH.getSharesByPooledEth(stethToRebalance); // TODO: round up, can it exceed liability?
+        stv = Math.min(stvRequired, stvBalance);
+        isUndercollateralized = isUndercollateralized || stvRequired > stvBalance;
+    }
 
-        stvBurned = _rebalanceMintedStethShares(_account, stethSharesToRebalance, stvToRebalance);
+    /**
+     * @notice Check if the user's minted stETH shares are healthy (not breaching the threshold)
+     * @param _account The address of the account to check
+     * @return isHealthy True if the account is healthy, false if the forced rebalance threshold is breached
+     */
+    function isHealthyOf(address _account) public view returns (bool isHealthy) {
+        isHealthy = !_isThresholdBreached(assetsOf(_account), mintedStethSharesOf(_account));
     }
 
     /**
