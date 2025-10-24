@@ -806,7 +806,8 @@ contract StvStETHPoolTest is StvStETHPoolHarness {
 
         uint256 user1Deposit = 50 ether;
         vm.prank(USER1);
-        w.depositETH{value: user1Deposit}(USER1, address(0), _calcMaxMintableStShares(ctx, user1Deposit));
+        uint256 stethSharesToMint = _calcMaxMintableStShares(ctx, user1Deposit) / 2 * 2; // make even for easier half transfer
+        w.depositETH{value: user1Deposit}(USER1, address(0), stethSharesToMint);
 
         uint256 sharesToTransfer = w.mintedStethSharesOf(USER1) / 2;
         uint256 minStvRequired = w.calcStvToLockForStethShares(sharesToTransfer);
