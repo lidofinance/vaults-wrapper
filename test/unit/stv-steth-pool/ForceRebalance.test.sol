@@ -126,16 +126,27 @@ contract ForceRebalanceTest is Test, SetupStvStETHPool {
         );
     }
 
-    function test_ForceRebalance_RevertIfAccountIsUndercollateralized() public {
+    function test_PreviewForceRebalance_ReturnsExpectedValuesForUndercollateralized() public {
         _mintMaxStethShares(userAlice);
 
         uint256 totalValue = dashboard.maxLockableValue();
         assertGt(totalValue, 1 ether, "unexpected vault value");
         _simulateLoss(totalValue - 1 ether);
 
-        (, uint256 stvToRebalance, bool isUndercollateralized) = pool.previewForceRebalance(userAlice);
-        uint256 stvBalance = pool.balanceOf(userAlice);
-        assertTrue(isUndercollateralized, "expected undercollateralized");
+        (uint256 stethShares, uint256 stvToRebalance, bool isUndercollateralized) = pool.previewForceRebalance(
+            userAlice
+        );
+        assertEq(stethShares, pool.mintedStethSharesOf(userAlice), "unexpected steth shares to rebalance");
+        assertEq(stvToRebalance, pool.balanceOf(userAlice), "unexpected stv to rebalance");
+        assertFalse(isUndercollateralized, "expected not undercollateralized");
+    }
+
+    function test_ForceRebalance_RevertIfAccountIsUndercollateralized() public {
+        _mintMaxStethShares(userAlice);
+
+        uint256 totalValue = dashboard.maxLockableValue();
+        assertGt(totalValue, 1 ether, "unexpected vault value");
+        _simulateLoss(totalValue - 1 ether);
 
         vm.expectRevert(abi.encodeWithSelector(StvStETHPool.UndercollateralizedAccount.selector));
         pool.forceRebalance(userAlice);
@@ -147,10 +158,6 @@ contract ForceRebalanceTest is Test, SetupStvStETHPool {
         uint256 totalValue = dashboard.maxLockableValue();
         assertGt(totalValue, 1 ether, "unexpected vault value");
         _simulateLoss(totalValue - 1 ether);
-
-        (, uint256 stvToRebalance, bool isUndercollateralized) = pool.previewForceRebalance(userAlice);
-        uint256 stvBalance = pool.balanceOf(userAlice);
-        assertTrue(isUndercollateralized, "expected undercollateralized");
 
         vm.prank(socializer);
         pool.forceRebalanceAndSocializeLoss(userAlice);
