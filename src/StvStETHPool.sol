@@ -2,11 +2,7 @@
 pragma solidity >=0.8.25;
 
 import {BasePool} from "./BasePool.sol";
-import {ERC20Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
-import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
-import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
-
 import {WithdrawalQueue} from "./WithdrawalQueue.sol";
 
 import {IStETH} from "./interfaces/IStETH.sol";
@@ -17,8 +13,6 @@ import {IVaultHub} from "./interfaces/IVaultHub.sol";
  * @notice Configuration B: Minting, no strategy - stv + maximum stETH minting for user
  */
 contract StvStETHPool is BasePool {
-    using EnumerableSet for EnumerableSet.UintSet;
-
     event StethSharesMinted(address indexed account, uint256 stethShares);
     event StethSharesBurned(address indexed account, uint256 stethShares);
     event StethSharesRebalanced(address indexed account, uint256 stethShares, uint256 stvBurned);
@@ -32,7 +26,6 @@ contract StvStETHPool is BasePool {
     error InsufficientMintedShares();
     error InsufficientStv();
     error ZeroArgument();
-    error MintingForThanTargetStSharesShareIsNotAllowed();
     error ArraysLengthMismatch(uint256 firstArrayLength, uint256 secondArrayLength);
     error InvalidReserveRatioGap(uint256 reserveRatioGapBP);
     error NothingToRebalance();
@@ -40,20 +33,20 @@ contract StvStETHPool is BasePool {
     error UndercollateralizedAccount();
     error CollateralizedAccount();
 
-    bytes32 public immutable LOSS_SOCIALIZER_ROLE = keccak256("LOSS_SOCIALIZER_ROLE");
-
-    /// @notice The gap between the reserve ratio in Staking Vault and Pool (in basis points)
-    uint256 public immutable RESERVE_RATIO_GAP_BP;
+    bytes32 public constant LOSS_SOCIALIZER_ROLE = keccak256("LOSS_SOCIALIZER_ROLE");
 
     /// @notice Sentinel value for depositETH to mint maximum available stETH shares for the deposit
     uint256 public constant MAX_MINTABLE_AMOUNT = type(uint256).max;
+
+    /// @notice The gap between the reserve ratio in Staking Vault and Pool (in basis points)
+    uint256 public immutable RESERVE_RATIO_GAP_BP;
 
     /// @custom:storage-location erc7201:pool.b.storage
     struct StvStETHPoolStorage {
         mapping(address => uint256) mintedStethShares;
         uint256 totalMintedStethShares;
-        uint256 reserveRatioBP;
-        uint256 forcedRebalanceThresholdBP;
+        uint16 reserveRatioBP;
+        uint16 forcedRebalanceThresholdBP;
     }
 
     // keccak256(abi.encode(uint256(keccak256("pool.b.storage")) - 1)) & ~bytes32(uint256(0xff))
@@ -479,7 +472,7 @@ contract StvStETHPool is BasePool {
      * @return reserveRatio The reserve ratio in basis points
      */
     function reserveRatioBP() public view returns (uint256 reserveRatio) {
-        reserveRatio = _getStvStETHPoolStorage().reserveRatioBP;
+        reserveRatio = uint256(_getStvStETHPoolStorage().reserveRatioBP);
     }
 
     /**
@@ -487,7 +480,7 @@ contract StvStETHPool is BasePool {
      * @return threshold The forced rebalance threshold in basis points
      */
     function forcedRebalanceThresholdBP() public view returns (uint256 threshold) {
-        threshold = _getStvStETHPoolStorage().forcedRebalanceThresholdBP;
+        threshold = uint256(_getStvStETHPoolStorage().forcedRebalanceThresholdBP);
     }
 
     /**
@@ -507,10 +500,11 @@ contract StvStETHPool is BasePool {
         assert(connection.forcedRebalanceThresholdBP > 0);
         assert(connection.forcedRebalanceThresholdBP <= connection.reserveRatioBP);
 
-        uint256 newReserveRatioBP = Math.min(connection.reserveRatioBP + RESERVE_RATIO_GAP_BP, maxReserveRatioBP);
-        uint256 newThresholdBP = Math.min(
-            connection.forcedRebalanceThresholdBP + RESERVE_RATIO_GAP_BP,
-            maxReserveRatioBP
+        uint16 newReserveRatioBP = uint16(
+            Math.min(connection.reserveRatioBP + RESERVE_RATIO_GAP_BP, maxReserveRatioBP)
+        );
+        uint16 newThresholdBP = uint16(
+            Math.min(connection.forcedRebalanceThresholdBP + RESERVE_RATIO_GAP_BP, maxReserveRatioBP)
         );
 
         StvStETHPoolStorage storage $ = _getStvStETHPoolStorage();

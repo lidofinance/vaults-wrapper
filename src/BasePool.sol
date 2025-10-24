@@ -4,8 +4,6 @@ pragma solidity >=0.8.25;
 import {ERC20Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
-import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
-
 import {WithdrawalQueue} from "./WithdrawalQueue.sol";
 import {IStETH} from "./interfaces/IStETH.sol";
 import {IVaultHub} from "./interfaces/IVaultHub.sol";
@@ -14,8 +12,6 @@ import {IStakingVault} from "./interfaces/IStakingVault.sol";
 import {AllowList} from "./AllowList.sol";
 
 abstract contract BasePool is Initializable, ERC20Upgradeable, AllowList {
-    using EnumerableSet for EnumerableSet.UintSet;
-
     // Custom errors
     error ZeroDeposit();
     error InvalidReceiver();
@@ -27,13 +23,14 @@ abstract contract BasePool is Initializable, ERC20Upgradeable, AllowList {
     error NotEnoughToRebalance();
     error UnassignedLiabilityOnVault();
 
-    bytes32 public immutable REQUEST_VALIDATOR_EXIT_ROLE = keccak256("REQUEST_VALIDATOR_EXIT_ROLE");
-    bytes32 public immutable TRIGGER_VALIDATOR_WITHDRAWAL_ROLE = keccak256("TRIGGER_VALIDATOR_WITHDRAWAL_ROLE");
+    bytes32 public constant REQUEST_VALIDATOR_EXIT_ROLE = keccak256("REQUEST_VALIDATOR_EXIT_ROLE");
+    bytes32 public constant TRIGGER_VALIDATOR_WITHDRAWAL_ROLE = keccak256("TRIGGER_VALIDATOR_WITHDRAWAL_ROLE");
 
-    uint256 public immutable DECIMALS = 27;
-    uint256 public immutable ASSET_DECIMALS = 18;
-    uint256 public immutable EXTRA_DECIMALS_BASE = 10 ** (DECIMALS - ASSET_DECIMALS);
-    uint256 public immutable TOTAL_BASIS_POINTS = 100_00;
+    uint256 public constant TOTAL_BASIS_POINTS = 100_00;
+
+    uint256 private constant DECIMALS = 27;
+    uint256 private constant ASSET_DECIMALS = 18;
+    uint256 private constant EXTRA_DECIMALS_BASE = 10 ** (DECIMALS - ASSET_DECIMALS);
 
     IStETH public immutable STETH;
     IDashboard public immutable DASHBOARD;
@@ -55,10 +52,6 @@ abstract contract BasePool is Initializable, ERC20Upgradeable, AllowList {
         assembly {
             $.slot := BASE_POOL_STORAGE_LOCATION
         }
-    }
-
-    function withdrawalQueue() public view returns (WithdrawalQueue) {
-        return WITHDRAWAL_QUEUE;
     }
 
     function vaultDisconnected() public view returns (bool) {
