@@ -1,39 +1,25 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity >=0.8.25;
 
-import {Test} from "forge-std/Test.sol";
-import {Factory} from "src/Factory.sol";
+import {StvPoolHarness} from "test/utils/StvPoolHarness.sol";
 import {OssifiableProxy} from "src/proxy/OssifiableProxy.sol";
 import {StvPool} from "src/StvPool.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
 import {TimelockController} from "@openzeppelin/contracts/governance/TimelockController.sol";
-import {ILidoLocator} from "src/interfaces/ILidoLocator.sol";
 import {IDashboard} from "src/interfaces/IDashboard.sol";
-import {FactoryHelper} from "test/utils/FactoryHelper.sol";
 
-contract TimelockUpgradeIntegrationTest is Test {
-    Factory factory;
-
+contract TimelockUpgradeIntegrationTest is StvPoolHarness {
     function setUp() public {
-        // Deploy a fresh Factory using core addresses discovered from the locator
-        string memory coreJsonPath = vm.envString("CORE_DEPLOYED_JSON");
-        string memory deployedJson = vm.readFile(coreJsonPath);
-        address locatorAddress = vm.parseJsonAddress(deployedJson, "$.lidoLocator.proxy.address");
-        ILidoLocator locator = ILidoLocator(locatorAddress);
-
-        FactoryHelper helper = new FactoryHelper();
-        factory = helper.deployMainFactory(locator.vaultFactory(), locator.lido(), locator.wstETH(), locator.lazyOracle());
+        _initializeCore();
     }
 
     function test_timelockControlsProxyAdmins() public {
         vm.deal(address(this), 100 ether);
 
-        (address ignoredVault, address dashboard, address payable poolProxy, address wqProxy) =
-            factory.createVaultWithNoMintingNoStrategy{value: 1 ether}(
-                address(this), address(this), 0, 1 hours, 30 days, 1 days, false
-            );
-        // suppress unused variable
-        ignoredVault;
+        WrapperContext memory ctx = _deployStvPool(false, 0);
+        address payable poolProxy = payable(address(ctx.pool));
+        address wqProxy = address(ctx.withdrawalQueue);
+        address dashboard = address(ctx.dashboard);
 
         // Timelock should be the admin of both proxies
         address adminWrapper = _getAdmin(poolProxy);
@@ -54,8 +40,9 @@ contract TimelockUpgradeIntegrationTest is Test {
         bytes32 salt = keccak256("upgrade-pool");
 
         uint256 minDelay = tl.getMinDelay();
-        vm.prank(address(this));
+        vm.startPrank(NODE_OPERATOR);
         tl.schedule(poolProxy, 0, payload, predecessor, salt, minDelay);
+        vm.stopPrank();
 
         vm.expectRevert();
         tl.execute(poolProxy, 0, payload, predecessor, salt);
@@ -70,9 +57,9 @@ contract TimelockUpgradeIntegrationTest is Test {
 
     function test_onlyProposerCanSchedule() public {
         vm.deal(address(this), 100 ether);
-        (, , address payable poolProxy, address wqProxy) = factory.createVaultWithNoMintingNoStrategy{value: 1 ether}(
-            address(this), address(this), 0, 1 hours, 30 days, 1 days, false
-        );
+        WrapperContext memory ctx = _deployStvPool(false, 0);
+        address payable poolProxy = payable(address(ctx.pool));
+        address wqProxy = address(ctx.withdrawalQueue);
         TimelockController tl = TimelockController(payable(_getAdmin(poolProxy)));
         bytes memory payload = abi.encodeWithSignature("proxy__changeAdmin(address)", address(0xdead));
         uint256 minDelay = tl.getMinDelay();
@@ -84,9 +71,12 @@ contract TimelockUpgradeIntegrationTest is Test {
         vm.expectRevert();
         tl.schedule(poolProxy, 0, payload, predecessor, salt, minDelay);
         // proposer (pool admin) can schedule
+        vm.startPrank(NODE_OPERATOR);
         tl.schedule(poolProxy, 0, payload, predecessor, salt, minDelay);
+        vm.stopPrank();
         // clean up by cancelling to avoid affecting later tests
         bytes32 id = tl.hashOperation(poolProxy, 0, payload, predecessor, salt);
+        vm.prank(NODE_OPERATOR);
         tl.cancel(id);
         // silence unused var
         wqProxy;
@@ -95,15 +85,16 @@ contract TimelockUpgradeIntegrationTest is Test {
     function test_onlyCustomExecutorCanExecute() public {
         vm.deal(address(this), 100 ether);
         address customExec = address(0xE0EC);
-        (, address dashboard, address payable poolProxy, ) = factory.createVaultWithNoMintingNoStrategy{value: 1 ether}(
-            address(this), address(this), 0, 1 hours, 30 days, 1 days, false, customExec
-        );
+        WrapperContext memory ctx = _deployStvPoolWithExecutor(false, 0, customExec);
+        address dashboard = address(ctx.dashboard);
+        address payable poolProxy = payable(address(ctx.pool));
         TimelockController tl = TimelockController(payable(_getAdmin(poolProxy)));
         address newImpl = address(new StvPool(dashboard, false, poolProxy));
         bytes memory payload = abi.encodeWithSignature("proxy__upgradeToAndCall(address,bytes)", newImpl, bytes(""));
         uint256 minDelay = tl.getMinDelay();
         bytes32 predecessor = bytes32(0);
         bytes32 salt = keccak256("only-executor-custom");
+        vm.prank(NODE_OPERATOR);
         tl.schedule(poolProxy, 0, payload, predecessor, salt, minDelay);
         vm.warp(block.timestamp + minDelay + 1);
         // wrong executor
@@ -116,10 +107,11 @@ contract TimelockUpgradeIntegrationTest is Test {
 
     function test_upgradeWithdrawalQueueViaTimelock() public {
         vm.deal(address(this), 100 ether);
-        (address vault, address dashboard, address payable poolProxy, address wqProxy) =
-            factory.createVaultWithNoMintingNoStrategy{value: 1 ether}(
-                address(this), address(this), 0, 1 hours, 30 days, 1 days, false
-            );
+        WrapperContext memory ctx = _deployStvPool(false, 0);
+        address vault = address(ctx.vault);
+        address dashboard = address(ctx.dashboard);
+        address payable poolProxy = payable(address(ctx.pool));
+        address wqProxy = address(ctx.withdrawalQueue);
         TimelockController tl = TimelockController(payable(_getAdmin(poolProxy)));
         // deploy new WQ implementation with same constructor args
         IDashboard dash = IDashboard(payable(dashboard));
@@ -129,7 +121,7 @@ contract TimelockUpgradeIntegrationTest is Test {
             dash.VAULT_HUB(),
             dash.STETH(),
             vault,
-            factory.LAZY_ORACLE(),
+            address(core.lazyOracle()),
             30 days,
             1 days
         ));
@@ -137,6 +129,7 @@ contract TimelockUpgradeIntegrationTest is Test {
         uint256 minDelay = tl.getMinDelay();
         bytes32 predecessor = bytes32(0);
         bytes32 salt = keccak256("upgrade-wq");
+        vm.prank(NODE_OPERATOR);
         tl.schedule(wqProxy, 0, payload, predecessor, salt, minDelay);
         vm.warp(block.timestamp + minDelay + 1);
         tl.execute(wqProxy, 0, payload, predecessor, salt);
@@ -146,9 +139,9 @@ contract TimelockUpgradeIntegrationTest is Test {
 
     function test_batchChangeAdminBothProxies() public {
         vm.deal(address(this), 100 ether);
-        (, , address payable poolProxy, address wqProxy) = factory.createVaultWithNoMintingNoStrategy{value: 1 ether}(
-            address(this), address(this), 0, 1 hours, 30 days, 1 days, false
-        );
+        WrapperContext memory ctx = _deployStvPool(false, 0);
+        address payable poolProxy = payable(address(ctx.pool));
+        address wqProxy = address(ctx.withdrawalQueue);
         TimelockController tl = TimelockController(payable(_getAdmin(poolProxy)));
         // new timelock
         address[] memory proposers = new address[](1);
@@ -168,6 +161,7 @@ contract TimelockUpgradeIntegrationTest is Test {
         bytes32 salt = keccak256("batch-admin-change");
         uint256 minDelay = tl.getMinDelay();
 
+        vm.prank(NODE_OPERATOR);
         tl.scheduleBatch(targets, values, payloads, predecessor, salt, minDelay);
         vm.warp(block.timestamp + minDelay + 1);
         tl.executeBatch(targets, values, payloads, predecessor, salt);
@@ -178,15 +172,15 @@ contract TimelockUpgradeIntegrationTest is Test {
 
     function test_updateDelayViaTimelock() public {
         vm.deal(address(this), 100 ether);
-        (, , address payable poolProxy, ) = factory.createVaultWithNoMintingNoStrategy{value: 1 ether}(
-            address(this), address(this), 0, 1 hours, 30 days, 1 days, false
-        );
+        WrapperContext memory ctx = _deployStvPool(false, 0);
+        address payable poolProxy = payable(address(ctx.pool));
         TimelockController tl = TimelockController(payable(_getAdmin(poolProxy)));
         uint256 current = tl.getMinDelay();
         uint256 newDelay = current + 1 days;
         bytes memory payload = abi.encodeWithSignature("updateDelay(uint256)", newDelay);
         bytes32 predecessor = bytes32(0);
         bytes32 salt = keccak256("update-delay");
+        vm.prank(NODE_OPERATOR);
         tl.schedule(address(tl), 0, payload, predecessor, salt, current);
         vm.warp(block.timestamp + current + 1);
         tl.execute(address(tl), 0, payload, predecessor, salt);
@@ -198,16 +192,17 @@ contract TimelockUpgradeIntegrationTest is Test {
 
     function test_cancelPreventsExecute() public {
         vm.deal(address(this), 100 ether);
-        (, , address payable poolProxy, ) = factory.createVaultWithNoMintingNoStrategy{value: 1 ether}(
-            address(this), address(this), 0, 1 hours, 30 days, 1 days, false
-        );
+        WrapperContext memory ctx = _deployStvPool(false, 0);
+        address payable poolProxy = payable(address(ctx.pool));
         TimelockController tl = TimelockController(payable(_getAdmin(poolProxy)));
         bytes memory payload = abi.encodeWithSignature("proxy__upgradeToAndCall(address,bytes)", address(0x1), bytes(""));
         uint256 minDelay = tl.getMinDelay();
         bytes32 predecessor = bytes32(0);
         bytes32 salt = keccak256("cancel-test");
+        vm.prank(NODE_OPERATOR);
         tl.schedule(poolProxy, 0, payload, predecessor, salt, minDelay);
         bytes32 id = tl.hashOperation(poolProxy, 0, payload, predecessor, salt);
+        vm.prank(NODE_OPERATOR);
         tl.cancel(id);
         vm.warp(block.timestamp + minDelay + 1);
         vm.expectRevert();
@@ -216,16 +211,18 @@ contract TimelockUpgradeIntegrationTest is Test {
 
     function test_revertExecuteBeforeDelay() public {
         vm.deal(address(this), 100 ether);
-        (, address dashboard, address payable poolProxy, ) = factory.createVaultWithNoMintingNoStrategy{value: 1 ether}(
-            address(this), address(this), 0, 1 hours, 30 days, 1 days, false
-        );
+        WrapperContext memory ctx = _deployStvPool(false, 0);
+        address dashboard = address(ctx.dashboard);
+        address payable poolProxy = payable(address(ctx.pool));
         TimelockController tl = TimelockController(payable(_getAdmin(poolProxy)));
         address newImpl = address(new StvPool(dashboard, false, poolProxy));
         bytes memory payload = abi.encodeWithSignature("proxy__upgradeToAndCall(address,bytes)", newImpl, bytes(""));
         uint256 minDelay = tl.getMinDelay();
         bytes32 predecessor = bytes32(0);
         bytes32 salt = keccak256("pre-delay-revert");
+        vm.startPrank(NODE_OPERATOR);
         tl.schedule(poolProxy, 0, payload, predecessor, salt, minDelay);
+        vm.stopPrank();
         // immediately try to execute
         vm.expectRevert();
         tl.execute(poolProxy, 0, payload, predecessor, salt);
@@ -233,11 +230,10 @@ contract TimelockUpgradeIntegrationTest is Test {
 
     function test_proxiesShareSameTimelockAfterOperations() public {
         vm.deal(address(this), 100 ether);
-        (address ignoredVault, address dashboard, address payable poolProxy, address wqProxy) =
-            factory.createVaultWithNoMintingNoStrategy{value: 1 ether}(
-                address(this), address(this), 0, 1 hours, 30 days, 1 days, false
-            );
-        ignoredVault;
+        WrapperContext memory ctx = _deployStvPool(false, 0);
+        address dashboard = address(ctx.dashboard);
+        address payable poolProxy = payable(address(ctx.pool));
+        address wqProxy = address(ctx.withdrawalQueue);
         TimelockController tl = TimelockController(payable(_getAdmin(poolProxy)));
         // perform an upgrade on pool
         address newImpl = address(new StvPool(dashboard, false, wqProxy));
@@ -245,7 +241,9 @@ contract TimelockUpgradeIntegrationTest is Test {
         uint256 minDelay = tl.getMinDelay();
         bytes32 predecessor = bytes32(0);
         bytes32 salt = keccak256("shared-tl-invariant");
+        vm.startPrank(NODE_OPERATOR);
         tl.schedule(poolProxy, 0, payload, predecessor, salt, minDelay);
+        vm.stopPrank();
         vm.warp(block.timestamp + minDelay + 1);
         tl.execute(poolProxy, 0, payload, predecessor, salt);
         // admins should still be same

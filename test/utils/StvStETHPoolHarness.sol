@@ -26,7 +26,8 @@ contract StvStETHPoolHarness is StvPoolHarness {
             maxFinalizationTime: 30 days,
             minWithdrawalDelayTime: 1 days,
             teller: address(0),
-            boringQueue: address(0)
+            boringQueue: address(0),
+            timelockExecutor: address(0)
         });
 
         WrapperContext memory context = _deployWrapperSystem(config);

@@ -59,6 +59,7 @@ contract StvPoolHarness is Test {
         uint256 minWithdrawalDelayTime;
         address teller;
         address boringQueue;
+        address timelockExecutor;
     }
 
     struct WrapperContext {
@@ -127,7 +128,8 @@ contract StvPoolHarness is Test {
                 config.confirmExpiry,
                 config.maxFinalizationTime,
                 config.minWithdrawalDelayTime,
-                config.enableAllowlist
+                config.enableAllowlist,
+                config.timelockExecutor
             );
         } else if (config.configuration == Factory.WrapperType.MINTING_NO_STRATEGY) {
             (vault_, dashboard_, poolAddress, withdrawalQueue_) = factory.createVaultWithMintingNoStrategy{
@@ -140,7 +142,8 @@ contract StvPoolHarness is Test {
                 config.maxFinalizationTime,
                 config.minWithdrawalDelayTime,
                 config.enableAllowlist,
-                config.reserveRatioGapBP
+                config.reserveRatioGapBP,
+                config.timelockExecutor
             );
         } else if (config.configuration == Factory.WrapperType.LOOP_STRATEGY) {
             uint256 loops = 1;
@@ -155,7 +158,8 @@ contract StvPoolHarness is Test {
                 config.minWithdrawalDelayTime,
                 config.enableAllowlist,
                 config.reserveRatioGapBP,
-                loops
+                loops,
+                config.timelockExecutor
             );
         } else if (config.configuration == Factory.WrapperType.GGV_STRATEGY) {
             (vault_, dashboard_, poolAddress, withdrawalQueue_) = factory.createVaultWithGGVStrategy{
@@ -170,7 +174,8 @@ contract StvPoolHarness is Test {
                 config.enableAllowlist,
                 config.reserveRatioGapBP,
                 config.teller,
-                config.boringQueue
+                config.boringQueue,
+                config.timelockExecutor
             );
         } else {
             revert("Invalid configuration");
@@ -206,7 +211,33 @@ contract StvPoolHarness is Test {
             maxFinalizationTime: 30 days,
             minWithdrawalDelayTime: 1 days,
             teller: address(0),
-            boringQueue: address(0)
+            boringQueue: address(0),
+            timelockExecutor: address(0)
+        });
+
+        context = _deployWrapperSystem(config);
+
+        return context;
+    }
+
+    function _deployStvPoolWithExecutor(bool enableAllowlist, uint256 nodeOperatorFeeBP, address timelockExecutor)
+        internal
+        returns (WrapperContext memory context)
+    {
+        DeploymentConfig memory config = DeploymentConfig({
+            configuration: Factory.WrapperType.NO_MINTING_NO_STRATEGY,
+            strategy: address(0),
+            enableAllowlist: enableAllowlist,
+            reserveRatioGapBP: 0,
+            nodeOperator: NODE_OPERATOR,
+            nodeOperatorManager: NODE_OPERATOR,
+            nodeOperatorFeeBP: nodeOperatorFeeBP,
+            confirmExpiry: CONFIRM_EXPIRY,
+            maxFinalizationTime: 30 days,
+            minWithdrawalDelayTime: 1 days,
+            teller: address(0),
+            boringQueue: address(0),
+            timelockExecutor: timelockExecutor
         });
 
         context = _deployWrapperSystem(config);
