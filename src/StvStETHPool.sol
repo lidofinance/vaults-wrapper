@@ -169,7 +169,7 @@ contract StvStETHPool is BasePool {
      * @param _stv The amount of stv to withdraw
      * @return stethShares The corresponding amount of stETH shares needed to burn (18 decimals)
      */
-    function stethSharesForWithdrawal(address _account, uint256 _stv) public view returns (uint256 stethShares) {
+    function stethSharesForWithdrawal(address _account, uint256 _stv) external view returns (uint256 stethShares) {
         if (_stv == 0) return 0;
 
         uint256 currentBalance = balanceOf(_account);
@@ -327,7 +327,7 @@ contract StvStETHPool is BasePool {
      * @notice Total Staking Vault minting capacity in stETH shares
      * @return stethShares Total minting capacity in stETH shares
      */
-    function totalMintingCapacityShares() public view returns (uint256 stethShares) {
+    function totalMintingCapacityShares() external view returns (uint256 stethShares) {
         stethShares = DASHBOARD.totalMintingCapacityShares();
     }
 
@@ -336,7 +336,7 @@ contract StvStETHPool is BasePool {
      * @return stethShares Remaining minting capacity in stETH shares
      * @dev Can be limited by Vault's max capacity
      */
-    function remainingMintingCapacityShares(uint256 _ethToFund) public view returns (uint256 stethShares) {
+    function remainingMintingCapacityShares(uint256 _ethToFund) external view returns (uint256 stethShares) {
         stethShares = DASHBOARD.remainingMintingCapacityShares(_ethToFund);
     }
 
@@ -354,7 +354,7 @@ contract StvStETHPool is BasePool {
      * @notice Mint stETH shares up to the user's minting capacity
      * @param _stethShares The amount of stETH shares to mint
      */
-    function mintStethShares(uint256 _stethShares) public {
+    function mintStethShares(uint256 _stethShares) external {
         _mintStethShares(msg.sender, _stethShares);
     }
 
@@ -375,7 +375,7 @@ contract StvStETHPool is BasePool {
      * @notice Burn stETH shares to reduce the user's minted stETH obligation
      * @param _stethShares The amount of stETH shares to burn
      */
-    function burnStethShares(uint256 _stethShares) public {
+    function burnStethShares(uint256 _stethShares) external {
         _burnStethShares(msg.sender, _stethShares);
     }
 
@@ -752,7 +752,7 @@ contract StvStETHPool is BasePool {
      * @return success True if the transfer was successful
      * @dev Ensures that the transferred stv covers the minimum required to lock for the transferred stETH shares liability
      */
-    function transferWithLiability(address _to, uint256 _stv, uint256 _stethShares) public returns (bool success) {
+    function transferWithLiability(address _to, uint256 _stv, uint256 _stethShares) external returns (bool success) {
         _checkMinStvToLock(_stv, _stethShares);
 
         _transferStethSharesLiability(msg.sender, _to, _stethShares);
