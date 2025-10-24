@@ -10,12 +10,28 @@ contract UnassignedLiabilityTest is Test, SetupStvPool {
         assertEq(pool.totalUnassignedLiabilityShares(), 0);
     }
 
-    // unassigned liability (UL) tests
+    // unassigned liability tests
 
-    function test_IncreaseWithVaultLiability_UpdatesShares() public {
-        uint256 liabilityToTransfer = 100;
-        dashboard.mock_increaseLiability(liabilityToTransfer);
-        assertEq(pool.totalUnassignedLiabilityShares(), liabilityToTransfer);
+    function test_TotalUnassignedLiabilityShares() public {
+        uint256 liabilityShares = 100;
+        dashboard.mock_increaseLiability(liabilityShares);
+        assertEq(pool.totalUnassignedLiabilityShares(), liabilityShares);
+    }
+
+    function test_TotalUnassignedLiabilitySteth() public {
+        uint256 liabilityShares = 1000;
+        uint256 stethRoundedUp = steth.getPooledEthBySharesRoundUp(liabilityShares);
+        dashboard.mock_increaseLiability(liabilityShares);
+        assertEq(pool.totalUnassignedLiabilitySteth(), stethRoundedUp);
+    }
+
+    function test_UnassignedLiabilityDecreasesTotalAssets() public {
+        uint256 totalAssetsBefore = pool.totalAssets();
+        uint256 liabilityShares = 1000;
+        uint256 stethRoundedUp = steth.getPooledEthBySharesRoundUp(liabilityShares);
+        dashboard.mock_increaseLiability(liabilityShares);
+
+        assertEq(pool.totalAssets(), totalAssetsBefore - stethRoundedUp);
     }
 
     // unavailable user operations tests
