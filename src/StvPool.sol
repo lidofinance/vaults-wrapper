@@ -11,11 +11,14 @@ error InsufficientShares(uint256 required, uint256 available);
  */
 contract StvPool is BasePool {
     constructor(
+        address _steth,
+        address _vaultHub,
+        address _stakingVault,
         address _dashboard,
-        bool _allowListEnabled,
         address _withdrawalQueue,
-        address _distributor
-    ) BasePool(_dashboard, _allowListEnabled, _withdrawalQueue, _distributor) {}
+        address _distributor,
+        bool _allowListEnabled
+    ) BasePool(_steth, _vaultHub, _stakingVault, _dashboard, _withdrawalQueue, _distributor, _allowListEnabled) {}
 
     function wrapperType() public pure override returns (string memory) {
         return "StvPool";

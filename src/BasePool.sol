@@ -73,12 +73,21 @@ abstract contract BasePool is Initializable, ERC20Upgradeable, AllowList {
     event ConnectDepositClaimed(address indexed recipient, uint256 amount);
     event UnassignedLiabilityRebalanced(uint256 stethShares, uint256 ethAmount);
 
-    constructor(address _dashboard, bool _allowListEnabled, address _withdrawalQueue, address _distributor) AllowList(_allowListEnabled) {
+    constructor(
+        address _steth,
+        address _vaultHub,
+        address _stakingVault,
+        address _dashboard,
+        address _withdrawalQueue,
+        address _distributor,
+        bool _allowListEnabled
+    ) AllowList(_allowListEnabled) {
+        STETH = IStETH(payable(_steth));
+        VAULT_HUB = IVaultHub(_vaultHub);
+        STAKING_VAULT = IStakingVault(_stakingVault);
         DASHBOARD = IDashboard(payable(_dashboard));
-        VAULT_HUB = IVaultHub(DASHBOARD.VAULT_HUB());
-        STAKING_VAULT = IStakingVault(DASHBOARD.stakingVault());
+
         WITHDRAWAL_QUEUE = WithdrawalQueue(payable(_withdrawalQueue));
-        STETH = IStETH(payable(DASHBOARD.STETH()));
         DISTRIBUTOR = Distributor(_distributor);
 
         // Disable initializers since we only support proxy deployment

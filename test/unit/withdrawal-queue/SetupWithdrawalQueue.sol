@@ -8,6 +8,8 @@ import {StvStETHPool} from "src/StvStETHPool.sol";
 import {MockLazyOracle} from "test/mocks/MockLazyOracle.sol";
 import {MockDashboard, MockDashboardFactory} from "test/mocks/MockDashboard.sol";
 import {MockStETH} from "test/mocks/MockStETH.sol";
+import {MockVaultHub} from "test/mocks/MockVaultHub.sol";
+import {MockStakingVault} from "test/mocks/MockStakingVault.sol";
 
 abstract contract SetupWithdrawalQueue is Test {
     WithdrawalQueue public withdrawalQueue;
@@ -15,6 +17,8 @@ abstract contract SetupWithdrawalQueue is Test {
     MockLazyOracle public lazyOracle;
     MockDashboard public dashboard;
     MockStETH public steth;
+    MockVaultHub public vaultHub;
+    MockStakingVault public stakingVault;
 
     address public owner;
     address public finalizeRoleHolder;
@@ -49,12 +53,23 @@ abstract contract SetupWithdrawalQueue is Test {
         dashboard = new MockDashboardFactory().createMockDashboard(owner);
         lazyOracle = new MockLazyOracle();
         steth = dashboard.STETH();
+        vaultHub = dashboard.VAULT_HUB();
+        stakingVault = MockStakingVault(payable(dashboard.stakingVault()));
 
         // Fund dashboard
         dashboard.fund{value: initialDeposit}();
 
         // Deploy StvStETHPool proxy with temporary implementation
-        StvStETHPool tempImpl = new StvStETHPool(address(dashboard), false, reserveRatioGapBP, address(0), address(0));
+        StvStETHPool tempImpl = new StvStETHPool(
+            address(steth),
+            address(vaultHub),
+            address(stakingVault),
+            address(dashboard),
+            address(0), // withdrawalQueue
+            address(0), // distributor
+            false,
+            reserveRatioGapBP
+        );
         OssifiableProxy poolProxy = new OssifiableProxy(address(tempImpl), owner, "");
         pool = StvStETHPool(payable(poolProxy));
 
@@ -62,9 +77,9 @@ abstract contract SetupWithdrawalQueue is Test {
         WithdrawalQueue wqImpl = new WithdrawalQueue(
             address(pool),
             address(dashboard),
-            address(dashboard.VAULT_HUB()),
+            address(vaultHub),
             address(steth),
-            address(dashboard.STAKING_VAULT()),
+            address(stakingVault),
             address(lazyOracle),
             MAX_ACCEPTABLE_WQ_FINALIZATION_TIME,
             MIN_WITHDRAWAL_DELAY_TIME
@@ -95,11 +110,14 @@ abstract contract SetupWithdrawalQueue is Test {
 
         // Deploy Wrapper implementation
         StvStETHPool poolImpl = new StvStETHPool(
+            address(steth),
+            address(vaultHub),
+            address(stakingVault),
             address(dashboard),
-            false,
-            reserveRatioGapBP,
             address(withdrawalQueue),
-            address(0)
+            address(0), // distributor
+            false,
+            reserveRatioGapBP
         );
         vm.prank(owner);
         poolProxy.proxy__upgradeTo(address(poolImpl));

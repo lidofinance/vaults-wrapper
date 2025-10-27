@@ -10,13 +10,26 @@ import {StvStETHPool} from "./StvStETHPool.sol";
  */
 contract StvStrategyPool is StvStETHPool {
     constructor(
+        address _steth,
+        address _vaultHub,
+        address _stakingVault,
         address _dashboard,
-        bool _allowListEnabled,
-        uint256 _reserveRatioGapBP,
         address _withdrawalQueue,
-        address _distributor
-    ) StvStETHPool(_dashboard, _allowListEnabled, _reserveRatioGapBP, _withdrawalQueue, _distributor) {
-    }
+        address _distributor,
+        bool _allowListEnabled,
+        uint256 _reserveRatioGapBP
+    )
+        StvStETHPool(
+            _steth,
+            _vaultHub,
+            _stakingVault,
+            _dashboard,
+            _withdrawalQueue,
+            _distributor,
+            _allowListEnabled,
+            _reserveRatioGapBP
+        )
+    {}
 
     function wrapperType() external pure virtual override returns (string memory) {
         return "StvStrategyPool";

@@ -521,27 +521,52 @@ contract Factory {
 
     function _deployWrapper(
         WrapperType _configuration,
-        address dashboard,
-        bool _allowlistEnabled,
+        address _dashboard,
+        bool _allowListEnabled,
         uint256 _reserveRatioGapBP,
-        address withdrawalQueueProxy,
-        address distributor,
+        address _withdrawalQueueProxy,
+        address _distributor,
         address _strategy
     ) internal returns (address poolImpl) {
+        IDashboard dashboard = IDashboard(payable(_dashboard));
+        address steth = dashboard.STETH();
+        address vaultHub = dashboard.VAULT_HUB();
+        address stakingVault = address(dashboard.stakingVault());
+
         if (_configuration == WrapperType.NO_MINTING_NO_STRATEGY) {
-            poolImpl = STV_POOL_FACTORY.deploy(dashboard, _allowlistEnabled, withdrawalQueueProxy, distributor);
+            poolImpl = STV_POOL_FACTORY.deploy(
+                steth,
+                vaultHub,
+                stakingVault,
+                _dashboard,
+                _withdrawalQueueProxy,
+                _distributor,
+                _allowListEnabled
+            );
             assert(keccak256(bytes(BasePool(payable(poolImpl)).wrapperType())) == keccak256(bytes("StvPool")));
         } else if (_configuration == WrapperType.MINTING_NO_STRATEGY) {
-            poolImpl = STV_STETH_POOL_FACTORY.deploy(dashboard, _allowlistEnabled, _reserveRatioGapBP, withdrawalQueueProxy, distributor);
+            poolImpl = STV_STETH_POOL_FACTORY.deploy(
+                steth,
+                vaultHub,
+                stakingVault,
+                _dashboard,
+                _withdrawalQueueProxy,
+                _distributor,
+                _allowListEnabled,
+                _reserveRatioGapBP
+            );
             assert(keccak256(bytes(BasePool(payable(poolImpl)).wrapperType())) == keccak256(bytes("StvStETHPool")));
         } else if (_configuration == WrapperType.LOOP_STRATEGY || _configuration == WrapperType.GGV_STRATEGY) {
             if (_strategy == address(0)) revert InvalidConfiguration();
             poolImpl = STV_STRATEGY_POOL_FACTORY.deploy(
-                dashboard,
-                _allowlistEnabled,
-                _reserveRatioGapBP,
-                withdrawalQueueProxy,
-                distributor
+                steth,
+                vaultHub,
+                stakingVault,
+                _dashboard,
+                _withdrawalQueueProxy,
+                _distributor,
+                _allowListEnabled,
+                _reserveRatioGapBP
             );
             assert(keccak256(bytes(BasePool(payable(poolImpl)).wrapperType())) == keccak256(bytes("StvStrategyPool")));
         } else {

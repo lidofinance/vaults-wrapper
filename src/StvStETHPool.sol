@@ -60,12 +60,15 @@ contract StvStETHPool is BasePool {
     }
 
     constructor(
+        address _steth,
+        address _vaultHub,
+        address _stakingVault,
         address _dashboard,
-        bool _allowListEnabled,
-        uint256 _reserveRatioGapBP,
         address _withdrawalQueue,
-        address _distributor
-    ) BasePool(_dashboard, _allowListEnabled, _withdrawalQueue, _distributor) {
+        address _distributor,
+        bool _allowListEnabled,
+        uint256 _reserveRatioGapBP
+    ) BasePool(_steth, _vaultHub, _stakingVault, _dashboard, _withdrawalQueue, _distributor, _allowListEnabled) {
         if (_reserveRatioGapBP >= TOTAL_BASIS_POINTS) revert InvalidReserveRatioGap(_reserveRatioGapBP);
         RESERVE_RATIO_GAP_BP = _reserveRatioGapBP;
     }
