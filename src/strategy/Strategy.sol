@@ -14,7 +14,7 @@ import {StvStrategyPool} from "src/StvStrategyPool.sol";
 import {StvStETHPool} from "src/StvStETHPool.sol";
 
 abstract contract Strategy is IStrategy {
-    StvStETHPool public immutable WRAPPER;
+    StvStETHPool public immutable POOL;
     IStETH public immutable STETH;
     IWstETH public immutable WSTETH;
     address public immutable STRATEGY_PROXY_IMPL;
@@ -23,9 +23,8 @@ abstract contract Strategy is IStrategy {
     /// Changing this value will break user proxy address calculations.
     bytes32 public constant STRATEGY_ID = keccak256("strategy.ggv.v1");
 
-    mapping(bytes32 salt => address proxy) public userStrategyProxy;
+    mapping(bytes32 salt => address proxy) private userStrategyProxy;
 
-    error ZeroAddress();
     error ZeroArgument(string name);
     error TokenNotAllowed();
 
@@ -33,7 +32,7 @@ abstract contract Strategy is IStrategy {
         STETH = IStETH(_stETH);
         WSTETH = IWstETH(_wstETH);
         STRATEGY_PROXY_IMPL = _strategyProxyImpl;
-        WRAPPER = StvStETHPool(payable(_pool));
+        POOL = StvStETHPool(payable(_pool));
     }
 
     /// @notice Recovers ERC20 tokens from the strategy
@@ -44,7 +43,6 @@ abstract contract Strategy is IStrategy {
         if (_token == address(0)) revert ZeroArgument("_token");
         if (_recipient == address(0)) revert ZeroArgument("_recipient");
         if (_amount == 0) revert ZeroArgument("_amount");
-        if (_token == address(WRAPPER)) revert TokenNotAllowed();
 
         address proxy = getStrategyProxyAddress(msg.sender);
 
@@ -69,7 +67,7 @@ abstract contract Strategy is IStrategy {
         proxy = Clones.cloneDeterministic(STRATEGY_PROXY_IMPL, salt);
         IStrategyProxy(proxy).initialize(address(this));
         IStrategyProxy(proxy).call(
-            address(STETH), abi.encodeWithSelector(STETH.approve.selector, address(WRAPPER), type(uint256).max)
+            address(STETH), abi.encodeWithSelector(STETH.approve.selector, address(POOL), type(uint256).max)
         );
         userStrategyProxy[salt] = proxy;
 

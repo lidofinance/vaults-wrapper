@@ -49,7 +49,7 @@ contract GGVMockTest is Test {
         assertEq(steth.balanceOf(user1), 1 ether);
 
         steth.approve(address(vault), type(uint256).max);
-        uint256 ggvShares = teller.deposit(steth, 1 ether, 0);
+        uint256 ggvShares = teller.deposit(steth, 1 ether, 0, address(0));
         assertEq(ggvShares, vault.balanceOf(user1));
         uint256 ggvUserAssets = vault.getAssetsByShares(ggvShares);
         vm.stopPrank();
@@ -68,7 +68,7 @@ contract GGVMockTest is Test {
         steth.submit{value: 1 ether}(address(0));
         steth.approve(address(vault), type(uint256).max);
         // deposit to ggv
-        uint256 userGgvShares = teller.deposit(steth, 1 ether, 0);
+        uint256 userGgvShares = teller.deposit(steth, 1 ether, 0, address(0));
         uint256 userStethSharesAfterDeposit = steth.sharesOf(user1);
 
         // withdraw from ggv

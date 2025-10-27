@@ -11,7 +11,6 @@ import {Strategy} from "src/strategy/Strategy.sol";
 import {IStrategy} from "src/interfaces/IStrategy.sol";
 import {IStrategyProxy} from "src/interfaces/IStrategyProxy.sol";
 import {IStrategyExitAsync} from "src/interfaces/IStrategyExitAsync.sol";
-import {WithdrawalRequest} from "src/strategy/WithdrawalRequest.sol";
 import {StvStETHPool} from "src/StvStETHPool.sol";
 
 contract GGVStrategy is Strategy, IStrategyExitAsync, ERC165 {
@@ -23,16 +22,16 @@ contract GGVStrategy is Strategy, IStrategyExitAsync, ERC165 {
 
     // ==================== Events ====================
 
-    event MintedGgvShares(address indexed recipient, uint256 ggvShares);
+    event GGVDeposited(address indexed recipient, uint256 stethAmount, uint256 ggvShares, address referralAddress, bytes data);
+    event GGVWithdrawalRequested(address indexed recipient, bytes32 requestId, uint128 requestedGGV, bytes data);
 
     // ==================== Errors ====================
 
-    error InvalidWrapper();
-    error InvalidStrategyRequestId();
     error InvalidSender();
     error InvalidStethAmount();
     error AlreadyRequested();
     error InvalidRequestId();
+    error NotImplemented();
 
     struct GGVParams {
         uint16 discount;
@@ -65,8 +64,8 @@ contract GGVStrategy is Strategy, IStrategyExitAsync, ERC165 {
     /// @param _params The parameters for the supply
     function supply(address _referral, bytes calldata _params) external payable {
         address proxy = _getOrCreateProxy(msg.sender);
-        uint256 stethShares = WRAPPER.calcStethSharesToMintForAssets(msg.value);
-        uint256 stv = WRAPPER.depositETH{value: msg.value}(proxy, _referral, stethShares);
+        uint256 stethShares = POOL.calcStethSharesToMintForAssets(msg.value);
+        uint256 stv = POOL.depositETH{value: msg.value}(proxy, _referral, stethShares);
 
         uint256 stethAmount = STETH.getPooledEthByShares(stethShares);
 
@@ -79,12 +78,12 @@ contract GGVStrategy is Strategy, IStrategyExitAsync, ERC165 {
 
         bytes memory data = IStrategyProxy(proxy).call(
             address(TELLER),
-            abi.encodeWithSelector(TELLER.deposit.selector, address(STETH), stethAmount, params.minimumMint)
+            abi.encodeWithSelector(TELLER.deposit.selector, address(STETH), stethAmount, params.minimumMint, _referral)
         );
         uint256 ggvShares = abi.decode(data, (uint256));
 
-        emit MintedGgvShares(msg.sender, ggvShares);
-        emit StrategyExecuted(msg.sender, stv, stethShares, stethAmount, _params);
+        emit StrategySupplied(msg.sender, stv, stethShares, stethAmount, _params);
+        emit GGVDeposited(msg.sender, stethAmount, ggvShares, _referral, _params);
     }
 
     /// @notice Requests a withdrawal of ggv shares from the strategy
@@ -106,9 +105,6 @@ contract GGVStrategy is Strategy, IStrategyExitAsync, ERC165 {
         public
         returns (bytes32 requestId)
     {
-        bytes32 withdrawalRequestId = exitRequest[msg.sender];
-        if (withdrawalRequestId != bytes32(0)) revert AlreadyRequested();
-
         GGVParams memory params = abi.decode(_params, (GGVParams));
 
         address proxy = _getOrCreateProxy(msg.sender);
@@ -125,21 +121,23 @@ contract GGVStrategy is Strategy, IStrategyExitAsync, ERC165 {
             address(boringVault), abi.encodeWithSelector(boringVault.approve.selector, address(BORING_QUEUE), ggvShares)
         );
 
+        uint128 requestedGGV = uint128(ggvShares);
+
         // Withdrawal request from GGV
         bytes memory data = IStrategyProxy(proxy).call(
             address(BORING_QUEUE),
             abi.encodeWithSelector(
                 BORING_QUEUE.requestOnChainWithdraw.selector,
                 address(WSTETH),
-                uint128(ggvShares),
+                requestedGGV,
                 params.discount,
                 params.secondsToDeadline
             )
         );
         requestId = abi.decode(data, (bytes32));
-        exitRequest[msg.sender] = requestId;
 
-        emit ExitRequested(msg.sender, requestId, _stethSharesToBurn, _params);
+        emit StrategyExitRequested(msg.sender, requestId, _stethSharesToBurn, _params);
+        emit GGVWithdrawalRequested(msg.sender, requestId, requestedGGV, _params);
     }
 
     /// @notice Cancels a withdrawal request
@@ -167,8 +165,6 @@ contract GGVStrategy is Strategy, IStrategyExitAsync, ERC165 {
             address(BORING_QUEUE), abi.encodeWithSelector(BORING_QUEUE.replaceOnChainWithdraw.selector, request, discount, secondsToDeadline)
         );
         (oldRequestId, newRequestId) = abi.decode(data, (bytes32, bytes32));
-        assert(oldRequestId == exitRequest[msg.sender]);
-        exitRequest[msg.sender] = newRequestId;
     }
 
     /// @notice Finalizes a withdrawal of stETH from the strategy
@@ -177,8 +173,7 @@ contract GGVStrategy is Strategy, IStrategyExitAsync, ERC165 {
         // was actually finalized in GGV Queue. Additionally, GGV allows multiple withdrawal requests,
         // so it's possible to have request->finalize->request sequence where 2 unfinalised requests
         // exist in GGV at the same time.
-        if (_requestId != exitRequest[msg.sender]) revert InvalidRequestId();
-        exitRequest[msg.sender] = bytes32(0);
+        revert NotImplemented();
     }
 
     /// @notice Returns the amount of stETH shares of a user
@@ -201,7 +196,7 @@ contract GGVStrategy is Strategy, IStrategyExitAsync, ERC165 {
     /// @return stethShares The amount of stETH shares to rebalance
     function proxyStethSharesToRebalance(address _user) external view returns(uint256 stethShares) {
         address proxy = getStrategyProxyAddress(_user);
-        uint256 mintedStethShares = WRAPPER.mintedStethSharesOf(proxy);
+        uint256 mintedStethShares = POOL.mintedStethSharesOf(proxy);
 
         uint256 sharesAfterUnwrapping = proxyStethSharesOf(_user);
 
@@ -216,7 +211,7 @@ contract GGVStrategy is Strategy, IStrategyExitAsync, ERC165 {
     /// @return stv The amount of stv that can be withdrawn
     function proxyWithdrawableStvOf(address _user, uint256 _stethSharesToBurn) external view returns(uint256 stv) {
         address proxy = getStrategyProxyAddress(_user);
-        stv = WRAPPER.withdrawableStvOf(proxy, _stethSharesToBurn);
+        stv = POOL.withdrawableStvOf(proxy, _stethSharesToBurn);
     }
 
     /// @notice Requests a withdrawal from the Withdrawal Queue
@@ -240,7 +235,7 @@ contract GGVStrategy is Strategy, IStrategyExitAsync, ERC165 {
 
         // request withdrawal from pool
         bytes memory withdrawalData = IStrategyProxy(proxy).call(
-            address(WRAPPER),
+            address(POOL),
             abi.encodeWithSelector(
                 StvStETHPool.requestWithdrawal.selector,
                 _stvToWithdraw,
