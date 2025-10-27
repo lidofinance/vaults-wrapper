@@ -325,30 +325,25 @@ contract StvStETHPool is BasePool {
     }
 
     /**
-     * @notice Total Staking Vault minting capacity in stETH shares
-     * @return stethShares Total minting capacity in stETH shares
-     */
-    function totalMintingCapacityShares() external view returns (uint256 stethShares) {
-        stethShares = DASHBOARD.totalMintingCapacityShares();
-    }
-
-    /**
-     * @notice Remaining Staking Vault minting capacity in stETH shares
-     * @return stethShares Remaining minting capacity in stETH shares
-     * @dev Can be limited by Vault's max capacity
-     */
-    function remainingMintingCapacityShares(uint256 _ethToFund) external view returns (uint256 stethShares) {
-        stethShares = DASHBOARD.remainingMintingCapacityShares(_ethToFund);
-    }
-
-    /**
-     * @notice Calculate the minting capacity in stETH shares for a specific account
+     * @notice Calculate the total minting capacity in stETH shares for a specific account
      * @param _account The address of the account
-     * @return stethSharesCapacity The minting capacity in stETH shares
+     * @return stethShares The total minting capacity in stETH shares
      */
-    function mintingCapacitySharesOf(address _account) public view returns (uint256 stethSharesCapacity) {
-        uint256 stethSharesForAssets = calcStethSharesToMintForAssets(assetsOf(_account));
-        stethSharesCapacity = Math.saturatingSub(stethSharesForAssets, mintedStethSharesOf(_account));
+    function totalMintingCapacitySharesOf(address _account) public view returns (uint256 stethShares) {
+        stethShares = calcStethSharesToMintForAssets(assetsOf(_account));
+    }
+
+    /**
+     * @notice Calculate the remaining minting capacity in stETH shares for a specific account
+     * @param _account The address of the account
+     * @return stethShares The remaining minting capacity in stETH shares
+     */
+    function remainingMintingCapacitySharesOf(
+        address _account,
+        uint256 _ethToFund
+    ) public view returns (uint256 stethShares) {
+        uint256 stethSharesForAssets = calcStethSharesToMintForAssets(assetsOf(_account) + _ethToFund);
+        stethShares = Math.saturatingSub(totalMintingCapacitySharesOf(_account), mintedStethSharesOf(_account));
     }
 
     /**
@@ -361,7 +356,7 @@ contract StvStETHPool is BasePool {
 
     function _mintStethShares(address _account, uint256 _stethShares) internal {
         if (_stethShares == 0) revert ZeroArgument();
-        if (mintingCapacitySharesOf(_account) < _stethShares) revert InsufficientMintingCapacity();
+        if (remainingMintingCapacitySharesOf(_account, 0) < _stethShares) revert InsufficientMintingCapacity();
 
         DASHBOARD.mintShares(_account, _stethShares);
 
