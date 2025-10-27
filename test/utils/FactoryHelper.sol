@@ -7,6 +7,7 @@ import {StvPoolFactory} from "src/factories/StvPoolFactory.sol";
 import {StvStETHPoolFactory} from "src/factories/StvStETHPoolFactory.sol";
 import {StvStrategyPoolFactory} from "src/factories/StvStrategyPoolFactory.sol";
 import {WithdrawalQueueFactory} from "src/factories/WithdrawalQueueFactory.sol";
+import {DistributorFactory} from "src/factories/DistributorFactory.sol";
 import {DummyImplementation} from "src/proxy/DummyImplementation.sol";
 import {LoopStrategyFactory} from "src/factories/LoopStrategyFactory.sol";
 import {GGVStrategyFactory} from "src/factories/GGVStrategyFactory.sol";
@@ -18,6 +19,7 @@ contract FactoryHelper {
     address public immutable WRAPPER_B_FACTORY;
     address public immutable WRAPPER_C_FACTORY;
     address public immutable WITHDRAWAL_QUEUE_FACTORY;
+    address public immutable DISTRIBUTOR_FACTORY;
     address public immutable LOOP_STRATEGY_FACTORY;
     address public immutable GGV_STRATEGY_FACTORY;
     address public immutable TIMELOCK_FACTORY;
@@ -28,6 +30,7 @@ contract FactoryHelper {
         WRAPPER_B_FACTORY = address(new StvStETHPoolFactory());
         WRAPPER_C_FACTORY = address(new StvStrategyPoolFactory());
         WITHDRAWAL_QUEUE_FACTORY = address(new WithdrawalQueueFactory());
+        DISTRIBUTOR_FACTORY = address(new DistributorFactory());
         LOOP_STRATEGY_FACTORY = address(new LoopStrategyFactory());
         GGV_STRATEGY_FACTORY = address(new GGVStrategyFactory());
         TIMELOCK_FACTORY = address(new TimelockFactory());
@@ -47,6 +50,7 @@ contract FactoryHelper {
             stvStETHPoolFactory: WRAPPER_B_FACTORY,
             stvStrategyPoolFactory: WRAPPER_C_FACTORY,
             withdrawalQueueFactory: WITHDRAWAL_QUEUE_FACTORY,
+            distributorFactory: DISTRIBUTOR_FACTORY,
             loopStrategyFactory: LOOP_STRATEGY_FACTORY,
             ggvStrategyFactory: GGV_STRATEGY_FACTORY,
             dummyImplementation: DUMMY_IMPLEMENTATION,

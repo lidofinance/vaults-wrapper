@@ -40,7 +40,7 @@ abstract contract SetupStvStETHPool is Test {
         dashboard.fund{value: initialDeposit}();
 
         // Deploy the pool with mock withdrawal queue
-        StvStETHPool poolImpl = new StvStETHPool(address(dashboard), false, reserveRatioGapBP, withdrawalQueue);
+        StvStETHPool poolImpl = new StvStETHPool(address(dashboard), false, reserveRatioGapBP, withdrawalQueue, address(0)); // distributor
         ERC1967Proxy poolProxy = new ERC1967Proxy(address(poolImpl), "");
 
         pool = StvStETHPool(payable(poolProxy));

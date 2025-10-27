@@ -97,7 +97,7 @@ contract WithdrawalQueueTest is Test {
         );
 
         // Deploy pool implementation with immutable WQ, then upgrade pool proxy and initialize
-        StvPool impl = new StvPool(address(dashboard), false, address(wqProxy));
+        StvPool impl = new StvPool(address(dashboard), false, address(wqProxy), address(0));
         vm.startPrank(admin);
         poolProxy.proxy__upgradeToAndCall(
             address(impl),

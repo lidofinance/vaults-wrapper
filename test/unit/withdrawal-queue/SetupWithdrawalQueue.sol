@@ -54,7 +54,7 @@ abstract contract SetupWithdrawalQueue is Test {
         dashboard.fund{value: initialDeposit}();
 
         // Deploy StvStETHPool proxy with temporary implementation
-        StvStETHPool tempImpl = new StvStETHPool(address(dashboard), false, reserveRatioGapBP, address(0));
+        StvStETHPool tempImpl = new StvStETHPool(address(dashboard), false, reserveRatioGapBP, address(0), address(0));
         OssifiableProxy poolProxy = new OssifiableProxy(address(tempImpl), owner, "");
         pool = StvStETHPool(payable(poolProxy));
 
@@ -94,7 +94,7 @@ abstract contract SetupWithdrawalQueue is Test {
         lazyOracle.mock__updateLatestReportTimestamp(block.timestamp);
 
         // Deploy Wrapper implementation
-        StvStETHPool poolImpl = new StvStETHPool(address(dashboard), false, reserveRatioGapBP, address(withdrawalQueue));
+        StvStETHPool poolImpl = new StvStETHPool(address(dashboard), false, reserveRatioGapBP, address(withdrawalQueue), address(0));
         vm.prank(owner);
         poolProxy.proxy__upgradeTo(address(poolImpl));
 

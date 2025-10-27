@@ -13,8 +13,9 @@ contract StvStrategyPool is StvStETHPool {
         address _dashboard,
         bool _allowListEnabled,
         uint256 _reserveRatioGapBP,
-        address _withdrawalQueue
-    ) StvStETHPool(_dashboard, _allowListEnabled, _reserveRatioGapBP, _withdrawalQueue) {
+        address _withdrawalQueue,
+        address _distributor
+    ) StvStETHPool(_dashboard, _allowListEnabled, _reserveRatioGapBP, _withdrawalQueue, _distributor) {
     }
 
     function wrapperType() external pure virtual override returns (string memory) {
