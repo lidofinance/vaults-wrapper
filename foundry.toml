@@ -13,7 +13,7 @@ via_ir = true # although it's slower it helps with stack too deep errors in test
 dynamic_test_linking = true # to improve compilation speed
 
 optimizer = true
-optimizer_runs = 200
+optimizer_runs = 1
 
 # Remappings
 remappings = [

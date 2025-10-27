@@ -540,30 +540,6 @@ contract StvStETHPool is BasePool {
         steth = STETH.getPooledEthByShares(totalExceedingMintedStethShares());
     }
 
-    /**
-     * @notice Amount of stETH shares exceeding the Staking Vault's liability for a specific account
-     * @param _account The address of the account
-     * @return stethShares Amount of exceeding stETH shares (18 decimals)
-     * @dev May occur if rebalancing happens on the Staking Vault bypassing the Wrapper
-     */
-    function exceedingMintedStethSharesOf(address _account) public view returns (uint256 stethShares) {
-        uint256 totalExceeding = totalExceedingMintedStethShares();
-        uint256 totalSupply = totalSupply();
-
-        if (totalExceeding == 0 || totalSupply == 0) return 0;
-        stethShares = Math.mulDiv(totalExceeding, balanceOf(_account), totalSupply, Math.Rounding.Floor);
-    }
-
-    /**
-     * @notice Amount of stETH exceeding the Staking Vault's liability for a specific account
-     * @param _account The address of the account
-     * @return steth Amount of exceeding stETH (18 decimals)
-     * @dev May occur if rebalancing happens on the Staking Vault bypassing the Wrapper
-     */
-    function exceedingMintedStethOf(address _account) public view returns (uint256 steth) {
-        steth = STETH.getPooledEthByShares(exceedingMintedStethSharesOf(_account));
-    }
-
     // =================================================================================
     // UNASSIGNED LIABILITY
     // =================================================================================

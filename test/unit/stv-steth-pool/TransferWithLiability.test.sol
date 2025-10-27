@@ -10,7 +10,7 @@ import {StvStETHPool} from "src/StvStETHPool.sol";
 contract TransferWithLiabilityTest is Test, SetupStvStETHPool {
     function setUp() public override {
         super.setUp();
-        pool.depositETH{value: 20 ether}();
+        pool.depositETH{value: 20 ether}(address(0));
     }
 
     function test_TransferWithLiability_TransfersDebtAndStv() public {

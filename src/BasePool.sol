@@ -235,14 +235,6 @@ abstract contract BasePool is Initializable, ERC20Upgradeable, AllowList {
     }
 
     /**
-     * @notice Convenience function to deposit ETH to msg.sender without referral
-     * @return stv Amount of stv minted
-     */
-    function depositETH() public payable returns (uint256 stv) {
-        stv = depositETH(msg.sender, address(0));
-    }
-
-    /**
      * @notice Deposit native ETH and receive stv
      * @param _receiver Address to receive the minted shares
      * @param _referral Address of the referral (if any)

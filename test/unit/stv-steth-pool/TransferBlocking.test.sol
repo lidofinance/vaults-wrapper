@@ -11,7 +11,7 @@ contract TransferBlockingTest is Test, SetupStvStETHPool {
 
     function setUp() public override {
         super.setUp();
-        pool.depositETH{value: ethToDeposit}();
+        pool.depositETH{value: ethToDeposit}(address(0));
     }
 
     // Basic transfer tests without debt
