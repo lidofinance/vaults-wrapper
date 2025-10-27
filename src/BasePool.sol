@@ -15,9 +15,7 @@ abstract contract BasePool is Initializable, ERC20Upgradeable, AllowList {
     // Custom errors
     error ZeroDeposit();
     error InvalidReceiver();
-    error NoMintingCapacityAvailable();
     error ZeroStv();
-    error TransferNotAllowed();
     error NotWithdrawalQueue();
     error InvalidRequestType();
     error NotEnoughToRebalance();
