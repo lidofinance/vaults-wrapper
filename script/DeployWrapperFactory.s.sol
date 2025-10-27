@@ -8,6 +8,7 @@ import {StvPoolFactory} from "src/factories/StvPoolFactory.sol";
 import {StvStETHPoolFactory} from "src/factories/StvStETHPoolFactory.sol";
 import {StvStrategyPoolFactory} from "src/factories/StvStrategyPoolFactory.sol";
 import {WithdrawalQueueFactory} from "src/factories/WithdrawalQueueFactory.sol";
+import {DistributorFactory} from "src/factories/DistributorFactory.sol";
 import {LoopStrategyFactory} from "src/factories/LoopStrategyFactory.sol";
 import {GGVStrategyFactory} from "src/factories/GGVStrategyFactory.sol";
 import {DummyImplementation} from "src/proxy/DummyImplementation.sol";
@@ -71,6 +72,7 @@ contract DeployWrapperFactory is Script {
         StvStETHPoolFactory stethPoolFac = new StvStETHPoolFactory();
         StvStrategyPoolFactory strategyPoolFac = new StvStrategyPoolFactory();
         WithdrawalQueueFactory wqf = new WithdrawalQueueFactory();
+        DistributorFactory df = new DistributorFactory();
         LoopStrategyFactory lsf = new LoopStrategyFactory();
         GGVStrategyFactory ggvf = new GGVStrategyFactory();
         DummyImplementation dummy = new DummyImplementation();
@@ -86,6 +88,7 @@ contract DeployWrapperFactory is Script {
             stvStETHPoolFactory: address(stethPoolFac),
             stvStrategyPoolFactory: address(strategyPoolFac),
             withdrawalQueueFactory: address(wqf),
+            distributorFactory: address(df),
             loopStrategyFactory: address(lsf),
             ggvStrategyFactory: address(ggvf),
             dummyImplementation: address(dummy),

@@ -3,7 +3,6 @@ pragma solidity >=0.8.25;
 
 import "forge-std/Script.sol";
 import {Factory} from "src/Factory.sol";
-import {StvStrategyPool} from "src/StvStrategyPool.sol";
 import {IStETH} from "src/interfaces/IStETH.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
 import {IOssifiableProxy} from "src/interfaces/IOssifiableProxy.sol";
@@ -133,9 +132,10 @@ contract DeployWrapper is Script {
         address poolImpl;
         address withdrawalQueueImpl;
         address strategy = address(0);
+        address distributor;
 
         if (p.poolType == uint256(Factory.WrapperType.NO_MINTING_NO_STRATEGY)) {
-            (vault, dashboard, poolProxy, withdrawalQueueProxy) = factory.createVaultWithNoMintingNoStrategy{
+            (vault, dashboard, poolProxy, withdrawalQueueProxy, distributor) = factory.createVaultWithNoMintingNoStrategy{
                 value: p.value
             }(
                 p.nodeOperator,
@@ -148,7 +148,7 @@ contract DeployWrapper is Script {
                 p.timelockExecutor
             );
         } else if (p.poolType == uint256(Factory.WrapperType.MINTING_NO_STRATEGY)) {
-            (vault, dashboard, poolProxy, withdrawalQueueProxy) = factory.createVaultWithMintingNoStrategy{
+            (vault, dashboard, poolProxy, withdrawalQueueProxy, distributor) = factory.createVaultWithMintingNoStrategy{
                 value: p.value
             }(
                 p.nodeOperator,
@@ -162,7 +162,7 @@ contract DeployWrapper is Script {
                 p.timelockExecutor
             );
         } else if (p.poolType == uint256(Factory.WrapperType.LOOP_STRATEGY)) {
-            (vault, dashboard, poolProxy, withdrawalQueueProxy) = factory.createVaultWithLoopStrategy{value: p.value}(
+            (vault, dashboard, poolProxy, withdrawalQueueProxy, strategy, distributor) = factory.createVaultWithLoopStrategy{value: p.value}(
                 p.nodeOperator,
                 p.nodeOperatorManager,
                 p.nodeOperatorFeeBP,
@@ -174,9 +174,8 @@ contract DeployWrapper is Script {
                 p.loops,
                 p.timelockExecutor
             );
-            strategy = address(StvStrategyPool(poolProxy).STRATEGY());
         } else if (p.poolType == uint256(Factory.WrapperType.GGV_STRATEGY)) {
-            (vault, dashboard, poolProxy, withdrawalQueueProxy) = factory.createVaultWithGGVStrategy{value: p.value}(
+            (vault, dashboard, poolProxy, withdrawalQueueProxy, strategy, distributor) = factory.createVaultWithGGVStrategy{value: p.value}(
                 p.nodeOperator,
                 p.nodeOperatorManager,
                 p.nodeOperatorFeeBP,
@@ -189,7 +188,6 @@ contract DeployWrapper is Script {
                 p.boringQueue,
                 p.timelockExecutor
             );
-            strategy = address(StvStrategyPool(poolProxy).STRATEGY());
         } else {
             revert("invalid poolType");
         }

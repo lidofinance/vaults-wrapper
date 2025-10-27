@@ -15,6 +15,7 @@ import {StvPool} from "src/StvPool.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
 import {Factory} from "src/Factory.sol";
 import {FactoryHelper} from "test/utils/FactoryHelper.sol";
+import {Distributor} from "src/Distributor.sol";
 
 /**
  * @title StvPoolHarness
@@ -48,7 +49,6 @@ contract StvPoolHarness is Test {
     // Deployment configuration struct
     struct DeploymentConfig {
         Factory.WrapperType configuration;
-        address strategy;
         bool enableAllowlist;
         uint256 reserveRatioGapBP;
         address nodeOperator;
@@ -66,6 +66,8 @@ contract StvPoolHarness is Test {
         WithdrawalQueue withdrawalQueue;
         IDashboard dashboard;
         IStakingVault vault;
+        address strategy;
+        Distributor distributor;
     }
 
     function _initializeCore() internal {
@@ -89,6 +91,8 @@ contract StvPoolHarness is Test {
         address dashboard_;
         address payable poolAddress;
         address withdrawalQueue_;
+        address strategy_;
+        address distributor_;
 
         require(address(core) != address(0), "CoreHarness not initialized");
 
@@ -118,7 +122,7 @@ contract StvPoolHarness is Test {
 
         vm.startPrank(config.nodeOperator);
         if (config.configuration == Factory.WrapperType.NO_MINTING_NO_STRATEGY) {
-            (vault_, dashboard_, poolAddress, withdrawalQueue_) = factory.createVaultWithNoMintingNoStrategy{
+            (vault_, dashboard_, poolAddress, withdrawalQueue_, distributor_) = factory.createVaultWithNoMintingNoStrategy{
                 value: CONNECT_DEPOSIT
             }(
                 config.nodeOperator,
@@ -130,7 +134,7 @@ contract StvPoolHarness is Test {
                 config.enableAllowlist
             );
         } else if (config.configuration == Factory.WrapperType.MINTING_NO_STRATEGY) {
-            (vault_, dashboard_, poolAddress, withdrawalQueue_) = factory.createVaultWithMintingNoStrategy{
+            (vault_, dashboard_, poolAddress, withdrawalQueue_, distributor_) = factory.createVaultWithMintingNoStrategy{
                 value: CONNECT_DEPOSIT
             }(
                 config.nodeOperator,
@@ -144,7 +148,7 @@ contract StvPoolHarness is Test {
             );
         } else if (config.configuration == Factory.WrapperType.LOOP_STRATEGY) {
             uint256 loops = 1;
-            (vault_, dashboard_, poolAddress, withdrawalQueue_) = factory.createVaultWithLoopStrategy{
+            (vault_, dashboard_, poolAddress, withdrawalQueue_, strategy_, distributor_) = factory.createVaultWithLoopStrategy{
                 value: CONNECT_DEPOSIT
             }(
                 config.nodeOperator,
@@ -158,7 +162,7 @@ contract StvPoolHarness is Test {
                 loops
             );
         } else if (config.configuration == Factory.WrapperType.GGV_STRATEGY) {
-            (vault_, dashboard_, poolAddress, withdrawalQueue_) = factory.createVaultWithGGVStrategy{
+            (vault_, dashboard_, poolAddress, withdrawalQueue_, strategy_, distributor_) = factory.createVaultWithGGVStrategy{
                 value: CONNECT_DEPOSIT
             }(
                 config.nodeOperator,
@@ -184,7 +188,9 @@ contract StvPoolHarness is Test {
             pool: StvPool(payable(poolAddress)),
             withdrawalQueue: WithdrawalQueue(payable(withdrawalQueue_)),
             dashboard: IDashboard(payable(dashboard_)),
-            vault: IStakingVault(vault_)
+            vault: IStakingVault(vault_),
+            strategy: strategy_,
+            distributor: Distributor(distributor_)
         });
 
         return ctx;
@@ -196,7 +202,6 @@ contract StvPoolHarness is Test {
     {
         DeploymentConfig memory config = DeploymentConfig({
             configuration: Factory.WrapperType.NO_MINTING_NO_STRATEGY,
-            strategy: address(0),
             enableAllowlist: enableAllowlist,
             reserveRatioGapBP: 0,
             nodeOperator: NODE_OPERATOR,

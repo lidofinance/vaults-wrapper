@@ -5,6 +5,7 @@ import {ERC20Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {WithdrawalQueue} from "./WithdrawalQueue.sol";
+import {Distributor} from "./Distributor.sol";
 import {IStETH} from "./interfaces/IStETH.sol";
 import {IVaultHub} from "./interfaces/IVaultHub.sol";
 import {IDashboard} from "./interfaces/IDashboard.sol";
@@ -36,6 +37,7 @@ abstract contract BasePool is Initializable, ERC20Upgradeable, AllowList {
     IStakingVault public immutable STAKING_VAULT;
 
     WithdrawalQueue public immutable WITHDRAWAL_QUEUE;
+    Distributor public immutable DISTRIBUTOR;
 
     /// @custom:storage-location erc7201:base.pool.storage
     struct BasePoolStorage {
@@ -71,12 +73,13 @@ abstract contract BasePool is Initializable, ERC20Upgradeable, AllowList {
     event ConnectDepositClaimed(address indexed recipient, uint256 amount);
     event UnassignedLiabilityRebalanced(uint256 stethShares, uint256 ethAmount);
 
-    constructor(address _dashboard, bool _allowListEnabled, address _withdrawalQueue) AllowList(_allowListEnabled) {
+    constructor(address _dashboard, bool _allowListEnabled, address _withdrawalQueue, address _distributor) AllowList(_allowListEnabled) {
         DASHBOARD = IDashboard(payable(_dashboard));
         VAULT_HUB = IVaultHub(DASHBOARD.VAULT_HUB());
         STAKING_VAULT = IStakingVault(DASHBOARD.stakingVault());
         WITHDRAWAL_QUEUE = WithdrawalQueue(payable(_withdrawalQueue));
         STETH = IStETH(payable(DASHBOARD.STETH()));
+        DISTRIBUTOR = Distributor(_distributor);
 
         // Disable initializers since we only support proxy deployment
         _disableInitializers();

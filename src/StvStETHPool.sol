@@ -63,8 +63,9 @@ contract StvStETHPool is BasePool {
         address _dashboard,
         bool _allowListEnabled,
         uint256 _reserveRatioGapBP,
-        address _withdrawalQueue
-    ) BasePool(_dashboard, _allowListEnabled, _withdrawalQueue) {
+        address _withdrawalQueue,
+        address _distributor
+    ) BasePool(_dashboard, _allowListEnabled, _withdrawalQueue, _distributor) {
         if (_reserveRatioGapBP >= TOTAL_BASIS_POINTS) revert InvalidReserveRatioGap(_reserveRatioGapBP);
         RESERVE_RATIO_GAP_BP = _reserveRatioGapBP;
     }
