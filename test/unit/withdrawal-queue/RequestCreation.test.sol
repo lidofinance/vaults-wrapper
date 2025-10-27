@@ -11,13 +11,13 @@ contract RequestCreationTest is Test, SetupWithdrawalQueue {
         super.setUp();
 
         vm.prank(userAlice);
-        pool.depositETH{value: 100 ether}();
+        pool.depositETH{value: 100 ether}(address(0));
 
         vm.prank(userBob);
-        pool.depositETH{value: 100 ether}();
+        pool.depositETH{value: 100 ether}(address(0));
 
         // from test contract
-        pool.depositETH{value: 100_000 ether}();
+        pool.depositETH{value: 100_000 ether}(address(0));
     }
 
     // Initial State Tests

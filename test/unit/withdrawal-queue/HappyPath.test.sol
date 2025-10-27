@@ -14,7 +14,7 @@ contract WithdrawalQueueHappyPathTest is Test, SetupWithdrawalQueue {
 
     function test_WithdrawalQueue_HappyPath() public {
         // Deposit ETH
-        pool.depositETH{value: 10 ether}();
+        pool.depositETH{value: 10 ether}(address(0));
         uint256 initialStv = pool.balanceOf(address(this));
         assertGt(initialStv, 0);
 

@@ -12,7 +12,7 @@ contract MintingStethSharesTest is Test, SetupStvStETHPool {
     function setUp() public override {
         super.setUp();
         // Deposit some ETH to get minting capacity
-        pool.depositETH{value: ethToDeposit}();
+        pool.depositETH{value: ethToDeposit}(address(0));
     }
 
     // Initial state tests
@@ -166,7 +166,7 @@ contract MintingStethSharesTest is Test, SetupStvStETHPool {
     function test_MintingCapacity_IncreasesWithMoreDeposits() public {
         uint256 capacityBefore = pool.mintingCapacitySharesOf(address(this));
 
-        pool.depositETH{value: ethToDeposit}();
+        pool.depositETH{value: ethToDeposit}(address(0));
 
         uint256 capacityAfter = pool.mintingCapacitySharesOf(address(this));
         assertGt(capacityAfter, capacityBefore);
