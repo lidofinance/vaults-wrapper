@@ -528,7 +528,7 @@ contract StvStETHPool is BasePool {
      * @dev May occur if rebalancing happens on the Staking Vault bypassing the Wrapper
      */
     function totalExceedingMintedStethShares() public view returns (uint256 stethShares) {
-        stethShares = Math.saturatingSub(totalMintedStethShares(), DASHBOARD.liabilityShares());
+        stethShares = Math.saturatingSub(totalMintedStethShares(), totalLiabilityShares());
     }
 
     /**
@@ -575,7 +575,7 @@ contract StvStETHPool is BasePool {
      * @dev May occur if liability was transferred from another Staking Vault
      */
     function totalUnassignedLiabilityShares() public view override returns (uint256 unassignedLiabilityShares) {
-        unassignedLiabilityShares = Math.saturatingSub(DASHBOARD.liabilityShares(), totalMintedStethShares());
+        unassignedLiabilityShares = Math.saturatingSub(totalLiabilityShares(), totalMintedStethShares());
     }
 
     // =================================================================================

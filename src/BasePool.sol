@@ -73,7 +73,12 @@ abstract contract BasePool is Initializable, ERC20Upgradeable, AllowList {
     event ConnectDepositClaimed(address indexed recipient, uint256 amount);
     event UnassignedLiabilityRebalanced(uint256 stethShares, uint256 ethAmount);
 
-    constructor(address _dashboard, bool _allowListEnabled, address _withdrawalQueue, address _distributor) AllowList(_allowListEnabled) {
+    constructor(
+        address _dashboard,
+        bool _allowListEnabled,
+        address _withdrawalQueue,
+        address _distributor
+    ) AllowList(_allowListEnabled) {
         DASHBOARD = IDashboard(payable(_dashboard));
         VAULT_HUB = IVaultHub(DASHBOARD.VAULT_HUB());
         STAKING_VAULT = IStakingVault(DASHBOARD.stakingVault());
@@ -267,7 +272,7 @@ abstract contract BasePool is Initializable, ERC20Upgradeable, AllowList {
      * @notice Total liability stETH shares issued to the vault
      * @return liabilityShares Total liability stETH shares (18 decimals)
      */
-    function totalLiabilityShares() external view returns (uint256) {
+    function totalLiabilityShares() public view returns (uint256) {
         return DASHBOARD.liabilityShares();
     }
 
@@ -278,7 +283,7 @@ abstract contract BasePool is Initializable, ERC20Upgradeable, AllowList {
      * @dev Should exclude individually minted stETH shares (if any)
      */
     function totalUnassignedLiabilityShares() public view virtual returns (uint256 unassignedLiabilityShares) {
-        unassignedLiabilityShares = DASHBOARD.liabilityShares(); /* minus individually minted stETH shares */
+        unassignedLiabilityShares = totalLiabilityShares(); /* minus individually minted stETH shares */
     }
 
     /**
