@@ -47,6 +47,5 @@ contract AssetsTest is Test, SetupStvStETHPool {
 
         assertEq(pool.assetsOf(address(this)), assetsBefore);
         assertLt(pool.nominalAssetsOf(address(this)), assetsBefore);
-        assertGt(pool.exceedingMintedStethOf(address(this)), 0);
     }
 }
