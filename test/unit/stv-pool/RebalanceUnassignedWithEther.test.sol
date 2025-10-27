@@ -18,13 +18,13 @@ contract RebalanceUnassignedWithEtherTest is Test, SetupStvPool {
         assertEq(pool.totalUnassignedLiabilityShares(), liabilityToTransfer - expectedLiabilityDecrease);
     }
 
-    function test_DoesNotDecreaseTotalValue() public {
+    function test_DecreasesTotalValue() public {
         uint256 totalAssetsBefore = pool.totalAssets();
 
         dashboard.mock_increaseLiability(100);
         pool.rebalanceUnassignedLiabilityWithEther{value: 50}();
 
-        assertEq(pool.totalAssets(), totalAssetsBefore);
+        assertLt(pool.totalAssets(), totalAssetsBefore);
     }
 
     function test_RevertIfMoreThanUnassignedLiability() public {

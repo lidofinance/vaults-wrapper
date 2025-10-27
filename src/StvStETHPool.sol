@@ -58,8 +58,9 @@ contract StvStETHPool is BasePool {
         address _dashboard,
         bool _allowListEnabled,
         uint256 _reserveRatioGapBP,
-        address _withdrawalQueue
-    ) BasePool(_dashboard, _allowListEnabled, _withdrawalQueue) {
+        address _withdrawalQueue,
+        address _distributor
+    ) BasePool(_dashboard, _allowListEnabled, _withdrawalQueue, _distributor) {
         uint256 vaultRR = DASHBOARD.vaultConnection().reserveRatioBP;
         require(_reserveRatioGapBP < TOTAL_BASIS_POINTS - vaultRR, "Reserve ratio gap too high");
         WRAPPER_RR_BP = vaultRR + _reserveRatioGapBP;
@@ -262,10 +263,21 @@ contract StvStETHPool is BasePool {
     /**
      * @notice Total assets managed by the pool
      * @return assets Total assets (18 decimals)
-     * @dev Includes totalAssets + total exceeding minted stETH shares
+     * @dev Includes total assets + total exceeding minted stETH
      */
     function totalAssets() public view override returns (uint256 assets) {
-        assets = super.totalAssets() + totalExceedingMintedSteth();
+        uint256 exceedingMintedSteth = totalExceedingMintedSteth();
+
+        /// total assets = nominal assets + exceeding minted steth - unassigned liability steth
+        ///
+        /// exceeding minted steth = minted steth on wrapper - liability on vault
+        /// unassigned liability steth = liability on vault - minted steth on wrapper
+        /// so only one of these values can be > 0 at any time
+        if (exceedingMintedSteth > 0) {
+            assets = totalNominalAssets() + exceedingMintedSteth;
+        } else {
+            assets = Math.saturatingSub(totalNominalAssets(), totalUnassignedLiabilitySteth());
+        }
     }
 
     /**

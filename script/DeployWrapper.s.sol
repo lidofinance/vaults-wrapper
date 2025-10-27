@@ -132,9 +132,10 @@ contract DeployWrapper is Script {
         address poolImpl;
         address withdrawalQueueImpl;
         address strategy = address(0);
+        address distributor;
 
         if (p.poolType == uint256(Factory.WrapperType.NO_MINTING_NO_STRATEGY)) {
-            (vault, dashboard, poolProxy, withdrawalQueueProxy) = factory.createVaultWithNoMintingNoStrategy{
+            (vault, dashboard, poolProxy, withdrawalQueueProxy, distributor) = factory.createVaultWithNoMintingNoStrategy{
                 value: p.value
             }(
                 p.nodeOperator,
@@ -147,7 +148,7 @@ contract DeployWrapper is Script {
                 p.timelockExecutor
             );
         } else if (p.poolType == uint256(Factory.WrapperType.MINTING_NO_STRATEGY)) {
-            (vault, dashboard, poolProxy, withdrawalQueueProxy) = factory.createVaultWithMintingNoStrategy{
+            (vault, dashboard, poolProxy, withdrawalQueueProxy, distributor) = factory.createVaultWithMintingNoStrategy{
                 value: p.value
             }(
                 p.nodeOperator,
@@ -161,7 +162,7 @@ contract DeployWrapper is Script {
                 p.timelockExecutor
             );
         } else if (p.poolType == uint256(Factory.WrapperType.LOOP_STRATEGY)) {
-            (vault, dashboard, poolProxy, withdrawalQueueProxy, strategy) = factory.createVaultWithLoopStrategy{value: p.value}(
+            (vault, dashboard, poolProxy, withdrawalQueueProxy, strategy, distributor) = factory.createVaultWithLoopStrategy{value: p.value}(
                 p.nodeOperator,
                 p.nodeOperatorManager,
                 p.nodeOperatorFeeBP,
@@ -174,7 +175,7 @@ contract DeployWrapper is Script {
                 p.timelockExecutor
             );
         } else if (p.poolType == uint256(Factory.WrapperType.GGV_STRATEGY)) {
-            (vault, dashboard, poolProxy, withdrawalQueueProxy, strategy) = factory.createVaultWithGGVStrategy{value: p.value}(
+            (vault, dashboard, poolProxy, withdrawalQueueProxy, strategy, distributor) = factory.createVaultWithGGVStrategy{value: p.value}(
                 p.nodeOperator,
                 p.nodeOperatorManager,
                 p.nodeOperatorFeeBP,

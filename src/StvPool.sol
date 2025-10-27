@@ -13,8 +13,9 @@ contract StvPool is BasePool {
     constructor(
         address _dashboard,
         bool _allowListEnabled,
-        address _withdrawalQueue
-    ) BasePool(_dashboard, _allowListEnabled, _withdrawalQueue) {}
+        address _withdrawalQueue,
+        address _distributor
+    ) BasePool(_dashboard, _allowListEnabled, _withdrawalQueue, _distributor) {}
 
     function wrapperType() public pure override returns (string memory) {
         return "StvPool";
