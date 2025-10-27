@@ -96,19 +96,11 @@ abstract contract BasePool is Initializable, ERC20Upgradeable, AllowList {
         _disableInitializers();
     }
 
-    function initialize(
-        address _owner,
-        string memory _name,
-        string memory _symbol
-    ) public virtual initializer {
+    function initialize(address _owner, string memory _name, string memory _symbol) public virtual initializer {
         _initializeBasePool(_owner, _name, _symbol);
     }
 
-    function _initializeBasePool(
-        address _owner,
-        string memory _name,
-        string memory _symbol
-    ) internal {
+    function _initializeBasePool(address _owner, string memory _name, string memory _symbol) internal {
         __ERC20_init(_name, _symbol);
         __AccessControlEnumerable_init();
 
@@ -153,9 +145,13 @@ abstract contract BasePool is Initializable, ERC20Upgradeable, AllowList {
      * @notice Total assets managed by the pool
      * @return assets Total assets (18 decimals)
      * @dev Overridable method to include other assets if needed
+     * @dev Subtract unassigned liability stETH from total nominal assets
      */
     function totalAssets() public view virtual returns (uint256 assets) {
-        assets = totalNominalAssets(); /* plus other assets if any */
+        assets = Math.saturatingSub(
+            totalNominalAssets(),
+            totalUnassignedLiabilitySteth()
+        ); /* plus other assets if any */
     }
 
     /**
@@ -294,6 +290,13 @@ abstract contract BasePool is Initializable, ERC20Upgradeable, AllowList {
      */
     function totalUnassignedLiabilityShares() public view virtual returns (uint256 unassignedLiabilityShares) {
         unassignedLiabilityShares = DASHBOARD.liabilityShares(); /* minus individually minted stETH shares */
+    }
+
+    /**
+     * @notice Total unassigned liability in stETH
+     */
+    function totalUnassignedLiabilitySteth() public view returns (uint256 unassignedLiabilitySteth) {
+        unassignedLiabilitySteth = STETH.getPooledEthBySharesRoundUp(totalUnassignedLiabilityShares());
     }
 
     /**
