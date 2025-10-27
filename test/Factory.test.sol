@@ -8,14 +8,15 @@ import {StvPoolFactory} from "src/factories/StvPoolFactory.sol";
 import {StvStETHPoolFactory} from "src/factories/StvStETHPoolFactory.sol";
 import {StvStrategyPoolFactory} from "src/factories/StvStrategyPoolFactory.sol";
 import {WithdrawalQueueFactory} from "src/factories/WithdrawalQueueFactory.sol";
+import {DistributorFactory} from "src/factories/DistributorFactory.sol";
 import {DummyImplementation} from "src/proxy/DummyImplementation.sol";
 import {LoopStrategyFactory} from "src/factories/LoopStrategyFactory.sol";
 import {GGVStrategyFactory} from "src/factories/GGVStrategyFactory.sol";
 import {TimelockFactory} from "src/factories/TimelockFactory.sol";
 import {BasePool} from "../src/BasePool.sol";
 import {StvPool} from "../src/StvPool.sol";
-import {StvStrategyPool} from "../src/StvStrategyPool.sol";
 import {WithdrawalQueue} from "../src/WithdrawalQueue.sol";
+import {Distributor} from "../src/Distributor.sol";
 
 import {MockERC20} from "./mocks/MockERC20.sol";
 
@@ -68,6 +69,7 @@ contract FactoryTest is Test {
         StvStETHPoolFactory wbf = new StvStETHPoolFactory();
         StvStrategyPoolFactory wcf = new StvStrategyPoolFactory();
         WithdrawalQueueFactory wqf = new WithdrawalQueueFactory();
+        DistributorFactory df = new DistributorFactory();
         LoopStrategyFactory lsf = new LoopStrategyFactory();
         GGVStrategyFactory ggvf = new GGVStrategyFactory();
         address dummy = address(new DummyImplementation());
@@ -82,6 +84,7 @@ contract FactoryTest is Test {
             stvStETHPoolFactory: address(wbf),
             stvStrategyPoolFactory: address(wcf),
             withdrawalQueueFactory: address(wqf),
+            distributorFactory: address(df),
             loopStrategyFactory: address(lsf),
             ggvStrategyFactory: address(ggvf),
             dummyImplementation: dummy,
@@ -97,7 +100,7 @@ contract FactoryTest is Test {
 
     function test_canCreatePool() public {
         vm.startPrank(admin);
-        (address vault, address dashboard, address payable poolProxy, address withdrawalQueueProxy) = WrapperFactory
+        (address vault, address dashboard, address payable poolProxy, address withdrawalQueueProxy, address distributor) = WrapperFactory
             .createVaultWithNoMintingNoStrategy{value: connectDeposit}(
             nodeOperator,
             nodeOperatorManager,
@@ -114,9 +117,11 @@ contract FactoryTest is Test {
         assertEq(address(pool.STAKING_VAULT()), address(vault));
         assertEq(address(pool.DASHBOARD()), address(dashboard));
         assertEq(address(pool.WITHDRAWAL_QUEUE()), address(withdrawalQueue));
+        assertEq(address(pool.DISTRIBUTOR()), address(distributor));
         // StvPool doesn't have a STRATEGY field
 
         MockDashboard mockDashboard = MockDashboard(payable(dashboard));
+        Distributor distributor_ = Distributor(distributor);
 
         assertTrue(
             mockDashboard.hasRole(
@@ -126,6 +131,11 @@ contract FactoryTest is Test {
         );
 
         assertFalse(mockDashboard.hasRole(mockDashboard.DEFAULT_ADMIN_ROLE(), address(WrapperFactory)));
+
+        assertFalse(distributor_.hasRole(distributor_.DEFAULT_ADMIN_ROLE(), address(WrapperFactory)), "Distributor default admin should be revoked");
+        assertFalse(distributor_.hasRole(distributor_.MANAGER_ROLE(), address(WrapperFactory)), "Distributor manager role should be revoked");
+        assertTrue(distributor_.hasRole(distributor_.DEFAULT_ADMIN_ROLE(), admin), "Distributor default admin should be granted to admin");
+        assertTrue(distributor_.hasRole(distributor_.MANAGER_ROLE(), admin), "Distributor manager role should be granted to admin");
     }
 
     function test_revertWithoutConnectDeposit() public {
@@ -144,7 +154,7 @@ contract FactoryTest is Test {
 
     function test_canCreateWithStrategy() public {
         vm.startPrank(admin);
-        (, address dashboard, address payable poolProxy,) = WrapperFactory
+        (, address dashboard, address payable poolProxy,, address strategy, /** distributor */) = WrapperFactory
             .createVaultWithLoopStrategy{value: connectDeposit}(
             nodeOperator,
             nodeOperatorManager,
@@ -159,9 +169,9 @@ contract FactoryTest is Test {
 
         BasePool pool = BasePool(poolProxy);
 
-        StvStrategyPool strategyPool = StvStrategyPool(payable(address(pool)));
-        // Strategy is deployed internally for loop strategy
-        assertTrue(address(strategyPool.STRATEGY()) != address(0));
+        // Strategy is deployed internally for loop strategy and added to allowlist
+        assertTrue(strategy != address(0));
+        assertTrue(pool.isAllowListed(strategy));
 
         MockDashboard mockDashboard = MockDashboard(payable(dashboard));
 
@@ -172,7 +182,7 @@ contract FactoryTest is Test {
 
     function test_allowlistEnabled() public {
         vm.startPrank(admin);
-        (,, address payable poolProxy,) = WrapperFactory.createVaultWithNoMintingNoStrategy{value: connectDeposit}(
+        (,, address payable poolProxy, /** withdrawalQueueProxy */ , /** distributor */) = WrapperFactory.createVaultWithNoMintingNoStrategy{value: connectDeposit}(
             nodeOperator,
             nodeOperatorManager,
             100, // 1% fee

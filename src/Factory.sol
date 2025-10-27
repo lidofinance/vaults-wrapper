@@ -7,10 +7,12 @@ import {StvPoolFactory} from "./factories/StvPoolFactory.sol";
 import {StvStETHPoolFactory} from "./factories/StvStETHPoolFactory.sol";
 import {StvStrategyPoolFactory} from "./factories/StvStrategyPoolFactory.sol";
 import {WithdrawalQueueFactory} from "./factories/WithdrawalQueueFactory.sol";
+import {DistributorFactory} from "./factories/DistributorFactory.sol";
 import {LoopStrategyFactory} from "./factories/LoopStrategyFactory.sol";
 import {GGVStrategyFactory} from "./factories/GGVStrategyFactory.sol";
 import {TimelockFactory} from "./factories/TimelockFactory.sol";
 import {OssifiableProxy} from "./proxy/OssifiableProxy.sol";
+import {Distributor} from "./Distributor.sol";
 
 import {IVaultFactory} from "./interfaces/IVaultFactory.sol";
 import {IDashboard} from "./interfaces/IDashboard.sol";
@@ -27,6 +29,7 @@ contract Factory {
         address stvStETHPoolFactory;
         address stvStrategyPoolFactory;
         address withdrawalQueueFactory;
+        address distributorFactory;
         address loopStrategyFactory;
         address ggvStrategyFactory;
         address dummyImplementation;
@@ -45,6 +48,7 @@ contract Factory {
     StvStETHPoolFactory public immutable STV_STETH_POOL_FACTORY;
     StvStrategyPoolFactory public immutable STV_STRATEGY_POOL_FACTORY;
     WithdrawalQueueFactory public immutable WITHDRAWAL_QUEUE_FACTORY;
+    DistributorFactory public immutable DISTRIBUTOR_FACTORY;
     LoopStrategyFactory public immutable LOOP_STRATEGY_FACTORY;
     GGVStrategyFactory public immutable GGV_STRATEGY_FACTORY;
     TimelockFactory public immutable TIMELOCK_FACTORY;
@@ -77,6 +81,7 @@ contract Factory {
         STV_STETH_POOL_FACTORY = StvStETHPoolFactory(poolConfig.stvStETHPoolFactory);
         STV_STRATEGY_POOL_FACTORY = StvStrategyPoolFactory(poolConfig.stvStrategyPoolFactory);
         WITHDRAWAL_QUEUE_FACTORY = WithdrawalQueueFactory(poolConfig.withdrawalQueueFactory);
+        DISTRIBUTOR_FACTORY = DistributorFactory(poolConfig.distributorFactory);
         LOOP_STRATEGY_FACTORY = LoopStrategyFactory(poolConfig.loopStrategyFactory);
         GGV_STRATEGY_FACTORY = GGVStrategyFactory(poolConfig.ggvStrategyFactory);
         DUMMY_IMPLEMENTATION = poolConfig.dummyImplementation;
@@ -100,12 +105,13 @@ contract Factory {
     )
         external
         payable
-        returns (address vault, address dashboard, address payable poolProxy, address withdrawalQueueProxy)
+        returns (address vault, address dashboard, address payable poolProxy, address withdrawalQueueProxy, address distributor)
     {
         IDashboard _dashboard;
         address payable _poolProxy;
         address _withdrawalQueueProxy;
-        (vault, dashboard, _dashboard, _poolProxy, _withdrawalQueueProxy) = _setupVaultAndProxies(
+        address _distributor;
+        (vault, dashboard, _dashboard, _poolProxy, _withdrawalQueueProxy, _distributor) = _setupVaultAndProxies(
             _nodeOperator, _nodeOperatorManager, _nodeOperatorFeeBP, _confirmExpiry, _maxFinalizationTime, _minWithdrawalDelayTime
         );
 
@@ -120,6 +126,7 @@ contract Factory {
             _allowlistEnabled,
             _reserveRatioGapBP,
             _withdrawalQueueProxy,
+            _distributor,
             usedStrategy,
             _poolProxy
         );
@@ -127,9 +134,10 @@ contract Factory {
         _configureAndFinalize(
             _dashboard, pool, _poolProxy, _withdrawalQueueProxy, vault, _configuration, usedStrategy
         );
+        _finalizeDistributor(_distributor);
 
         _finalizeGovernance(_poolProxy, _withdrawalQueueProxy, _timelockExecutor);
-        return (vault, dashboard, _poolProxy, _withdrawalQueueProxy);
+        return (vault, dashboard, _poolProxy, _withdrawalQueueProxy, _distributor);
     }
 
     // =================================================================================
@@ -148,7 +156,7 @@ contract Factory {
     )
         external
         payable
-        returns (address vault, address dashboard, address payable poolProxy, address withdrawalQueueProxy)
+        returns (address vault, address dashboard, address payable poolProxy, address withdrawalQueueProxy, address distributor)
     {
         return _createVaultWithNoMintingNoStrategy(
             _nodeOperator,
@@ -171,7 +179,7 @@ contract Factory {
         uint256 _maxFinalizationTime,
         uint256 _minWithdrawalDelayTime,
         bool _allowlistEnabled
-    ) external payable returns (address vault, address dashboard, address payable poolProxy, address withdrawalQueueProxy) {
+    ) external payable returns (address vault, address dashboard, address payable poolProxy, address withdrawalQueueProxy, address distributor) {
         return _createVaultWithNoMintingNoStrategy(
             _nodeOperator,
             _nodeOperatorManager,
@@ -193,9 +201,9 @@ contract Factory {
         uint256 _minWithdrawalDelayTime,
         bool _allowlistEnabled,
         address _timelockExecutor
-    ) internal returns (address vault, address dashboard, address payable _poolProxy, address _withdrawalQueueProxy) {
+    ) internal returns (address vault, address dashboard, address payable _poolProxy, address _withdrawalQueueProxy, address _distributor) {
         IDashboard _dashboard;
-        (vault, dashboard, _dashboard, _poolProxy, _withdrawalQueueProxy) = _setupVaultAndProxies(
+        (vault, dashboard, _dashboard, _poolProxy, _withdrawalQueueProxy, _distributor) = _setupVaultAndProxies(
             _nodeOperator, _nodeOperatorManager, _nodeOperatorFeeBP, _confirmExpiry, _maxFinalizationTime, _minWithdrawalDelayTime
         );
 
@@ -205,6 +213,7 @@ contract Factory {
             _allowlistEnabled,
             0,
             _withdrawalQueueProxy,
+            _distributor,
             address(0),
             _poolProxy
         );
@@ -218,6 +227,7 @@ contract Factory {
             WrapperType.NO_MINTING_NO_STRATEGY,
             address(0)
         );
+        _finalizeDistributor(_distributor);
 
         _finalizeGovernance(_poolProxy, _withdrawalQueueProxy, _timelockExecutor);
     }
@@ -235,7 +245,7 @@ contract Factory {
     )
         external
         payable
-        returns (address vault, address dashboard, address payable poolProxy, address withdrawalQueueProxy)
+        returns (address vault, address dashboard, address payable poolProxy, address withdrawalQueueProxy, address distributor)
     {
         return _createVaultWithMintingNoStrategy(
             _nodeOperator,
@@ -260,7 +270,7 @@ contract Factory {
         uint256 _minWithdrawalDelayTime,
         bool _allowlistEnabled,
         uint256 _reserveRatioGapBP
-    ) external payable returns (address vault, address dashboard, address payable poolProxy, address withdrawalQueueProxy) {
+    ) external payable returns (address vault, address dashboard, address payable poolProxy, address withdrawalQueueProxy, address distributor) {
         return _createVaultWithMintingNoStrategy(
             _nodeOperator,
             _nodeOperatorManager,
@@ -284,9 +294,10 @@ contract Factory {
         bool _allowlistEnabled,
         uint256 _reserveRatioGapBP,
         address _timelockExecutor
-    ) internal returns (address vault, address dashboard, address payable _poolProxy, address _withdrawalQueueProxy) {
+    ) internal returns (address vault, address dashboard, address payable _poolProxy, address _withdrawalQueueProxy, address _distributor) {
         IDashboard _dashboard;
-        (vault, dashboard, _dashboard, _poolProxy, _withdrawalQueueProxy) = _setupVaultAndProxies(
+
+        (vault, dashboard, _dashboard, _poolProxy, _withdrawalQueueProxy, _distributor) = _setupVaultAndProxies(
             _nodeOperator, _nodeOperatorManager, _nodeOperatorFeeBP, _confirmExpiry, _maxFinalizationTime, _minWithdrawalDelayTime
         );
 
@@ -296,6 +307,7 @@ contract Factory {
             _allowlistEnabled,
             _reserveRatioGapBP,
             _withdrawalQueueProxy,
+            _distributor,
             address(0),
             _poolProxy
         );
@@ -309,7 +321,8 @@ contract Factory {
             WrapperType.MINTING_NO_STRATEGY,
             address(0)
         );
-
+        
+        _finalizeDistributor(_distributor);
         _finalizeGovernance(_poolProxy, _withdrawalQueueProxy, _timelockExecutor);
     }
 
@@ -327,7 +340,7 @@ contract Factory {
     )
         external
         payable
-        returns (address vault, address dashboard, address payable poolProxy, address withdrawalQueueProxy)
+        returns (address vault, address dashboard, address payable poolProxy, address withdrawalQueueProxy, address strategy, address distributor)
     {
         return _createVaultWithLoopStrategy(
             _nodeOperator,
@@ -354,7 +367,7 @@ contract Factory {
         bool _allowlistEnabled,
         uint256 _reserveRatioGapBP,
         uint256 _loops
-    ) external payable returns (address vault, address dashboard, address payable poolProxy, address withdrawalQueueProxy) {
+    ) external payable returns (address vault, address dashboard, address payable poolProxy, address withdrawalQueueProxy, address strategy, address distributor) {
         return _createVaultWithLoopStrategy(
             _nodeOperator,
             _nodeOperatorManager,
@@ -380,13 +393,13 @@ contract Factory {
         uint256 _reserveRatioGapBP,
         uint256 _loops,
         address _timelockExecutor
-    ) internal returns (address vault, address dashboard, address payable _poolProxy, address _withdrawalQueueProxy) {
+    ) internal returns (address vault, address dashboard, address payable _poolProxy, address _withdrawalQueueProxy, address loopStrategy, address _distributor) {
         IDashboard _dashboard;
-        (vault, dashboard, _dashboard, _poolProxy, _withdrawalQueueProxy) = _setupVaultAndProxies(
+        (vault, dashboard, _dashboard, _poolProxy, _withdrawalQueueProxy, _distributor) = _setupVaultAndProxies(
             _nodeOperator, _nodeOperatorManager, _nodeOperatorFeeBP, _confirmExpiry, _maxFinalizationTime, _minWithdrawalDelayTime
         );
 
-        address loopStrategy = LOOP_STRATEGY_FACTORY.deploy(STETH, address(_poolProxy), _loops);
+        loopStrategy = LOOP_STRATEGY_FACTORY.deploy(STETH, address(_poolProxy), _loops);
 
         BasePool pool = _deployAndInitWrapper(
             WrapperType.LOOP_STRATEGY,
@@ -394,6 +407,7 @@ contract Factory {
             _allowlistEnabled,
             _reserveRatioGapBP,
             _withdrawalQueueProxy,
+            _distributor,
             loopStrategy,
             _poolProxy
         );
@@ -401,6 +415,7 @@ contract Factory {
         _configureAndFinalize(
             _dashboard, pool, _poolProxy, _withdrawalQueueProxy, vault, WrapperType.LOOP_STRATEGY, loopStrategy
         );
+        _finalizeDistributor(_distributor);
 
         _finalizeGovernance(_poolProxy, _withdrawalQueueProxy, _timelockExecutor);
     }
@@ -420,7 +435,7 @@ contract Factory {
     )
         external
         payable
-        returns (address vault, address dashboard, address payable poolProxy, address withdrawalQueueProxy)
+        returns (address vault, address dashboard, address payable poolProxy, address withdrawalQueueProxy, address strategy, address distributor)
     {
         return _createVaultWithGGVStrategy(
             _nodeOperator,
@@ -449,7 +464,7 @@ contract Factory {
         uint256 _reserveRatioGapBP,
         address _teller,
         address _boringQueue
-    ) external payable returns (address vault, address dashboard, address payable poolProxy, address withdrawalQueueProxy) {
+    ) external payable returns (address vault, address dashboard, address payable poolProxy, address withdrawalQueueProxy, address strategy, address distributor) {
         return _createVaultWithGGVStrategy(
             _nodeOperator,
             _nodeOperatorManager,
@@ -477,13 +492,13 @@ contract Factory {
         address _teller,
         address _boringQueue,
         address _timelockExecutor
-    ) internal returns (address vault, address dashboard, address payable _poolProxy, address _withdrawalQueueProxy) {
+    ) internal returns (address vault, address dashboard, address payable _poolProxy, address _withdrawalQueueProxy, address ggvStrategy, address _distributor) {
         IDashboard _dashboard;
-        (vault, dashboard, _dashboard, _poolProxy, _withdrawalQueueProxy) = _setupVaultAndProxies(
+        (vault, dashboard, _dashboard, _poolProxy, _withdrawalQueueProxy, _distributor) = _setupVaultAndProxies(
             _nodeOperator, _nodeOperatorManager, _nodeOperatorFeeBP, _confirmExpiry, _maxFinalizationTime, _minWithdrawalDelayTime
         );
 
-        address ggvStrategy = GGV_STRATEGY_FACTORY.deploy(_poolProxy, STETH, WSTETH, _teller, _boringQueue);
+        ggvStrategy = GGV_STRATEGY_FACTORY.deploy(_poolProxy, STETH, WSTETH, _teller, _boringQueue);
 
         BasePool pool = _deployAndInitWrapper(
             WrapperType.GGV_STRATEGY,
@@ -491,6 +506,7 @@ contract Factory {
             _allowlistEnabled,
             _reserveRatioGapBP,
             _withdrawalQueueProxy,
+            _distributor,
             ggvStrategy,
             _poolProxy
         );
@@ -498,6 +514,7 @@ contract Factory {
         _configureAndFinalize(
             _dashboard, pool, _poolProxy, _withdrawalQueueProxy, vault, WrapperType.GGV_STRATEGY, ggvStrategy
         );
+        _finalizeDistributor(_distributor);
 
         _finalizeGovernance(_poolProxy, _withdrawalQueueProxy, _timelockExecutor);
     }
@@ -508,22 +525,23 @@ contract Factory {
         bool _allowlistEnabled,
         uint256 _reserveRatioGapBP,
         address withdrawalQueueProxy,
+        address distributor,
         address _strategy
     ) internal returns (address poolImpl) {
         if (_configuration == WrapperType.NO_MINTING_NO_STRATEGY) {
-            poolImpl = STV_POOL_FACTORY.deploy(dashboard, _allowlistEnabled, withdrawalQueueProxy);
+            poolImpl = STV_POOL_FACTORY.deploy(dashboard, _allowlistEnabled, withdrawalQueueProxy, distributor);
             assert(keccak256(bytes(BasePool(payable(poolImpl)).wrapperType())) == keccak256(bytes("StvPool")));
         } else if (_configuration == WrapperType.MINTING_NO_STRATEGY) {
-            poolImpl = STV_STETH_POOL_FACTORY.deploy(dashboard, _allowlistEnabled, _reserveRatioGapBP, withdrawalQueueProxy);
+            poolImpl = STV_STETH_POOL_FACTORY.deploy(dashboard, _allowlistEnabled, _reserveRatioGapBP, withdrawalQueueProxy, distributor);
             assert(keccak256(bytes(BasePool(payable(poolImpl)).wrapperType())) == keccak256(bytes("StvStETHPool")));
         } else if (_configuration == WrapperType.LOOP_STRATEGY || _configuration == WrapperType.GGV_STRATEGY) {
             if (_strategy == address(0)) revert InvalidConfiguration();
             poolImpl = STV_STRATEGY_POOL_FACTORY.deploy(
                 dashboard,
                 _allowlistEnabled,
-                _strategy,
                 _reserveRatioGapBP,
-                withdrawalQueueProxy
+                withdrawalQueueProxy,
+                distributor
             );
             assert(keccak256(bytes(BasePool(payable(poolImpl)).wrapperType())) == keccak256(bytes("StvStrategyPool")));
         } else {
@@ -545,7 +563,8 @@ contract Factory {
             address dashboard,
             IDashboard _dashboard,
             address payable poolProxy,
-            address withdrawalQueueProxy
+            address withdrawalQueueProxy,
+            address distributor
         )
     {
         (vault, dashboard) = VAULT_FACTORY.createVaultWithDashboard{value: msg.value}(
@@ -560,6 +579,9 @@ contract Factory {
         _dashboard = IDashboard(payable(dashboard));
 
         poolProxy = payable(address(new OssifiableProxy(DUMMY_IMPLEMENTATION, address(this), bytes(""))));
+        
+        distributor = DISTRIBUTOR_FACTORY.deploy(address(this));
+        
         address wqImpl = WITHDRAWAL_QUEUE_FACTORY.deploy(
             address(poolProxy),
             dashboard,
@@ -583,11 +605,12 @@ contract Factory {
         bool _allowlistEnabled,
         uint256 _reserveRatioGapBP,
         address withdrawalQueueProxy,
+        address distributor,
         address _strategy,
         address payable poolProxy
     ) internal returns (BasePool pool) {
         address poolImpl = _deployWrapper(
-            _configuration, dashboard, _allowlistEnabled, _reserveRatioGapBP, withdrawalQueueProxy, _strategy
+            _configuration, dashboard, _allowlistEnabled, _reserveRatioGapBP, withdrawalQueueProxy, distributor, _strategy
         );
 
         OssifiableProxy(poolProxy).proxy__upgradeToAndCall(
@@ -627,6 +650,11 @@ contract Factory {
             _dashboard.grantRole(_dashboard.BURN_ROLE(), address(poolProxy));
         }
 
+        // Add strategy to allowlist if provided
+        if (_strategy != address(0)) {
+            pool.grantRole(pool.DEPOSIT_ROLE(), _strategy);
+        }
+
         pool.grantRole(pool.ALLOW_LIST_MANAGER_ROLE(), msg.sender);
         pool.grantRole(pool.DEFAULT_ADMIN_ROLE(), msg.sender);
         pool.revokeRole(pool.DEFAULT_ADMIN_ROLE(), address(this));
@@ -635,5 +663,13 @@ contract Factory {
         _dashboard.revokeRole(_dashboard.DEFAULT_ADMIN_ROLE(), address(this));
 
         emit VaultWrapperCreated(vault, address(pool), withdrawalQueueProxy, _strategy, _configuration);
+    }
+
+    function _finalizeDistributor(address _distributor) internal {
+        Distributor distributor = Distributor(_distributor);
+        distributor.grantRole(distributor.DEFAULT_ADMIN_ROLE(), msg.sender);
+        distributor.grantRole(distributor.MANAGER_ROLE(), msg.sender);
+        distributor.revokeRole(distributor.MANAGER_ROLE(), address(this));
+        distributor.revokeRole(distributor.DEFAULT_ADMIN_ROLE(), address(this));
     }
 }

@@ -58,8 +58,9 @@ contract StvStETHPool is BasePool {
         address _dashboard,
         bool _allowListEnabled,
         uint256 _reserveRatioGapBP,
-        address _withdrawalQueue
-    ) BasePool(_dashboard, _allowListEnabled, _withdrawalQueue) {
+        address _withdrawalQueue,
+        address _distributor
+    ) BasePool(_dashboard, _allowListEnabled, _withdrawalQueue, _distributor) {
         uint256 vaultRR = DASHBOARD.vaultConnection().reserveRatioBP;
         require(_reserveRatioGapBP < TOTAL_BASIS_POINTS - vaultRR, "Reserve ratio gap too high");
         WRAPPER_RR_BP = vaultRR + _reserveRatioGapBP;

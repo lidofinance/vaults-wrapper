@@ -1,0 +1,48 @@
+// SPDX-License-Identifier: MIT
+pragma solidity >=0.8.25;
+
+import {Test} from "forge-std/Test.sol";
+import {SetupDistributor} from "./SetupDistributor.sol";
+import {Distributor} from "src/Distributor.sol";
+
+contract ConstructorTest is Test, SetupDistributor {
+    function setUp() public override {
+        super.setUp();
+    }
+
+    function test_Constructor_SetsOwnerAsDefaultAdmin() public view {
+        assertTrue(distributor.hasRole(distributor.DEFAULT_ADMIN_ROLE(), owner));
+    }
+
+    function test_Constructor_SetsOwnerAsManager() public view {
+        assertTrue(distributor.hasRole(distributor.MANAGER_ROLE(), owner));
+    }
+
+    function test_Constructor_InitializesLastProcessedBlock() public view {
+        // lastProcessedBlock should be set to block.number at deployment
+        // In our setUp, distributor is deployed in the same block
+        assertEq(distributor.lastProcessedBlock(), block.number);
+    }
+
+    function test_Constructor_InitializesRootToZero() public view {
+        assertEq(distributor.root(), bytes32(0));
+    }
+
+    function test_Constructor_InitializesCidToEmpty() public view {
+        assertEq(distributor.cid(), "");
+    }
+
+    function test_Constructor_CanDeployWithDifferentOwner() public {
+        address newOwner = makeAddr("newOwner");
+        Distributor newDistributor = new Distributor(newOwner);
+
+        assertTrue(newDistributor.hasRole(newDistributor.DEFAULT_ADMIN_ROLE(), newOwner));
+        assertTrue(newDistributor.hasRole(newDistributor.MANAGER_ROLE(), newOwner));
+    }
+
+    function test_Constructor_ManagerRoleConstant() public view {
+        bytes32 expectedRole = keccak256("MANAGER_ROLE");
+        assertEq(distributor.MANAGER_ROLE(), expectedRole);
+    }
+}
+
