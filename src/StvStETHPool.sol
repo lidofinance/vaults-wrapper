@@ -343,7 +343,7 @@ contract StvStETHPool is BasePool {
         uint256 _ethToFund
     ) public view returns (uint256 stethShares) {
         uint256 stethSharesForAssets = calcStethSharesToMintForAssets(assetsOf(_account) + _ethToFund);
-        stethShares = Math.saturatingSub(totalMintingCapacitySharesOf(_account), mintedStethSharesOf(_account));
+        stethShares = Math.saturatingSub(stethSharesForAssets, mintedStethSharesOf(_account));
     }
 
     /**
