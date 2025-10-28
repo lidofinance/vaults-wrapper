@@ -75,8 +75,9 @@ contract StvStETHPool is BasePool {
     function initialize(address _owner, string memory _name, string memory _symbol) public override initializer {
         _initializeBasePool(_owner, _name, _symbol);
 
-        // Approve max stETH to the Dashboard for burning
+        // Approve max to the Dashboard for burning
         STETH.approve(address(DASHBOARD), type(uint256).max);
+        WSTETH.approve(address(DASHBOARD), type(uint256).max);
 
         // Sync reserve ratio and forced rebalance threshold from the VaultHub
         syncVaultParameters();
