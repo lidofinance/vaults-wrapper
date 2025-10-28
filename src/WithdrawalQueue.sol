@@ -342,6 +342,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
      * @param _maxRequests the maximum number of requests to finalize
      * @return finalizedRequests the number of requests that were finalized
      * @dev MIN_WITHDRAWAL_AMOUNT is used to prevent DoS attacks by placing many small requests
+     * @dev Reverts if there are no requests to finalize
      */
     function finalize(uint256 _maxRequests) external returns (uint256 finalizedRequests) {
         if (!isEmergencyExitActivated()) {
@@ -357,7 +358,6 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
         uint256 firstRequestIdToFinalize = lastFinalizedRequestId + 1;
         uint256 lastRequestIdToFinalize = Math.min(lastFinalizedRequestId + _maxRequests, $.lastRequestId);
 
-        // TODO: think about should it be an early return or revert
         if (firstRequestIdToFinalize > lastRequestIdToFinalize) revert NoRequestsToFinalize();
 
         uint256 currentStvRate = calculateCurrentStvRate();
