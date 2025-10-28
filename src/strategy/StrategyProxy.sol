@@ -5,12 +5,9 @@ import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Ini
 import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
-import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IStrategyProxy} from "src/interfaces/IStrategyProxy.sol";
 
 contract StrategyProxy is Initializable, ReentrancyGuardUpgradeable, OwnableUpgradeable, IStrategyProxy {
-    using SafeERC20 for IERC20;
 
     constructor() {
         _disableInitializers();
@@ -51,13 +48,5 @@ contract StrategyProxy is Initializable, ReentrancyGuardUpgradeable, OwnableUpgr
     /// @notice sends `_amount` wei to `_recipient`
     function sendValue(address payable _recipient, uint256 _amount) external payable onlyOwner nonReentrant {
         Address.sendValue(_recipient, _amount);
-    }
-
-    /// @notice Safely recovers ERC20 tokens from proxy
-    function safeRecoverERC20(address _token, address _recipient, uint256 _amount)
-        external
-        onlyOwner
-    {
-        IERC20(_token).safeTransfer(_recipient, _amount);
     }
 }

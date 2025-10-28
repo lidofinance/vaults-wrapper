@@ -3,22 +3,18 @@ pragma solidity >=0.8.25;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
-import {ERC165} from "@openzeppelin/contracts/utils/introspection/ERC165.sol";
 
 import {ITellerWithMultiAssetSupport} from "src/interfaces/ggv/ITellerWithMultiAssetSupport.sol";
 import {IBoringOnChainQueue} from "src/interfaces/ggv/IBoringOnChainQueue.sol";
 import {Strategy} from "src/strategy/Strategy.sol";
 import {IStrategy} from "src/interfaces/IStrategy.sol";
 import {IStrategyProxy} from "src/interfaces/IStrategyProxy.sol";
-import {IStrategyExitAsync} from "src/interfaces/IStrategyExitAsync.sol";
 import {StvStETHPool} from "src/StvStETHPool.sol";
 
-contract GGVStrategy is Strategy, IStrategyExitAsync, ERC165 {
+contract GGVStrategy is Strategy {
 
     ITellerWithMultiAssetSupport public immutable TELLER;
     IBoringOnChainQueue public immutable BORING_QUEUE;
-
-    uint16 public constant MINIMUM_MINT = 0;
 
     // ==================== Events ====================
 
@@ -32,14 +28,13 @@ contract GGVStrategy is Strategy, IStrategyExitAsync, ERC165 {
     error AlreadyRequested();
     error InvalidRequestId();
     error NotImplemented();
+    error InvalidGGVAmount();
 
     struct GGVParams {
         uint16 discount;
         uint16 minimumMint;
         uint24 secondsToDeadline;
     }
-
-    mapping(address user => bytes32 requestId) private exitRequest;
 
     constructor(
         address _strategyProxyImplementation,
@@ -51,12 +46,6 @@ contract GGVStrategy is Strategy, IStrategyExitAsync, ERC165 {
     ) Strategy(_pool, _stETH, _wstETH, _strategyProxyImplementation) {
         TELLER = ITellerWithMultiAssetSupport(_teller);
         BORING_QUEUE = IBoringOnChainQueue(_boringQueue);
-    }
-
-    function supportsInterface(bytes4 interfaceId) public view virtual override returns (bool) {
-        return interfaceId == type(IStrategy).interfaceId
-            || interfaceId == type(IStrategyExitAsync).interfaceId
-            || super.supportsInterface(interfaceId);
     }
 
     /// @notice Supplies stETH to the strategy
@@ -97,6 +86,26 @@ contract GGVStrategy is Strategy, IStrategyExitAsync, ERC165 {
         requestId = requestExitByStethShares(stethSharesToBurn, _params);
     }
 
+    /// @notice Previews the amount of stETH shares that can be withdrawn by a given amount of GGV shares
+    /// @param _user The user to preview the amount of stETH shares for
+    /// @param _ggvShares The amount of GGV shares to preview the amount of stETH shares for
+    /// @param _params The parameters for the withdrawal
+    /// @return stethShares The amount of stETH shares that can be withdrawn
+    function previewStethSharesByGGV(address _user, uint256 _ggvShares, bytes calldata _params) external view returns (uint256 stethShares) {
+        address proxy = getStrategyProxyAddress(_user);
+
+        GGVParams memory params = abi.decode(_params, (GGVParams));
+
+        IERC20 boringVault = IERC20(TELLER.vault());
+        uint256 totalGGV = boringVault.balanceOf(proxy);
+
+        if (totalGGV == 0) return 0;
+        if (_ggvShares > totalGGV) revert InvalidGGVAmount();
+
+        uint256 totalStethSharesFromGgv = BORING_QUEUE.previewAssetsOut(address(WSTETH), uint128(totalGGV), params.discount);
+        stethShares = Math.mulDiv(_ggvShares, totalStethSharesFromGgv, totalGGV);
+    }
+
     /// @notice Requests a withdrawal of ggv shares from the strategy
     /// @param _stethSharesToBurn The amount of steth shares to burn
     /// @param _params The parameters for the withdrawal
@@ -113,6 +122,7 @@ contract GGVStrategy is Strategy, IStrategyExitAsync, ERC165 {
         // Calculate how much wsteth we'll get from total GGV shares
         uint256 totalGGV = boringVault.balanceOf(proxy);
         uint256 totalStethSharesFromGgv = BORING_QUEUE.previewAssetsOut(address(WSTETH), uint128(totalGGV), params.discount);
+        if (totalStethSharesFromGgv == 0) revert InvalidStethAmount();
         if (_stethSharesToBurn > totalStethSharesFromGgv) revert InvalidStethAmount();
 
         // Approve GGV shares
@@ -168,7 +178,7 @@ contract GGVStrategy is Strategy, IStrategyExitAsync, ERC165 {
     }
 
     /// @notice Finalizes a withdrawal of stETH from the strategy
-    function finalizeRequestExit(address /*_receiver*/, bytes32 _requestId) external {
+    function finalizeRequestExit(address /*_receiver*/, bytes32 /*_requestId*/) external {
         // GGV does not provide a way to check request status, so we cannot verify if the request
         // was actually finalized in GGV Queue. Additionally, GGV allows multiple withdrawal requests,
         // so it's possible to have request->finalize->request sequence where 2 unfinalised requests
@@ -245,12 +255,5 @@ contract GGVStrategy is Strategy, IStrategyExitAsync, ERC165 {
             )
         );
         requestId = abi.decode(withdrawalData, (uint256));
-    }
-
-    /// @notice Returns the request id for a withdrawal
-    /// @param _user The user to get the request id for
-    /// @return exitRequestId The request id
-    function getExitRequestId(address _user) external view returns(bytes32 exitRequestId) {
-        exitRequestId = exitRequest[_user];
     }
 }

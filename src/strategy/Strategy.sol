@@ -26,7 +26,6 @@ abstract contract Strategy is IStrategy {
     mapping(bytes32 salt => address proxy) private userStrategyProxy;
 
     error ZeroArgument(string name);
-    error TokenNotAllowed();
 
     constructor(address _pool, address _stETH, address _wstETH, address _strategyProxyImpl) {
         STETH = IStETH(_stETH);
@@ -46,7 +45,9 @@ abstract contract Strategy is IStrategy {
 
         address proxy = getStrategyProxyAddress(msg.sender);
 
-        IStrategyProxy(proxy).safeRecoverERC20(_token, _recipient, _amount);
+        IStrategyProxy(proxy).call(
+            address(STETH), abi.encodeWithSelector(IERC20.transfer.selector, _recipient, _amount)
+        );
     }
 
     /// @notice Returns the address of the strategy proxy for a given user

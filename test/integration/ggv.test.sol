@@ -216,10 +216,8 @@ contract GGVTest is StvStrategyPoolHarness {
         // 4. Solve GGV requests (Simulate GGV Solver)
         console.log("\n[SCENARIO] Step 4. Solve GGV requests");
 
-        bytes32 ggvRequestId = ggvStrategy.getExitRequestId(USER1);
-
         IBoringOnChainQueue.OnChainWithdraw memory req =
-            GGVQueueMock(address(boringOnChainQueue)).mockGetRequestById(ggvRequestId);
+            GGVQueueMock(address(boringOnChainQueue)).mockGetRequestById(requestId);
         IBoringOnChainQueue.OnChainWithdraw[] memory requests = new IBoringOnChainQueue.OnChainWithdraw[](1);
         requests[0] = req;
 
