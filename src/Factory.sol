@@ -54,6 +54,7 @@ contract Factory {
     TimelockFactory public immutable TIMELOCK_FACTORY;
     address public immutable DUMMY_IMPLEMENTATION;
     uint256 public immutable TIMELOCK_MIN_DELAY;
+    uint256 public constant TOTAL_BASIS_POINTS = 100_00;
     string constant NAME = "Staked ETH Vault Wrapper";
     string constant SYMBOL = "stvToken";
 
@@ -528,6 +529,8 @@ contract Factory {
         address distributor,
         address _strategy
     ) internal returns (address poolImpl) {
+        if (_reserveRatioGapBP >= TOTAL_BASIS_POINTS) revert InvalidConfiguration();
+
         if (_configuration == WrapperType.NO_MINTING_NO_STRATEGY) {
             poolImpl = STV_POOL_FACTORY.deploy(dashboard, _allowlistEnabled, withdrawalQueueProxy, distributor);
             assert(keccak256(bytes(BasePool(payable(poolImpl)).wrapperType())) == keccak256(bytes("StvPool")));

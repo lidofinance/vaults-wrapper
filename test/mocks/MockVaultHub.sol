@@ -18,6 +18,7 @@ contract MockVaultHub {
     mapping(address => uint256) public vaultBalances;
     mapping(address => uint256) public vaultLiabilityShares;
     mapping(address => bool) public vaultReportFreshness;
+    mapping(address => IVaultHub.VaultConnection) public connections;
 
     constructor() {
         LIDO = new MockStETH();
@@ -37,19 +38,8 @@ contract MockVaultHub {
         return (vaultBalances[_vault] * (TOTAL_BASIS_POINTS - RESERVE_RATIO_BP)) / TOTAL_BASIS_POINTS;
     }
 
-    function vaultConnection(address /* _vault */) external pure returns (IVaultHub.VaultConnection memory) {
-        return IVaultHub.VaultConnection({
-            owner: address(0),
-            shareLimit: 0,
-            vaultIndex: 0,
-            disconnectInitiatedTs: type(uint48).max,
-            reserveRatioBP: 0,
-            forcedRebalanceThresholdBP: 0,
-            infraFeeBP: 0,
-            liquidityFeeBP: 0,
-            reservationFeeBP: uint16(RESERVE_RATIO_BP),
-            isBeaconDepositsManuallyPaused: false
-        });
+    function vaultConnection(address _vault) external view returns (IVaultHub.VaultConnection memory) {
+        return connections[_vault];
     }
 
     function burnShares(address from, uint256 amount) external {
@@ -102,6 +92,7 @@ contract MockVaultHub {
                 vaultBalances[_vault] = 0;
             } else {
                 vaultBalances[_vault] -= loss;
+                IStakingVault(_vault).withdraw(address(0), loss);
             }
         }
     }
@@ -166,5 +157,13 @@ contract MockVaultHub {
 
     function mock_setReportFreshness(address _vault, bool _isFresh) external {
         vaultReportFreshness[_vault] = _isFresh;
+    }
+
+    function mock_setConnectionParameters(address _vault, uint16 _reserveRatioBP, uint16 _forcedRebalanceThresholdBP)
+        external
+    {
+        IVaultHub.VaultConnection storage connection = connections[_vault];
+        connection.reserveRatioBP = _reserveRatioBP;
+        connection.forcedRebalanceThresholdBP = _forcedRebalanceThresholdBP;
     }
 }

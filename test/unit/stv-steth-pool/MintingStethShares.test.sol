@@ -12,7 +12,7 @@ contract MintingStethSharesTest is Test, SetupStvStETHPool {
     function setUp() public override {
         super.setUp();
         // Deposit some ETH to get minting capacity
-        pool.depositETH{value: ethToDeposit}();
+        pool.depositETH{value: ethToDeposit}(address(0));
     }
 
     // Initial state tests
@@ -29,7 +29,7 @@ contract MintingStethSharesTest is Test, SetupStvStETHPool {
 
     function test_InitialState_CorrectMintingCapacityCalculation() public view {
         uint256 capacity = pool.mintingCapacitySharesOf(address(this));
-        uint256 expectedReservedPart = (ethToDeposit * pool.WRAPPER_RR_BP()) / pool.TOTAL_BASIS_POINTS();
+        uint256 expectedReservedPart = (ethToDeposit * pool.reserveRatioBP()) / pool.TOTAL_BASIS_POINTS();
         uint256 expectedUnreservedPart = ethToDeposit - expectedReservedPart;
         uint256 expectedCapacity = steth.getSharesByPooledEth(expectedUnreservedPart);
         assertEq(capacity, expectedCapacity);
@@ -166,7 +166,7 @@ contract MintingStethSharesTest is Test, SetupStvStETHPool {
     function test_MintingCapacity_IncreasesWithMoreDeposits() public {
         uint256 capacityBefore = pool.mintingCapacitySharesOf(address(this));
 
-        pool.depositETH{value: ethToDeposit}();
+        pool.depositETH{value: ethToDeposit}(address(0));
 
         uint256 capacityAfter = pool.mintingCapacitySharesOf(address(this));
         assertGt(capacityAfter, capacityBefore);
@@ -179,7 +179,7 @@ contract MintingStethSharesTest is Test, SetupStvStETHPool {
         uint256 capacity = pool.mintingCapacitySharesOf(address(this));
 
         // Verify that reserve ratio is respected
-        uint256 expectedReservedPart = (assets * pool.WRAPPER_RR_BP()) / pool.TOTAL_BASIS_POINTS();
+        uint256 expectedReservedPart = (assets * pool.reserveRatioBP()) / pool.TOTAL_BASIS_POINTS();
         uint256 expectedUnreservedPart = assets - expectedReservedPart;
         uint256 expectedCapacity = steth.getSharesByPooledEth(expectedUnreservedPart);
 

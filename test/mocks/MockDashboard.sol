@@ -31,6 +31,7 @@ contract MockDashboard is AccessControlEnumerable {
 
         // Set default report freshness to true
         VAULT_HUB.mock_setReportFreshness(STAKING_VAULT, true);
+        VAULT_HUB.mock_setConnectionParameters(STAKING_VAULT, 10_00, 9_75); // 10% reserve, 9.75% forced rebalance
     }
 
     function fund() external payable {
@@ -100,10 +101,11 @@ contract MockDashboard is AccessControlEnumerable {
         // Mock implementation
     }
 
-    function triggerValidatorWithdrawals(bytes calldata pubkeys, uint64[] calldata amountsInGwei, address refundRecipient)
-        external
-        payable
-    {
+    function triggerValidatorWithdrawals(
+        bytes calldata pubkeys,
+        uint64[] calldata amountsInGwei,
+        address refundRecipient
+    ) external payable {
         // Mock implementation
     }
 

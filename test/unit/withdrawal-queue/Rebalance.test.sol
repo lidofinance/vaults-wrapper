@@ -10,7 +10,7 @@ import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
 contract FinalizationTest is Test, SetupWithdrawalQueue {
     function setUp() public override {
         super.setUp();
-        pool.depositETH{value: 100_000 ether}();
+        pool.depositETH{value: 100_000 ether}(address(0));
     }
 
     // Initial state
@@ -110,7 +110,7 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
 
     function test_RebalanceFinalization_SmallPenaltiesDoNotAffectUnrelatedUsers() public {
         vm.prank(userAlice);
-        pool.depositETH{value: 10 ether}();
+        pool.depositETH{value: 10 ether}(address(0));
 
         uint256 mintedStethShares = 10 ** ASSETS_DECIMALS;
         uint256 stvToRequest = 2 * 10 ** STV_DECIMALS;
@@ -133,7 +133,7 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
 
     function test_RebalanceFinalization_HugePenaltiesSocialization() public {
         vm.prank(userAlice);
-        pool.depositETH{value: 10 ether}();
+        pool.depositETH{value: 10 ether}(address(0));
 
         uint256 mintedStethShares = 10 ** ASSETS_DECIMALS;
         uint256 stvToRequest = 2 * 10 ** STV_DECIMALS;

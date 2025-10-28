@@ -9,7 +9,7 @@ import {SetupStvStETHPool} from "./SetupStvStETHPool.sol";
 contract LockCalculationsTest is Test, SetupStvStETHPool {
     function setUp() public override {
         super.setUp();
-        pool.depositETH{value: 10 ether}();
+        pool.depositETH{value: 10 ether}(address(0));
     }
 
     function test_CalcAssetsToLockForStethShares_Zero() public view {
@@ -35,7 +35,7 @@ contract LockCalculationsTest is Test, SetupStvStETHPool {
         uint256 expectedAssets = Math.mulDiv(
             steth,
             pool.TOTAL_BASIS_POINTS(),
-            pool.TOTAL_BASIS_POINTS() - pool.WRAPPER_RR_BP(),
+            pool.TOTAL_BASIS_POINTS() - pool.reserveRatioBP(),
             Math.Rounding.Ceil // rounds up
         );
 
@@ -49,7 +49,7 @@ contract LockCalculationsTest is Test, SetupStvStETHPool {
         uint256 expectedAssets = Math.mulDiv(
             steth,
             pool.TOTAL_BASIS_POINTS(),
-            pool.TOTAL_BASIS_POINTS() - pool.WRAPPER_RR_BP(),
+            pool.TOTAL_BASIS_POINTS() - pool.reserveRatioBP(),
             Math.Rounding.Ceil // rounds up
         );
         uint256 expectedStv = Math.mulDiv(
@@ -68,7 +68,7 @@ contract LockCalculationsTest is Test, SetupStvStETHPool {
         uint256 assets = Math.mulDiv(stv, pool.totalAssets(), pool.totalSupply(), Math.Rounding.Floor);
         uint256 maxStethToMint = Math.mulDiv(
             assets,
-            pool.TOTAL_BASIS_POINTS() - pool.WRAPPER_RR_BP(),
+            pool.TOTAL_BASIS_POINTS() - pool.reserveRatioBP(),
             pool.TOTAL_BASIS_POINTS(),
             Math.Rounding.Floor // rounds down
         );
@@ -82,7 +82,7 @@ contract LockCalculationsTest is Test, SetupStvStETHPool {
 
         uint256 maxStethToMint = Math.mulDiv(
             assets,
-            pool.TOTAL_BASIS_POINTS() - pool.WRAPPER_RR_BP(),
+            pool.TOTAL_BASIS_POINTS() - pool.reserveRatioBP(),
             pool.TOTAL_BASIS_POINTS(),
             Math.Rounding.Floor // rounds down
         );

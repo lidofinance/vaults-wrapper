@@ -12,7 +12,7 @@ contract BurningStethSharesTest is Test, SetupStvStETHPool {
     function setUp() public override {
         super.setUp();
         // Deposit ETH and mint stETH shares for testing burn functionality
-        pool.depositETH{value: ethToDeposit}();
+        pool.depositETH{value: ethToDeposit}(address(0));
         pool.mintStethShares(stethSharesToMint);
 
         // Mint stETH to the test contract so it can burn shares

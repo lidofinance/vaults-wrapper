@@ -4,44 +4,37 @@ pragma solidity >=0.8.25;
 import {ERC20Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
-import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
-
 import {WithdrawalQueue} from "./WithdrawalQueue.sol";
 import {Distributor} from "./Distributor.sol";
 import {IStETH} from "./interfaces/IStETH.sol";
 import {IVaultHub} from "./interfaces/IVaultHub.sol";
 import {IDashboard} from "./interfaces/IDashboard.sol";
+import {IStakingVault} from "./interfaces/IStakingVault.sol";
 import {AllowList} from "./AllowList.sol";
 
 abstract contract BasePool is Initializable, ERC20Upgradeable, AllowList {
-    using EnumerableSet for EnumerableSet.UintSet;
-
     // Custom errors
     error ZeroDeposit();
     error InvalidReceiver();
-    error NoMintingCapacityAvailable();
     error ZeroStv();
-    error TransferNotAllowed();
     error NotWithdrawalQueue();
     error InvalidRequestType();
     error NotEnoughToRebalance();
     error UnassignedLiabilityOnVault();
 
-    // keccak256("REQUEST_VALIDATOR_EXIT_ROLE")
-    bytes32 public immutable REQUEST_VALIDATOR_EXIT_ROLE =
-        0x2bbd6da7b06270fd63c039b4a14614f791d085d02c5a2e297591df95b05e4185;
+    bytes32 public constant REQUEST_VALIDATOR_EXIT_ROLE = keccak256("REQUEST_VALIDATOR_EXIT_ROLE");
+    bytes32 public constant TRIGGER_VALIDATOR_WITHDRAWAL_ROLE = keccak256("TRIGGER_VALIDATOR_WITHDRAWAL_ROLE");
 
-    bytes32 public immutable TRIGGER_VALIDATOR_WITHDRAWAL_ROLE = keccak256("TRIGGER_VALIDATOR_WITHDRAWAL_ROLE");
+    uint256 public constant TOTAL_BASIS_POINTS = 100_00;
 
-    uint256 public immutable DECIMALS = 27;
-    uint256 public immutable ASSET_DECIMALS = 18;
-    uint256 public immutable EXTRA_DECIMALS_BASE = 10 ** (DECIMALS - ASSET_DECIMALS);
-    uint256 public immutable TOTAL_BASIS_POINTS = 100_00;
+    uint256 private constant DECIMALS = 27;
+    uint256 private constant ASSET_DECIMALS = 18;
+    uint256 private constant EXTRA_DECIMALS_BASE = 10 ** (DECIMALS - ASSET_DECIMALS);
 
     IStETH public immutable STETH;
     IDashboard public immutable DASHBOARD;
     IVaultHub public immutable VAULT_HUB;
-    address public immutable STAKING_VAULT;
+    IStakingVault public immutable STAKING_VAULT;
 
     WithdrawalQueue public immutable WITHDRAWAL_QUEUE;
     Distributor public immutable DISTRIBUTOR;
@@ -59,10 +52,6 @@ abstract contract BasePool is Initializable, ERC20Upgradeable, AllowList {
         assembly {
             $.slot := BASE_POOL_STORAGE_LOCATION
         }
-    }
-
-    function withdrawalQueue() public view returns (WithdrawalQueue) {
-        return WITHDRAWAL_QUEUE;
     }
 
     function vaultDisconnected() public view returns (bool) {
@@ -84,10 +73,15 @@ abstract contract BasePool is Initializable, ERC20Upgradeable, AllowList {
     event ConnectDepositClaimed(address indexed recipient, uint256 amount);
     event UnassignedLiabilityRebalanced(uint256 stethShares, uint256 ethAmount);
 
-    constructor(address _dashboard, bool _allowListEnabled, address _withdrawalQueue, address _distributor) AllowList(_allowListEnabled) {
+    constructor(
+        address _dashboard,
+        bool _allowListEnabled,
+        address _withdrawalQueue,
+        address _distributor
+    ) AllowList(_allowListEnabled) {
         DASHBOARD = IDashboard(payable(_dashboard));
         VAULT_HUB = IVaultHub(DASHBOARD.VAULT_HUB());
-        STAKING_VAULT = address(DASHBOARD.stakingVault());
+        STAKING_VAULT = IStakingVault(DASHBOARD.stakingVault());
         WITHDRAWAL_QUEUE = WithdrawalQueue(payable(_withdrawalQueue));
         STETH = IStETH(payable(DASHBOARD.STETH()));
         DISTRIBUTOR = Distributor(_distributor);
@@ -241,14 +235,6 @@ abstract contract BasePool is Initializable, ERC20Upgradeable, AllowList {
     }
 
     /**
-     * @notice Convenience function to deposit ETH to msg.sender without referral
-     * @return stv Amount of stv minted
-     */
-    function depositETH() public payable returns (uint256 stv) {
-        stv = depositETH(msg.sender, address(0));
-    }
-
-    /**
      * @notice Deposit native ETH and receive stv
      * @param _receiver Address to receive the minted shares
      * @param _referral Address of the referral (if any)
@@ -278,7 +264,7 @@ abstract contract BasePool is Initializable, ERC20Upgradeable, AllowList {
      * @notice Total liability stETH shares issued to the vault
      * @return liabilityShares Total liability stETH shares (18 decimals)
      */
-    function totalLiabilityShares() external view returns (uint256) {
+    function totalLiabilityShares() public view returns (uint256) {
         return DASHBOARD.liabilityShares();
     }
 
@@ -289,7 +275,7 @@ abstract contract BasePool is Initializable, ERC20Upgradeable, AllowList {
      * @dev Should exclude individually minted stETH shares (if any)
      */
     function totalUnassignedLiabilityShares() public view virtual returns (uint256 unassignedLiabilityShares) {
-        unassignedLiabilityShares = DASHBOARD.liabilityShares(); /* minus individually minted stETH shares */
+        unassignedLiabilityShares = totalLiabilityShares(); /* minus individually minted stETH shares */
     }
 
     /**
@@ -509,7 +495,7 @@ abstract contract BasePool is Initializable, ERC20Upgradeable, AllowList {
         _checkRole(DEFAULT_ADMIN_ROLE, msg.sender);
 
         // Check if vault has been disconnected
-        if (STAKING_VAULT == address(DASHBOARD.stakingVault())) {
+        if (address(STAKING_VAULT) == address(DASHBOARD.stakingVault())) {
             revert("Vault not disconnected yet");
         }
 

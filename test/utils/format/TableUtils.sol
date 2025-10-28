@@ -16,7 +16,6 @@ interface IWrapper {
     function totalSupply() external view returns (uint256);
     function totalAssets() external view returns (uint256);
     function mintedStethSharesOf(address _account) external view returns (uint256 stethShares);
-    function exceedingMintedStethSharesOf(address _account) external view returns (uint256 stethShares);
 }
 
 library TableUtils {

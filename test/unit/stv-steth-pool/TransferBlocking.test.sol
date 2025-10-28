@@ -11,7 +11,7 @@ contract TransferBlockingTest is Test, SetupStvStETHPool {
 
     function setUp() public override {
         super.setUp();
-        pool.depositETH{value: ethToDeposit}();
+        pool.depositETH{value: ethToDeposit}(address(0));
     }
 
     // Basic transfer tests without debt
@@ -237,7 +237,7 @@ contract TransferBlockingTest is Test, SetupStvStETHPool {
 
     function test_Transfer_ReserveRatioImpactOnCalculations() public view {
         uint256 testShares = 1 ether;
-        uint256 reserveRatio = pool.WRAPPER_RR_BP();
+        uint256 reserveRatio = pool.reserveRatioBP();
         uint256 totalBasisPoints = pool.TOTAL_BASIS_POINTS();
 
         // Verify reserve ratio is configured correctly
