@@ -352,6 +352,8 @@ contract StvStETHPool is BasePool {
     /**
      * @notice Mint wstETH up to the user's minting capacity
      * @param _wsteth The amount of wstETH to mint
+     * @dev Note that minted wstETH can be not enough to cover the full obligation in stETH shares because of rounding error
+     * on WSTETH contract during unwrapping. The dust from rounding accumulates on the WSTETH contract during unwrapping
      */
     function mintWsteth(uint256 _wsteth) external {
         _mintWsteth(msg.sender, _wsteth);
@@ -380,6 +382,8 @@ contract StvStETHPool is BasePool {
     /**
      * @notice Burn wstETH to reduce the user's minted stETH obligation
      * @param _wsteth The amount of wstETH to burn
+     * @dev Note that minted wstETH can be not enough to cover the full obligation in stETH shares because of rounding error
+     * on WSTETH contract during unwrapping. The dust from rounding accumulates on the WSTETH contract during unwrapping
      */
     function burnWsteth(uint256 _wsteth) external {
         _burnWsteth(msg.sender, _wsteth);
