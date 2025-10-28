@@ -36,7 +36,12 @@ abstract contract SetupStvPool is Test {
         dashboard.fund{value: initialDeposit}();
 
         // Deploy the pool
-        StvPool poolImpl = new StvPool(address(dashboard), false, address(0), address(0)); // withdrawalQueue and distributor
+        StvPool poolImpl = new StvPool({
+            _dashboard: address(dashboard),
+            _allowListEnabled: false,
+            _withdrawalQueue: address(0),
+            _distributor: address(0)
+        });
         ERC1967Proxy poolProxy = new ERC1967Proxy(address(poolImpl), "");
 
         pool = StvPool(payable(poolProxy));
