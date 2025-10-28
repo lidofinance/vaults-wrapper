@@ -31,7 +31,7 @@ contract RebalanceMintedStethSharesTest is Test, SetupStvStETHPool {
     }
 
     function test_RebalanceMintedStethShares_SuccessfulCallFromWithdrawalQueue() public {
-        uint256 sharesToMint = pool.mintingCapacitySharesOf(withdrawalQueue) / 4;
+        uint256 sharesToMint = pool.remainingMintingCapacitySharesOf(withdrawalQueue, 0) / 4;
         _mintStethSharesToWQ(sharesToMint);
 
         uint256 wqMintedBefore = pool.mintedStethSharesOf(withdrawalQueue);
@@ -55,7 +55,7 @@ contract RebalanceMintedStethSharesTest is Test, SetupStvStETHPool {
     }
 
     function test_RebalanceMintedStethShares_RevertOnInsufficientMintedShares() public {
-        uint256 sharesToMint = pool.mintingCapacitySharesOf(withdrawalQueue) / 4;
+        uint256 sharesToMint = pool.remainingMintingCapacitySharesOf(withdrawalQueue, 0) / 4;
         _mintStethSharesToWQ(sharesToMint);
 
         vm.prank(withdrawalQueue);
@@ -74,7 +74,7 @@ contract RebalanceMintedStethSharesTest is Test, SetupStvStETHPool {
     // Basic functionality test
 
     function test_RebalanceMintedStethShares_BasicFunctionality() public {
-        uint256 sharesToMint = pool.mintingCapacitySharesOf(withdrawalQueue) / 4;
+        uint256 sharesToMint = pool.remainingMintingCapacitySharesOf(withdrawalQueue, 0) / 4;
         _mintStethSharesToWQ(sharesToMint);
 
         uint256 wqBalanceBefore = pool.balanceOf(withdrawalQueue);
@@ -90,7 +90,7 @@ contract RebalanceMintedStethSharesTest is Test, SetupStvStETHPool {
     }
 
     function test_RebalanceMintedStethShares_EmitsCorrectEvent() public {
-        uint256 sharesToMint = pool.mintingCapacitySharesOf(withdrawalQueue) / 4;
+        uint256 sharesToMint = pool.remainingMintingCapacitySharesOf(withdrawalQueue, 0) / 4;
         _mintStethSharesToWQ(sharesToMint);
 
         // Only check that event is emitted with correct shares parameter (without exact stv amount)
@@ -104,7 +104,7 @@ contract RebalanceMintedStethSharesTest is Test, SetupStvStETHPool {
     // Exceeding shares scenarios
 
     function test_RebalanceMintedStethShares_WithExceedingShares() public {
-        uint256 sharesToMint = pool.mintingCapacitySharesOf(withdrawalQueue) / 4;
+        uint256 sharesToMint = pool.remainingMintingCapacitySharesOf(withdrawalQueue, 0) / 4;
         _mintStethSharesToWQ(sharesToMint);
 
         // Create exceeding shares by external rebalancing
@@ -123,7 +123,7 @@ contract RebalanceMintedStethSharesTest is Test, SetupStvStETHPool {
     // Socialization scenarios
 
     function test_RebalanceMintedStethShares_SocializationWhenMaxStvExceeded() public {
-        uint256 sharesToMint = pool.mintingCapacitySharesOf(withdrawalQueue) / 4;
+        uint256 sharesToMint = pool.remainingMintingCapacitySharesOf(withdrawalQueue, 0) / 4;
         _mintStethSharesToWQ(sharesToMint);
 
         // Set very low maxStvToBurn to trigger socialization
@@ -141,7 +141,7 @@ contract RebalanceMintedStethSharesTest is Test, SetupStvStETHPool {
     }
 
     function test_RebalanceMintedStethShares_ZeroMaxStvToBurn_FullSocialization() public {
-        uint256 sharesToMint = pool.mintingCapacitySharesOf(withdrawalQueue) / 4;
+        uint256 sharesToMint = pool.remainingMintingCapacitySharesOf(withdrawalQueue, 0) / 4;
         _mintStethSharesToWQ(sharesToMint);
 
         uint256 maxStvToBurn = 0; // No burning allowed
@@ -163,7 +163,7 @@ contract RebalanceMintedStethSharesTest is Test, SetupStvStETHPool {
     // Partial rebalance scenarios
 
     function test_RebalanceMintedStethShares_PartialRebalance() public {
-        uint256 sharesToMint = pool.mintingCapacitySharesOf(withdrawalQueue) / 2;
+        uint256 sharesToMint = pool.remainingMintingCapacitySharesOf(withdrawalQueue, 0) / 2;
         _mintStethSharesToWQ(sharesToMint);
 
         uint256 sharesToRebalance = sharesToMint / 2;
@@ -178,7 +178,7 @@ contract RebalanceMintedStethSharesTest is Test, SetupStvStETHPool {
     }
 
     function test_RebalanceMintedStethShares_MinimalAmount() public {
-        uint256 sharesToMint = pool.mintingCapacitySharesOf(withdrawalQueue) / 4;
+        uint256 sharesToMint = pool.remainingMintingCapacitySharesOf(withdrawalQueue, 0) / 4;
         _mintStethSharesToWQ(sharesToMint);
 
         uint256 wqBalanceBefore = pool.balanceOf(withdrawalQueue);

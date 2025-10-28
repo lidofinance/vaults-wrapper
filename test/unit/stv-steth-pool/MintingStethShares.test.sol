@@ -23,12 +23,12 @@ contract MintingStethSharesTest is Test, SetupStvStETHPool {
     }
 
     function test_InitialState_HasMintingCapacity() public view {
-        uint256 capacity = pool.mintingCapacitySharesOf(address(this));
+        uint256 capacity = pool.remainingMintingCapacitySharesOf(address(this), 0);
         assertGt(capacity, 0);
     }
 
     function test_InitialState_CorrectMintingCapacityCalculation() public view {
-        uint256 capacity = pool.mintingCapacitySharesOf(address(this));
+        uint256 capacity = pool.remainingMintingCapacitySharesOf(address(this), 0);
         uint256 expectedReservedPart = (ethToDeposit * pool.reserveRatioBP()) / pool.TOTAL_BASIS_POINTS();
         uint256 expectedUnreservedPart = ethToDeposit - expectedReservedPart;
         uint256 expectedCapacity = steth.getSharesByPooledEth(expectedUnreservedPart);
@@ -71,11 +71,11 @@ contract MintingStethSharesTest is Test, SetupStvStETHPool {
     }
 
     function test_MintStethShares_DecreasesAvailableCapacity() public {
-        uint256 capacityBefore = pool.mintingCapacitySharesOf(address(this));
+        uint256 capacityBefore = pool.remainingMintingCapacitySharesOf(address(this), 0);
 
         pool.mintStethShares(stethSharesToMint);
 
-        uint256 capacityAfter = pool.mintingCapacitySharesOf(address(this));
+        uint256 capacityAfter = pool.remainingMintingCapacitySharesOf(address(this), 0);
         assertEq(capacityAfter, capacityBefore - stethSharesToMint);
     }
 
@@ -98,7 +98,7 @@ contract MintingStethSharesTest is Test, SetupStvStETHPool {
     }
 
     function test_MintStethShares_RevertOnInsufficientCapacity() public {
-        uint256 capacity = pool.mintingCapacitySharesOf(address(this));
+        uint256 capacity = pool.remainingMintingCapacitySharesOf(address(this), 0);
         uint256 excessiveAmount = capacity + 1;
 
         vm.expectRevert(StvStETHPool.InsufficientMintingCapacity.selector);
@@ -106,7 +106,7 @@ contract MintingStethSharesTest is Test, SetupStvStETHPool {
     }
 
     function test_MintStethShares_RevertOnExactlyExceedingCapacity() public {
-        uint256 capacity = pool.mintingCapacitySharesOf(address(this));
+        uint256 capacity = pool.remainingMintingCapacitySharesOf(address(this), 0);
 
         // First mint should succeed
         pool.mintStethShares(capacity);
@@ -126,8 +126,8 @@ contract MintingStethSharesTest is Test, SetupStvStETHPool {
         pool.depositETH{value: ethToDeposit}(userBob, address(0));
 
         // Both users should have minting capacity
-        uint256 aliceCapacity = pool.mintingCapacitySharesOf(userAlice);
-        uint256 bobCapacity = pool.mintingCapacitySharesOf(userBob);
+        uint256 aliceCapacity = pool.remainingMintingCapacitySharesOf(userAlice, 0);
+        uint256 bobCapacity = pool.remainingMintingCapacitySharesOf(userBob, 0);
 
         assertGt(aliceCapacity, 0);
         assertGt(bobCapacity, 0);
@@ -147,28 +147,28 @@ contract MintingStethSharesTest is Test, SetupStvStETHPool {
     // Minting capacity tests
 
     function test_MintingCapacity_DecreasesAfterMint() public {
-        uint256 capacityBefore = pool.mintingCapacitySharesOf(address(this));
+        uint256 capacityBefore = pool.remainingMintingCapacitySharesOf(address(this), 0);
 
         pool.mintStethShares(stethSharesToMint);
 
-        uint256 capacityAfter = pool.mintingCapacitySharesOf(address(this));
+        uint256 capacityAfter = pool.remainingMintingCapacitySharesOf(address(this), 0);
         assertEq(capacityAfter, capacityBefore - stethSharesToMint);
     }
 
     function test_MintingCapacity_ZeroAfterFullMint() public {
-        uint256 fullCapacity = pool.mintingCapacitySharesOf(address(this));
+        uint256 fullCapacity = pool.remainingMintingCapacitySharesOf(address(this), 0);
 
         pool.mintStethShares(fullCapacity);
 
-        assertEq(pool.mintingCapacitySharesOf(address(this)), 0);
+        assertEq(pool.remainingMintingCapacitySharesOf(address(this), 0), 0);
     }
 
     function test_MintingCapacity_IncreasesWithMoreDeposits() public {
-        uint256 capacityBefore = pool.mintingCapacitySharesOf(address(this));
+        uint256 capacityBefore = pool.remainingMintingCapacitySharesOf(address(this), 0);
 
         pool.depositETH{value: ethToDeposit}(address(0));
 
-        uint256 capacityAfter = pool.mintingCapacitySharesOf(address(this));
+        uint256 capacityAfter = pool.remainingMintingCapacitySharesOf(address(this), 0);
         assertGt(capacityAfter, capacityBefore);
     }
 
@@ -176,7 +176,7 @@ contract MintingStethSharesTest is Test, SetupStvStETHPool {
 
     function test_MintingCapacity_RespectsReserveRatio() public view {
         uint256 assets = pool.assetsOf(address(this));
-        uint256 capacity = pool.mintingCapacitySharesOf(address(this));
+        uint256 capacity = pool.remainingMintingCapacitySharesOf(address(this), 0);
 
         // Verify that reserve ratio is respected
         uint256 expectedReservedPart = (assets * pool.reserveRatioBP()) / pool.TOTAL_BASIS_POINTS();

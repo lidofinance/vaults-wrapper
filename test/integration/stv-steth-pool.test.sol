@@ -42,7 +42,7 @@ contract StvStETHPoolTest is StvStETHPoolHarness {
 
         assertEq(steth.sharesOf(USER1), 0, "stETH shares balance of USER1 should be equal to 0");
         assertEq(
-            stvStETHPool(ctx).mintingCapacitySharesOf(USER1),
+            stvStETHPool(ctx).remainingMintingCapacitySharesOf(USER1, 0),
             user1ExpectedMintableStethShares,
             "Mintable stETH shares should equal capacity derived from assets"
         );
@@ -90,7 +90,7 @@ contract StvStETHPoolTest is StvStETHPoolHarness {
         assertGt(
             ctx.dashboard.remainingMintingCapacityShares(0), 0, "Remaining minting capacity should be greater than 0"
         );
-        assertEq(stvStETHPool(ctx).mintingCapacitySharesOf(USER1), 0, "Mintable stETH shares should be equal to 0");
+        assertEq(stvStETHPool(ctx).remainingMintingCapacitySharesOf(USER1, 0), 0, "Mintable stETH shares should be equal to 0");
     }
 
     function test_depositETH_with_max_mintable_amount() public {
@@ -122,7 +122,7 @@ contract StvStETHPoolTest is StvStETHPoolHarness {
             user1ExpectedMintableStethShares,
             "Vault's liability shares should equal minted shares"
         );
-        assertEq(stvStETHPool(ctx).mintingCapacitySharesOf(USER1), 0, "No additional mintable shares should remain");
+        assertEq(stvStETHPool(ctx).remainingMintingCapacitySharesOf(USER1, 0), 0, "No additional mintable shares should remain");
 
         //
         // Step 2: User deposits more ETH and mints max for new deposit
@@ -163,7 +163,7 @@ contract StvStETHPoolTest is StvStETHPoolHarness {
 
         assertEq(steth.sharesOf(USER1), 0, "stETH shares balance of USER1 should be equal to 0");
         assertEq(
-            stvStETHPool(ctx).mintingCapacitySharesOf(USER1),
+            stvStETHPool(ctx).remainingMintingCapacitySharesOf(USER1, 0),
             user1ExpectedMintableStethShares,
             "Mintable stETH shares should be equal to 0"
         );
@@ -213,7 +213,7 @@ contract StvStETHPoolTest is StvStETHPoolHarness {
             "Remaining minting capacity should be equal to user1ExpectedMintableStethShares - user1StSharesToMint"
         );
         assertEq(
-            stvStETHPool(ctx).mintingCapacitySharesOf(USER1),
+            stvStETHPool(ctx).remainingMintingCapacitySharesOf(USER1, 0),
             user1ExpectedMintableStethShares - user1StSharesPart1,
             "Remaining mintable should reduce exactly by minted part"
         );
@@ -245,7 +245,7 @@ contract StvStETHPoolTest is StvStETHPoolHarness {
         );
         // Still remaining capacity is higher due to CONNECT_DEPOSIT
         assertGt(ctx.dashboard.remainingMintingCapacityShares(0), 0, "Remaining minting capacity should be equal to 0");
-        assertEq(stvStETHPool(ctx).mintingCapacitySharesOf(USER1), 0, "Mintable stETH shares should be equal to 0");
+        assertEq(stvStETHPool(ctx).remainingMintingCapacitySharesOf(USER1, 0), 0, "Mintable stETH shares should be equal to 0");
     }
 
     function test_two_users_mint_full_in_two_steps() public {
@@ -262,7 +262,7 @@ contract StvStETHPoolTest is StvStETHPoolHarness {
 
         assertEq(steth.sharesOf(USER1), 0, "stETH shares balance of USER1 should be equal to 0");
         assertEq(
-            stvStETHPool(ctx).mintingCapacitySharesOf(USER1),
+            stvStETHPool(ctx).remainingMintingCapacitySharesOf(USER1, 0),
             user1ExpectedMintableStethShares,
             "Mintable stETH shares for USER1 should equal expected"
         );
@@ -279,7 +279,7 @@ contract StvStETHPoolTest is StvStETHPoolHarness {
 
         assertEq(steth.sharesOf(USER2), 0, "stETH shares balance of USER2 should be equal to 0");
         assertEq(
-            stvStETHPool(ctx).mintingCapacitySharesOf(USER2),
+            stvStETHPool(ctx).remainingMintingCapacitySharesOf(USER2, 0),
             user2ExpectedMintableStethShares,
             "Mintable stETH shares for USER2 should equal expected"
         );
@@ -315,7 +315,7 @@ contract StvStETHPoolTest is StvStETHPoolHarness {
             "USER1 stSharesForWithdrawal should equal part1 minted"
         );
         assertEq(
-            stvStETHPool(ctx).mintingCapacitySharesOf(USER1),
+            stvStETHPool(ctx).remainingMintingCapacitySharesOf(USER1, 0),
             user1ExpectedMintableStethShares - user1StSharesPart1,
             "USER1 remaining mintable should decrease by part1"
         );
@@ -340,7 +340,7 @@ contract StvStETHPoolTest is StvStETHPoolHarness {
             "USER2 stSharesForWithdrawal should equal part1 minted"
         );
         assertEq(
-            stvStETHPool(ctx).mintingCapacitySharesOf(USER2),
+            stvStETHPool(ctx).remainingMintingCapacitySharesOf(USER2, 0),
             user2ExpectedMintableStethShares - user2StSharesPart1,
             "USER2 remaining mintable should decrease by part1"
         );
@@ -370,7 +370,7 @@ contract StvStETHPoolTest is StvStETHPoolHarness {
             user1ExpectedMintableStethShares,
             "USER1 stSharesForWithdrawal should equal full expected"
         );
-        assertEq(stvStETHPool(ctx).mintingCapacitySharesOf(USER1), 0, "USER1 remaining mintable should be zero");
+        assertEq(stvStETHPool(ctx).remainingMintingCapacitySharesOf(USER1, 0), 0, "USER1 remaining mintable should be zero");
         assertEq(
             ctx.dashboard.liabilityShares(),
             user1ExpectedMintableStethShares + user2StSharesPart1,
@@ -397,7 +397,7 @@ contract StvStETHPoolTest is StvStETHPoolHarness {
             user2ExpectedMintableStethShares,
             "USER2 stSharesForWithdrawal should equal full expected"
         );
-        assertEq(stvStETHPool(ctx).mintingCapacitySharesOf(USER2), 0, "USER2 remaining mintable should be zero");
+        assertEq(stvStETHPool(ctx).remainingMintingCapacitySharesOf(USER2, 0), 0, "USER2 remaining mintable should be zero");
         // Still remaining capacity is higher due to CONNECT_DEPOSIT
         assertGt(
             ctx.dashboard.remainingMintingCapacityShares(0), 0, "Remaining minting capacity should be greater than 0"
@@ -421,7 +421,7 @@ contract StvStETHPoolTest is StvStETHPoolHarness {
         stvStETHPool(ctx).depositETH{value: user1Deposit}(USER1, address(0), user1ExpectedMintable);
 
         assertEq(steth.sharesOf(USER1), user1ExpectedMintable, "USER1 stETH shares should equal expected minted");
-        assertEq(stvStETHPool(ctx).mintingCapacitySharesOf(USER1), 0, "USER1 remaining mintable should be zero");
+        assertEq(stvStETHPool(ctx).remainingMintingCapacitySharesOf(USER1, 0), 0, "USER1 remaining mintable should be zero");
         assertGt(
             ctx.dashboard.remainingMintingCapacityShares(0),
             0,
@@ -440,7 +440,7 @@ contract StvStETHPoolTest is StvStETHPoolHarness {
         {
             uint256 user2ExpectedMintableStethShares = _calcMaxMintableStShares(ctx, user2Deposit);
             assertLe(
-                stvStETHPool(ctx).mintingCapacitySharesOf(USER2),
+                stvStETHPool(ctx).remainingMintingCapacitySharesOf(USER2, 0),
                 user2ExpectedMintableStethShares,
                 "USER2 mintable stETH shares should not exceed expected after underperformance"
             );
@@ -471,7 +471,7 @@ contract StvStETHPoolTest is StvStETHPoolHarness {
             expectedUser1MintedStShares,
             "USER1 stETH shares should be equal to expectedUser1MintedStShares"
         );
-        assertEq(w.mintingCapacitySharesOf(USER1), 0, "USER1 mintable stETH shares should be equal to 0");
+        assertEq(w.remainingMintingCapacitySharesOf(USER1, 0), 0, "USER1 mintable stETH shares should be equal to 0");
         assertEq(
             w.stethSharesForWithdrawal(USER1, w.balanceOf(USER1)),
             expectedUser1MintedStShares,
@@ -492,7 +492,7 @@ contract StvStETHPoolTest is StvStETHPoolHarness {
         // TODO: handle 1 wei problem here
         uint256 expectedRewardsShares = _calcMaxMintableStShares(ctx, user1Rewards);
         assertApproxEqAbs(
-            w.mintingCapacitySharesOf(USER1),
+            w.remainingMintingCapacitySharesOf(USER1, 0),
             expectedRewardsShares,
             WEI_ROUNDING_TOLERANCE,
             "USER1 mintable stETH shares should equal capacity from rewards"
@@ -996,14 +996,14 @@ contract StvStETHPoolTest is StvStETHPoolHarness {
         w.depositETH{value: userDeposit}(USER1, address(0), _calcMaxMintableStShares(ctx, userDeposit));
 
         uint256 initialMinted = w.mintedStethSharesOf(USER1);
-        assertEq(w.mintingCapacitySharesOf(USER1), 0, "No capacity initially");
+        assertEq(w.remainingMintingCapacitySharesOf(USER1, 0), 0, "No capacity initially");
 
         // Vault gains 5%
         // vm.warp(block.timestamp + 1 days);
         reportVaultValueChangeNoFees(ctx, 100_00 + 500);
 
         // Now has minting capacity from rewards
-        uint256 additionalCapacity = w.mintingCapacitySharesOf(USER1);
+        uint256 additionalCapacity = w.remainingMintingCapacitySharesOf(USER1, 0);
         assertGt(additionalCapacity, 0, "Has minting capacity from rewards");
 
         // Can mint additional shares

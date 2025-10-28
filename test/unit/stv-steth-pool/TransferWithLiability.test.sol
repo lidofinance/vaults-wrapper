@@ -14,7 +14,7 @@ contract TransferWithLiabilityTest is Test, SetupStvStETHPool {
     }
 
     function test_TransferWithLiability_TransfersDebtAndStv() public {
-        uint256 sharesToTransfer = pool.mintingCapacitySharesOf(address(this)) / 2;
+        uint256 sharesToTransfer = pool.remainingMintingCapacitySharesOf(address(this), 0) / 2;
         pool.mintStethShares(sharesToTransfer);
 
         uint256 stvToTransfer = pool.balanceOf(address(this));
@@ -39,7 +39,7 @@ contract TransferWithLiabilityTest is Test, SetupStvStETHPool {
     }
 
     function test_TransferWithLiability_RevertsWhenStvInsufficient() public {
-        uint256 sharesToTransfer = pool.mintingCapacitySharesOf(address(this)) / 2;
+        uint256 sharesToTransfer = pool.remainingMintingCapacitySharesOf(address(this), 0) / 2;
         pool.mintStethShares(sharesToTransfer);
 
         uint256 minStv = pool.calcStvToLockForStethShares(sharesToTransfer);
@@ -51,7 +51,7 @@ contract TransferWithLiabilityTest is Test, SetupStvStETHPool {
     }
 
     function test_TransferWithLiability_RevertsWhenSharesExceedLiability() public {
-        uint256 mintedShares = pool.mintingCapacitySharesOf(address(this)) / 4;
+        uint256 mintedShares = pool.remainingMintingCapacitySharesOf(address(this), 0) / 4;
         pool.mintStethShares(mintedShares);
 
         uint256 mintedRecorded = pool.mintedStethSharesOf(address(this));
@@ -64,7 +64,7 @@ contract TransferWithLiabilityTest is Test, SetupStvStETHPool {
     }
 
     function test_TransferWithLiability_RevertsWhenZeroStvButHasShares() public {
-        uint256 sharesToTransfer = pool.mintingCapacitySharesOf(address(this)) / 5;
+        uint256 sharesToTransfer = pool.remainingMintingCapacitySharesOf(address(this), 0) / 5;
         pool.mintStethShares(sharesToTransfer);
 
         vm.expectRevert(StvStETHPool.InsufficientStv.selector);

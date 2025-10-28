@@ -29,7 +29,7 @@ contract ForceRebalanceTest is Test, SetupStvStETHPool {
     }
 
     function _mintMaxStethShares(address _account) internal {
-        uint256 capacity = pool.mintingCapacitySharesOf(_account);
+        uint256 capacity = pool.remainingMintingCapacitySharesOf(_account, 0);
         assertGt(capacity, 0, "expected positive minting capacity");
 
         vm.prank(_account);
@@ -94,7 +94,7 @@ contract ForceRebalanceTest is Test, SetupStvStETHPool {
         );
         pool.syncVaultParameters();
 
-        uint256 sharesToMint = pool.mintingCapacitySharesOf(userAlice);
+        uint256 sharesToMint = pool.remainingMintingCapacitySharesOf(userAlice, 0);
         vm.prank(userAlice);
         pool.mintStethShares(sharesToMint);
 

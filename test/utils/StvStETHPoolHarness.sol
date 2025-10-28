@@ -56,7 +56,7 @@ contract StvStETHPoolHarness is StvPoolHarness {
             // Check none can mint beyond mintable capacity
             for (uint256 i = 0; i < holders.length; i++) {
                 address holder = holders[i];
-                uint256 mintableStShares = stvStETHPool(_ctx).mintingCapacitySharesOf(holder);
+                uint256 mintableStShares = stvStETHPool(_ctx).remainingMintingCapacitySharesOf(holder, 0);
 
                 vm.startPrank(holder);
                 vm.expectRevert(StvStETHPool.InsufficientMintingCapacity.selector);
