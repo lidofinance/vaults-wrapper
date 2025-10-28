@@ -307,7 +307,7 @@ abstract contract BasePool is Initializable, ERC20Upgradeable, AllowList {
      * @dev Required fresh oracle report before calling
      */
     function rebalanceUnassignedLiabilityWithEther() external payable {
-        uint256 stethShares = STETH.getSharesByPooledEth(msg.value);
+        uint256 stethShares = _getSharesByPooledEth(msg.value);
         _checkOnlyUnassignedLiabilityRebalance(stethShares);
         DASHBOARD.rebalanceVaultWithEther{value: msg.value}(msg.value);
 
@@ -329,6 +329,22 @@ abstract contract BasePool is Initializable, ERC20Upgradeable, AllowList {
      */
     function _checkNoUnassignedLiability() internal view {
         if (totalUnassignedLiabilityShares() > 0) revert UnassignedLiabilityOnVault();
+    }
+
+    // =================================================================================
+    // STETH HELPERS
+    // =================================================================================
+
+    function _getSharesByPooledEth(uint256 _ethAmount) internal view returns (uint256 stethShares) {
+        stethShares = STETH.getSharesByPooledEth(_ethAmount);
+    }
+
+    function _getPooledEthByShares(uint256 _stethShares) internal view returns (uint256 ethAmount) {
+        ethAmount = STETH.getPooledEthByShares(_stethShares);
+    }
+
+    function _getPooledEthBySharesRoundUp(uint256 _stethShares) internal view returns (uint256 ethAmount) {
+        ethAmount = STETH.getPooledEthBySharesRoundUp(_stethShares);
     }
 
     // =================================================================================

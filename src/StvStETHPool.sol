@@ -6,6 +6,7 @@ import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {WithdrawalQueue} from "./WithdrawalQueue.sol";
 
 import {IStETH} from "./interfaces/IStETH.sol";
+import {IWstETH} from "./interfaces/IWstETH.sol";
 import {IVaultHub} from "./interfaces/IVaultHub.sol";
 
 /**
@@ -40,6 +41,8 @@ contract StvStETHPool is BasePool {
     /// @notice The gap between the reserve ratio in Staking Vault and Pool (in basis points)
     uint256 public immutable RESERVE_RATIO_GAP_BP;
 
+    IWstETH public immutable WSTETH;
+
     /// @custom:storage-location erc7201:pool.b.storage
     struct StvStETHPoolStorage {
         mapping(address => uint256) mintedStethShares;
@@ -66,6 +69,7 @@ contract StvStETHPool is BasePool {
         address _distributor
     ) BasePool(_dashboard, _allowListEnabled, _withdrawalQueue, _distributor) {
         RESERVE_RATIO_GAP_BP = _reserveRatioGapBP;
+        WSTETH = IWstETH(DASHBOARD.WSTETH());
     }
 
     function initialize(address _owner, string memory _name, string memory _symbol) public override initializer {
@@ -345,6 +349,20 @@ contract StvStETHPool is BasePool {
     }
 
     /**
+     * @notice Mint wstETH up to the user's minting capacity
+     * @param _wsteth The amount of wstETH to mint
+     */
+    function mintWsteth(uint256 _wsteth) external {
+        _mintWsteth(msg.sender, _wsteth);
+    }
+
+    function _mintWsteth(address _account, uint256 _wsteth) internal {
+        _checkRemainingMintingCapacityOf(_account, _wsteth);
+        _increaseMintedStethShares(_account, _wsteth);
+        DASHBOARD.mintWstETH(_account, _wsteth);
+    }
+
+    /**
      * @notice Mint stETH shares up to the user's minting capacity
      * @param _stethShares The amount of stETH shares to mint
      */
@@ -353,16 +371,27 @@ contract StvStETHPool is BasePool {
     }
 
     function _mintStethShares(address _account, uint256 _stethShares) internal {
-        if (_stethShares == 0) revert ZeroArgument();
-        if (remainingMintingCapacitySharesOf(_account, 0) < _stethShares) revert InsufficientMintingCapacity();
-
+        _checkRemainingMintingCapacityOf(_account, _stethShares);
+        _increaseMintedStethShares(_account, _stethShares);
         DASHBOARD.mintShares(_account, _stethShares);
+    }
 
-        StvStETHPoolStorage storage $ = _getStvStETHPoolStorage();
-        $.totalMintedStethShares += _stethShares;
-        $.mintedStethShares[_account] += _stethShares;
+    /**
+     * @notice Burn wstETH to reduce the user's minted stETH obligation
+     * @param _wsteth The amount of wstETH to burn
+     */
+    function burnWsteth(uint256 _wsteth) external {
+        _burnWsteth(msg.sender, _wsteth);
+    }
 
-        emit StethSharesMinted(_account, _stethShares);
+    function _burnWsteth(address _account, uint256 _wsteth) internal {
+        /// @dev Simulate conversions during unwrapping to account for possible reduction due to rounding errors
+        uint256 unwrappedSteth = _getPooledEthByShares(_wsteth);
+        uint256 unwrappedStethShares = _getSharesByPooledEth(unwrappedSteth);
+        _decreaseMintedStethShares(_account, unwrappedStethShares);
+
+        WSTETH.transferFrom(_account, address(this), _wsteth);
+        DASHBOARD.burnWstETH(_wsteth);
     }
 
     /**
@@ -375,9 +404,23 @@ contract StvStETHPool is BasePool {
 
     function _burnStethShares(address _account, uint256 _stethShares) internal {
         _decreaseMintedStethShares(_account, _stethShares);
-
         STETH.transferSharesFrom(_account, address(this), _stethShares);
         DASHBOARD.burnShares(_stethShares);
+    }
+
+    function _checkRemainingMintingCapacityOf(address _account, uint256 _stethShares) internal view {
+        if (remainingMintingCapacitySharesOf(_account, 0) < _stethShares) revert InsufficientMintingCapacity();
+    }
+
+    function _increaseMintedStethShares(address _account, uint256 _stethShares) internal {
+        StvStETHPoolStorage storage $ = _getStvStETHPoolStorage();
+
+        if (_stethShares == 0) revert ZeroArgument();
+
+        $.totalMintedStethShares += _stethShares;
+        $.mintedStethShares[_account] += _stethShares;
+
+        emit StethSharesMinted(_account, _stethShares);
     }
 
     function _decreaseMintedStethShares(address _account, uint256 _stethShares) internal {
@@ -418,7 +461,7 @@ contract StvStETHPool is BasePool {
             Math.Rounding.Floor
         );
 
-        stethShares = STETH.getSharesByPooledEth(maxStethToMint);
+        stethShares = _getSharesByPooledEth(maxStethToMint);
     }
 
     /**
@@ -440,7 +483,7 @@ contract StvStETHPool is BasePool {
         if (_stethShares == 0) return 0;
 
         assetsToLock = Math.mulDiv(
-            STETH.getPooledEthBySharesRoundUp(_stethShares),
+            _getPooledEthBySharesRoundUp(_stethShares),
             TOTAL_BASIS_POINTS,
             TOTAL_BASIS_POINTS - reserveRatioBP(),
             Math.Rounding.Ceil
@@ -530,7 +573,7 @@ contract StvStETHPool is BasePool {
      * @dev May occur if rebalancing happens on the Staking Vault bypassing the Wrapper
      */
     function totalExceedingMintedSteth() public view override returns (uint256 steth) {
-        steth = STETH.getPooledEthByShares(totalExceedingMintedStethShares());
+        steth = _getPooledEthByShares(totalExceedingMintedStethShares());
     }
 
     // =================================================================================
@@ -627,7 +670,7 @@ contract StvStETHPool is BasePool {
         /// Rearranging the equation to solve for x gives us:
         /// x = (liability - (1 - reserveRatio) * assets) / reserveRatio
         uint256 reserveRatioBP_ = reserveRatioBP();
-        uint256 stethLiability = STETH.getPooledEthBySharesRoundUp(stethSharesLiability);
+        uint256 stethLiability = _getPooledEthBySharesRoundUp(stethSharesLiability);
         uint256 targetStethToRebalance = Math.ceilDiv(
             /// Shouldn't underflow as threshold breach is already checked
             stethLiability * TOTAL_BASIS_POINTS - (TOTAL_BASIS_POINTS - reserveRatioBP_) * assets,
@@ -649,7 +692,7 @@ contract StvStETHPool is BasePool {
 
         uint256 stvRequired = _convertToStv(stethToRebalance, Math.Rounding.Ceil);
 
-        stethShares = STETH.getSharesByPooledEth(stethToRebalance); // TODO: round up, can it exceed liability?
+        stethShares = _getSharesByPooledEth(stethToRebalance); // TODO: round up, can it exceed liability?
         stv = Math.min(stvRequired, stvBalance);
         isUndercollateralized = isUndercollateralized || stvRequired > stvBalance;
     }
@@ -676,7 +719,7 @@ contract StvStETHPool is BasePool {
 
         uint256 exceedingStethShares = totalExceedingMintedStethShares();
         uint256 remainingStethShares = Math.saturatingSub(_stethShares, exceedingStethShares);
-        uint256 ethToRebalance = STETH.getPooledEthBySharesRoundUp(_stethShares);
+        uint256 ethToRebalance = _getPooledEthBySharesRoundUp(_stethShares);
         stvToBurn = _convertToStv(ethToRebalance, Math.Rounding.Ceil);
 
         if (remainingStethShares > 0) DASHBOARD.rebalanceVaultWithShares(remainingStethShares);
@@ -697,7 +740,7 @@ contract StvStETHPool is BasePool {
         if (_stethShares == 0) return false;
 
         uint256 assetsThreshold = Math.mulDiv(
-            STETH.getPooledEthBySharesRoundUp(_stethShares),
+            _getPooledEthBySharesRoundUp(_stethShares),
             TOTAL_BASIS_POINTS,
             TOTAL_BASIS_POINTS - forcedRebalanceThresholdBP(),
             Math.Rounding.Ceil

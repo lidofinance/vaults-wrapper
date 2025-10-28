@@ -2,6 +2,7 @@
 pragma solidity >=0.8.25;
 
 import {MockStETH} from "./MockStETH.sol";
+import {MockWstETH} from "./MockWstETH.sol";
 import {MockVaultHub} from "./MockVaultHub.sol";
 import {MockStakingVault} from "./MockStakingVault.sol";
 import {AccessControlEnumerable} from "@openzeppelin/contracts/access/extensions/AccessControlEnumerable.sol";
@@ -10,6 +11,7 @@ import {IVaultHub} from "../../src/interfaces/IVaultHub.sol";
 
 contract MockDashboard is AccessControlEnumerable {
     MockStETH public immutable STETH;
+    MockWstETH public immutable WSTETH;
     MockVaultHub public immutable VAULT_HUB;
     address public immutable STAKING_VAULT;
 
@@ -23,8 +25,9 @@ contract MockDashboard is AccessControlEnumerable {
     bytes32 public constant WITHDRAW_ROLE = keccak256("WITHDRAW_ROLE");
     bytes32 public constant REBALANCE_ROLE = keccak256("REBALANCE_ROLE");
 
-    constructor(address _steth, address _vaultHub, address _stakingVault, address _admin) {
+    constructor(address _steth, address _wsteth, address _vaultHub, address _stakingVault, address _admin) {
         STETH = MockStETH(_steth);
+        WSTETH = MockWstETH(payable(_wsteth));
         VAULT_HUB = MockVaultHub(payable(_vaultHub));
         STAKING_VAULT = _stakingVault; // Mock staking vault address
         _grantRole(DEFAULT_ADMIN_ROLE, _admin);
@@ -133,11 +136,18 @@ contract MockDashboardFactory {
     function createMockDashboard(address _owner) external returns (MockDashboard) {
         MockVaultHub vaultHub = new MockVaultHub();
         MockStakingVault stakingVault = new MockStakingVault();
-
         MockStETH steth = MockStETH(vaultHub.LIDO());
+        MockWstETH wsteth = new MockWstETH(address(steth));
+
         steth.mock_setTotalPooled(1000 ether, 800 * 10 ** 18);
 
-        MockDashboard dashboard = new MockDashboard(address(steth), address(vaultHub), address(stakingVault), _owner);
+        MockDashboard dashboard = new MockDashboard(
+            address(steth),
+            address(wsteth),
+            address(vaultHub),
+            address(stakingVault),
+            _owner
+        );
 
         return dashboard;
     }
