@@ -27,7 +27,6 @@ contract StvStETHPool is BasePool {
     error InsufficientStv();
     error ZeroArgument();
     error ArraysLengthMismatch(uint256 firstArrayLength, uint256 secondArrayLength);
-    error InvalidReserveRatioGap(uint256 reserveRatioGapBP);
     error NothingToRebalance();
     error VaultReportStale();
     error UndercollateralizedAccount();
@@ -66,7 +65,6 @@ contract StvStETHPool is BasePool {
         address _withdrawalQueue,
         address _distributor
     ) BasePool(_dashboard, _allowListEnabled, _withdrawalQueue, _distributor) {
-        if (_reserveRatioGapBP >= TOTAL_BASIS_POINTS) revert InvalidReserveRatioGap(_reserveRatioGapBP);
         RESERVE_RATIO_GAP_BP = _reserveRatioGapBP;
     }
 
