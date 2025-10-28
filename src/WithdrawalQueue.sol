@@ -936,10 +936,10 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
 
     /**
      * @notice Returns true if Emergency Exit is activated
-     * @return isActivate true if Emergency Exit is activated
+     * @return isActivated true if Emergency Exit is activated
      */
-    function isEmergencyExitActivated() public view returns (bool isActivate) {
-        isActivate = _getWithdrawalQueueStorage().emergencyExitActivationTimestamp > 0;
+    function isEmergencyExitActivated() public view returns (bool isActivated) {
+        isActivated = _getWithdrawalQueueStorage().emergencyExitActivationTimestamp > 0;
     }
 
     /**
