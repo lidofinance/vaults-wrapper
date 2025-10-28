@@ -8,7 +8,7 @@ import {ITellerWithMultiAssetSupport} from "src/interfaces/ggv/ITellerWithMultiA
 import {IBoringOnChainQueue} from "src/interfaces/ggv/IBoringOnChainQueue.sol";
 import {Strategy} from "src/strategy/Strategy.sol";
 import {IStrategy} from "src/interfaces/IStrategy.sol";
-import {IStrategyProxy} from "src/interfaces/IStrategyProxy.sol";
+import {IStrategyCallForwarder} from "src/interfaces/IStrategyCallForwarder.sol";
 import {StvStETHPool} from "src/StvStETHPool.sol";
 
 contract GGVStrategy is Strategy {
@@ -37,13 +37,13 @@ contract GGVStrategy is Strategy {
     }
 
     constructor(
-        address _strategyProxyImplementation,
+        address _strategyCallForwarderImplementation,
         address _pool,
         address _stETH,
         address _wstETH,
         address _teller,
         address _boringQueue
-    ) Strategy(_pool, _stETH, _wstETH, _strategyProxyImplementation) {
+    ) Strategy(_pool, _stETH, _wstETH, _strategyCallForwarderImplementation) {
         TELLER = ITellerWithMultiAssetSupport(_teller);
         BORING_QUEUE = IBoringOnChainQueue(_boringQueue);
     }
@@ -52,20 +52,20 @@ contract GGVStrategy is Strategy {
     /// @param _referral The referral address
     /// @param _params The parameters for the supply
     function supply(address _referral, bytes calldata _params) external payable {
-        address proxy = _getOrCreateProxy(msg.sender);
+        address callForwarder = _getOrCreateCallForwarder(msg.sender);
         uint256 stethShares = POOL.calcStethSharesToMintForAssets(msg.value);
-        uint256 stv = POOL.depositETH{value: msg.value}(proxy, _referral, stethShares);
+        uint256 stv = POOL.depositETH{value: msg.value}(callForwarder, _referral, stethShares);
 
         uint256 stethAmount = STETH.getPooledEthByShares(stethShares);
 
-        IStrategyProxy(proxy).call(
+        IStrategyCallForwarder(callForwarder).call(
             address(STETH),
             abi.encodeWithSelector(STETH.approve.selector, TELLER.vault(), stethAmount)
         );
 
         GGVParams memory params = abi.decode(_params, (GGVParams));
 
-        bytes memory data = IStrategyProxy(proxy).call(
+        bytes memory data = IStrategyCallForwarder(callForwarder).call(
             address(TELLER),
             abi.encodeWithSelector(TELLER.deposit.selector, address(STETH), stethAmount, params.minimumMint, _referral)
         );
@@ -92,12 +92,12 @@ contract GGVStrategy is Strategy {
     /// @param _params The parameters for the withdrawal
     /// @return stethShares The amount of stETH shares that can be withdrawn
     function previewStethSharesByGGV(address _user, uint256 _ggvShares, bytes calldata _params) external view returns (uint256 stethShares) {
-        address proxy = getStrategyProxyAddress(_user);
+        address callForwarder = getStrategyCallForwarderAddress(_user);
 
         GGVParams memory params = abi.decode(_params, (GGVParams));
 
         IERC20 boringVault = IERC20(TELLER.vault());
-        uint256 totalGGV = boringVault.balanceOf(proxy);
+        uint256 totalGGV = boringVault.balanceOf(callForwarder);
 
         if (totalGGV == 0) return 0;
         if (_ggvShares > totalGGV) revert InvalidGGVAmount();
@@ -116,25 +116,25 @@ contract GGVStrategy is Strategy {
     {
         GGVParams memory params = abi.decode(_params, (GGVParams));
 
-        address proxy = _getOrCreateProxy(msg.sender);
+        address callForwarder = _getOrCreateCallForwarder(msg.sender);
         IERC20 boringVault = IERC20(TELLER.vault());
 
         // Calculate how much wsteth we'll get from total GGV shares
-        uint256 totalGGV = boringVault.balanceOf(proxy);
+        uint256 totalGGV = boringVault.balanceOf(callForwarder);
         uint256 totalStethSharesFromGgv = BORING_QUEUE.previewAssetsOut(address(WSTETH), uint128(totalGGV), params.discount);
         if (totalStethSharesFromGgv == 0) revert InvalidStethAmount();
         if (_stethSharesToBurn > totalStethSharesFromGgv) revert InvalidStethAmount();
 
         // Approve GGV shares
         uint256 ggvShares = Math.mulDiv(totalGGV, _stethSharesToBurn, totalStethSharesFromGgv);
-        IStrategyProxy(proxy).call(
+        IStrategyCallForwarder(callForwarder).call(
             address(boringVault), abi.encodeWithSelector(boringVault.approve.selector, address(BORING_QUEUE), ggvShares)
         );
 
         uint128 requestedGGV = uint128(ggvShares);
 
         // Withdrawal request from GGV
-        bytes memory data = IStrategyProxy(proxy).call(
+        bytes memory data = IStrategyCallForwarder(callForwarder).call(
             address(BORING_QUEUE),
             abi.encodeWithSelector(
                 BORING_QUEUE.requestOnChainWithdraw.selector,
@@ -153,10 +153,10 @@ contract GGVStrategy is Strategy {
     /// @notice Cancels a withdrawal request
     /// @param request The request to cancel
     function cancelGgvRequest(IBoringOnChainQueue.OnChainWithdraw memory request) external {
-        address proxy = getStrategyProxyAddress(msg.sender);
-        if (proxy != request.user) revert InvalidSender();
+        address callForwarder = getStrategyCallForwarderAddress(msg.sender);
+        if (callForwarder != request.user) revert InvalidSender();
 
-        IStrategyProxy(proxy).call(
+        IStrategyCallForwarder(callForwarder).call(
             address(BORING_QUEUE), abi.encodeWithSelector(BORING_QUEUE.cancelOnChainWithdraw.selector, request)
         );
     }
@@ -168,10 +168,10 @@ contract GGVStrategy is Strategy {
     /// @return oldRequestId The old request id
     /// @return newRequestId The new request id
     function replaceGgvOnChainWithdraw(IBoringOnChainQueue.OnChainWithdraw memory request, uint16 discount, uint24 secondsToDeadline) external returns (bytes32 oldRequestId, bytes32 newRequestId) {
-        address proxy = getStrategyProxyAddress(msg.sender);
-        if (proxy != request.user) revert InvalidSender();
+        address callForwarder = getStrategyCallForwarderAddress(msg.sender);
+        if (callForwarder != request.user) revert InvalidSender();
 
-        bytes memory data = IStrategyProxy(proxy).call(
+        bytes memory data = IStrategyCallForwarder(callForwarder).call(
             address(BORING_QUEUE), abi.encodeWithSelector(BORING_QUEUE.replaceOnChainWithdraw.selector, request, discount, secondsToDeadline)
         );
         (oldRequestId, newRequestId) = abi.decode(data, (bytes32, bytes32));
@@ -190,23 +190,23 @@ contract GGVStrategy is Strategy {
     /// @param _user The user to get the stETH shares for
     /// @return stethShares The amount of stETH shares
     function proxyStethSharesOf(address _user) public view returns(uint256 stethShares) {
-        address proxy = getStrategyProxyAddress(_user);
+        address callForwarder = getStrategyCallForwarderAddress(_user);
 
         // simulate the unwrapping of wstETH to stETH with rounding issue
-        uint256 wstethAmount = WSTETH.balanceOf(proxy);
+        uint256 wstethAmount = WSTETH.balanceOf(callForwarder);
         uint256 stETHAmount = STETH.getPooledEthByShares(wstethAmount);
         uint256 sharesAfterUnwrapping = STETH.getSharesByPooledEth(stETHAmount);
 
-        // add the stETH shares of the proxy
-        stethShares = sharesAfterUnwrapping + STETH.sharesOf(proxy);
+        // add the stETH shares of the call forwarder
+        stethShares = sharesAfterUnwrapping + STETH.sharesOf(callForwarder);
     }
 
     /// @notice Calculates the amount of stETH shares to rebalance
     /// @param _user The user to calculate the amount of stETH shares to rebalance for
     /// @return stethShares The amount of stETH shares to rebalance
     function proxyStethSharesToRebalance(address _user) external view returns(uint256 stethShares) {
-        address proxy = getStrategyProxyAddress(_user);
-        uint256 mintedStethShares = POOL.mintedStethSharesOf(proxy);
+        address callForwarder = getStrategyCallForwarderAddress(_user);
+        uint256 mintedStethShares = POOL.mintedStethSharesOf(callForwarder);
 
         uint256 sharesAfterUnwrapping = proxyStethSharesOf(_user);
 
@@ -220,8 +220,8 @@ contract GGVStrategy is Strategy {
     /// @param _stethSharesToBurn The amount of stETH shares to burn
     /// @return stv The amount of stv that can be withdrawn
     function proxyWithdrawableStvOf(address _user, uint256 _stethSharesToBurn) external view returns(uint256 stv) {
-        address proxy = getStrategyProxyAddress(_user);
-        stv = POOL.withdrawableStvOf(proxy, _stethSharesToBurn);
+        address callForwarder = getStrategyCallForwarderAddress(_user);
+        stv = POOL.withdrawableStvOf(callForwarder, _stethSharesToBurn);
     }
 
     /// @notice Requests a withdrawal from the Withdrawal Queue
@@ -236,15 +236,15 @@ contract GGVStrategy is Strategy {
         uint256 _stethSharesToRebalance,
         address _receiver
     ) external returns (uint256 requestId) {
-        address proxy = _getOrCreateProxy(msg.sender);
+        address callForwarder = _getOrCreateCallForwarder(msg.sender);
 
-        IStrategyProxy(proxy).call(
+        IStrategyCallForwarder(callForwarder).call(
             address(WSTETH),
-            abi.encodeWithSelector(WSTETH.unwrap.selector, WSTETH.balanceOf(proxy))
+            abi.encodeWithSelector(WSTETH.unwrap.selector, WSTETH.balanceOf(callForwarder))
         );
 
         // request withdrawal from pool
-        bytes memory withdrawalData = IStrategyProxy(proxy).call(
+        bytes memory withdrawalData = IStrategyCallForwarder(callForwarder).call(
             address(POOL),
             abi.encodeWithSelector(
                 StvStETHPool.requestWithdrawal.selector,

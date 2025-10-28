@@ -5,9 +5,9 @@ import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Ini
 import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
-import {IStrategyProxy} from "src/interfaces/IStrategyProxy.sol";
+import {IStrategyCallForwarder} from "src/interfaces/IStrategyCallForwarder.sol";
 
-contract StrategyProxy is Initializable, ReentrancyGuardUpgradeable, OwnableUpgradeable, IStrategyProxy {
+contract StrategyCallForwarder is Initializable, ReentrancyGuardUpgradeable, OwnableUpgradeable, IStrategyCallForwarder {
 
     constructor() {
         _disableInitializers();

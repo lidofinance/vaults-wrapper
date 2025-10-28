@@ -71,8 +71,8 @@ contract GGVTest is StvStrategyPoolHarness {
 
     WrapperContext public ctx;
 
-    address public user1StrategyProxy;
-    address public user2StrategyProxy;
+    address public user1StrategyCallForwarder;
+    address public user2StrategyCallForwarder;
 
     function setUp() public {
         _initializeCore();
@@ -91,11 +91,11 @@ contract GGVTest is StvStrategyPoolHarness {
         strategy = IStrategy(ctx.strategy);
         ggvStrategy = GGVStrategy(address(strategy));
 
-        user1StrategyProxy = ggvStrategy.getStrategyProxyAddress(USER1);
-        vm.label(user1StrategyProxy, "User1StrategyProxy");
+        user1StrategyCallForwarder = ggvStrategy.getStrategyCallForwarderAddress(USER1);
+        vm.label(user1StrategyCallForwarder, "User1StrategyCallForwarder");
 
-        user2StrategyProxy = ggvStrategy.getStrategyProxyAddress(USER2);
-        vm.label(user2StrategyProxy, "User2StrategyProxy");
+        user2StrategyCallForwarder = ggvStrategy.getStrategyCallForwarderAddress(USER2);
+        vm.label(user2StrategyCallForwarder, "User2StrategyCallForwarder");
 
         _log.init(
             address(pool),
@@ -154,7 +154,7 @@ contract GGVTest is StvStrategyPoolHarness {
         uint256 vaultProfit = depositAmount * vaultIncrease / 100; // 0.05 ether profit
 
         logUsers.push(TableUtils.User(USER1, "user1"));
-        logUsers.push(TableUtils.User(user1StrategyProxy, "user1_proxy"));
+        logUsers.push(TableUtils.User(user1StrategyCallForwarder, "user1_call_forwarder"));
         logUsers.push(TableUtils.User(address(pool), "pool"));
         logUsers.push(TableUtils.User(address(pool.WITHDRAWAL_QUEUE()), "wq"));
         logUsers.push(TableUtils.User(address(boringVault), "boringVault"));
@@ -189,7 +189,7 @@ contract GGVTest is StvStrategyPoolHarness {
         // _log.printUsers("[SCENARIO] After report (increase vault balance)", logUsers, ggvDiscount);
 
 //         3. Request withdrawal (full amount, based on appreciated value)
-        uint256 totalGgvShares = boringVault.balanceOf(user1StrategyProxy);
+        uint256 totalGgvShares = boringVault.balanceOf(user1StrategyCallForwarder);
         uint256 withdrawalStethAmount =
             boringOnChainQueue.previewAssetsOut(address(steth), uint128(totalGgvShares), uint16(ggvDiscount));
 
@@ -264,10 +264,10 @@ contract GGVTest is StvStrategyPoolHarness {
         _log.printUsers("After User Claims ETH", logUsers, ggvDiscount);
 
 //         // 8. Recover Surplus stETH (если есть)
-//         uint256 surplusStETH = steth.balanceOf(user1StrategyProxy);
+//         uint256 surplusStETH = steth.balanceOf(user1StrategyCallForwarder);
 //         if (surplusStETH > 0) {
-//             uint256 stethBalance = steth.sharesOf(user1StrategyProxy);
-//             uint256 stethDebt = pool.mintedStethSharesOf(user1StrategyProxy);
+//             uint256 stethBalance = steth.sharesOf(user1StrategyCallForwarder);
+//             uint256 stethDebt = pool.mintedStethSharesOf(user1StrategyCallForwarder);
 //             uint256 surplusInShares = stethBalance > stethDebt ? stethBalance - stethDebt : 0;
 //             uint256 maxAmount = steth.getPooledEthByShares(surplusInShares);
 
