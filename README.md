@@ -50,12 +50,13 @@ $ anvil
 The Factory orchestrates deployment of the entire pool system (Vault, Dashboard, Wrapper, Withdrawal Queue, and optionally a Strategy) via dedicated implementation factories and proxies.
 
 - Prerequisites (addresses required to deploy `Factory`):
-  - **Core**: `IVaultFactory` (Lido `VaultFactory`), `stETH` token address
+  - **Core (auto-discovered from Locator)**: `IVaultFactory`, `stETH`, `wstETH`, `lazyOracle`
   - **Implementation factories**: `StvPoolFactory`, `StvStETHPoolFactory`, `StvStrategyPoolFactory`, `WithdrawalQueueFactory`, `LoopStrategyFactory`, `GGVStrategyFactory`
   - **Proxy stub**: `DummyImplementation` (for `OssifiableProxy` bootstrap)
 
 - Deploy `Factory` (either deploy the factories yourself or use `script/DeployWrapperFactory.s.sol`):
-  - `new Factory(WrapperConfig{ vaultFactory, stETH, wstETH, lazyOracle, stvPoolFactory, stvStETHPoolFactory, stvStrategyPoolFactory, withdrawalQueueFactory, loopStrategyFactory, ggvStrategyFactory, dummyImplementation, timelockFactory }, TimelockConfig{ minDelaySeconds })`
+  - `DeployWrapperFactory` now requires `CORE_LOCATOR_ADDRESS` and `FACTORY_PARAMS_JSON`; it derives all core addresses from the Locator.
+  - Constructor shape for reference: `new Factory(WrapperConfig{ vaultFactory, stETH, wstETH, lazyOracle, stvPoolFactory, stvStETHPoolFactory, stvStrategyPoolFactory, withdrawalQueueFactory, loopStrategyFactory, ggvStrategyFactory, dummyImplementation, timelockFactory }, TimelockConfig{ minDelaySeconds })`
 
 - Create a complete pool system using one of the specialized entrypoints (send `msg.value == VaultHub.CONNECT_DEPOSIT`):
   - `createVaultWithNoMintingNoStrategy(nodeOperator, nodeOperatorManager, nodeOperatorFeeBP, confirmExpiry, allowlistEnabled)`
@@ -113,18 +114,44 @@ Dedicated factories for wrappers, withdrawal queue and strategies are required t
 Local deployment (quickstart)
 
 - Files/scripts:
-  - `lido-core/deployed-local.json` (core addresses produced by `make core-deploy`)
+  - `lido-core/deployed-local.json` (written by `make core-deploy`; use it to extract the Locator address)
   - `script/HarnessCore.s.sol` + `script/harness-core.sh` (prepares core via impersonation: sets epoch, resumes Lido, submits initial ETH)
-  - `script/DeployWrapperFactory.s.sol` (deploys Factory + implementation factories; writes `deployments/pool-local.json`)
-  - `script/DeployWrapper.s.sol` (deploys a pool instance from the Factory using `script/deploy-local-config.json`)
+  - `script/DeployWrapperFactory.s.sol` (deploys Factory + implementation factories; writes `deployments/pool-<chainId>.json`)
+  - `script/DeployWrapper.s.sol` (deploys a pool instance from the Factory using your pool config JSON)
   - `foundry.toml` (`fs_permissions` allow writing to `deployments/`)
 - Procedure:
-  - Start RPC (e.g., Anvil on `http://localhost:9123`).
+  - Start RPC (e.g., Anvil or Hardhat at `http://localhost:9123`).
   - `make core-deploy` (deploys core and writes `lido-core/deployed-local.json`).
-  - `bash script/harness-core.sh` (prepares core; default initial submission ≈ 15k ETH; override `INITIAL_LIDO_SUBMISSION` if needed).
-  - `bash script/deploy-local.sh` (deploys Factory and then a Wrapper using `script/deploy-local-config.json`).
+  - Export `CORE_LOCATOR_ADDRESS` from the deployed core JSON:
+    ```bash
+    export CORE_LOCATOR_ADDRESS=$(jq -r '.lidoLocator.proxy.address' lido-core/deployed-local.json)
+    export RPC_URL=http://localhost:9123
+    ```
+  - Prepare core (optional best-effort):
+    ```bash
+    INITIAL_LIDO_SUBMISSION=20000000000000000000000 \
+    CORE_LOCATOR_ADDRESS="$CORE_LOCATOR_ADDRESS" \
+    RPC_URL="$RPC_URL" \
+    bash script/harness-core.sh
+    ```
+  - Deploy Factory via Foundry script (the script auto-writes to `deployments/pool-factory-<chainId>-<timestamp>.json`):
+    ```bash
+    CORE_LOCATOR_ADDRESS="$CORE_LOCATOR_ADDRESS" \
+    FACTORY_PARAMS_JSON=script/factory-deploy-config.json \
+    forge script script/DeployWrapperFactory.s.sol:DeployWrapperFactory \
+      --rpc-url "$RPC_URL" \
+      --broadcast -vvv
+    ```
+    The script also updates a stable pointer:
+    - `deployments/pool-factory-latest.json`
+  - Deploy a pool instance (example; adjust config):
+    ```bash
+    forge script script/DeployWrapper.s.sol:DeployWrapper \
+      --rpc-url "$RPC_URL" \
+      --broadcast -vvv
+    ```
   - Artifacts:
-    - `deployments/pool-local.json`: deployed `Factory` and implementation factory addresses
+    - `deployments/pool-<chainId>.json`: deployed `Factory` and implementation factory addresses
     - `deployments/pool-instance.json`: deployed Vault, Dashboard, Wrapper proxy, Withdrawal Queue, and Strategy (if applicable)
 
 ### Cast

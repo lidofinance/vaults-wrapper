@@ -101,12 +101,9 @@ contract StvPoolHarness is Test {
 
         // Decide whether to deploy a new pool Factory or use a pre-deployed one
         Factory factory;
-        string memory factoryJsonPath = "";
-        try vm.envString("FACTORY_DEPLOYED_JSON") returns (string memory p) {
-            factoryJsonPath = p;
-        } catch {}
+        string memory factoryJsonPath = "deployments/pool-factory-latest.json";
 
-        if (bytes(factoryJsonPath).length != 0) {
+        if (vm.isFile(factoryJsonPath)) {
             string memory deployedJson = vm.readFile(factoryJsonPath);
             address existingFactory = vm.parseJsonAddress(deployedJson, "$.deployment.factory");
             factory = Factory(existingFactory);
@@ -115,7 +112,7 @@ contract StvPoolHarness is Test {
             factory = helper.deployMainFactory(vaultFactory, address(steth), address(wsteth), lazyOracle);
         }
 
-        if (bytes(factoryJsonPath).length > 0) {
+        if (vm.isFile(factoryJsonPath)) {
             console.log("factoryJsonPath", factoryJsonPath);
             console.log("NB: using existingFactory for testing: %s", address(factory));
         }

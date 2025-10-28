@@ -237,3 +237,33 @@ mock-strategy:
 	VAULT_FACTORY=$(VAULT_FACTORY) \
 	STETH=$(STETH) \
 	forge script script/DeployStrategy.s.sol --rpc-url $(RPC_URL) --broadcast
+
+deploy-all:
+	[ -f .env ] && . .env; \
+	set -e; \
+	# 1) Deploy Factory using existing make target
+	CORE_LOCATOR_ADDRESS="$$CORE_LOCATOR_ADDRESS" \
+	FACTORY_PARAMS_JSON="$$FACTORY_PARAMS_JSON" \
+	RPC_URL="$$RPC_URL" \
+	PRIVATE_KEY="$$PRIVATE_KEY" \
+	DEPLOYER="$$DEPLOYER" \
+	PUBLISH_SOURCES="$$PUBLISH_SOURCES" \
+	$(MAKE) deploy-factory; \
+	# 2) Deploy all wrappers from configs using existing make target
+	WRAPPER_CONFIGS=$${WRAPPER_CONFIGS:-"script/stv-pool-deploy-config-hoodi.json script/stv-steth-pool-deploy-config-hoodi.json script/stv-ggv-pool-deploy-config-hoodi.json"}; \
+	CHAIN_ID=$$(cast chain-id --rpc-url "$${RPC_URL}"); \
+	for CFG in $$WRAPPER_CONFIGS; do \
+		if [ -f "$$CFG" ]; then \
+			BASENAME=$$(basename "$$CFG" .json); \
+			OUT="deployments/pool-instance-$$BASENAME-$$CHAIN_ID-$$(date +%s).json"; \
+			WRAPPER_DEPLOYED_JSON="$$OUT" \
+			BUMP_CORE_FACTORY_NONCE="$${BUMP_CORE_FACTORY_NONCE:-0}" \
+			RPC_URL="$$RPC_URL" \
+			DEPLOYER="$$DEPLOYER" \
+			PRIVATE_KEY="$$PRIVATE_KEY" \
+			$(MAKE) deploy-pool-from-factory PARAMS_JSON="$$CFG"; \
+			echo "Deployed wrapper: $$CFG -> $$OUT"; \
+		else \
+			echo "Config not found, skipping: $$CFG"; \
+		fi; \
+	done
