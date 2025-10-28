@@ -7,7 +7,6 @@ import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {ITellerWithMultiAssetSupport} from "src/interfaces/ggv/ITellerWithMultiAssetSupport.sol";
 import {IBoringOnChainQueue} from "src/interfaces/ggv/IBoringOnChainQueue.sol";
 import {Strategy} from "src/strategy/Strategy.sol";
-import {IStrategy} from "src/interfaces/IStrategy.sol";
 import {IStrategyCallForwarder} from "src/interfaces/IStrategyCallForwarder.sol";
 import {StvStETHPool} from "src/StvStETHPool.sol";
 
