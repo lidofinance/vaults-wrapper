@@ -15,10 +15,6 @@ contract BurningStethSharesTest is Test, SetupStvStETHPool {
         pool.depositETH{value: ethToDeposit}(address(0));
         pool.mintStethShares(stethSharesToMint);
 
-        // Mint stETH to the test contract so it can burn shares
-        vm.deal(address(this), 100 ether);
-        steth.submit{value: 10 ether}(address(this));
-
         // Approve pool to spend stETH shares for burning
         steth.approve(address(pool), type(uint256).max);
     }
@@ -163,14 +159,12 @@ contract BurningStethSharesTest is Test, SetupStvStETHPool {
         vm.startPrank(userAlice);
         pool.depositETH{value: ethToDeposit}(userAlice, address(0));
         pool.mintStethShares(stethSharesToMint);
-        steth.submit{value: 10 ether}(address(userAlice));
         steth.approve(address(pool), type(uint256).max);
         vm.stopPrank();
 
         vm.startPrank(userBob);
         pool.depositETH{value: ethToDeposit}(userBob, address(0));
         pool.mintStethShares(stethSharesToMint);
-        steth.submit{value: 10 ether}(address(userBob));
         steth.approve(address(pool), type(uint256).max);
         vm.stopPrank();
 
@@ -195,7 +189,6 @@ contract BurningStethSharesTest is Test, SetupStvStETHPool {
         vm.startPrank(userAlice);
         pool.depositETH{value: ethToDeposit}(userAlice, address(0));
         pool.mintStethShares(stethSharesToMint);
-        steth.submit{value: 10 ether}(address(userAlice));
         steth.approve(address(pool), type(uint256).max);
         vm.stopPrank();
 

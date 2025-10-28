@@ -6,12 +6,16 @@ import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.s
 
 import {StvStETHPool} from "src/StvStETHPool.sol";
 import {MockDashboard, MockDashboardFactory} from "test/mocks/MockDashboard.sol";
+import {MockVaultHub} from "test/mocks/MockVaultHub.sol";
 import {MockStETH} from "test/mocks/MockStETH.sol";
+import {MockWstETH} from "test/mocks/MockWstETH.sol";
 
 abstract contract SetupStvStETHPool is Test {
     StvStETHPool public pool;
     MockDashboard public dashboard;
+    MockVaultHub public vaultHub;
     MockStETH public steth;
+    MockWstETH public wsteth;
 
     address public owner;
     address public withdrawalQueue;
@@ -35,6 +39,8 @@ abstract contract SetupStvStETHPool is Test {
         // Deploy mocks
         dashboard = new MockDashboardFactory().createMockDashboard(owner);
         steth = dashboard.STETH();
+        wsteth = dashboard.WSTETH();
+        vaultHub = dashboard.VAULT_HUB();
 
         // Fund the dashboard with 1 ETH
         dashboard.fund{value: initialDeposit}();

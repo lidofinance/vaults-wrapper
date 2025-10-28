@@ -37,6 +37,10 @@ contract MockDashboard is AccessControlEnumerable {
         VAULT_HUB.mock_setConnectionParameters(STAKING_VAULT, 10_00, 9_75); // 10% reserve, 9.75% forced rebalance
     }
 
+    function initialize() external {
+        STETH.approve(address(WSTETH), type(uint256).max);
+    }
+
     function fund() external payable {
         emit DashboardFunded(msg.sender, msg.value);
         VAULT_HUB.fund{value: msg.value}(STAKING_VAULT);
@@ -83,8 +87,24 @@ contract MockDashboard is AccessControlEnumerable {
         VAULT_HUB.mintShares(STAKING_VAULT, to, amount);
     }
 
+    function mintWstETH(address to, uint256 amount) external {
+        VAULT_HUB.mintShares(STAKING_VAULT, address(this), amount);
+        uint256 mintedStETH = STETH.getPooledEthBySharesRoundUp(amount);
+        uint256 wrappedWstETH = WSTETH.wrap(mintedStETH);
+        WSTETH.transfer(to, wrappedWstETH);
+    }
+
     function burnShares(uint256 amount) external {
         STETH.transferSharesFrom(msg.sender, address(VAULT_HUB), amount);
+        VAULT_HUB.burnShares(STAKING_VAULT, amount);
+    }
+
+    function burnWstETH(uint256 amount) external {
+        WSTETH.transferFrom(msg.sender, address(this), amount);
+        uint256 unwrappedStETH = WSTETH.unwrap(amount);
+        uint256 unwrappedShares = STETH.getSharesByPooledEth(unwrappedStETH);
+
+        STETH.transferShares(address(VAULT_HUB), unwrappedShares);
         VAULT_HUB.burnShares(STAKING_VAULT, amount);
     }
 
@@ -148,6 +168,8 @@ contract MockDashboardFactory {
             address(stakingVault),
             _owner
         );
+
+        dashboard.initialize();
 
         return dashboard;
     }

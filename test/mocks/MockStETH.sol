@@ -78,6 +78,18 @@ contract MockStETH is ERC20 {
         return true;
     }
 
+    function transferFrom(address from, address to, uint256 amount) public override returns (bool) {
+        uint256 sharesToTransfer = getSharesByPooledEth(amount);
+        require(shares[from] >= sharesToTransfer, "Not enough shares");
+
+        uint256 currentAllowance = allowance(from, msg.sender);
+        require(currentAllowance >= amount, "ERC20: transfer amount exceeds allowance");
+        _approve(from, msg.sender, currentAllowance - amount);
+
+        shares[from] -= sharesToTransfer;
+        shares[to] += sharesToTransfer;
+        return true;
+    }
 
     function submit(address) external payable returns (uint256) {
         uint256 sharesToMint = getPooledEthByShares(msg.value);

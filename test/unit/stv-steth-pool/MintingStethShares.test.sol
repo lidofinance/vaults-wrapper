@@ -20,6 +20,7 @@ contract MintingStethSharesTest is Test, SetupStvStETHPool {
     function test_InitialState_NoMintedStethShares() public view {
         assertEq(pool.totalMintedStethShares(), 0);
         assertEq(pool.mintedStethSharesOf(address(this)), 0);
+        assertEq(steth.balanceOf(address(this)), 0);
     }
 
     function test_InitialState_HasMintingCapacity() public view {
@@ -43,6 +44,14 @@ contract MintingStethSharesTest is Test, SetupStvStETHPool {
         pool.mintStethShares(stethSharesToMint);
 
         assertEq(pool.totalMintedStethShares(), totalBefore + stethSharesToMint);
+    }
+
+    function test_MintStethShares_IncreasesUserStethBalance() public {
+        uint256 userStethBefore = steth.sharesOf(address(this));
+        pool.mintStethShares(stethSharesToMint);
+        uint256 userStethAfter = steth.sharesOf(address(this));
+
+        assertEq(userStethAfter, userStethBefore + stethSharesToMint);
     }
 
     function test_MintStethShares_IncreasesUserMintedShares() public {
