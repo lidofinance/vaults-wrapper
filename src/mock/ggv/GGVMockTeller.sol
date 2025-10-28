@@ -22,6 +22,8 @@ contract GGVMockTeller is ITellerWithMultiAssetSupport {
 
     mapping(ERC20 asset => Asset) public assets;
 
+    event ReferralAddress(address indexed referralAddress);
+
     constructor(address _owner, address __vault, address _steth, address _wsteth) {
         owner = _owner;
         _vault = GGVVaultMock(__vault);
@@ -34,7 +36,7 @@ contract GGVMockTeller is ITellerWithMultiAssetSupport {
         _updateAssetData(ERC20(_wsteth), false, true, 0);
     }
 
-    function deposit(ERC20 depositAsset, uint256 depositAmount, uint256 minimumMint)
+    function deposit(ERC20 depositAsset, uint256 depositAmount, uint256 minimumMint, address referralAddress)
         external
         returns (uint256 shares)
     {
@@ -53,6 +55,8 @@ contract GGVMockTeller is ITellerWithMultiAssetSupport {
         if (shares < minimumMint) revert("Minted shares less than minimumMint");
 
         _vault.depositByTeller(address(depositAsset), shares, stethShares, msg.sender);
+
+        emit ReferralAddress(referralAddress);
     }
 
     function _updateAssetData(ERC20 asset, bool allowDeposits, bool allowWithdraws, uint16 sharePremium) internal {
