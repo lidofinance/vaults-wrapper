@@ -16,9 +16,8 @@ contract TimelockUpgradeIntegrationTest is Test {
 
     function setUp() public {
         // Deploy a fresh Factory using core addresses discovered from the locator
-        string memory coreJsonPath = vm.envString("CORE_DEPLOYED_JSON");
-        string memory deployedJson = vm.readFile(coreJsonPath);
-        address locatorAddress = vm.parseJsonAddress(deployedJson, "$.lidoLocator.proxy.address");
+        string memory locatorAddressStr = vm.envString("CORE_LOCATOR_ADDRESS");
+        address locatorAddress = vm.parseAddress(locatorAddressStr);
         ILidoLocator locator = ILidoLocator(locatorAddress);
 
         FactoryHelper helper = new FactoryHelper();

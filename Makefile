@@ -11,7 +11,7 @@ DEBUG_TEST ?= test_debug
 test-integration-a:
 	[ -f .env ] && . .env; \
 	FOUNDRY_PROFILE=test \
-	CORE_DEPLOYED_JSON="$$CORE_DEPLOYED_JSON" \
+	CORE_LOCATOR_ADDRESS="$$CORE_LOCATOR_ADDRESS" \
 	forge test \
 		test/integration/stv-pool.test.sol \
 		-$(VERBOSITY) \
@@ -20,7 +20,7 @@ test-integration-a:
 test-integration-b:
 	[ -f .env ] && . .env; \
 	FOUNDRY_PROFILE=test \
-	CORE_DEPLOYED_JSON="$$CORE_DEPLOYED_JSON" \
+	CORE_LOCATOR_ADDRESS="$$CORE_LOCATOR_ADDRESS" \
 	forge test \
 		test/integration/stv-steth-pool.test.sol \
 		-$(VERBOSITY) \
@@ -30,7 +30,7 @@ test-integration-b:
 test-integration-ggv:
 	[ -f .env ] && . .env; \
 	FOUNDRY_PROFILE=test \
-	CORE_DEPLOYED_JSON="$$CORE_DEPLOYED_JSON" \
+	CORE_LOCATOR_ADDRESS="$$CORE_LOCATOR_ADDRESS" \
 	forge test \
 		test/integration/ggv.test.sol \
 		-$(VERBOSITY) \
@@ -38,11 +38,11 @@ test-integration-ggv:
 
 test-integration:
 	[ -f .env ] && . .env; \
-	FOUNDRY_PROFILE=test CORE_DEPLOYED_JSON="$$CORE_DEPLOYED_JSON" forge test test/integration/**/*.test.sol -$(VERBOSITY) --fork-url "$$RPC_URL"
+	FOUNDRY_PROFILE=test CORE_LOCATOR_ADDRESS="$$CORE_LOCATOR_ADDRESS" forge test test/integration/**/*.test.sol -$(VERBOSITY) --fork-url "$$RPC_URL"
 
 test-integration-debug:
 	[ -f .env ] && . .env; \
-	FOUNDRY_PROFILE=test CORE_DEPLOYED_JSON="$$CORE_DEPLOYED_JSON" forge test --match-test $(DEBUG_TEST) -$(VERBOSITY) --fork-url "$$RPC_URL"
+	FOUNDRY_PROFILE=test CORE_LOCATOR_ADDRESS="$$CORE_LOCATOR_ADDRESS" forge test --match-test $(DEBUG_TEST) -$(VERBOSITY) --fork-url "$$RPC_URL"
 
 test-unit:
 	FOUNDRY_PROFILE=test forge test -$(VERBOSITY) --no-match-path 'test/integration/*' test

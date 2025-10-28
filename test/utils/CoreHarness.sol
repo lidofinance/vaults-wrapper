@@ -27,6 +27,10 @@ interface IAgent {
     function kernel() external view returns (address);
 }
 
+interface IBaseOracle {
+    function getConsensusContract() external view returns (address);
+}
+
 interface IKernel {
     function acl() external view returns (address);
 }
@@ -61,8 +65,9 @@ contract CoreHarness is Test {
     constructor() {
         vm.deal(address(this), 10000000 ether);
 
-        string memory deployedJson = vm.readFile(vm.envString("CORE_DEPLOYED_JSON"));
-        address locatorAddress = vm.parseJsonAddress(deployedJson, "$.lidoLocator.proxy.address");
+        address locatorAddress = vm.parseAddress(vm.envString("CORE_LOCATOR_ADDRESS"));
+        console.log("Locator address:", locatorAddress);
+
         locator = ILidoLocator(locatorAddress);
         vm.label(locatorAddress, "LidoLocator");
 
@@ -83,7 +88,7 @@ contract CoreHarness is Test {
         operatorGrid = IOperatorGrid(locator.operatorGrid());
         vm.label(address(operatorGrid), "OperatorGrid");
 
-        address hashConsensusAddr = vm.parseJsonAddress(deployedJson, "$.hashConsensusForAccountingOracle.address");
+        address hashConsensusAddr = IBaseOracle(locator.accountingOracle()).getConsensusContract();
         vm.label(hashConsensusAddr, "HashConsensusForAO");
         hashConsensus = IHashConsensusView(hashConsensusAddr);
 

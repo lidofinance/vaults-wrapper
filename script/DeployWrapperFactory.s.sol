@@ -17,24 +17,6 @@ import {TimelockFactory} from "src/factories/TimelockFactory.sol";
 import {ILidoLocator} from "src/interfaces/ILidoLocator.sol";
 
 contract DeployWrapperFactory is Script {
-    struct CoreAddresses {
-        address locator;
-        address vaultFactory;
-        address steth;
-        address wsteth;
-        address lazyOracle;
-    }
-
-    function _readCoreFromJson(string memory deployedJsonPath) internal view returns (CoreAddresses memory core) {
-        string memory deployedJson = vm.readFile(deployedJsonPath);
-        core.locator = vm.parseJsonAddress(deployedJson, "$.lidoLocator.proxy.address");
-
-        ILidoLocator locator = ILidoLocator(core.locator);
-        core.vaultFactory = locator.vaultFactory();
-        core.steth = address(locator.lido());
-        core.wsteth = address(locator.wstETH());
-        core.lazyOracle = locator.lazyOracle();
-    }
 
     function _readTimelockFromJson(string memory paramsPath)
         internal
@@ -49,20 +31,20 @@ contract DeployWrapperFactory is Script {
 
     function run() external {
         // Expect environment variables for non-interactive deploys
-        // REQUIRED: CORE_DEPLOYED_JSON (path to Lido core deployed json, like CoreHarness)
+        // REQUIRED: CORE_LOCATOR_ADDRESS (address of Lido Locator proxy)
         // OPTIONAL: FACTORY_DEPLOYED_JSON
         // REQUIRED: FACTORY_PARAMS_JSON (path to config with timelock params)
-        string memory deployedJsonPath = vm.envString("CORE_DEPLOYED_JSON");
+        string memory locatorAddressStr = vm.envString("CORE_LOCATOR_ADDRESS");
         string memory outputJsonPath = vm.envOr(
             "FACTORY_DEPLOYED_JSON", string(string.concat("deployments/pool-", vm.toString(block.chainid), ".json"))
         );
         string memory paramsJsonPath = vm.envString("FACTORY_PARAMS_JSON");
-
-        if (!vm.isFile(deployedJsonPath)) {
-            revert(string(abi.encodePacked("CORE_DEPLOYED_JSON file does not exist at: ", deployedJsonPath)));
-        }
-
-        CoreAddresses memory core = _readCoreFromJson(deployedJsonPath);
+        address locatorAddress = vm.parseAddress(locatorAddressStr);
+        ILidoLocator locator = ILidoLocator(locatorAddress);
+        address vaultFactory = locator.vaultFactory();
+        address steth = address(locator.lido());
+        address wsteth = address(locator.wstETH());
+        address lazyOracle = locator.lazyOracle();
         Factory.TimelockConfig memory tcfg = _readTimelockFromJson(paramsJsonPath);
 
         vm.startBroadcast();
@@ -80,10 +62,10 @@ contract DeployWrapperFactory is Script {
 
         // Build Factory configuration struct
         Factory.WrapperConfig memory cfg = Factory.WrapperConfig({
-            vaultFactory: core.vaultFactory,
-            steth: core.steth,
-            wsteth: core.wsteth,
-            lazyOracle: core.lazyOracle,
+            vaultFactory: vaultFactory,
+            steth: steth,
+            wsteth: wsteth,
+            lazyOracle: lazyOracle,
             stvPoolFactory: address(poolFac),
             stvStETHPoolFactory: address(stethPoolFac),
             stvStrategyPoolFactory: address(strategyPoolFac),
@@ -101,11 +83,11 @@ contract DeployWrapperFactory is Script {
 
         // Serialize artifact with deployed addresses
         string memory root = "";
-        root = vm.serializeAddress("core", "locator", core.locator);
-        root = vm.serializeAddress("core", "vaultFactory", core.vaultFactory);
-        root = vm.serializeAddress("core", "steth", core.steth);
-        root = vm.serializeAddress("core", "wsteth", core.wsteth);
-        root = vm.serializeAddress("core", "lazyOracle", core.lazyOracle);
+        root = vm.serializeAddress("core", "locator", locatorAddress);
+        root = vm.serializeAddress("core", "vaultFactory", vaultFactory);
+        root = vm.serializeAddress("core", "steth", steth);
+        root = vm.serializeAddress("core", "wsteth", wsteth);
+        root = vm.serializeAddress("core", "lazyOracle", lazyOracle);
 
         string memory facs = "";
         facs = vm.serializeAddress("factories", "stvPoolFactory", address(poolFac));
@@ -137,10 +119,11 @@ contract DeployWrapperFactory is Script {
     }
 
     // Optional overload to allow passing a pre-built WrapperConfig and skipping internal factory deploys
-    function run(string memory deployedJsonPath, Factory.WrapperConfig memory cfg) external {
-        CoreAddresses memory core = _readCoreFromJson(deployedJsonPath);
-        require(core.vaultFactory == cfg.vaultFactory, "vaultFactory mismatch");
-        require(core.steth == cfg.steth, "stETH mismatch");
+    function run(string memory locatorAddressStr, Factory.WrapperConfig memory cfg) external {
+        address locatorAddress = vm.parseAddress(locatorAddressStr);
+        ILidoLocator locator = ILidoLocator(locatorAddress);
+        require(locator.vaultFactory() == cfg.vaultFactory, "vaultFactory mismatch");
+        require(address(locator.lido()) == cfg.steth, "stETH mismatch");
 
         vm.startBroadcast();
         Factory factory = new Factory(cfg, Factory.TimelockConfig({
@@ -155,12 +138,13 @@ contract DeployWrapperFactory is Script {
     }
 
     // Overload with explicit timelock configuration
-    function run(string memory deployedJsonPath, Factory.WrapperConfig memory cfg, Factory.TimelockConfig memory tcfg)
+    function run(string memory locatorAddressStr, Factory.WrapperConfig memory cfg, Factory.TimelockConfig memory tcfg)
         external
     {
-        CoreAddresses memory core = _readCoreFromJson(deployedJsonPath);
-        require(core.vaultFactory == cfg.vaultFactory, "vaultFactory mismatch");
-        require(core.steth == cfg.steth, "stETH mismatch");
+        address locatorAddress = vm.parseAddress(locatorAddressStr);
+        ILidoLocator locator = ILidoLocator(locatorAddress);
+        require(locator.vaultFactory() == cfg.vaultFactory, "vaultFactory mismatch");
+        require(address(locator.lido()) == cfg.steth, "stETH mismatch");
 
         vm.startBroadcast();
         Factory factory = new Factory(cfg, tcfg);

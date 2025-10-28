@@ -12,7 +12,7 @@ jobs:
     env:
       FOUNDRY_PROFILE: test
       RPC_URL: "https://hoodi.drpc.org"
-      CORE_DEPLOYED_JSON: "deployments/deployed-core-hoodi.json"
+      CORE_LOCATOR_ADDRESS: "0xe2EF9536DAAAEBFf5b1c130957AB3E80056b06D8"
 
     steps:
       - uses: actions/checkout@v4
