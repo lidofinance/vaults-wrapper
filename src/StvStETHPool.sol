@@ -35,9 +35,6 @@ contract StvStETHPool is BasePool {
 
     bytes32 public constant LOSS_SOCIALIZER_ROLE = keccak256("LOSS_SOCIALIZER_ROLE");
 
-    /// @notice Sentinel value for depositETH to mint maximum available stETH shares for the deposit
-    uint256 public constant MAX_MINTABLE_AMOUNT = type(uint256).max;
-
     /// @notice The gap between the reserve ratio in Staking Vault and Pool (in basis points)
     uint256 public immutable RESERVE_RATIO_GAP_BP;
 
@@ -92,29 +89,44 @@ contract StvStETHPool is BasePool {
     // =================================================================================
 
     /**
-     * @notice Deposit native ETH and receive stv, optionally minting stETH shares
-     * @param _receiver Address to receive the minted shares
+     * @notice Deposit native ETH and receive stv, minting a specific amount of stETH shares
+     * @param _recipient Address to receive stv and minted steth shares
      * @param _referral Address of the referral (if any)
-     * @param _stethSharesToMint Amount of stETH shares to mint (up to maximum capacity for this deposit)
-     *                           Pass MAX_MINTABLE_AMOUNT to mint maximum available for this deposit
-     * @return stv Amount of stv minted
+     * @param _stethSharesToMint Optional amount of stETH shares to mint (18 decimals)
+     * @return stv Amount of stv minted (27 decimals)
+     * @dev If the recipient is different from msg.sender, checks that enough stv is deposited to lock the requested stETH shares
      */
-    function depositETH(
-        address _receiver,
+    function depositETHAndMintStethShares(
+        address _recipient,
         address _referral,
         uint256 _stethSharesToMint
-    ) public payable virtual returns (uint256 stv) {
-        stv = _deposit(_receiver, _referral);
+    ) external payable virtual returns (uint256 stv) {
+        stv = depositETH(_recipient, _referral);
 
-        if (_stethSharesToMint > 0) {
-            // If MAX_MINTABLE_AMOUNT is passed, calculate max mintable for this deposit
-            uint256 sharesToMint = _stethSharesToMint == MAX_MINTABLE_AMOUNT
-                ? calcStethSharesToMintForAssets(msg.value)
-                : _stethSharesToMint;
+        if (_stethSharesToMint != 0) {
+            if (_recipient != msg.sender) _checkMinStvToLock(stv, _stethSharesToMint);
+            _mintStethShares(_recipient, _stethSharesToMint);
+        }
+    }
 
-            if (sharesToMint > 0) {
-                _mintStethShares(_receiver, sharesToMint);
-            }
+    /**
+     * @notice Deposit native ETH and receive stv, minting a specific amount of wstETH
+     * @param _recipient Address to receive stv and minted wstETH
+     * @param _referral Address of the referral (if any)
+     * @param _wstethToMint Optional amount of wstETH to mint (18 decimals)
+     * @return stv Amount of stv minted (27 decimals)
+     * @dev If the recipient is different from msg.sender, checks that enough stv is deposited to lock the requested wstETH
+     */
+    function depositETHAndMintWsteth(
+        address _recipient,
+        address _referral,
+        uint256 _wstethToMint
+    ) external payable virtual returns (uint256 stv) {
+        stv = depositETH(_recipient, _referral);
+
+        if (_wstethToMint != 0) {
+            if (_recipient != msg.sender) _checkMinStvToLock(stv, _wstethToMint);
+            _mintWsteth(_recipient, _wstethToMint);
         }
     }
 

@@ -227,33 +227,25 @@ abstract contract BasePool is Initializable, ERC20Upgradeable, AllowList {
     }
 
     /**
-     * @notice Convenience function to deposit ETH to msg.sender
-     * @return stv Amount of stv minted
-     */
-    function depositETH(address _referral) public payable returns (uint256 stv) {
-        stv = depositETH(msg.sender, _referral);
-    }
-
-    /**
      * @notice Deposit native ETH and receive stv
-     * @param _receiver Address to receive the minted shares
+     * @param _recipient Address to receive the minted shares
      * @param _referral Address of the referral (if any)
      * @return stv Amount of stv minted
      */
-    function depositETH(address _receiver, address _referral) public payable returns (uint256 stv) {
-        stv = _deposit(_receiver, _referral);
+    function depositETH(address _recipient, address _referral) public payable returns (uint256 stv) {
+        stv = _deposit(_recipient, _referral);
     }
 
-    function _deposit(address _receiver, address _referral) internal returns (uint256 stv) {
+    function _deposit(address _recipient, address _referral) internal returns (uint256 stv) {
         if (msg.value == 0) revert BasePool.ZeroDeposit();
-        if (_receiver == address(0)) revert BasePool.InvalidReceiver();
+        if (_recipient == address(0)) revert BasePool.InvalidReceiver();
         _checkAllowList();
 
         stv = previewDeposit(msg.value);
-        _mint(_receiver, stv);
+        _mint(_recipient, stv);
         DASHBOARD.fund{value: msg.value}();
 
-        emit Deposit(msg.sender, _receiver, _referral, msg.value, stv);
+        emit Deposit(msg.sender, _recipient, _referral, msg.value, stv);
     }
 
     // =================================================================================

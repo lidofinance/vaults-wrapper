@@ -169,7 +169,7 @@ contract GGVTest is StvStrategyPoolHarness {
         // Check that user is not allowed to deposit directly
         vm.prank(USER1);
         vm.expectRevert(abi.encodeWithSelector(AllowList.NotAllowListed.selector, USER1));
-        pool.depositETH{value: depositAmount}(USER1);
+        pool.depositETH{value: depositAmount}(USER1, address(0));
 
         // 1. Initial Deposit
         vm.prank(USER1);

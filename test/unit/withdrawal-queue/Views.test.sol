@@ -32,7 +32,7 @@ contract ViewsTest is Test, SetupWithdrawalQueue {
     }
 
     function test_GetWithdrawalStatus_ArrayMatchesSingle() public {
-        pool.depositETH{value: 100 ether}(address(0));
+        pool.depositETH{value: 100 ether}(address(this), address(0));
         uint256 requestId1 = pool.requestWithdrawal(10 ** STV_DECIMALS);
         uint256 requestId2 = pool.requestWithdrawal(2 * 10 ** STV_DECIMALS);
 
@@ -73,7 +73,7 @@ contract ViewsTest is Test, SetupWithdrawalQueue {
     }
 
     function test_GetClaimableEther_ViewLifecycle() public {
-        pool.depositETH{value: 100 ether}(address(0));
+        pool.depositETH{value: 100 ether}(address(this), address(0));
         uint256 requestId = pool.requestWithdrawal(10 ** STV_DECIMALS);
 
         assertEq(withdrawalQueue.getClaimableEther(requestId), 0);
@@ -105,7 +105,7 @@ contract ViewsTest is Test, SetupWithdrawalQueue {
     }
 
     function test_GetClaimableEtherBatch_ReturnsZeroForUnfinalized() public {
-        pool.depositETH{value: 100 ether}(address(0));
+        pool.depositETH{value: 100 ether}(address(this), address(0));
         uint256 requestId = pool.requestWithdrawal(10 ** STV_DECIMALS);
 
         uint256[] memory requestIds = new uint256[](1);

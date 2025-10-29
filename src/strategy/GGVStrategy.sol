@@ -53,7 +53,7 @@ contract GGVStrategy is Strategy {
     function supply(address _referral, bytes calldata _params) external payable {
         address callForwarder = _getOrCreateCallForwarder(msg.sender);
         uint256 stethShares = POOL.calcStethSharesToMintForAssets(msg.value);
-        uint256 stv = POOL.depositETH{value: msg.value}(callForwarder, _referral, stethShares);
+        uint256 stv = POOL.depositETHAndMintStethShares{value: msg.value}(callForwarder, _referral, stethShares);
 
         uint256 stethAmount = STETH.getPooledEthByShares(stethShares);
 

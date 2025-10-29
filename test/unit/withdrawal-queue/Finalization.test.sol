@@ -10,7 +10,7 @@ import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
 contract FinalizationTest is Test, SetupWithdrawalQueue {
     function setUp() public override {
         super.setUp();
-        pool.depositETH{value: 100_000 ether}(address(0));
+        pool.depositETH{value: 100_000 ether}(address(this), address(0));
     }
 
     // Basic Finalization

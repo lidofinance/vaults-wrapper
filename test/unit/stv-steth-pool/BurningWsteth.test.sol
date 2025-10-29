@@ -14,7 +14,7 @@ contract BurningWstethTest is Test, SetupStvStETHPool {
     function setUp() public override {
         super.setUp();
         // Deposit ETH and mint wstETH for testing burn functionality
-        pool.depositETH{value: ethToDeposit}(address(0));
+        pool.depositETH{value: ethToDeposit}(address(this), address(0));
         pool.mintWsteth(wstethToMint);
 
         // Approve pool to spend wstETH for burning

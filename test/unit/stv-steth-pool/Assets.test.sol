@@ -38,7 +38,7 @@ contract AssetsTest is Test, SetupStvStETHPool {
     }
 
     function test_Rebalance_DoNotChangeUserAssets() public {
-        pool.depositETH{value: 4 ether}(address(0));
+        pool.depositETH{value: 4 ether}(address(this), address(0));
         pool.mintStethShares(1 * 10 ** 18);
 
         uint256 assetsBefore = pool.assetsOf(address(this));

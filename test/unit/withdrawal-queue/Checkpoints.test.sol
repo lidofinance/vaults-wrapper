@@ -10,7 +10,7 @@ contract CheckpointsTest is Test, SetupWithdrawalQueue {
         super.setUp();
 
         // Deposit initial ETH to pool for withdrawals
-        pool.depositETH{value: 1000 ether}(address(0));
+        pool.depositETH{value: 1000 ether}(address(this), address(0));
     }
 
     // Basic Checkpoint Operations

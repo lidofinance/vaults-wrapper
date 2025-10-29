@@ -12,7 +12,7 @@ contract MintingWstethTest is Test, SetupStvStETHPool {
     function setUp() public override {
         super.setUp();
         // Deposit some ETH to get minting capacity
-        pool.depositETH{value: ethToDeposit}(address(0));
+        pool.depositETH{value: ethToDeposit}(address(this), address(0));
     }
 
     // Initial state tests
