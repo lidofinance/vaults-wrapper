@@ -113,7 +113,7 @@ contract DeployWrapperFactory is Script {
         LocalFactories memory f = _deployImplFactories();
 
         // Build Factory configuration struct
-        Factory.WrapperConfig memory cfg = Factory.WrapperConfig({
+        Factory.PoolConfig memory cfg = Factory.PoolConfig({
             vaultFactory: core.vaultFactory,
             steth: core.steth,
             wsteth: core.wsteth,
@@ -141,8 +141,8 @@ contract DeployWrapperFactory is Script {
         console2.log("Also updated", "deployments/pool-factory-latest.json");
     }
 
-    // Optional overload to allow passing a pre-built WrapperConfig and skipping internal factory deploys
-    function run(string memory locatorAddressStr, Factory.WrapperConfig memory cfg) external {
+    // Optional overload to allow passing a pre-built PoolConfig and skipping internal factory deploys
+    function run(string memory locatorAddressStr, Factory.PoolConfig memory cfg) external {
         address locatorAddress = vm.parseAddress(locatorAddressStr);
         ILidoLocator locator = ILidoLocator(locatorAddress);
         require(locator.vaultFactory() == cfg.vaultFactory, "vaultFactory mismatch");
@@ -169,7 +169,7 @@ contract DeployWrapperFactory is Script {
     }
 
     // Overload with explicit timelock configuration
-    function run(string memory locatorAddressStr, Factory.WrapperConfig memory cfg, Factory.TimelockConfig memory tcfg)
+    function run(string memory locatorAddressStr, Factory.PoolConfig memory cfg, Factory.TimelockConfig memory tcfg)
         external
     {
         address locatorAddress = vm.parseAddress(locatorAddressStr);

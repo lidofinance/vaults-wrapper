@@ -75,7 +75,7 @@ contract FactoryTest is Test {
         address dummy = address(new DummyImplementation());
         address timelockFactory = address(new TimelockFactory());
 
-        Factory.WrapperConfig memory a = Factory.WrapperConfig({
+        Factory.PoolConfig memory a = Factory.PoolConfig({
             vaultFactory: address(vaultFactory),
             steth: address(stETH),
             wsteth: address(wstETH),

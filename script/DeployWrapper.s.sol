@@ -8,7 +8,7 @@ import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
 import {IOssifiableProxy} from "src/interfaces/IOssifiableProxy.sol";
 
 contract DeployWrapper is Script {
-    struct WrapperParams {
+    struct PoolParams {
         uint256 poolType; // 0:A, 1:B, 2:LOOP, 3:GGV
         address nodeOperator;
         address nodeOperatorManager;
@@ -38,12 +38,12 @@ contract DeployWrapper is Script {
         address wstethAddr;
     }
 
-    function _deployWrapper(Factory factory, WrapperParams memory p)
+    function _deployPool(Factory factory, PoolParams memory p)
         internal
         returns (DeploymentResult memory r)
     {
         address distributor;
-        if (p.poolType == uint256(Factory.WrapperType.NO_MINTING_NO_STRATEGY)) {
+        if (p.poolType == uint256(Factory.PoolType.NO_MINTING_NO_STRATEGY)) {
             (r.vault, r.dashboard, r.poolProxy, r.withdrawalQueueProxy, distributor) = factory
                 .createVaultWithNoMintingNoStrategy{value: p.value}(
                 p.nodeOperator,
@@ -55,7 +55,7 @@ contract DeployWrapper is Script {
                 p.allowlistEnabled,
                 p.timelockExecutor
             );
-        } else if (p.poolType == uint256(Factory.WrapperType.MINTING_NO_STRATEGY)) {
+        } else if (p.poolType == uint256(Factory.PoolType.MINTING_NO_STRATEGY)) {
             (r.vault, r.dashboard, r.poolProxy, r.withdrawalQueueProxy, distributor) = factory
                 .createVaultWithMintingNoStrategy{value: p.value}(
                 p.nodeOperator,
@@ -68,7 +68,7 @@ contract DeployWrapper is Script {
                 p.reserveRatioGapBP,
                 p.timelockExecutor
             );
-        } else if (p.poolType == uint256(Factory.WrapperType.LOOP_STRATEGY)) {
+        } else if (p.poolType == uint256(Factory.PoolType.LOOP_STRATEGY)) {
             (r.vault, r.dashboard, r.poolProxy, r.withdrawalQueueProxy, r.strategy, distributor) = factory
                 .createVaultWithLoopStrategy{value: p.value}(
                 p.nodeOperator,
@@ -82,7 +82,7 @@ contract DeployWrapper is Script {
                 p.loops,
                 p.timelockExecutor
             );
-        } else if (p.poolType == uint256(Factory.WrapperType.GGV_STRATEGY)) {
+        } else if (p.poolType == uint256(Factory.PoolType.GGV_STRATEGY)) {
             (r.vault, r.dashboard, r.poolProxy, r.withdrawalQueueProxy, r.strategy, distributor) = factory
                 .createVaultWithGGVStrategy{value: p.value}(
                 p.nodeOperator,
@@ -111,9 +111,9 @@ contract DeployWrapper is Script {
         r.wstethAddr = factory.WSTETH();
     }
 
-    function _writeWrapperArtifact(
+    function _writePoolArtifact(
         Factory factoryView,
-        WrapperParams memory p,
+        PoolParams memory p,
         DeploymentResult memory r,
         string memory outputJsonPath
     ) internal {
@@ -139,11 +139,11 @@ contract DeployWrapper is Script {
 
         // Pool implementation constructor args
         bytes memory poolImplCtorArgs;
-        if (p.poolType == uint256(Factory.WrapperType.NO_MINTING_NO_STRATEGY)) {
+        if (p.poolType == uint256(Factory.PoolType.NO_MINTING_NO_STRATEGY)) {
             poolImplCtorArgs = abi.encode(r.dashboard, p.allowlistEnabled, r.withdrawalQueueProxy);
-        } else if (p.poolType == uint256(Factory.WrapperType.MINTING_NO_STRATEGY)) {
+        } else if (p.poolType == uint256(Factory.PoolType.MINTING_NO_STRATEGY)) {
             poolImplCtorArgs = abi.encode(r.dashboard, r.stethAddr, p.allowlistEnabled, p.reserveRatioGapBP, r.withdrawalQueueProxy);
-        } else if (p.poolType == uint256(Factory.WrapperType.LOOP_STRATEGY)) {
+        } else if (p.poolType == uint256(Factory.PoolType.LOOP_STRATEGY)) {
             poolImplCtorArgs = abi.encode(r.dashboard, r.stethAddr, p.allowlistEnabled, r.strategy, p.reserveRatioGapBP, r.withdrawalQueueProxy);
         } else {
             // GGV
@@ -176,7 +176,7 @@ contract DeployWrapper is Script {
         require(factory != address(0), "factory not found");
     }
 
-    function _readWrapperParams(string memory path) internal view returns (WrapperParams memory p) {
+    function _readPoolParams(string memory path) internal view returns (PoolParams memory p) {
         string memory json = vm.readFile(path);
         p.poolType = vm.parseJsonUint(json, "$.poolType");
         p.nodeOperator = vm.parseJsonAddress(json, "$.nodeOperator");
@@ -190,16 +190,16 @@ contract DeployWrapper is Script {
 
         // Parse only fields relevant to the pool type
         if (
-            p.poolType == uint256(Factory.WrapperType.MINTING_NO_STRATEGY)
-                || p.poolType == uint256(Factory.WrapperType.LOOP_STRATEGY)
-                || p.poolType == uint256(Factory.WrapperType.GGV_STRATEGY)
+            p.poolType == uint256(Factory.PoolType.MINTING_NO_STRATEGY)
+                || p.poolType == uint256(Factory.PoolType.LOOP_STRATEGY)
+                || p.poolType == uint256(Factory.PoolType.GGV_STRATEGY)
         ) {
             p.reserveRatioGapBP = vm.parseJsonUint(json, "$.reserveRatioGapBP");
         }
-        if (p.poolType == uint256(Factory.WrapperType.LOOP_STRATEGY)) {
+        if (p.poolType == uint256(Factory.PoolType.LOOP_STRATEGY)) {
             p.loops = vm.parseJsonUint(json, "$.loops");
         }
-        if (p.poolType == uint256(Factory.WrapperType.GGV_STRATEGY)) {
+        if (p.poolType == uint256(Factory.PoolType.GGV_STRATEGY)) {
             address ggvTeller = address(0);
             address ggvQueue = address(0);
             try vm.parseJsonAddress(json, "$.ggv.teller") returns (address t) {
@@ -230,7 +230,7 @@ contract DeployWrapper is Script {
         }
 
         address factoryAddr = _readFactoryAddress(factoryJsonPath);
-        WrapperParams memory p = _readWrapperParams(paramsJsonPath);
+        PoolParams memory p = _readPoolParams(paramsJsonPath);
 
         // Check Lido total shares before broadcasting
         Factory factoryView = Factory(factoryAddr);
@@ -263,14 +263,14 @@ contract DeployWrapper is Script {
         }
 
         vm.startBroadcast();
-        DeploymentResult memory r = _deployWrapper(factoryView, p);
+        DeploymentResult memory r = _deployPool(factoryView, p);
         vm.stopBroadcast();
 
         // write artifact
-        _writeWrapperArtifact(factoryView, p, r, outputJsonPath);
+        _writePoolArtifact(factoryView, p, r, outputJsonPath);
 
-        console2.log("Wrapper deployed: vault", r.vault);
-        console2.log("Wrapper proxy:", r.poolProxy);
+        console2.log("Pool deployed: vault", r.vault);
+        console2.log("Pool proxy:", r.poolProxy);
         console2.log("WithdrawalQueue:", r.withdrawalQueueProxy);
         if (r.strategy != address(0)) console2.log("Strategy:", r.strategy);
         console2.log("Output written to", outputJsonPath);

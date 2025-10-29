@@ -15,7 +15,7 @@ contract StvStETHPoolHarness is StvPoolHarness {
         returns (WrapperContext memory)
     {
         DeploymentConfig memory config = DeploymentConfig({
-            configuration: Factory.WrapperType.MINTING_NO_STRATEGY,
+            configuration: Factory.PoolType.MINTING_NO_STRATEGY,
             enableAllowlist: enableAllowlist,
             reserveRatioGapBP: reserveRatioGapBP,
             nodeOperator: NODE_OPERATOR,

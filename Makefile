@@ -58,6 +58,13 @@ deploy-factory:
 		export ETHERSCAN_API_KEY="$${ETHERSCAN_API_KEY:-$${ETHERSCAN_TOKEN}}"; \
 		VERIFY_FLAGS="--verify --verifier etherscan"; \
 	fi; \
+	GAS_FLAGS=""; \
+	if [ -n "$$GAS_PRIORITY_FEE" ]; then \
+		GAS_FLAGS="$$GAS_FLAGS --priority-gas-price $$GAS_PRIORITY_FEE"; \
+	fi; \
+	if [ -n "$$GAS_MAX_FEE" ]; then \
+		GAS_FLAGS="$$GAS_FLAGS --with-gas-price $$GAS_MAX_FEE"; \
+	fi; \
 	OUTPUT_JSON=$(OUTPUT_JSON) \
 	forge script script/DeployWrapperFactory.s.sol:DeployWrapperFactory \
 		--rpc-url $${RPC_URL:-http://localhost:9123} \
@@ -65,6 +72,7 @@ deploy-factory:
 		--private-key $${PRIVATE_KEY:-$(PRIVATE_KEY)} \
 		--sender $${DEPLOYER:-$(DEPLOYER)} \
 		$$VERIFY_FLAGS \
+		$$GAS_FLAGS \
 		--slow \
 		-vvvv \
 		--sig 'run()' \
@@ -248,19 +256,23 @@ deploy-all:
 	PRIVATE_KEY="$$PRIVATE_KEY" \
 	DEPLOYER="$$DEPLOYER" \
 	PUBLISH_SOURCES="$$PUBLISH_SOURCES" \
+	GAS_PRIORITY_FEE="$$GAS_PRIORITY_FEE" \
+	GAS_MAX_FEE="$$GAS_MAX_FEE" \
 	$(MAKE) deploy-factory; \
 	# 2) Deploy all wrappers from configs using existing make target
 	WRAPPER_CONFIGS=$${WRAPPER_CONFIGS:-"script/stv-pool-deploy-config-hoodi.json script/stv-steth-pool-deploy-config-hoodi.json script/stv-ggv-pool-deploy-config-hoodi.json"}; \
-	CHAIN_ID=$$(cast chain-id --rpc-url "$${RPC_URL}"); \
+	CHAIN_ID=$$(cast chain-id --rpc-url "$$RPC_URL"); \
 	for CFG in $$WRAPPER_CONFIGS; do \
 		if [ -f "$$CFG" ]; then \
 			BASENAME=$$(basename "$$CFG" .json); \
 			OUT="deployments/pool-instance-$$BASENAME-$$CHAIN_ID-$$(date +%s).json"; \
 			WRAPPER_DEPLOYED_JSON="$$OUT" \
-			BUMP_CORE_FACTORY_NONCE="$${BUMP_CORE_FACTORY_NONCE:-0}" \
+			BUMP_CORE_FACTORY_NONCE="$$${BUMP_CORE_FACTORY_NONCE:-0}" \
 			RPC_URL="$$RPC_URL" \
 			DEPLOYER="$$DEPLOYER" \
 			PRIVATE_KEY="$$PRIVATE_KEY" \
+			GAS_PRIORITY_FEE="$$GAS_PRIORITY_FEE" \
+			GAS_MAX_FEE="$$GAS_MAX_FEE" \
 			$(MAKE) deploy-pool-from-factory PARAMS_JSON="$$CFG"; \
 			echo "Deployed wrapper: $$CFG -> $$OUT"; \
 		else \

@@ -41,7 +41,7 @@ contract FactoryHelper {
         external
         returns (Factory factory)
     {
-        Factory.WrapperConfig memory a = Factory.WrapperConfig({
+        Factory.PoolConfig memory a = Factory.PoolConfig({
             vaultFactory: _vaultFactory,
             steth: _steth,
             wsteth: _wsteth,

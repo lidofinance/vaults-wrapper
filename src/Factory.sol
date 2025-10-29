@@ -20,7 +20,7 @@ import {IDashboard} from "./interfaces/IDashboard.sol";
 error InvalidConfiguration();
 
 contract Factory {
-    struct WrapperConfig {
+    struct PoolConfig {
         address vaultFactory;
         address steth;
         address wsteth;
@@ -55,25 +55,25 @@ contract Factory {
     address public immutable DUMMY_IMPLEMENTATION;
     uint256 public immutable TIMELOCK_MIN_DELAY;
     uint256 public constant TOTAL_BASIS_POINTS = 100_00;
-    string constant NAME = "Staked ETH Vault Wrapper";
+    string constant NAME = "Staked ETH Vault Pool";
     string constant SYMBOL = "stvToken";
 
-    event VaultWrapperCreated(
+    event VaultPoolCreated(
         address indexed vault,
         address indexed pool,
         address indexed withdrawalQueue,
         address strategy,
-        WrapperType configuration
+        PoolType configuration
     );
 
-    enum WrapperType {
+    enum PoolType {
         NO_MINTING_NO_STRATEGY,
         MINTING_NO_STRATEGY,
         LOOP_STRATEGY,
         GGV_STRATEGY
     }
 
-    constructor(WrapperConfig memory poolConfig, TimelockConfig memory timelockConfig) {
+    constructor(PoolConfig memory poolConfig, TimelockConfig memory timelockConfig) {
         VAULT_FACTORY = IVaultFactory(poolConfig.vaultFactory);
         STETH = poolConfig.steth;
         WSTETH = poolConfig.wsteth;
@@ -91,14 +91,14 @@ contract Factory {
         TIMELOCK_MIN_DELAY = timelockConfig.minDelaySeconds;
     }
 
-    function createVaultWithConfiguredWrapper(
+    function createVaultWithConfiguredPool(
         address _nodeOperator,
         address _nodeOperatorManager,
         uint256 _nodeOperatorFeeBP,
         uint256 _confirmExpiry,
         uint256 _maxFinalizationTime,
         uint256 _minWithdrawalDelayTime,
-        WrapperType _configuration,
+        PoolType _configuration,
         address _strategy,
         bool _allowlistEnabled,
         uint256 _reserveRatioGapBP,
@@ -117,11 +117,11 @@ contract Factory {
         );
 
         address usedStrategy = _strategy;
-        if (_configuration == WrapperType.LOOP_STRATEGY && usedStrategy == address(0)) {
+        if (_configuration == PoolType.LOOP_STRATEGY && usedStrategy == address(0)) {
             usedStrategy = LOOP_STRATEGY_FACTORY.deploy(STETH, address(_poolProxy), 1);
         }
 
-        BasePool pool = _deployAndInitWrapper(
+        BasePool pool = _deployAndInitPool(
             _configuration,
             dashboard,
             _allowlistEnabled,
@@ -208,8 +208,8 @@ contract Factory {
             _nodeOperator, _nodeOperatorManager, _nodeOperatorFeeBP, _confirmExpiry, _maxFinalizationTime, _minWithdrawalDelayTime
         );
 
-        BasePool pool = _deployAndInitWrapper(
-            WrapperType.NO_MINTING_NO_STRATEGY,
+        BasePool pool = _deployAndInitPool(
+            PoolType.NO_MINTING_NO_STRATEGY,
             dashboard,
             _allowlistEnabled,
             0,
@@ -225,7 +225,7 @@ contract Factory {
             _poolProxy,
             _withdrawalQueueProxy,
             vault,
-            WrapperType.NO_MINTING_NO_STRATEGY,
+            PoolType.NO_MINTING_NO_STRATEGY,
             address(0)
         );
         _finalizeDistributor(_distributor);
@@ -302,8 +302,8 @@ contract Factory {
             _nodeOperator, _nodeOperatorManager, _nodeOperatorFeeBP, _confirmExpiry, _maxFinalizationTime, _minWithdrawalDelayTime
         );
 
-        BasePool pool = _deployAndInitWrapper(
-            WrapperType.MINTING_NO_STRATEGY,
+        BasePool pool = _deployAndInitPool(
+            PoolType.MINTING_NO_STRATEGY,
             dashboard,
             _allowlistEnabled,
             _reserveRatioGapBP,
@@ -319,10 +319,10 @@ contract Factory {
             _poolProxy,
             _withdrawalQueueProxy,
             vault,
-            WrapperType.MINTING_NO_STRATEGY,
+            PoolType.MINTING_NO_STRATEGY,
             address(0)
         );
-        
+
         _finalizeDistributor(_distributor);
         _finalizeGovernance(_poolProxy, _withdrawalQueueProxy, _timelockExecutor);
     }
@@ -402,8 +402,8 @@ contract Factory {
 
         loopStrategy = LOOP_STRATEGY_FACTORY.deploy(STETH, address(_poolProxy), _loops);
 
-        BasePool pool = _deployAndInitWrapper(
-            WrapperType.LOOP_STRATEGY,
+        BasePool pool = _deployAndInitPool(
+            PoolType.LOOP_STRATEGY,
             dashboard,
             _allowlistEnabled,
             _reserveRatioGapBP,
@@ -414,7 +414,7 @@ contract Factory {
         );
 
         _configureAndFinalize(
-            _dashboard, pool, _poolProxy, _withdrawalQueueProxy, vault, WrapperType.LOOP_STRATEGY, loopStrategy
+            _dashboard, pool, _poolProxy, _withdrawalQueueProxy, vault, PoolType.LOOP_STRATEGY, loopStrategy
         );
         _finalizeDistributor(_distributor);
 
@@ -501,8 +501,8 @@ contract Factory {
 
         ggvStrategy = GGV_STRATEGY_FACTORY.deploy(_poolProxy, STETH, WSTETH, _teller, _boringQueue);
 
-        BasePool pool = _deployAndInitWrapper(
-            WrapperType.GGV_STRATEGY,
+        BasePool pool = _deployAndInitPool(
+            PoolType.GGV_STRATEGY,
             dashboard,
             _allowlistEnabled,
             _reserveRatioGapBP,
@@ -513,15 +513,15 @@ contract Factory {
         );
 
         _configureAndFinalize(
-            _dashboard, pool, _poolProxy, _withdrawalQueueProxy, vault, WrapperType.GGV_STRATEGY, ggvStrategy
+            _dashboard, pool, _poolProxy, _withdrawalQueueProxy, vault, PoolType.GGV_STRATEGY, ggvStrategy
         );
         _finalizeDistributor(_distributor);
 
         _finalizeGovernance(_poolProxy, _withdrawalQueueProxy, _timelockExecutor);
     }
 
-    function _deployWrapper(
-        WrapperType _configuration,
+    function _deployPool(
+        PoolType _configuration,
         address dashboard,
         bool _allowlistEnabled,
         uint256 _reserveRatioGapBP,
@@ -531,13 +531,13 @@ contract Factory {
     ) internal returns (address poolImpl) {
         if (_reserveRatioGapBP >= TOTAL_BASIS_POINTS) revert InvalidConfiguration();
 
-        if (_configuration == WrapperType.NO_MINTING_NO_STRATEGY) {
+        if (_configuration == PoolType.NO_MINTING_NO_STRATEGY) {
             poolImpl = STV_POOL_FACTORY.deploy(dashboard, _allowlistEnabled, withdrawalQueueProxy, distributor);
             assert(keccak256(bytes(BasePool(payable(poolImpl)).wrapperType())) == keccak256(bytes("StvPool")));
-        } else if (_configuration == WrapperType.MINTING_NO_STRATEGY) {
+        } else if (_configuration == PoolType.MINTING_NO_STRATEGY) {
             poolImpl = STV_STETH_POOL_FACTORY.deploy(dashboard, _allowlistEnabled, _reserveRatioGapBP, withdrawalQueueProxy, distributor);
             assert(keccak256(bytes(BasePool(payable(poolImpl)).wrapperType())) == keccak256(bytes("StvStETHPool")));
-        } else if (_configuration == WrapperType.LOOP_STRATEGY || _configuration == WrapperType.GGV_STRATEGY) {
+        } else if (_configuration == PoolType.LOOP_STRATEGY || _configuration == PoolType.GGV_STRATEGY) {
             if (_strategy == address(0)) revert InvalidConfiguration();
             poolImpl = STV_STRATEGY_POOL_FACTORY.deploy(
                 dashboard,
@@ -582,9 +582,9 @@ contract Factory {
         _dashboard = IDashboard(payable(dashboard));
 
         poolProxy = payable(address(new OssifiableProxy(DUMMY_IMPLEMENTATION, address(this), bytes(""))));
-        
+
         distributor = DISTRIBUTOR_FACTORY.deploy(address(this));
-        
+
         address wqImpl = WITHDRAWAL_QUEUE_FACTORY.deploy(
             address(poolProxy),
             dashboard,
@@ -602,8 +602,8 @@ contract Factory {
         );
     }
 
-    function _deployAndInitWrapper(
-        WrapperType _configuration,
+    function _deployAndInitPool(
+        PoolType _configuration,
         address dashboard,
         bool _allowlistEnabled,
         uint256 _reserveRatioGapBP,
@@ -612,7 +612,7 @@ contract Factory {
         address _strategy,
         address payable poolProxy
     ) internal returns (BasePool pool) {
-        address poolImpl = _deployWrapper(
+        address poolImpl = _deployPool(
             _configuration, dashboard, _allowlistEnabled, _reserveRatioGapBP, withdrawalQueueProxy, distributor, _strategy
         );
 
@@ -641,14 +641,14 @@ contract Factory {
         address payable poolProxy,
         address withdrawalQueueProxy,
         address vault,
-        WrapperType _configuration,
+        PoolType _configuration,
         address _strategy
     ) internal {
         _dashboard.grantRole(_dashboard.FUND_ROLE(), address(poolProxy));
         _dashboard.grantRole(_dashboard.WITHDRAW_ROLE(), withdrawalQueueProxy);
         _dashboard.grantRole(_dashboard.REBALANCE_ROLE(), address(poolProxy));
 
-        if (_configuration != WrapperType.NO_MINTING_NO_STRATEGY) {
+        if (_configuration != PoolType.NO_MINTING_NO_STRATEGY) {
             _dashboard.grantRole(_dashboard.MINT_ROLE(), address(poolProxy));
             _dashboard.grantRole(_dashboard.BURN_ROLE(), address(poolProxy));
         }
@@ -665,7 +665,7 @@ contract Factory {
         _dashboard.grantRole(_dashboard.DEFAULT_ADMIN_ROLE(), msg.sender);
         _dashboard.revokeRole(_dashboard.DEFAULT_ADMIN_ROLE(), address(this));
 
-        emit VaultWrapperCreated(vault, address(pool), withdrawalQueueProxy, _strategy, _configuration);
+        emit VaultPoolCreated(vault, address(pool), withdrawalQueueProxy, _strategy, _configuration);
     }
 
     function _finalizeDistributor(address _distributor) internal {

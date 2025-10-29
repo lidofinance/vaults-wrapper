@@ -48,7 +48,7 @@ contract StvPoolHarness is Test {
 
     // Deployment configuration struct
     struct DeploymentConfig {
-        Factory.WrapperType configuration;
+        Factory.PoolType configuration;
         bool enableAllowlist;
         uint256 reserveRatioGapBP;
         address nodeOperator;
@@ -118,7 +118,7 @@ contract StvPoolHarness is Test {
         }
 
         vm.startPrank(config.nodeOperator);
-        if (config.configuration == Factory.WrapperType.NO_MINTING_NO_STRATEGY) {
+        if (config.configuration == Factory.PoolType.NO_MINTING_NO_STRATEGY) {
             (vault_, dashboard_, poolAddress, withdrawalQueue_, distributor_) = factory.createVaultWithNoMintingNoStrategy{
                 value: CONNECT_DEPOSIT
             }(
@@ -130,7 +130,7 @@ contract StvPoolHarness is Test {
                 config.minWithdrawalDelayTime,
                 config.enableAllowlist
             );
-        } else if (config.configuration == Factory.WrapperType.MINTING_NO_STRATEGY) {
+        } else if (config.configuration == Factory.PoolType.MINTING_NO_STRATEGY) {
             (vault_, dashboard_, poolAddress, withdrawalQueue_, distributor_) = factory.createVaultWithMintingNoStrategy{
                 value: CONNECT_DEPOSIT
             }(
@@ -143,7 +143,7 @@ contract StvPoolHarness is Test {
                 config.enableAllowlist,
                 config.reserveRatioGapBP
             );
-        } else if (config.configuration == Factory.WrapperType.LOOP_STRATEGY) {
+        } else if (config.configuration == Factory.PoolType.LOOP_STRATEGY) {
             uint256 loops = 1;
             (vault_, dashboard_, poolAddress, withdrawalQueue_, strategy_, distributor_) = factory.createVaultWithLoopStrategy{
                 value: CONNECT_DEPOSIT
@@ -158,7 +158,7 @@ contract StvPoolHarness is Test {
                 config.reserveRatioGapBP,
                 loops
             );
-        } else if (config.configuration == Factory.WrapperType.GGV_STRATEGY) {
+        } else if (config.configuration == Factory.PoolType.GGV_STRATEGY) {
             (vault_, dashboard_, poolAddress, withdrawalQueue_, strategy_, distributor_) = factory.createVaultWithGGVStrategy{
                 value: CONNECT_DEPOSIT
             }(
@@ -198,7 +198,7 @@ contract StvPoolHarness is Test {
         returns (WrapperContext memory context)
     {
         DeploymentConfig memory config = DeploymentConfig({
-            configuration: Factory.WrapperType.NO_MINTING_NO_STRATEGY,
+            configuration: Factory.PoolType.NO_MINTING_NO_STRATEGY,
             enableAllowlist: enableAllowlist,
             reserveRatioGapBP: 0,
             nodeOperator: NODE_OPERATOR,

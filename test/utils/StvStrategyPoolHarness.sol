@@ -21,7 +21,7 @@ contract StvStrategyPoolHarness is StvStETHPoolHarness {
         address _boringQueue
     ) internal returns (WrapperContext memory) {
         DeploymentConfig memory config = DeploymentConfig({
-            configuration: Factory.WrapperType.GGV_STRATEGY,
+            configuration: Factory.PoolType.GGV_STRATEGY,
             enableAllowlist: enableAllowlist,
             reserveRatioGapBP: reserveRatioGapBP,
             nodeOperator: NODE_OPERATOR,
