@@ -159,16 +159,6 @@ abstract contract BasePool is Initializable, ERC20Upgradeable, AllowList {
     }
 
     /**
-     * @notice Amount of minted stETH exceeding the Staking Vault's liability
-     * @return steth Amount of exceeding stETH (18 decimals)
-     * @dev May occur if rebalancing happens on the Staking Vault bypassing the Wrapper
-     * @dev Overridable method to support stETH shares minting
-     */
-    function totalExceedingMintedSteth() public view virtual returns (uint256 steth) {
-        steth = 0;
-    }
-
-    /**
      * @notice Returns the number of decimals used to get its user representation.
      * @return Number of decimals (27)
      */
@@ -353,6 +343,15 @@ abstract contract BasePool is Initializable, ERC20Upgradeable, AllowList {
         super._update(_from, _to, _value);
     }
 
+    /**
+     * @dev Overridden method from ERC20 bypassing checks in overridden `_update` method
+     * Note that `_update` method is overridable and can have additional checks in child contracts
+     */
+    function _burnForWithdrawalQueue(uint256 _stv) internal {
+        _checkNoUnassignedLiability();
+        super._update(address(WITHDRAWAL_QUEUE), address(0), _stv);
+    }
+
     // =================================================================================
     // WITHDRAWALS
     // =================================================================================
@@ -378,96 +377,24 @@ abstract contract BasePool is Initializable, ERC20Upgradeable, AllowList {
     }
 
     /**
-     * @notice Request a withdrawal by specifying the amount of assets to withdraw
-     * @param _assetsToWithdraw The amount of assets to withdraw (18 decimals)
-     * @return requestId The ID of the withdrawal request
+     * @notice Transfer stv from user to WithdrawalQueue contract when enqueuing withdrawal requests
+     * @param _from Address of the user
+     * @param _stv Amount of stv to transfer (27 decimals)
+     * @dev Can only be called by the WithdrawalQueue contract
      */
-    function requestWithdrawalETH(uint256 _assetsToWithdraw) public virtual returns (uint256 requestId) {
-        uint256 stvToWithdraw = _convertToStv(_assetsToWithdraw, Math.Rounding.Ceil);
-        requestId = requestWithdrawal(stvToWithdraw);
+    function transferFromForWithdrawalQueue(address _from, uint256 _stv) external {
+        _checkOnlyWithdrawalQueue();
+        _transfer(_from, address(WITHDRAWAL_QUEUE), _stv);
     }
 
     /**
-     * @notice Request a withdrawal by specifying the amount of stv to withdraw
-     * @param _stvToWithdraw The amount of stv to withdraw (27 decimals)
-     * @param _receiver The address to receive the claimed ether, or address(0)
-     * @return requestId The ID of the withdrawal request
-     */
-    function requestWithdrawal(uint256 _stvToWithdraw, address _receiver) public virtual returns (uint256 requestId) {
-        address receiver = _receiver == address(0) ? msg.sender : _receiver;
-        _transfer(msg.sender, address(WITHDRAWAL_QUEUE), _stvToWithdraw);
-        requestId = WITHDRAWAL_QUEUE.requestWithdrawal(_stvToWithdraw, 0 /** stethSharesToRebalance */, receiver);
-    }
-
-    /**
-     * @notice Request a withdrawal by specifying the amount of stv to withdraw
-     * @param _stvToWithdraw The amount of stv to withdraw (27 decimals)
-     * @return requestId The ID of the withdrawal request
-     */
-    function requestWithdrawal(uint256 _stvToWithdraw) public virtual returns (uint256 requestId) {
-        requestId = requestWithdrawal(_stvToWithdraw, msg.sender);
-    }
-
-    /**
-     * @notice Request multiple withdrawals by specifying the amounts of stv to withdraw
-     * @param _stvToWithdraw The array of amounts of stv to withdraw (27 decimals)
-     * @param _receiver The address to receive the claimed ether, or address(0)
-     * @return requestIds The array of IDs of the created withdrawal requests
-     * @dev If _receiver is address(0), it defaults to msg.sender
-     */
-    function requestWithdrawals(
-        uint256[] calldata _stvToWithdraw,
-        address _receiver
-    ) public virtual returns (uint256[] memory requestIds) {
-        address receiver = _receiver == address(0) ? msg.sender : _receiver;
-        uint256[] memory stethSharesToRebalance = new uint256[](_stvToWithdraw.length);
-        uint256 totalStvToTransfer;
-
-        for (uint256 i = 0; i < _stvToWithdraw.length; ++i) {
-            totalStvToTransfer += _stvToWithdraw[i];
-        }
-
-        _transfer(msg.sender, address(WITHDRAWAL_QUEUE), totalStvToTransfer);
-        requestIds = WITHDRAWAL_QUEUE.requestWithdrawals(_stvToWithdraw, stethSharesToRebalance, receiver);
-    }
-
-    /**
-     * @notice Claim finalized withdrawal request
-     * @param _requestId The withdrawal request ID to claim
-     * @param _recipient The address to receive the claimed ether
-     * @return ethClaimed The amount of ether claimed (18 decimals)
-     * @dev If _recipient is address(0), it defaults to msg.sender
-     */
-    function claimWithdrawal(uint256 _requestId, address _recipient) external virtual returns (uint256 ethClaimed) {
-        address recipient = _recipient == address(0) ? msg.sender : _recipient;
-        ethClaimed = WITHDRAWAL_QUEUE.claimWithdrawal(_requestId, msg.sender, recipient);
-    }
-
-    /**
-     * @notice Claim multiple finalized withdrawal requests
-     * @param _requestIds The array of withdrawal request IDs to claim
-     * @param _hints Checkpoint hints. Can be found with `WQ.findCheckpointHints(_requestIds, 1, getLastCheckpointIndex())`
-     * @param _recipient The address to receive the claimed ether
-     * @return claimedEth The array of amounts of ether claimed for each request (18 decimals)
-     * @dev If _recipient is address(0), it defaults to msg.sender
-     */
-    function claimWithdrawals(
-        uint256[] calldata _requestIds,
-        uint256[] calldata _hints,
-        address _recipient
-    ) external virtual returns (uint256[] memory claimedEth) {
-        address recipient = _recipient == address(0) ? msg.sender : _recipient;
-        claimedEth = WITHDRAWAL_QUEUE.claimWithdrawals(_requestIds, _hints, msg.sender, recipient);
-    }
-
-    /**
-     * @notice Burn stv from WithdrawalQueue contract when processing withdrawal requests
+     * @notice Burn stv from WithdrawalQueue contract when finalizing withdrawal requests
      * @param _stv Amount of stv to burn (27 decimals)
      * @dev Can only be called by the WithdrawalQueue contract
      */
     function burnStvForWithdrawalQueue(uint256 _stv) external {
         _checkOnlyWithdrawalQueue();
-        _burn(msg.sender, _stv);
+        _burnForWithdrawalQueue(_stv);
     }
 
     function _checkOnlyWithdrawalQueue() internal view {

@@ -108,12 +108,14 @@ contract Factory {
         payable
         returns (address vault, address dashboard, address payable poolProxy, address withdrawalQueueProxy, address distributor)
     {
+        bool isRebalancingSupported = _configuration == WrapperType.NO_MINTING_NO_STRATEGY ? false : true;
+
         IDashboard _dashboard;
         address payable _poolProxy;
         address _withdrawalQueueProxy;
         address _distributor;
         (vault, dashboard, _dashboard, _poolProxy, _withdrawalQueueProxy, _distributor) = _setupVaultAndProxies(
-            _nodeOperator, _nodeOperatorManager, _nodeOperatorFeeBP, _confirmExpiry, _maxFinalizationTime, _minWithdrawalDelayTime
+            _nodeOperator, _nodeOperatorManager, _nodeOperatorFeeBP, _confirmExpiry, _maxFinalizationTime, _minWithdrawalDelayTime, isRebalancingSupported
         );
 
         address usedStrategy = _strategy;
@@ -205,7 +207,7 @@ contract Factory {
     ) internal returns (address vault, address dashboard, address payable _poolProxy, address _withdrawalQueueProxy, address _distributor) {
         IDashboard _dashboard;
         (vault, dashboard, _dashboard, _poolProxy, _withdrawalQueueProxy, _distributor) = _setupVaultAndProxies(
-            _nodeOperator, _nodeOperatorManager, _nodeOperatorFeeBP, _confirmExpiry, _maxFinalizationTime, _minWithdrawalDelayTime
+            _nodeOperator, _nodeOperatorManager, _nodeOperatorFeeBP, _confirmExpiry, _maxFinalizationTime, _minWithdrawalDelayTime, false
         );
 
         BasePool pool = _deployAndInitWrapper(
@@ -299,7 +301,7 @@ contract Factory {
         IDashboard _dashboard;
 
         (vault, dashboard, _dashboard, _poolProxy, _withdrawalQueueProxy, _distributor) = _setupVaultAndProxies(
-            _nodeOperator, _nodeOperatorManager, _nodeOperatorFeeBP, _confirmExpiry, _maxFinalizationTime, _minWithdrawalDelayTime
+            _nodeOperator, _nodeOperatorManager, _nodeOperatorFeeBP, _confirmExpiry, _maxFinalizationTime, _minWithdrawalDelayTime, true
         );
 
         BasePool pool = _deployAndInitWrapper(
@@ -397,7 +399,7 @@ contract Factory {
     ) internal returns (address vault, address dashboard, address payable _poolProxy, address _withdrawalQueueProxy, address loopStrategy, address _distributor) {
         IDashboard _dashboard;
         (vault, dashboard, _dashboard, _poolProxy, _withdrawalQueueProxy, _distributor) = _setupVaultAndProxies(
-            _nodeOperator, _nodeOperatorManager, _nodeOperatorFeeBP, _confirmExpiry, _maxFinalizationTime, _minWithdrawalDelayTime
+            _nodeOperator, _nodeOperatorManager, _nodeOperatorFeeBP, _confirmExpiry, _maxFinalizationTime, _minWithdrawalDelayTime, true
         );
 
         loopStrategy = LOOP_STRATEGY_FACTORY.deploy(STETH, address(_poolProxy), _loops);
@@ -496,7 +498,7 @@ contract Factory {
     ) internal returns (address vault, address dashboard, address payable _poolProxy, address _withdrawalQueueProxy, address ggvStrategy, address _distributor) {
         IDashboard _dashboard;
         (vault, dashboard, _dashboard, _poolProxy, _withdrawalQueueProxy, _distributor) = _setupVaultAndProxies(
-            _nodeOperator, _nodeOperatorManager, _nodeOperatorFeeBP, _confirmExpiry, _maxFinalizationTime, _minWithdrawalDelayTime
+            _nodeOperator, _nodeOperatorManager, _nodeOperatorFeeBP, _confirmExpiry, _maxFinalizationTime, _minWithdrawalDelayTime, true
         );
 
         ggvStrategy = GGV_STRATEGY_FACTORY.deploy(_poolProxy, STETH, WSTETH, _teller, _boringQueue);
@@ -558,7 +560,8 @@ contract Factory {
         uint256 _nodeOperatorFeeBP,
         uint256 _confirmExpiry,
         uint256 _maxFinalizationTime,
-        uint256 _minWithdrawalDelayTime
+        uint256 _minWithdrawalDelayTime,
+        bool _isRebalancingSupported
     )
         internal
         returns (
@@ -593,7 +596,8 @@ contract Factory {
             vault,
             LAZY_ORACLE,
             _maxFinalizationTime,
-            _minWithdrawalDelayTime
+            _minWithdrawalDelayTime,
+            _isRebalancingSupported
         );
         withdrawalQueueProxy = address(
             new OssifiableProxy(

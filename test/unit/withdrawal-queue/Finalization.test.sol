@@ -16,7 +16,7 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
     // Basic Finalization
 
     function test_Finalize_SimpleRequestAndFinalization() public {
-        uint256 requestId = pool.requestWithdrawal(10 ** STV_DECIMALS);
+        uint256 requestId = withdrawalQueue.requestWithdrawal(address(this), 10 ** STV_DECIMALS, 0);
 
         // Verify request was created
         assertEq(requestId, 1);
@@ -46,9 +46,9 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
     }
 
     function test_Finalize_MultipleRequests() public {
-        pool.requestWithdrawal(10 ** STV_DECIMALS);
-        pool.requestWithdrawal(10 ** STV_DECIMALS);
-        pool.requestWithdrawal(10 ** STV_DECIMALS);
+        withdrawalQueue.requestWithdrawal(address(this), 10 ** STV_DECIMALS, 0);
+        withdrawalQueue.requestWithdrawal(address(this), 10 ** STV_DECIMALS, 0);
+        withdrawalQueue.requestWithdrawal(address(this), 10 ** STV_DECIMALS, 0);
 
         // Verify all requests created
         assertEq(withdrawalQueue.getLastRequestId(), 3);
@@ -74,9 +74,9 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
     }
 
     function test_Finalize_PartialFinalization() public {
-        pool.requestWithdrawal(10 ** STV_DECIMALS);
-        pool.requestWithdrawal(10 ** STV_DECIMALS);
-        pool.requestWithdrawal(10 ** STV_DECIMALS);
+        withdrawalQueue.requestWithdrawal(address(this), 10 ** STV_DECIMALS, 0);
+        withdrawalQueue.requestWithdrawal(address(this), 10 ** STV_DECIMALS, 0);
+        withdrawalQueue.requestWithdrawal(address(this), 10 ** STV_DECIMALS, 0);
 
         assertEq(withdrawalQueue.getLastRequestId(), 3);
 
@@ -96,7 +96,7 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
     // Restrictions
 
     function test_Finalize_RevertMinDelayNotPassed() public {
-        pool.requestWithdrawal(10 ** STV_DECIMALS);
+        withdrawalQueue.requestWithdrawal(address(this), 10 ** STV_DECIMALS, 0);
 
         // Don't advance time enough
         vm.warp(block.timestamp + MIN_WITHDRAWAL_DELAY_TIME - 1);
@@ -114,7 +114,7 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
         // Move time forward and create request after report
         vm.warp(block.timestamp + 1 hours);
 
-        pool.requestWithdrawal(10 ** STV_DECIMALS);
+        withdrawalQueue.requestWithdrawal(address(this), 10 ** STV_DECIMALS, 0);
 
         vm.warp(block.timestamp + MIN_WITHDRAWAL_DELAY_TIME + 1);
 
@@ -125,7 +125,7 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
     }
 
     function test_Finalize_RevertOnlyFinalizeRole() public {
-        pool.requestWithdrawal(10 ** STV_DECIMALS);
+        withdrawalQueue.requestWithdrawal(address(this), 10 ** STV_DECIMALS, 0);
 
         vm.warp(block.timestamp + MIN_WITHDRAWAL_DELAY_TIME + 1);
 
@@ -142,7 +142,7 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
     }
 
     function test_Finalize_RevertWhenPaused() public {
-        pool.requestWithdrawal(10 ** STV_DECIMALS);
+        withdrawalQueue.requestWithdrawal(address(this), 10 ** STV_DECIMALS, 0);
 
         vm.warp(block.timestamp + MIN_WITHDRAWAL_DELAY_TIME + 1);
 
@@ -157,7 +157,7 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
 
     function test_Finalize_ReturnsZeroWhenWithdrawableInsufficient() public {
         uint256 stvToRequest = 10 ** STV_DECIMALS;
-        pool.requestWithdrawal(stvToRequest);
+        withdrawalQueue.requestWithdrawal(address(this), stvToRequest, 0);
 
         vm.warp(block.timestamp + MIN_WITHDRAWAL_DELAY_TIME + 1);
 
@@ -175,8 +175,8 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
         uint256 stvRequest1 = 10 ** STV_DECIMALS;
         uint256 stvRequest2 = 2 * 10 ** STV_DECIMALS;
 
-        pool.requestWithdrawal(stvRequest1);
-        pool.requestWithdrawal(stvRequest2);
+        withdrawalQueue.requestWithdrawal(address(this), stvRequest1, 0);
+        withdrawalQueue.requestWithdrawal(address(this), stvRequest2, 0);
 
         vm.warp(block.timestamp + MIN_WITHDRAWAL_DELAY_TIME + 1);
 
@@ -199,7 +199,7 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
         uint256 stvToRequest = 2 * 10 ** STV_DECIMALS;
 
         pool.mintStethShares(mintedStethShares);
-        pool.requestWithdrawal(stvToRequest, 0, mintedStethShares, address(this));
+        withdrawalQueue.requestWithdrawal(address(this), stvToRequest, mintedStethShares);
 
         vm.warp(block.timestamp + MIN_WITHDRAWAL_DELAY_TIME + 1);
 
@@ -221,7 +221,7 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
         uint256 stvToRequest = 2 * 10 ** STV_DECIMALS;
 
         pool.mintStethShares(mintedStethShares);
-        pool.requestWithdrawal(stvToRequest, 0, mintedStethShares, address(this));
+        withdrawalQueue.requestWithdrawal(address(this), stvToRequest, mintedStethShares);
 
         vm.warp(block.timestamp + MIN_WITHDRAWAL_DELAY_TIME + 1);
 
@@ -241,10 +241,10 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
         uint256 stvToRequest = 2 * 10 ** STV_DECIMALS;
 
         pool.mintStethShares(mintedStethShares);
-        uint256 requestId1 = pool.requestWithdrawal(stvToRequest, 0, mintedStethShares, address(this));
+        uint256 requestId1 = withdrawalQueue.requestWithdrawal(address(this), stvToRequest, mintedStethShares);
 
         pool.mintStethShares(mintedStethShares);
-        uint256 requestId2 = pool.requestWithdrawal(stvToRequest, 0, mintedStethShares, address(this));
+        uint256 requestId2 = withdrawalQueue.requestWithdrawal(address(this), stvToRequest, mintedStethShares);
 
         vm.warp(block.timestamp + MIN_WITHDRAWAL_DELAY_TIME + 1);
 
@@ -264,7 +264,7 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
     // Edge Cases
 
     function test_Finalize_ZeroMaxRequests() public {
-        pool.requestWithdrawal(10 ** STV_DECIMALS);
+        withdrawalQueue.requestWithdrawal(address(this), 10 ** STV_DECIMALS, 0);
 
         vm.warp(block.timestamp + MIN_WITHDRAWAL_DELAY_TIME + 1);
 
@@ -280,7 +280,7 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
     }
 
     function test_Finalize_AlreadyFullyFinalized() public {
-        pool.requestWithdrawal(10 ** STV_DECIMALS);
+        withdrawalQueue.requestWithdrawal(address(this), 10 ** STV_DECIMALS, 0);
 
         vm.warp(block.timestamp + MIN_WITHDRAWAL_DELAY_TIME + 1);
 
@@ -295,7 +295,7 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
     }
 
     function test_Finalize_RevertWhenReportStale() public {
-        pool.requestWithdrawal(10 ** STV_DECIMALS);
+        withdrawalQueue.requestWithdrawal(address(this), 10 ** STV_DECIMALS, 0);
 
         vm.warp(block.timestamp + MIN_WITHDRAWAL_DELAY_TIME + 1);
 
@@ -309,7 +309,7 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
     // Checkpoint Tests
 
     function test_Finalize_CreatesCheckpoint() public {
-        pool.requestWithdrawal(10 ** STV_DECIMALS);
+        withdrawalQueue.requestWithdrawal(address(this), 10 ** STV_DECIMALS, 0);
 
         // Verify no checkpoints initially
         assertEq(withdrawalQueue.getLastCheckpointIndex(), 0);
@@ -326,7 +326,7 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
     // Emergency Exit
 
     function test_Finalize_DuringEmergencyExit() public {
-        pool.requestWithdrawal(10 ** STV_DECIMALS);
+        withdrawalQueue.requestWithdrawal(address(this), 10 ** STV_DECIMALS, 0);
 
         // Set very old timestamp to make queue "stuck"
         vm.warp(block.timestamp + withdrawalQueue.MAX_ACCEPTABLE_WQ_FINALIZATION_TIME_IN_SECONDS() + 1);
@@ -347,7 +347,7 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
     function test_Finalize_RewardsDoNotAffectFinalizationRate() public {
         uint256 stvToRequest = 10 ** STV_DECIMALS;
         uint256 expectedEth = pool.previewRedeem(stvToRequest);
-        uint256 requestId = pool.requestWithdrawal(stvToRequest);
+        uint256 requestId = withdrawalQueue.requestWithdrawal(address(this), stvToRequest, 0);
 
         // Simulate rewards
         uint256 totalAssetsBefore = pool.totalAssets();
@@ -366,7 +366,7 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
 
     function test_Finalize_PenaltiesAffectFinalizationRate() public {
         uint256 stvToRequest = 10 ** STV_DECIMALS;
-        uint256 requestId = pool.requestWithdrawal(stvToRequest);
+        uint256 requestId = withdrawalQueue.requestWithdrawal(address(this), stvToRequest, 0);
 
         // Simulate penalties
         uint256 totalAssetsBefore = pool.totalAssets();

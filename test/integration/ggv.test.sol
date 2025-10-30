@@ -251,12 +251,12 @@ contract GGVTest is StvStrategyPoolHarness {
         console.log("\n[SCENARIO] Step 7. Claim final ETH");
         uint256 userBalanceBeforeClaim = USER1.balance;
 
-        uint256[] memory wqRequestIds = withdrawalQueue.getWithdrawalRequests(USER1);
+        uint256[] memory wqRequestIds = withdrawalQueue.withdrawalRequestsOf(USER1);
 
         //  console.log("requestIds length", wqRequestIds[0]);
 
         vm.prank(USER1);
-        pool.claimWithdrawal(wqRequestIds[0], USER1);
+        withdrawalQueue.claimWithdrawal(USER1, wqRequestIds[0]);
 
         uint256 ethClaimed = USER1.balance - userBalanceBeforeClaim;
         console.log("ETH Claimed:", ethClaimed);

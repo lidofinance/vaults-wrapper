@@ -73,7 +73,8 @@ abstract contract SetupWithdrawalQueue is Test {
             address(dashboard.STAKING_VAULT()),
             address(lazyOracle),
             MAX_ACCEPTABLE_WQ_FINALIZATION_TIME,
-            MIN_WITHDRAWAL_DELAY_TIME
+            MIN_WITHDRAWAL_DELAY_TIME,
+            true
         );
 
         OssifiableProxy wqProxy = new OssifiableProxy(address(wqImpl), owner, "");
@@ -86,15 +87,7 @@ abstract contract SetupWithdrawalQueue is Test {
         vm.startPrank(owner);
         withdrawalQueue.grantRole(withdrawalQueue.PAUSE_ROLE(), pauseRoleHolder);
         withdrawalQueue.grantRole(withdrawalQueue.RESUME_ROLE(), resumeRoleHolder);
-
-        // Pause first (since initialize resets pause state), then resume
-        withdrawalQueue.grantRole(withdrawalQueue.PAUSE_ROLE(), owner);
-        withdrawalQueue.pause();
         vm.stopPrank();
-
-        // Resume the queue
-        vm.prank(resumeRoleHolder);
-        withdrawalQueue.resume();
 
         // Set oracle timestamp to current time
         lazyOracle.mock__updateLatestReportTimestamp(block.timestamp);
@@ -117,7 +110,7 @@ abstract contract SetupWithdrawalQueue is Test {
     // Helper function to create and finalize a withdrawal request
 
     function _requestWithdrawalAndFinalize(uint256 _stvAmount) internal returns (uint256 requestId) {
-        requestId = pool.requestWithdrawal(_stvAmount);
+        requestId = withdrawalQueue.requestWithdrawal(address(this), _stvAmount, 0);
         _finalizeRequests(1);
     }
 

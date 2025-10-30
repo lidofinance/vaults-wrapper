@@ -524,8 +524,7 @@ contract StvStETHPoolTest is StvStETHPoolHarness {
         );
 
         vm.prank(USER1);
-        uint256 requestId = w.requestWithdrawal(rewardsStv, 0, 0, USER1);
-        // same as: uint256 requestId = w.requestWithdrawal(rewardsStv);
+        uint256 requestId = ctx.withdrawalQueue.requestWithdrawal(USER1, rewardsStv, 0);
 
         WithdrawalQueue.WithdrawalRequestStatus memory status = ctx.withdrawalQueue.getWithdrawalStatus(requestId);
         assertEq(status.amountOfAssets, user1Rewards, "Withdrawal request amount should match previewRedeem");
@@ -550,7 +549,7 @@ contract StvStETHPoolTest is StvStETHPoolHarness {
         // User1 claims their withdrawal
         uint256 user1EthBalanceBeforeClaim = USER1.balance;
         vm.prank(USER1);
-        w.claimWithdrawal(requestId, USER1);
+        ctx.withdrawalQueue.claimWithdrawal(USER1, requestId);
 
         assertApproxEqAbs(
             USER1.balance,
@@ -568,8 +567,8 @@ contract StvStETHPoolTest is StvStETHPoolHarness {
         assertGt(w.balanceOf(USER1), stvFor1Wei, "USER1 stv balance should be greater than stvFor1Wei");
 
         vm.startPrank(USER1);
-        vm.expectRevert(StvStETHPool.InsufficientReservedBalance.selector);
-        w.requestWithdrawal(stvFor1Wei);
+        vm.expectRevert(abi.encodeWithSelector(WithdrawalQueue.RequestAmountTooSmall.selector, 1 wei));
+        ctx.withdrawalQueue.requestWithdrawal(USER1, stvFor1Wei, 0);
         vm.stopPrank();
 
         //
@@ -581,16 +580,17 @@ contract StvStETHPoolTest is StvStETHPoolHarness {
         vm.startPrank(USER1);
 
         vm.expectRevert(StvStETHPool.InsufficientReservedBalance.selector);
-        w.requestWithdrawal(stvForMinWithdrawal);
+        ctx.withdrawalQueue.requestWithdrawal(USER1, stvForMinWithdrawal, 0);
 
         steth.approve(address(w), steth.getPooledEthByShares(stethSharesToBurn));
         vm.expectRevert(StvStETHPool.InsufficientReservedBalance.selector);
-        w.requestWithdrawal(stvForMinWithdrawal);
+        ctx.withdrawalQueue.requestWithdrawal(USER1, stvForMinWithdrawal, 0);
 
         steth.increaseAllowance(address(w), steth.getPooledEthByShares(1));
 
         uint256 user1StethSharesBefore = steth.sharesOf(USER1);
-        requestId = w.requestWithdrawal(stvForMinWithdrawal, stethSharesToBurn, 0, USER1);
+        w.burnStethShares(stethSharesToBurn);
+        requestId = ctx.withdrawalQueue.requestWithdrawal(USER1, stvForMinWithdrawal, 0);
 
         vm.stopPrank();
 
@@ -613,7 +613,7 @@ contract StvStETHPoolTest is StvStETHPoolHarness {
 
         uint256 user1EthBefore2 = USER1.balance;
         vm.prank(USER1);
-        w.claimWithdrawal(requestId, USER1);
+        ctx.withdrawalQueue.claimWithdrawal(USER1, requestId);
 
         assertApproxEqAbs(
             USER1.balance,
@@ -632,7 +632,8 @@ contract StvStETHPoolTest is StvStETHPoolHarness {
 
             vm.startPrank(USER1);
             steth.approve(address(w), steth.getPooledEthByShares(burnForRest));
-            uint256 requestId3 = w.requestWithdrawal(remainingStv, burnForRest, 0, USER1);
+            w.burnStethShares(burnForRest);
+            uint256 requestId3 = ctx.withdrawalQueue.requestWithdrawal(USER1, remainingStv, 0);
             vm.stopPrank();
 
             _advancePastMinDelayAndRefreshReport(ctx, requestId3);
@@ -645,7 +646,7 @@ contract StvStETHPoolTest is StvStETHPoolHarness {
 
             uint256 user1EthBefore3 = USER1.balance;
             vm.prank(USER1);
-            w.claimWithdrawal(requestId3, USER1);
+            ctx.withdrawalQueue.claimWithdrawal(USER1, requestId3);
 
             assertApproxEqAbs(
                 USER1.balance,
@@ -682,7 +683,7 @@ contract StvStETHPoolTest is StvStETHPoolHarness {
         //
         uint256 user1Deposit = 100 ether;
         uint256 user1MintedShares = _calcMaxMintableStShares(ctx, user1Deposit);
-        user1MintedShares = user1MintedShares / 2 * 2; // make even for easier half transfer
+        user1MintedShares = user1MintedShares / 4 * 4; // Make it divisible by 4 for easier splits
 
         vm.prank(USER1);
         w.depositETHAndMintStethShares{value: user1Deposit}(USER1, address(0), user1MintedShares);

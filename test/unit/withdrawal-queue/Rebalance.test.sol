@@ -32,7 +32,7 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
         uint256 mintedStethShares = 10 ** ASSETS_DECIMALS;
         uint256 stvToRequest = 2 * 10 ** STV_DECIMALS;
         pool.mintStethShares(mintedStethShares);
-        uint256 requestId = pool.requestWithdrawal(stvToRequest, 0, mintedStethShares, address(this));
+        uint256 requestId = withdrawalQueue.requestWithdrawal(address(this), stvToRequest, mintedStethShares);
 
         // Verify request was created
         assertEq(requestId, 1);
@@ -92,11 +92,11 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
         pool.mintStethShares(5 * mintedStethShares);
         dashboard.mock_simulateRewards(1234566789);
 
-        pool.requestWithdrawal(stvToRequest, 0, mintedStethShares, address(this));
-        pool.requestWithdrawal(stvToRequest, 0, mintedStethShares, address(this));
-        pool.requestWithdrawal(stvToRequest, 0, mintedStethShares, address(this));
-        pool.requestWithdrawal(stvToRequest, 0, mintedStethShares, address(this));
-        pool.requestWithdrawal(stvToRequest, 0, mintedStethShares, address(this));
+        withdrawalQueue.requestWithdrawal(address(this), stvToRequest, mintedStethShares);
+        withdrawalQueue.requestWithdrawal(address(this), stvToRequest, mintedStethShares);
+        withdrawalQueue.requestWithdrawal(address(this), stvToRequest, mintedStethShares);
+        withdrawalQueue.requestWithdrawal(address(this), stvToRequest, mintedStethShares);
+        withdrawalQueue.requestWithdrawal(address(this), stvToRequest, mintedStethShares);
 
         // Finalize all requests
         _finalizeRequests(5);
@@ -117,7 +117,7 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
         pool.mintStethShares(mintedStethShares);
 
         // Request withdrawal
-        pool.requestWithdrawal(stvToRequest, 0, mintedStethShares, address(this));
+        withdrawalQueue.requestWithdrawal(address(this), stvToRequest, mintedStethShares);
 
         // Simulate small penalties before finalization
         dashboard.mock_simulateRewards(-1 ether);
@@ -140,7 +140,7 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
         pool.mintStethShares(mintedStethShares);
 
         // Request withdrawal
-        uint256 requestId = pool.requestWithdrawal(stvToRequest, 0, mintedStethShares, address(this));
+        uint256 requestId = withdrawalQueue.requestWithdrawal(address(this), stvToRequest, mintedStethShares);
 
         // Simulate huge penalties before finalization
         // which result in the request exceeding the reserve ratio
@@ -167,7 +167,7 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
         pool.mintStethShares(mintedStethShares);
 
         // Request withdrawal
-        pool.requestWithdrawal(stvToRequest, 0, mintedStethShares, address(this));
+        withdrawalQueue.requestWithdrawal(address(this), stvToRequest, mintedStethShares);
 
         // Simulate vault rebalance before finalization
         assertEq(pool.totalExceedingMintedStethShares(), 0);

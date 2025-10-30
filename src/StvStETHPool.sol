@@ -197,76 +197,16 @@ contract StvStETHPool is BasePool {
     }
 
     /**
-     * @notice Request a withdrawal by specifying the amount of stv to withdraw, burning stETH shares and rebalancing
-     * @param _stvToWithdraw The amount of stv to withdraw (27 decimals)
-     * @param _stethSharesToBurn The amount of stETH shares to burn to repay user's liabilities (18 decimals)
-     * @param _stethSharesToRebalance The amount of stETH shares to rebalance (18 decimals)
-     * @return requestId The ID of the withdrawal request
+     * @notice Transfer stv with liability from user to WithdrawalQueue contract when enqueuing withdrawal requests
+     * @param _from Address of the user
+     * @param _stv Amount of stv to transfer (27 decimals)
+     * @param _stethShares Amount of stETH shares liability to transfer (18 decimals)
+     * @dev Ensures that the transferred stv covers the minimum required to lock for the transferred stETH shares liability
+     * @dev Can only be called by the WithdrawalQueue contract
      */
-    function requestWithdrawal(
-        uint256 _stvToWithdraw,
-        uint256 _stethSharesToBurn,
-        uint256 _stethSharesToRebalance,
-        address _receiver
-    ) public virtual returns (uint256 requestId) {
-        if (_stvToWithdraw == 0) revert BasePool.ZeroStv();
-
-        if (_stethSharesToBurn > 0) {
-            _burnStethShares(msg.sender, _stethSharesToBurn);
-        }
-
-        if (_stethSharesToRebalance > 0) {
-            _checkMinStvToLock(_stvToWithdraw, _stethSharesToRebalance);
-            _transferStethSharesLiability(msg.sender, address(WITHDRAWAL_QUEUE), _stethSharesToRebalance);
-        }
-
-        _transfer(msg.sender, address(WITHDRAWAL_QUEUE), _stvToWithdraw);
-        address receiver = _receiver == address(0) ? msg.sender : _receiver;
-        requestId = WITHDRAWAL_QUEUE.requestWithdrawal(_stvToWithdraw, _stethSharesToRebalance, receiver);
-    }
-
-    /**
-     * @notice Request multiple withdrawals by specifying the amounts of stv to withdraw, burning stETH shares and rebalancing
-     * @param _stvToWithdraw The array of amounts of stv to withdraw (27 decimals)
-     * @param _stethSharesToBurn The amount of stETH shares to burn to repay user's liabilities (18 decimals)
-     * @param _stethSharesToRebalance The array of amounts of stETH shares to rebalance (18 decimals)
-     * @param _receiver The address to receive the claimed ether, or address(0)
-     * @return requestIds The array of IDs of the created withdrawal requests
-     */
-    function requestWithdrawals(
-        uint256[] calldata _stvToWithdraw,
-        uint256[] calldata _stethSharesToRebalance,
-        uint256 _stethSharesToBurn,
-        address _receiver
-    ) public virtual returns (uint256[] memory requestIds) {
-        address receiver = _receiver == address(0) ? msg.sender : _receiver;
-
-        if (_stethSharesToBurn > 0) {
-            _burnStethShares(msg.sender, _stethSharesToBurn);
-        }
-
-        if (_stvToWithdraw.length != _stethSharesToRebalance.length) {
-            revert ArraysLengthMismatch(_stvToWithdraw.length, _stethSharesToRebalance.length);
-        }
-
-        uint256 totalStvToTransfer;
-        uint256 totalStethSharesToTransfer;
-
-        for (uint256 i = 0; i < _stvToWithdraw.length; ++i) {
-            if (_stethSharesToRebalance[i] > 0) {
-                _checkMinStvToLock(_stvToWithdraw[i], _stethSharesToRebalance[i]);
-                totalStethSharesToTransfer += _stethSharesToRebalance[i];
-            }
-
-            totalStvToTransfer += _stvToWithdraw[i];
-        }
-
-        if (totalStethSharesToTransfer > 0) {
-            _transferStethSharesLiability(msg.sender, address(WITHDRAWAL_QUEUE), totalStethSharesToTransfer);
-        }
-
-        _transfer(msg.sender, address(WITHDRAWAL_QUEUE), totalStvToTransfer);
-        requestIds = WITHDRAWAL_QUEUE.requestWithdrawals(_stvToWithdraw, _stethSharesToRebalance, receiver);
+    function transferFromWithLiabilityForWithdrawalQueue(address _from, uint256 _stv, uint256 _stethShares) external {
+        _checkOnlyWithdrawalQueue();
+        _transferWithLiability(_from, address(WITHDRAWAL_QUEUE), _stv, _stethShares);
     }
 
     function _checkMinStvToLock(uint256 _stv, uint256 _stethShares) internal view {
@@ -589,7 +529,7 @@ contract StvStETHPool is BasePool {
      * @return steth Amount of exceeding stETH (18 decimals)
      * @dev May occur if rebalancing happens on the Staking Vault bypassing the Wrapper
      */
-    function totalExceedingMintedSteth() public view override returns (uint256 steth) {
+    function totalExceedingMintedSteth() public view returns (uint256 steth) {
         steth = _getPooledEthByShares(totalExceedingMintedStethShares());
     }
 
@@ -783,11 +723,15 @@ contract StvStETHPool is BasePool {
      * @dev Ensures that the transferred stv covers the minimum required to lock for the transferred stETH shares liability
      */
     function transferWithLiability(address _to, uint256 _stv, uint256 _stethShares) external returns (bool success) {
+        _transferWithLiability(msg.sender, _to, _stv, _stethShares);
+        success = true;
+    }
+
+    function _transferWithLiability(address _from, address _to, uint256 _stv, uint256 _stethShares) internal {
         _checkMinStvToLock(_stv, _stethShares);
 
-        _transferStethSharesLiability(msg.sender, _to, _stethShares);
-        _transfer(msg.sender, _to, _stv);
-        success = true;
+        _transferStethSharesLiability(_from, _to, _stethShares);
+        _transfer(_from, _to, _stv);
     }
 
     // =================================================================================
@@ -800,9 +744,6 @@ contract StvStETHPool is BasePool {
      */
     function _update(address _from, address _to, uint256 _value) internal override {
         super._update(_from, _to, _value);
-
-        // Skip checks for burning from Withdrawal Queue
-        if (_from == address(WITHDRAWAL_QUEUE) && _to == address(0)) return;
 
         uint256 mintedStethShares = mintedStethSharesOf(_from);
         if (mintedStethShares == 0) return;

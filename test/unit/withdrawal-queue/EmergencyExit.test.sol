@@ -41,7 +41,7 @@ contract EmergencyExitTest is Test, SetupWithdrawalQueue {
     // Queue Stuck Detection
 
     function test_EmergencyExit_QueueBecomesStuck() public {
-        pool.requestWithdrawal(10 ** STV_DECIMALS);
+        withdrawalQueue.requestWithdrawal(address(this), 10 ** STV_DECIMALS, 0);
 
         // Initially not stuck
         assertFalse(withdrawalQueue.isWithdrawalQueueStuck());
@@ -56,9 +56,9 @@ contract EmergencyExitTest is Test, SetupWithdrawalQueue {
     }
 
     function test_EmergencyExit_QueueStuckWithMultipleRequests() public {
-        pool.requestWithdrawal(10 ** STV_DECIMALS);
-        pool.requestWithdrawal(10 ** STV_DECIMALS);
-        pool.requestWithdrawal(10 ** STV_DECIMALS);
+        withdrawalQueue.requestWithdrawal(address(this), 10 ** STV_DECIMALS, 0);
+        withdrawalQueue.requestWithdrawal(address(this), 10 ** STV_DECIMALS, 0);
+        withdrawalQueue.requestWithdrawal(address(this), 10 ** STV_DECIMALS, 0);
 
         // Advance time past max acceptable time for first request
         vm.warp(block.timestamp + withdrawalQueue.MAX_ACCEPTABLE_WQ_FINALIZATION_TIME_IN_SECONDS() + 1);
@@ -69,7 +69,7 @@ contract EmergencyExitTest is Test, SetupWithdrawalQueue {
     // Emergency Exit Activation
 
     function test_EmergencyExit_SuccessfulActivation() public {
-        pool.requestWithdrawal(10 ** STV_DECIMALS);
+        withdrawalQueue.requestWithdrawal(address(this), 10 ** STV_DECIMALS, 0);
 
         // Make queue stuck
         vm.warp(block.timestamp + withdrawalQueue.MAX_ACCEPTABLE_WQ_FINALIZATION_TIME_IN_SECONDS() + 1);
@@ -85,7 +85,7 @@ contract EmergencyExitTest is Test, SetupWithdrawalQueue {
     }
 
     function test_EmergencyExit_RevertWhenNotStuck() public {
-        pool.requestWithdrawal(10 ** STV_DECIMALS);
+        withdrawalQueue.requestWithdrawal(address(this), 10 ** STV_DECIMALS, 0);
 
         // Queue is not stuck yet
         assertFalse(withdrawalQueue.isWithdrawalQueueStuck());
@@ -96,7 +96,7 @@ contract EmergencyExitTest is Test, SetupWithdrawalQueue {
     }
 
     function test_EmergencyExit_RevertAlreadyActivated() public {
-        pool.requestWithdrawal(10 ** STV_DECIMALS);
+        withdrawalQueue.requestWithdrawal(address(this), 10 ** STV_DECIMALS, 0);
 
         // Make queue stuck and activate
         vm.warp(block.timestamp + withdrawalQueue.MAX_ACCEPTABLE_WQ_FINALIZATION_TIME_IN_SECONDS() + 1);
@@ -110,7 +110,7 @@ contract EmergencyExitTest is Test, SetupWithdrawalQueue {
     // Emergency Exit Effects on Operations
 
     function test_EmergencyExit_RequestsWorkWhenPaused() public {
-        pool.requestWithdrawal(10 ** STV_DECIMALS);
+        withdrawalQueue.requestWithdrawal(address(this), 10 ** STV_DECIMALS, 0);
 
         // Make queue stuck and activate emergency exit
         vm.warp(block.timestamp + withdrawalQueue.MAX_ACCEPTABLE_WQ_FINALIZATION_TIME_IN_SECONDS() + 1);
@@ -121,12 +121,12 @@ contract EmergencyExitTest is Test, SetupWithdrawalQueue {
         withdrawalQueue.pause();
 
         // Should still be able to create requests in emergency exit
-        pool.requestWithdrawal(10 ** STV_DECIMALS);
+        withdrawalQueue.requestWithdrawal(address(this), 10 ** STV_DECIMALS, 0);
         assertEq(withdrawalQueue.getLastRequestId(), 2);
     }
 
     function test_EmergencyExit_FinalizationBypassesRoles() public {
-        pool.requestWithdrawal(10 ** STV_DECIMALS);
+        withdrawalQueue.requestWithdrawal(address(this), 10 ** STV_DECIMALS, 0);
 
         // Make queue stuck and activate emergency exit
         vm.warp(block.timestamp + MIN_WITHDRAWAL_DELAY_TIME + 1);
@@ -140,7 +140,7 @@ contract EmergencyExitTest is Test, SetupWithdrawalQueue {
     }
 
     function test_EmergencyExit_FinalizationBypassesPause() public {
-        pool.requestWithdrawal(10 ** STV_DECIMALS);
+        withdrawalQueue.requestWithdrawal(address(this), 10 ** STV_DECIMALS, 0);
 
         // Make queue stuck and activate emergency exit
         vm.warp(block.timestamp + MIN_WITHDRAWAL_DELAY_TIME + 1);
