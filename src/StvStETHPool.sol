@@ -3,7 +3,6 @@ pragma solidity >=0.8.25;
 
 import {BasePool} from "./BasePool.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
-import {WithdrawalQueue} from "./WithdrawalQueue.sol";
 
 import {IStETH} from "./interfaces/IStETH.sol";
 import {IWstETH} from "./interfaces/IWstETH.sol";

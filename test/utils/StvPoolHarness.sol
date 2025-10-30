@@ -9,7 +9,6 @@ import {IVaultHub} from "src/interfaces/IVaultHub.sol";
 import {IStakingVault} from "src/interfaces/IStakingVault.sol";
 import {ILido} from "src/interfaces/ILido.sol";
 import {IWstETH} from "src/interfaces/IWstETH.sol";
-import {ILazyOracle} from "src/interfaces/ILazyOracle.sol";
 
 import {StvPool} from "src/StvPool.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";

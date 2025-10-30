@@ -14,7 +14,6 @@ import {LoopStrategyFactory} from "src/factories/LoopStrategyFactory.sol";
 import {GGVStrategyFactory} from "src/factories/GGVStrategyFactory.sol";
 import {TimelockFactory} from "src/factories/TimelockFactory.sol";
 import {BasePool} from "../src/BasePool.sol";
-import {StvPool} from "../src/StvPool.sol";
 import {WithdrawalQueue} from "../src/WithdrawalQueue.sol";
 import {Distributor} from "../src/Distributor.sol";
 

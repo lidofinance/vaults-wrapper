@@ -1,14 +1,7 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity >=0.8.25;
 
-import {Test, console} from "forge-std/Test.sol";
-
 import {StvPoolHarness} from "test/utils/StvPoolHarness.sol";
-import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
-import {Factory} from "src/Factory.sol";
-import {StvPool} from "src/StvPool.sol";
-import {IDashboard} from "src/interfaces/IDashboard.sol";
-import {IStakingVault} from "src/interfaces/IStakingVault.sol";
 
 /**
  * @title StvPoolTest

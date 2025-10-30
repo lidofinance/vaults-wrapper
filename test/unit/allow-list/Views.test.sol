@@ -2,10 +2,7 @@
 pragma solidity >=0.8.25;
 
 import {Test} from "forge-std/Test.sol";
-import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {SetupAllowList} from "./SetupAllowList.sol";
-import {StvPool} from "src/StvPool.sol";
-import {AllowList} from "src/AllowList.sol";
 
 contract AllowListViewsTest is Test, SetupAllowList {
     // ALLOW_LIST_ENABLED

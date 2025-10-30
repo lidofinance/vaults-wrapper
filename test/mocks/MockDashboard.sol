@@ -6,7 +6,6 @@ import {MockWstETH} from "./MockWstETH.sol";
 import {MockVaultHub} from "./MockVaultHub.sol";
 import {MockStakingVault} from "./MockStakingVault.sol";
 import {AccessControlEnumerable} from "@openzeppelin/contracts/access/extensions/AccessControlEnumerable.sol";
-import {IStakingVault} from "../../src/interfaces/IStakingVault.sol";
 import {IVaultHub} from "../../src/interfaces/IVaultHub.sol";
 
 contract MockDashboard is AccessControlEnumerable {
