@@ -219,9 +219,9 @@ contract GGVStrategy is Strategy {
     /// @param _user The user to calculate the amount of stv to withdraw for
     /// @param _stethSharesToBurn The amount of stETH shares to burn
     /// @return stv The amount of stv that can be withdrawn
-    function proxyWithdrawableStvOf(address _user, uint256 _stethSharesToBurn) external view returns(uint256 stv) {
+    function proxyUnlockedStvOf(address _user, uint256 _stethSharesToBurn) external view returns(uint256 stv) {
         address callForwarder = getStrategyCallForwarderAddress(_user);
-        stv = POOL.withdrawableStvOf(callForwarder, _stethSharesToBurn);
+        stv = POOL.unlockedStvOf(callForwarder, _stethSharesToBurn);
     }
 
     /// @notice Requests a withdrawal from the Withdrawal Queue

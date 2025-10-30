@@ -134,57 +134,55 @@ contract StvStETHPool is BasePool {
     // =================================================================================
 
     /**
-     * @notice Calculate the amount of ETH that can be withdrawn by burning a specific amount of stETH shares
+     * @notice Calculate the amount of assets that can be unlocked if a specified amount of stETH shares is burned
      * @param _account The address of the account
      * @param _stethSharesToBurn The amount of stETH shares to burn
-     * @return ethAmount The amount of ETH that can be withdrawn (18 decimals)
+     * @return assets The amount of assets that can be unlocked (18 decimals)
      */
-    function withdrawableEthOf(address _account, uint256 _stethSharesToBurn) public view returns (uint256 ethAmount) {
+    function unlockedAssetsOf(address _account, uint256 _stethSharesToBurn) public view returns (uint256 assets) {
         uint256 mintedStethShares = mintedStethSharesOf(_account);
         if (mintedStethShares < _stethSharesToBurn) revert InsufficientStethShares();
 
         uint256 mintedStethSharesAfter = mintedStethShares - _stethSharesToBurn;
         uint256 minLockedAssetsAfter = calcAssetsToLockForStethShares(mintedStethSharesAfter);
-        uint256 currentAssets = assetsOf(_account);
-        ethAmount = Math.saturatingSub(currentAssets, minLockedAssetsAfter);
+        assets = Math.saturatingSub(assetsOf(_account), minLockedAssetsAfter);
     }
 
     /**
-     * @notice Calculate the amount of ETH that can be withdrawn by an account
+     * @notice Calculate the amount of unlocked assets for an account
      * @param _account The address of the account
-     * @return ethAmount The amount of ETH that can be withdrawn (18 decimals)
-     * @dev Overridden method to include locked assets
+     * @return assets The amount of assets (18 decimals)
      */
-    function withdrawableEthOf(address _account) public view override returns (uint256 ethAmount) {
-        ethAmount = withdrawableEthOf(_account, 0);
+    function unlockedAssetsOf(address _account) public view returns (uint256 assets) {
+        assets = unlockedAssetsOf(_account, 0);
     }
 
     /**
-     * @notice Calculate the amount of stv that can be withdrawn by an account
+     * @notice Calculate the amount of stv that can be unlocked if a specified amount of stETH shares is burned
      * @param _account The address of the account
      * @param _stethSharesToBurn The amount of stETH shares to burn
-     * @return stv The amount of stv that can be withdrawn (18 decimals)
+     * @return stv The amount of stv that can be unlocked (27 decimals)
      */
-    function withdrawableStvOf(address _account, uint256 _stethSharesToBurn) public view returns (uint256 stv) {
-        stv = _convertToStv(withdrawableEthOf(_account, _stethSharesToBurn), Math.Rounding.Floor);
+    function unlockedStvOf(address _account, uint256 _stethSharesToBurn) public view returns (uint256 stv) {
+        stv = _convertToStv(unlockedAssetsOf(_account, _stethSharesToBurn), Math.Rounding.Floor);
     }
 
     /**
-     * @notice Calculate the amount of stv that can be withdrawn by an account
+     * @notice Calculate the amount of unlocked stv for an account
      * @param _account The address of the account
-     * @return stv The amount of stv that can be withdrawn (18 decimals)
-     * @dev Overridden method to include locked assets
+     * @return stv The amount of stv (27 decimals)
      */
-    function withdrawableStvOf(address _account) public view override returns (uint256 stv) {
-        stv = withdrawableStvOf(_account, 0);
+    function unlockedStvOf(address _account) public view returns (uint256 stv) {
+        stv = unlockedStvOf(_account, 0);
     }
 
     /**
-     * @notice Calculate the amount of stETH shares required for a given amount of stv to withdraw
-     * @param _stv The amount of stv to withdraw
+     * @notice Calculate the amount of stETH shares to burn to unlock a given amount of stv
+     * @param _account The address of the account
+     * @param _stv The amount of stv to unlock
      * @return stethShares The corresponding amount of stETH shares needed to burn (18 decimals)
      */
-    function stethSharesForWithdrawal(address _account, uint256 _stv) external view returns (uint256 stethShares) {
+    function stethSharesToBurnForStvOf(address _account, uint256 _stv) external view returns (uint256 stethShares) {
         if (_stv == 0) return 0;
 
         uint256 currentBalance = balanceOf(_account);

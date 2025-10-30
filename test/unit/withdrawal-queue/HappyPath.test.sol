@@ -24,7 +24,7 @@ contract WithdrawalQueueHappyPathTest is Test, SetupWithdrawalQueue {
         assertEq(pool.mintedStethSharesOf(address(this)), mintedShares);
 
         // Request 1: Withdrawable Stv should be half of initial deposit now
-        uint256 withdrawableStv = pool.withdrawableStvOf(address(this));
+        uint256 withdrawableStv = pool.unlockedStvOf(address(this));
         assertEq(withdrawableStv, initialStv / 2);
 
         // Request 1: Try to request full withdrawal - should fail

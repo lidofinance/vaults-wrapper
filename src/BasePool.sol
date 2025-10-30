@@ -357,26 +357,6 @@ abstract contract BasePool is Initializable, ERC20Upgradeable, AllowList {
     // =================================================================================
 
     /**
-     * @notice Calculate the amount of ETH that can be withdrawn by an account
-     * @param _account The address of the account
-     * @return ethAmount The amount of ETH that can be withdrawn (18 decimals)
-     * @dev Overridable method to include locked assets if needed
-     */
-    function withdrawableEthOf(address _account) public view virtual returns (uint256 ethAmount) {
-        ethAmount = assetsOf(_account);
-    }
-
-    /**
-     * @notice Calculate the amount of stv that can be withdrawn by an account
-     * @param _account The address of the account
-     * @return stv The amount of stv that can be withdrawn (18 decimals)
-     * @dev Overridable method to include locked assets if needed
-     */
-    function withdrawableStvOf(address _account) public view virtual returns (uint256 stv) {
-        stv = _convertToStv(withdrawableEthOf(_account), Math.Rounding.Floor);
-    }
-
-    /**
      * @notice Transfer stv from user to WithdrawalQueue contract when enqueuing withdrawal requests
      * @param _from Address of the user
      * @param _stv Amount of stv to transfer (27 decimals)
