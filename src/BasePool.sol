@@ -39,14 +39,14 @@ abstract contract BasePool is Initializable, ERC20Upgradeable, AllowList {
     WithdrawalQueue public immutable WITHDRAWAL_QUEUE;
     Distributor public immutable DISTRIBUTOR;
 
-    /// @custom:storage-location erc7201:base.pool.storage
+    /// @custom:storage-location erc7201:pool.storage.BasePool
     struct BasePoolStorage {
         bool vaultDisconnected;
     }
 
-    // keccak256(abi.encode(uint256(keccak256("base.pool.storage")) - 1)) & ~bytes32(uint256(0xff))
+    // keccak256(abi.encode(uint256(keccak256("pool.storage.BasePool")) - 1)) & ~bytes32(uint256(0xff))
     bytes32 private constant BASE_POOL_STORAGE_LOCATION =
-        0x8405b42399982e28cdd42aed39df9522715c70c841209124c7b936e15fd30300;
+        0xc4110d6af9d6cc8ebf3d109653462ebdabed38a4baebe6d0d7e79af4f6479900;
 
     function _getBasePoolStorage() internal pure returns (BasePoolStorage storage $) {
         assembly {

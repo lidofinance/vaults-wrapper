@@ -122,7 +122,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
 
     // keccak256(abi.encode(uint256(keccak256("pool.storage.WithdrawalQueue")) - 1)) & ~bytes32(uint256(0xff))
     bytes32 private constant WithdrawalQueueStorageLocation =
-        0xff0bcb2d6a043ff95a84af574799a6cec022695552f02c53d70e4e5aa1e06100;
+        0x11fba3ff43ee43ae28e3c08029ee00ea5862db2aba88444d8c290c62bd802000;
 
     function _getWithdrawalQueueStorage() private pure returns (WithdrawalQueueStorage storage $) {
         assembly {

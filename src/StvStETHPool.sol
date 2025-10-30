@@ -40,7 +40,7 @@ contract StvStETHPool is BasePool {
 
     IWstETH public immutable WSTETH;
 
-    /// @custom:storage-location erc7201:pool.b.storage
+    /// @custom:storage-location erc7201:pool.storage.StvStETHPool
     struct StvStETHPoolStorage {
         mapping(address => uint256) mintedStethShares;
         uint256 totalMintedStethShares;
@@ -48,9 +48,9 @@ contract StvStETHPool is BasePool {
         uint16 forcedRebalanceThresholdBP;
     }
 
-    // keccak256(abi.encode(uint256(keccak256("pool.b.storage")) - 1)) & ~bytes32(uint256(0xff))
+    // keccak256(abi.encode(uint256(keccak256("pool.storage.StvStETHPool")) - 1)) & ~bytes32(uint256(0xff))
     bytes32 private constant STV_STETH_POOL_STORAGE_LOCATION =
-        0x68280b7606a1a98bf19dd7ad4cb88029b355c2c81a554f53b998c73f934e4400;
+        0xcb955bfb671da6f0ca24747fd5d6827b1540ffa01981f020957afc070cf0eb00;
 
     function _getStvStETHPoolStorage() internal pure returns (StvStETHPoolStorage storage $) {
         assembly {
