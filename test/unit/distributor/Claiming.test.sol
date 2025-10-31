@@ -15,8 +15,8 @@ contract ClaimingTest is Test, SetupDistributor {
 
     function test_Claim_RevertsIfRootNotSet() public {
         // Deploy new distributor without setting root
-        Distributor newDistributor = new Distributor(owner);
-        
+        Distributor newDistributor = new Distributor(owner, manager);
+
         bytes32[] memory proof = new bytes32[](0);
 
         vm.expectRevert(Distributor.RootNotSet.selector);
@@ -26,9 +26,9 @@ contract ClaimingTest is Test, SetupDistributor {
     function test_Claim_RevertsOnInvalidProof() public {
         uint256 claimAmount = 100 ether;
         merkleTree.pushLeaf(_leafData(userAlice, address(token1), claimAmount));
-        
+
         bytes32 root = merkleTree.root();
-        
+
         vm.prank(manager);
         distributor.setMerkleRoot(root, "QmTest");
 
@@ -44,10 +44,10 @@ contract ClaimingTest is Test, SetupDistributor {
     function test_Claim_RevertsOnClaimableTooLow() public {
         uint256 claimAmount = 100 ether;
         merkleTree.pushLeaf(_leafData(userAlice, address(token1), claimAmount));
-        
+
         bytes32 root = merkleTree.root();
         bytes32[] memory proof = merkleTree.getProof(0);
-        
+
         vm.prank(manager);
         distributor.setMerkleRoot(root, "QmTest");
 
@@ -64,10 +64,10 @@ contract ClaimingTest is Test, SetupDistributor {
     function test_Claim_RevertsOnWrongRecipient() public {
         uint256 claimAmount = 100 ether;
         merkleTree.pushLeaf(_leafData(userAlice, address(token1), claimAmount));
-        
+
         bytes32 root = merkleTree.root();
         bytes32[] memory proof = merkleTree.getProof(0);
-        
+
         vm.prank(manager);
         distributor.setMerkleRoot(root, "QmTest");
 
@@ -80,10 +80,10 @@ contract ClaimingTest is Test, SetupDistributor {
     function test_Claim_RevertsOnWrongToken() public {
         uint256 claimAmount = 100 ether;
         merkleTree.pushLeaf(_leafData(userAlice, address(token1), claimAmount));
-        
+
         bytes32 root = merkleTree.root();
         bytes32[] memory proof = merkleTree.getProof(0);
-        
+
         vm.prank(manager);
         distributor.setMerkleRoot(root, "QmTest");
 
@@ -96,10 +96,10 @@ contract ClaimingTest is Test, SetupDistributor {
     function test_Claim_RevertsOnWrongAmount() public {
         uint256 claimAmount = 100 ether;
         merkleTree.pushLeaf(_leafData(userAlice, address(token1), claimAmount));
-        
+
         bytes32 root = merkleTree.root();
         bytes32[] memory proof = merkleTree.getProof(0);
-        
+
         vm.prank(manager);
         distributor.setMerkleRoot(root, "QmTest");
 
@@ -115,10 +115,10 @@ contract ClaimingTest is Test, SetupDistributor {
         // Setup: Create merkle tree with one claim
         uint256 claimAmount = 100 ether;
         merkleTree.pushLeaf(_leafData(userAlice, address(token1), claimAmount));
-        
+
         bytes32 root = merkleTree.root();
         bytes32[] memory proof = merkleTree.getProof(0);
-        
+
         vm.prank(manager);
         distributor.setMerkleRoot(root, "QmTest");
 
@@ -137,10 +137,10 @@ contract ClaimingTest is Test, SetupDistributor {
     function test_Claim_EmitsClaimedEvent() public {
         uint256 claimAmount = 100 ether;
         merkleTree.pushLeaf(_leafData(userAlice, address(token1), claimAmount));
-        
+
         bytes32 root = merkleTree.root();
         bytes32[] memory proof = merkleTree.getProof(0);
-        
+
         vm.prank(manager);
         distributor.setMerkleRoot(root, "QmTest");
 
@@ -154,10 +154,10 @@ contract ClaimingTest is Test, SetupDistributor {
     function test_Claim_AnyoneCanClaimOnBehalf() public {
         uint256 claimAmount = 100 ether;
         merkleTree.pushLeaf(_leafData(userAlice, address(token1), claimAmount));
-        
+
         bytes32 root = merkleTree.root();
         bytes32[] memory proof = merkleTree.getProof(0);
-        
+
         vm.prank(manager);
         distributor.setMerkleRoot(root, "QmTest");
 
@@ -177,9 +177,9 @@ contract ClaimingTest is Test, SetupDistributor {
         merkleTree.pushLeaf(_leafData(userBob, address(token1), 200 ether));
         merkleTree.pushLeaf(_leafData(userCharlie, address(token2), 300 ether));
 
-        
+
         bytes32 root = merkleTree.root();
-        
+
         vm.prank(manager);
         distributor.setMerkleRoot(root, "QmTest");
 
@@ -209,10 +209,10 @@ contract ClaimingTest is Test, SetupDistributor {
         // First claim with 50 ether
         uint256 amount1 = 50 ether;
         merkleTree.pushLeaf(_leafData(userAlice, address(token1), amount1));
-        
+
         bytes32 root1 = merkleTree.root();
         bytes32[] memory proof1 = merkleTree.getProof(0);
-        
+
         vm.prank(manager);
         distributor.setMerkleRoot(root1, "QmTest1");
 
@@ -225,10 +225,10 @@ contract ClaimingTest is Test, SetupDistributor {
         uint256 amount2 = 100 ether;
         merkleTree = new MerkleTree(); // Reset tree
         merkleTree.pushLeaf(_leafData(userAlice, address(token1), amount2));
-        
+
         bytes32 root2 = merkleTree.root();
         bytes32[] memory proof2 = merkleTree.getProof(0);
-        
+
         vm.prank(manager);
         distributor.setMerkleRoot(root2, "QmTest2");
 
@@ -244,7 +244,7 @@ contract ClaimingTest is Test, SetupDistributor {
         // Setup claims for same user, different tokens
         merkleTree.pushLeaf(_leafData(userAlice, address(token1), 100 ether));
         merkleTree.pushLeaf(_leafData(userAlice, address(token2), 200 ether));
-        
+
         bytes32 root = merkleTree.root();
 
         vm.prank(manager);

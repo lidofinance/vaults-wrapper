@@ -88,10 +88,11 @@ contract TokenManagementTest is Test, SetupDistributor {
         assertTrue(hasToken3);
     }
 
-    function test_AddToken_OwnerCanAddToken() public {
-        // Owner also has MANAGER_ROLE
-        vm.prank(owner);
+    function test_AddToken_OwnerCanAddTokenAfterGrant() public {
+        vm.startPrank(owner);
+        distributor.grantRole(distributor.MANAGER_ROLE(), owner);
         distributor.addToken(address(token1));
+        vm.stopPrank();
 
         address[] memory tokens = distributor.getTokens();
         assertEq(tokens.length, 1);

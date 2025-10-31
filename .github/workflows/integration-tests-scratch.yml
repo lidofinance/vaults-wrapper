@@ -12,7 +12,7 @@ jobs:
     env:
       FOUNDRY_PROFILE: test
       RPC_URL: http://localhost:9123
-      CORE_DEPLOYED_JSON: lido-core/deployed-local.json
+      CORE_LOCATOR_ADDRESS: "0x84eA74d481Ee0A5332c457a4d796187F6Ba67fEB"
 
     services:
       hardhat-node:

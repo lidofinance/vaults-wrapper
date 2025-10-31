@@ -41,7 +41,7 @@ abstract contract SetupDistributor is Test {
         token3 = new MockERC20("Token3", "TKN3");
 
         // Deploy Distributor
-        distributor = new Distributor(owner);
+        distributor = new Distributor(owner, manager);
 
         // Grant MANAGER_ROLE to manager
         bytes32 managerRole = distributor.MANAGER_ROLE();

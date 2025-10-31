@@ -152,7 +152,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
     event ImplementationUpgraded(address newImplementation);
 
     error ZeroAddress();
-    error OnlyStvStrategyPoolan();
+    error OnlyStvStETHPoolan();
     error RequestAmountTooSmall(uint256 amount);
     error RequestAmountTooLarge(uint256 amount);
     error InvalidRequestId(uint256 requestId);
@@ -977,7 +977,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
     // =================================================================================
 
     function _checkOnlyWrapper() internal view {
-        if (msg.sender != address(WRAPPER)) revert OnlyStvStrategyPoolan();
+        if (msg.sender != address(WRAPPER)) revert OnlyStvStETHPoolan();
     }
 
     function _checkResumedOrEmergencyExit() internal view {

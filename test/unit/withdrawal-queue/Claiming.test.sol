@@ -148,7 +148,7 @@ contract ClaimingTest is Test, SetupWithdrawalQueue {
         // Create and finalize a request
         uint256 requestId = _requestWithdrawalAndFinalize(10 ** STV_DECIMALS);
 
-        vm.expectRevert(abi.encodeWithSelector(WithdrawalQueue.OnlyStvStrategyPoolan.selector));
+        vm.expectRevert(abi.encodeWithSelector(WithdrawalQueue.OnlyStvStETHPoolan.selector));
         withdrawalQueue.claimWithdrawal(requestId, userAlice, userAlice);
     }
 

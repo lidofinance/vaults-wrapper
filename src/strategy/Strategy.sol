@@ -10,7 +10,6 @@ import {IStETH} from "src/interfaces/IStETH.sol";
 import {IWstETH} from "src/interfaces/IWstETH.sol";
 import {IStrategy} from "src/interfaces/IStrategy.sol";
 import {IStrategyCallForwarder} from "src/interfaces/IStrategyCallForwarder.sol";
-import {StvStrategyPool} from "src/StvStrategyPool.sol";
 import {StvStETHPool} from "src/StvStETHPool.sol";
 
 abstract contract Strategy is IStrategy {
