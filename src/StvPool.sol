@@ -39,23 +39,23 @@ contract StvPool is Initializable, ERC20Upgradeable, AllowList {
     WithdrawalQueue public immutable WITHDRAWAL_QUEUE;
     Distributor public immutable DISTRIBUTOR;
 
-    /// @custom:storage-location erc7201:pool.storage.BasePool
-    struct BasePoolStorage {
+    /// @custom:storage-location erc7201:pool.storage.StvPool
+    struct StvPoolStorage {
         bool vaultDisconnected;
     }
 
-    // keccak256(abi.encode(uint256(keccak256("pool.storage.BasePool")) - 1)) & ~bytes32(uint256(0xff))
-    bytes32 private constant BASE_POOL_STORAGE_LOCATION =
-        0xc4110d6af9d6cc8ebf3d109653462ebdabed38a4baebe6d0d7e79af4f6479900;
+    // keccak256(abi.encode(uint256(keccak256("pool.storage.StvPool")) - 1)) & ~bytes32(uint256(0xff))
+    bytes32 private constant STV_POOL_STORAGE_LOCATION =
+        0x4ba3584e94e638ad48c84a51d04c6416f12f2677ae8479c14b06fa49535c7e00;
 
-    function _getBasePoolStorage() internal pure returns (BasePoolStorage storage $) {
+    function _getStvPoolStorage() internal pure returns (StvPoolStorage storage $) {
         assembly {
-            $.slot := BASE_POOL_STORAGE_LOCATION
+            $.slot := STV_POOL_STORAGE_LOCATION
         }
     }
 
     function vaultDisconnected() public view returns (bool) {
-        return _getBasePoolStorage().vaultDisconnected;
+        return _getStvPoolStorage().vaultDisconnected;
     }
 
     event VaultFunded(uint256 amount);
@@ -426,7 +426,7 @@ contract StvPool is Initializable, ERC20Upgradeable, AllowList {
             revert("Vault not disconnected yet");
         }
 
-        _getBasePoolStorage().vaultDisconnected = true;
+        _getStvPoolStorage().vaultDisconnected = true;
 
         // After disconnection, the connect deposit is available in the vault
         uint256 vaultBalance = address(STAKING_VAULT).balance;
