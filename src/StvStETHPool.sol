@@ -3,9 +3,9 @@ pragma solidity >=0.8.25;
 
 import {StvPool} from "./StvPool.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
-import {WithdrawalQueue} from "./WithdrawalQueue.sol";
 
 import {IStETH} from "./interfaces/IStETH.sol";
+import {IWstETH} from "./interfaces/IWstETH.sol";
 import {IVaultHub} from "./interfaces/IVaultHub.sol";
 
 /**
@@ -34,13 +34,12 @@ contract StvStETHPool is StvPool {
 
     bytes32 public constant LOSS_SOCIALIZER_ROLE = keccak256("LOSS_SOCIALIZER_ROLE");
 
-    /// @notice Sentinel value for depositETH to mint maximum available stETH shares for the deposit
-    uint256 public constant MAX_MINTABLE_AMOUNT = type(uint256).max;
-
     /// @notice The gap between the reserve ratio in Staking Vault and Pool (in basis points)
     uint256 public immutable RESERVE_RATIO_GAP_BP;
 
-    /// @custom:storage-location erc7201:pool.b.storage
+    IWstETH public immutable WSTETH;
+
+    /// @custom:storage-location erc7201:pool.storage.StvStETHPool
     struct StvStETHPoolStorage {
         mapping(address => uint256) mintedStethShares;
         uint256 totalMintedStethShares;
@@ -48,9 +47,9 @@ contract StvStETHPool is StvPool {
         uint16 forcedRebalanceThresholdBP;
     }
 
-    // keccak256(abi.encode(uint256(keccak256("pool.b.storage")) - 1)) & ~bytes32(uint256(0xff))
+    // keccak256(abi.encode(uint256(keccak256("pool.storage.StvStETHPool")) - 1)) & ~bytes32(uint256(0xff))
     bytes32 private constant STV_STETH_POOL_STORAGE_LOCATION =
-        0x68280b7606a1a98bf19dd7ad4cb88029b355c2c81a554f53b998c73f934e4400;
+        0xcb955bfb671da6f0ca24747fd5d6827b1540ffa01981f020957afc070cf0eb00;
 
     function _getStvStETHPoolStorage() internal pure returns (StvStETHPoolStorage storage $) {
         assembly {
@@ -66,13 +65,15 @@ contract StvStETHPool is StvPool {
         address _distributor
     ) StvPool(_dashboard, _allowListEnabled, _withdrawalQueue, _distributor) {
         RESERVE_RATIO_GAP_BP = _reserveRatioGapBP;
+        WSTETH = IWstETH(DASHBOARD.WSTETH());
     }
 
     function initialize(address _owner, string memory _name, string memory _symbol) public override initializer {
         _initializeBasePool(_owner, _name, _symbol);
 
-        // Approve max stETH to the Dashboard for burning
+        // Approve max to the Dashboard for burning
         STETH.approve(address(DASHBOARD), type(uint256).max);
+        WSTETH.approve(address(DASHBOARD), type(uint256).max);
 
         // Sync reserve ratio and forced rebalance threshold from the VaultHub
         syncVaultParameters();
@@ -83,29 +84,44 @@ contract StvStETHPool is StvPool {
     // =================================================================================
 
     /**
-     * @notice Deposit native ETH and receive stv, optionally minting stETH shares
-     * @param _receiver Address to receive the minted shares
+     * @notice Deposit native ETH and receive stv, minting a specific amount of stETH shares
+     * @param _recipient Address to receive stv and minted steth shares
      * @param _referral Address of the referral (if any)
-     * @param _stethSharesToMint Amount of stETH shares to mint (up to maximum capacity for this deposit)
-     *                           Pass MAX_MINTABLE_AMOUNT to mint maximum available for this deposit
-     * @return stv Amount of stv minted
+     * @param _stethSharesToMint Optional amount of stETH shares to mint (18 decimals)
+     * @return stv Amount of stv minted (27 decimals)
+     * @dev If the recipient is different from msg.sender, checks that enough stv is deposited to lock the requested stETH shares
      */
-    function depositETH(
-        address _receiver,
+    function depositETHAndMintStethShares(
+        address _recipient,
         address _referral,
         uint256 _stethSharesToMint
-    ) public payable virtual returns (uint256 stv) {
-        stv = _deposit(_receiver, _referral);
+    ) external payable virtual returns (uint256 stv) {
+        stv = depositETH(_recipient, _referral);
 
-        if (_stethSharesToMint > 0) {
-            // If MAX_MINTABLE_AMOUNT is passed, calculate max mintable for this deposit
-            uint256 sharesToMint = _stethSharesToMint == MAX_MINTABLE_AMOUNT
-                ? calcStethSharesToMintForAssets(msg.value)
-                : _stethSharesToMint;
+        if (_stethSharesToMint != 0) {
+            if (_recipient != msg.sender) _checkMinStvToLock(stv, _stethSharesToMint);
+            _mintStethShares(_recipient, _stethSharesToMint);
+        }
+    }
 
-            if (sharesToMint > 0) {
-                _mintStethShares(_receiver, sharesToMint);
-            }
+    /**
+     * @notice Deposit native ETH and receive stv, minting a specific amount of wstETH
+     * @param _recipient Address to receive stv and minted wstETH
+     * @param _referral Address of the referral (if any)
+     * @param _wstethToMint Optional amount of wstETH to mint (18 decimals)
+     * @return stv Amount of stv minted (27 decimals)
+     * @dev If the recipient is different from msg.sender, checks that enough stv is deposited to lock the requested wstETH
+     */
+    function depositETHAndMintWsteth(
+        address _recipient,
+        address _referral,
+        uint256 _wstethToMint
+    ) external payable virtual returns (uint256 stv) {
+        stv = depositETH(_recipient, _referral);
+
+        if (_wstethToMint != 0) {
+            if (_recipient != msg.sender) _checkMinStvToLock(stv, _wstethToMint);
+            _mintWsteth(_recipient, _wstethToMint);
         }
     }
 
@@ -114,57 +130,55 @@ contract StvStETHPool is StvPool {
     // =================================================================================
 
     /**
-     * @notice Calculate the amount of ETH that can be withdrawn by burning a specific amount of stETH shares
+     * @notice Calculate the amount of assets that can be unlocked if a specified amount of stETH shares is burned
      * @param _account The address of the account
      * @param _stethSharesToBurn The amount of stETH shares to burn
-     * @return ethAmount The amount of ETH that can be withdrawn (18 decimals)
+     * @return assets The amount of assets that can be unlocked (18 decimals)
      */
-    function withdrawableEthOf(address _account, uint256 _stethSharesToBurn) public view returns (uint256 ethAmount) {
+    function unlockedAssetsOf(address _account, uint256 _stethSharesToBurn) public view returns (uint256 assets) {
         uint256 mintedStethShares = mintedStethSharesOf(_account);
         if (mintedStethShares < _stethSharesToBurn) revert InsufficientStethShares();
 
         uint256 mintedStethSharesAfter = mintedStethShares - _stethSharesToBurn;
         uint256 minLockedAssetsAfter = calcAssetsToLockForStethShares(mintedStethSharesAfter);
-        uint256 currentAssets = assetsOf(_account);
-        ethAmount = Math.saturatingSub(currentAssets, minLockedAssetsAfter);
+        assets = Math.saturatingSub(assetsOf(_account), minLockedAssetsAfter);
     }
 
     /**
-     * @notice Calculate the amount of ETH that can be withdrawn by an account
+     * @notice Calculate the amount of unlocked assets for an account
      * @param _account The address of the account
-     * @return ethAmount The amount of ETH that can be withdrawn (18 decimals)
-     * @dev Overridden method to include locked assets
+     * @return assets The amount of assets (18 decimals)
      */
-    function withdrawableEthOf(address _account) public view override returns (uint256 ethAmount) {
-        ethAmount = withdrawableEthOf(_account, 0);
+    function unlockedAssetsOf(address _account) public view returns (uint256 assets) {
+        assets = unlockedAssetsOf(_account, 0);
     }
 
     /**
-     * @notice Calculate the amount of stv that can be withdrawn by an account
+     * @notice Calculate the amount of stv that can be unlocked if a specified amount of stETH shares is burned
      * @param _account The address of the account
      * @param _stethSharesToBurn The amount of stETH shares to burn
-     * @return stv The amount of stv that can be withdrawn (18 decimals)
+     * @return stv The amount of stv that can be unlocked (27 decimals)
      */
-    function withdrawableStvOf(address _account, uint256 _stethSharesToBurn) public view returns (uint256 stv) {
-        stv = _convertToStv(withdrawableEthOf(_account, _stethSharesToBurn), Math.Rounding.Floor);
+    function unlockedStvOf(address _account, uint256 _stethSharesToBurn) public view returns (uint256 stv) {
+        stv = _convertToStv(unlockedAssetsOf(_account, _stethSharesToBurn), Math.Rounding.Floor);
     }
 
     /**
-     * @notice Calculate the amount of stv that can be withdrawn by an account
+     * @notice Calculate the amount of unlocked stv for an account
      * @param _account The address of the account
-     * @return stv The amount of stv that can be withdrawn (18 decimals)
-     * @dev Overridden method to include locked assets
+     * @return stv The amount of stv (27 decimals)
      */
-    function withdrawableStvOf(address _account) public view override returns (uint256 stv) {
-        stv = withdrawableStvOf(_account, 0);
+    function unlockedStvOf(address _account) public view returns (uint256 stv) {
+        stv = unlockedStvOf(_account, 0);
     }
 
     /**
-     * @notice Calculate the amount of stETH shares required for a given amount of stv to withdraw
-     * @param _stv The amount of stv to withdraw
+     * @notice Calculate the amount of stETH shares to burn to unlock a given amount of stv
+     * @param _account The address of the account
+     * @param _stv The amount of stv to unlock
      * @return stethShares The corresponding amount of stETH shares needed to burn (18 decimals)
      */
-    function stethSharesForWithdrawal(address _account, uint256 _stv) external view returns (uint256 stethShares) {
+    function stethSharesToBurnForStvOf(address _account, uint256 _stv) external view returns (uint256 stethShares) {
         if (_stv == 0) return 0;
 
         uint256 currentBalance = balanceOf(_account);
@@ -176,76 +190,16 @@ contract StvStETHPool is StvPool {
     }
 
     /**
-     * @notice Request a withdrawal by specifying the amount of stv to withdraw, burning stETH shares and rebalancing
-     * @param _stvToWithdraw The amount of stv to withdraw (27 decimals)
-     * @param _stethSharesToBurn The amount of stETH shares to burn to repay user's liabilities (18 decimals)
-     * @param _stethSharesToRebalance The amount of stETH shares to rebalance (18 decimals)
-     * @return requestId The ID of the withdrawal request
+     * @notice Transfer stv with liability from user to WithdrawalQueue contract when enqueuing withdrawal requests
+     * @param _from Address of the user
+     * @param _stv Amount of stv to transfer (27 decimals)
+     * @param _stethShares Amount of stETH shares liability to transfer (18 decimals)
+     * @dev Ensures that the transferred stv covers the minimum required to lock for the transferred stETH shares liability
+     * @dev Can only be called by the WithdrawalQueue contract
      */
-    function requestWithdrawal(
-        uint256 _stvToWithdraw,
-        uint256 _stethSharesToBurn,
-        uint256 _stethSharesToRebalance,
-        address _receiver
-    ) public virtual returns (uint256 requestId) {
-        if (_stvToWithdraw == 0) revert StvPool.ZeroStv();
-
-        if (_stethSharesToBurn > 0) {
-            _burnStethShares(msg.sender, _stethSharesToBurn);
-        }
-
-        if (_stethSharesToRebalance > 0) {
-            _checkMinStvToLock(_stvToWithdraw, _stethSharesToRebalance);
-            _transferStethSharesLiability(msg.sender, address(WITHDRAWAL_QUEUE), _stethSharesToRebalance);
-        }
-
-        _transfer(msg.sender, address(WITHDRAWAL_QUEUE), _stvToWithdraw);
-        address receiver = _receiver == address(0) ? msg.sender : _receiver;
-        requestId = WITHDRAWAL_QUEUE.requestWithdrawal(_stvToWithdraw, _stethSharesToRebalance, receiver);
-    }
-
-    /**
-     * @notice Request multiple withdrawals by specifying the amounts of stv to withdraw, burning stETH shares and rebalancing
-     * @param _stvToWithdraw The array of amounts of stv to withdraw (27 decimals)
-     * @param _stethSharesToBurn The amount of stETH shares to burn to repay user's liabilities (18 decimals)
-     * @param _stethSharesToRebalance The array of amounts of stETH shares to rebalance (18 decimals)
-     * @param _receiver The address to receive the claimed ether, or address(0)
-     * @return requestIds The array of IDs of the created withdrawal requests
-     */
-    function requestWithdrawals(
-        uint256[] calldata _stvToWithdraw,
-        uint256[] calldata _stethSharesToRebalance,
-        uint256 _stethSharesToBurn,
-        address _receiver
-    ) public virtual returns (uint256[] memory requestIds) {
-        address receiver = _receiver == address(0) ? msg.sender : _receiver;
-
-        if (_stethSharesToBurn > 0) {
-            _burnStethShares(msg.sender, _stethSharesToBurn);
-        }
-
-        if (_stvToWithdraw.length != _stethSharesToRebalance.length) {
-            revert ArraysLengthMismatch(_stvToWithdraw.length, _stethSharesToRebalance.length);
-        }
-
-        uint256 totalStvToTransfer;
-        uint256 totalStethSharesToTransfer;
-
-        for (uint256 i = 0; i < _stvToWithdraw.length; ++i) {
-            if (_stethSharesToRebalance[i] > 0) {
-                _checkMinStvToLock(_stvToWithdraw[i], _stethSharesToRebalance[i]);
-                totalStethSharesToTransfer += _stethSharesToRebalance[i];
-            }
-
-            totalStvToTransfer += _stvToWithdraw[i];
-        }
-
-        if (totalStethSharesToTransfer > 0) {
-            _transferStethSharesLiability(msg.sender, address(WITHDRAWAL_QUEUE), totalStethSharesToTransfer);
-        }
-
-        _transfer(msg.sender, address(WITHDRAWAL_QUEUE), totalStvToTransfer);
-        requestIds = WITHDRAWAL_QUEUE.requestWithdrawals(_stvToWithdraw, _stethSharesToRebalance, receiver);
+    function transferFromWithLiabilityForWithdrawalQueue(address _from, uint256 _stv, uint256 _stethShares) external {
+        _checkOnlyWithdrawalQueue();
+        _transferWithLiability(_from, address(WITHDRAWAL_QUEUE), _stv, _stethShares);
     }
 
     function _checkMinStvToLock(uint256 _stv, uint256 _stethShares) internal view {
@@ -341,6 +295,22 @@ contract StvStETHPool is StvPool {
     }
 
     /**
+     * @notice Mint wstETH up to the user's minting capacity
+     * @param _wsteth The amount of wstETH to mint
+     * @dev Note that minted wstETH can be not enough to cover the full obligation in stETH shares because of rounding error
+     * on WSTETH contract during unwrapping. The dust from rounding accumulates on the WSTETH contract during unwrapping
+     */
+    function mintWsteth(uint256 _wsteth) external {
+        _mintWsteth(msg.sender, _wsteth);
+    }
+
+    function _mintWsteth(address _account, uint256 _wsteth) internal {
+        _checkRemainingMintingCapacityOf(_account, _wsteth);
+        _increaseMintedStethShares(_account, _wsteth);
+        DASHBOARD.mintWstETH(_account, _wsteth);
+    }
+
+    /**
      * @notice Mint stETH shares up to the user's minting capacity
      * @param _stethShares The amount of stETH shares to mint
      */
@@ -349,16 +319,29 @@ contract StvStETHPool is StvPool {
     }
 
     function _mintStethShares(address _account, uint256 _stethShares) internal {
-        if (_stethShares == 0) revert ZeroArgument();
-        if (remainingMintingCapacitySharesOf(_account, 0) < _stethShares) revert InsufficientMintingCapacity();
-
+        _checkRemainingMintingCapacityOf(_account, _stethShares);
+        _increaseMintedStethShares(_account, _stethShares);
         DASHBOARD.mintShares(_account, _stethShares);
+    }
 
-        StvStETHPoolStorage storage $ = _getStvStETHPoolStorage();
-        $.totalMintedStethShares += _stethShares;
-        $.mintedStethShares[_account] += _stethShares;
+    /**
+     * @notice Burn wstETH to reduce the user's minted stETH obligation
+     * @param _wsteth The amount of wstETH to burn
+     * @dev Note that minted wstETH can be not enough to cover the full obligation in stETH shares because of rounding error
+     * on WSTETH contract during unwrapping. The dust from rounding accumulates on the WSTETH contract during unwrapping
+     */
+    function burnWsteth(uint256 _wsteth) external {
+        _burnWsteth(msg.sender, _wsteth);
+    }
 
-        emit StethSharesMinted(_account, _stethShares);
+    function _burnWsteth(address _account, uint256 _wsteth) internal {
+        /// @dev Simulate conversions during unwrapping to account for possible reduction due to rounding errors
+        uint256 unwrappedSteth = _getPooledEthByShares(_wsteth);
+        uint256 unwrappedStethShares = _getSharesByPooledEth(unwrappedSteth);
+        _decreaseMintedStethShares(_account, unwrappedStethShares);
+
+        WSTETH.transferFrom(_account, address(this), _wsteth);
+        DASHBOARD.burnWstETH(_wsteth);
     }
 
     /**
@@ -371,9 +354,23 @@ contract StvStETHPool is StvPool {
 
     function _burnStethShares(address _account, uint256 _stethShares) internal {
         _decreaseMintedStethShares(_account, _stethShares);
-
         STETH.transferSharesFrom(_account, address(this), _stethShares);
         DASHBOARD.burnShares(_stethShares);
+    }
+
+    function _checkRemainingMintingCapacityOf(address _account, uint256 _stethShares) internal view {
+        if (remainingMintingCapacitySharesOf(_account, 0) < _stethShares) revert InsufficientMintingCapacity();
+    }
+
+    function _increaseMintedStethShares(address _account, uint256 _stethShares) internal {
+        StvStETHPoolStorage storage $ = _getStvStETHPoolStorage();
+
+        if (_stethShares == 0) revert ZeroArgument();
+
+        $.totalMintedStethShares += _stethShares;
+        $.mintedStethShares[_account] += _stethShares;
+
+        emit StethSharesMinted(_account, _stethShares);
     }
 
     function _decreaseMintedStethShares(address _account, uint256 _stethShares) internal {
@@ -414,7 +411,7 @@ contract StvStETHPool is StvPool {
             Math.Rounding.Floor
         );
 
-        stethShares = STETH.getSharesByPooledEth(maxStethToMint);
+        stethShares = _getSharesByPooledEth(maxStethToMint);
     }
 
     /**
@@ -436,7 +433,7 @@ contract StvStETHPool is StvPool {
         if (_stethShares == 0) return 0;
 
         assetsToLock = Math.mulDiv(
-            STETH.getPooledEthBySharesRoundUp(_stethShares),
+            _getPooledEthBySharesRoundUp(_stethShares),
             TOTAL_BASIS_POINTS,
             TOTAL_BASIS_POINTS - reserveRatioBP(),
             Math.Rounding.Ceil
@@ -525,8 +522,8 @@ contract StvStETHPool is StvPool {
      * @return steth Amount of exceeding stETH (18 decimals)
      * @dev May occur if rebalancing happens on the Staking Vault bypassing the Wrapper
      */
-    function totalExceedingMintedSteth() public view override returns (uint256 steth) {
-        steth = STETH.getPooledEthByShares(totalExceedingMintedStethShares());
+    function totalExceedingMintedSteth() public view returns (uint256 steth) {
+        steth = _getPooledEthByShares(totalExceedingMintedStethShares());
     }
 
     // =================================================================================
@@ -623,7 +620,7 @@ contract StvStETHPool is StvPool {
         /// Rearranging the equation to solve for x gives us:
         /// x = (liability - (1 - reserveRatio) * assets) / reserveRatio
         uint256 reserveRatioBP_ = reserveRatioBP();
-        uint256 stethLiability = STETH.getPooledEthBySharesRoundUp(stethSharesLiability);
+        uint256 stethLiability = _getPooledEthBySharesRoundUp(stethSharesLiability);
         uint256 targetStethToRebalance = Math.ceilDiv(
             /// Shouldn't underflow as threshold breach is already checked
             stethLiability * TOTAL_BASIS_POINTS - (TOTAL_BASIS_POINTS - reserveRatioBP_) * assets,
@@ -645,7 +642,7 @@ contract StvStETHPool is StvPool {
 
         uint256 stvRequired = _convertToStv(stethToRebalance, Math.Rounding.Ceil);
 
-        stethShares = STETH.getSharesByPooledEth(stethToRebalance); // TODO: round up, can it exceed liability?
+        stethShares = _getSharesByPooledEth(stethToRebalance); // TODO: round up, can it exceed liability?
         stv = Math.min(stvRequired, stvBalance);
         isUndercollateralized = isUndercollateralized || stvRequired > stvBalance;
     }
@@ -667,12 +664,14 @@ contract StvStETHPool is StvPool {
         uint256 _stethShares,
         uint256 _maxStvToBurn
     ) internal returns (uint256 stvToBurn) {
+        _checkNoUnassignedLiability();
+
         if (_stethShares == 0) revert ZeroArgument();
         if (_stethShares > mintedStethSharesOf(_account)) revert InsufficientMintedShares();
 
         uint256 exceedingStethShares = totalExceedingMintedStethShares();
         uint256 remainingStethShares = Math.saturatingSub(_stethShares, exceedingStethShares);
-        uint256 ethToRebalance = STETH.getPooledEthBySharesRoundUp(_stethShares);
+        uint256 ethToRebalance = _getPooledEthBySharesRoundUp(_stethShares);
         stvToBurn = _convertToStv(ethToRebalance, Math.Rounding.Ceil);
 
         if (remainingStethShares > 0) DASHBOARD.rebalanceVaultWithShares(remainingStethShares);
@@ -693,7 +692,7 @@ contract StvStETHPool is StvPool {
         if (_stethShares == 0) return false;
 
         uint256 assetsThreshold = Math.mulDiv(
-            STETH.getPooledEthBySharesRoundUp(_stethShares),
+            _getPooledEthBySharesRoundUp(_stethShares),
             TOTAL_BASIS_POINTS,
             TOTAL_BASIS_POINTS - forcedRebalanceThresholdBP(),
             Math.Rounding.Ceil
@@ -719,11 +718,15 @@ contract StvStETHPool is StvPool {
      * @dev Ensures that the transferred stv covers the minimum required to lock for the transferred stETH shares liability
      */
     function transferWithLiability(address _to, uint256 _stv, uint256 _stethShares) external returns (bool success) {
+        _transferWithLiability(msg.sender, _to, _stv, _stethShares);
+        success = true;
+    }
+
+    function _transferWithLiability(address _from, address _to, uint256 _stv, uint256 _stethShares) internal {
         _checkMinStvToLock(_stv, _stethShares);
 
-        _transferStethSharesLiability(msg.sender, _to, _stethShares);
-        _transfer(msg.sender, _to, _stv);
-        success = true;
+        _transferStethSharesLiability(_from, _to, _stethShares);
+        _transfer(_from, _to, _stv);
     }
 
     // =================================================================================
@@ -737,22 +740,11 @@ contract StvStETHPool is StvPool {
     function _update(address _from, address _to, uint256 _value) internal override {
         super._update(_from, _to, _value);
 
-        // Skip checks for burning from Withdrawal Queue
-        if (_from == address(WITHDRAWAL_QUEUE) && _to == address(0)) return;
-
         uint256 mintedStethShares = mintedStethSharesOf(_from);
         if (mintedStethShares == 0) return;
 
         uint256 stvToLock = calcStvToLockForStethShares(mintedStethShares);
 
         if (balanceOf(_from) < stvToLock) revert InsufficientReservedBalance();
-    }
-
-    /**
-     * @dev Unsafe burn that skips reserved balance check
-     */
-    function _burnUnsafe(address _account, uint256 _value) internal {
-        if (_account == address(0)) revert ERC20InvalidSender(address(0));
-        super._update(_account, address(0), _value);
     }
 }

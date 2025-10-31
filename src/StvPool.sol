@@ -39,14 +39,14 @@ contract StvPool is Initializable, ERC20Upgradeable, AllowList {
     WithdrawalQueue public immutable WITHDRAWAL_QUEUE;
     Distributor public immutable DISTRIBUTOR;
 
-    /// @custom:storage-location erc7201:base.pool.storage
+    /// @custom:storage-location erc7201:pool.storage.StvPool
     struct StvPoolStorage {
         bool vaultDisconnected;
     }
 
-    // keccak256(abi.encode(uint256(keccak256("base.pool.storage")) - 1)) & ~bytes32(uint256(0xff))
+    // keccak256(abi.encode(uint256(keccak256("pool.storage.StvPool")) - 1)) & ~bytes32(uint256(0xff))
     bytes32 private constant STV_POOL_STORAGE_LOCATION =
-        0x8405b42399982e28cdd42aed39df9522715c70c841209124c7b936e15fd30300;
+        0x4ba3584e94e638ad48c84a51d04c6416f12f2677ae8479c14b06fa49535c7e00;
 
     function _getStvPoolStorage() internal pure returns (StvPoolStorage storage $) {
         assembly {
@@ -112,7 +112,7 @@ contract StvPool is Initializable, ERC20Upgradeable, AllowList {
     }
 
     // =================================================================================
-    // CORE VAULT FUNCTIONS
+    // ASSETS
     // =================================================================================
 
     /**
@@ -156,23 +156,9 @@ contract StvPool is Initializable, ERC20Upgradeable, AllowList {
         assets = nominalAssetsOf(_account); /* plus other assets if any */
     }
 
-    /**
-     * @notice Amount of minted stETH exceeding the Staking Vault's liability
-     * @return steth Amount of exceeding stETH (18 decimals)
-     * @dev May occur if rebalancing happens on the Staking Vault bypassing the Wrapper
-     * @dev Overridable method to support stETH shares minting
-     */
-    function totalExceedingMintedSteth() public view virtual returns (uint256 steth) {
-        steth = 0;
-    }
-
-    /**
-     * @notice Returns the number of decimals used to get its user representation.
-     * @return Number of decimals (27)
-     */
-    function decimals() public pure override returns (uint8) {
-        return uint8(DECIMALS);
-    }
+    // =================================================================================
+    // CONVERSION
+    // =================================================================================
 
     function _convertToStv(uint256 _assetsE18, Math.Rounding _rounding) internal view returns (uint256 stv) {
         uint256 totalAssetsE18 = totalAssets();
@@ -196,6 +182,10 @@ contract StvPool is Initializable, ERC20Upgradeable, AllowList {
         uint256 assetsShare = Math.mulDiv(_stv * EXTRA_DECIMALS_BASE, _assetsE18, supplyE27, Math.Rounding.Ceil);
         assets = assetsShare / EXTRA_DECIMALS_BASE;
     }
+
+    // =================================================================================
+    // PREVIEW
+    // =================================================================================
 
     /**
      * @notice Preview the amount of stv that would be received for a given asset amount
@@ -224,34 +214,35 @@ contract StvPool is Initializable, ERC20Upgradeable, AllowList {
         assets = _convertToAssets(_stv);
     }
 
-    /**
-     * @notice Convenience function to deposit ETH to msg.sender
-     * @return stv Amount of stv minted
-     */
-    function depositETH(address _referral) public payable returns (uint256 stv) {
-        stv = depositETH(msg.sender, _referral);
+    // =================================================================================
+    // DEPOSIT
+    // =================================================================================
+
+    receive() external payable {
+        // Auto-deposit ETH sent directly to the contract
+        depositETH(msg.sender, address(0));
     }
 
     /**
      * @notice Deposit native ETH and receive stv
-     * @param _receiver Address to receive the minted shares
+     * @param _recipient Address to receive the minted shares
      * @param _referral Address of the referral (if any)
      * @return stv Amount of stv minted
      */
-    function depositETH(address _receiver, address _referral) public payable returns (uint256 stv) {
-        stv = _deposit(_receiver, _referral);
+    function depositETH(address _recipient, address _referral) public payable returns (uint256 stv) {
+        stv = _deposit(_recipient, _referral);
     }
 
-    function _deposit(address _receiver, address _referral) internal returns (uint256 stv) {
-        if (msg.value == 0) revert StvPool.ZeroDeposit();
-        if (_receiver == address(0)) revert StvPool.InvalidReceiver();
+    function _deposit(address _recipient, address _referral) internal returns (uint256 stv) {
+        if (msg.value == 0) revert ZeroDeposit();
+        if (_recipient == address(0)) revert InvalidReceiver();
         _checkAllowList();
 
         stv = previewDeposit(msg.value);
-        _mint(_receiver, stv);
+        _mint(_recipient, stv);
         DASHBOARD.fund{value: msg.value}();
 
-        emit Deposit(msg.sender, _receiver, _referral, msg.value, stv);
+        emit Deposit(msg.sender, _recipient, _referral, msg.value, stv);
     }
 
     // =================================================================================
@@ -305,7 +296,7 @@ contract StvPool is Initializable, ERC20Upgradeable, AllowList {
      * @dev Required fresh oracle report before calling
      */
     function rebalanceUnassignedLiabilityWithEther() external payable {
-        uint256 stethShares = STETH.getSharesByPooledEth(msg.value);
+        uint256 stethShares = _getSharesByPooledEth(msg.value);
         _checkOnlyUnassignedLiabilityRebalance(stethShares);
         DASHBOARD.rebalanceVaultWithEther{value: msg.value}(msg.value);
 
@@ -330,8 +321,32 @@ contract StvPool is Initializable, ERC20Upgradeable, AllowList {
     }
 
     // =================================================================================
+    // STETH HELPERS
+    // =================================================================================
+
+    function _getSharesByPooledEth(uint256 _ethAmount) internal view returns (uint256 stethShares) {
+        stethShares = STETH.getSharesByPooledEth(_ethAmount);
+    }
+
+    function _getPooledEthByShares(uint256 _stethShares) internal view returns (uint256 ethAmount) {
+        ethAmount = STETH.getPooledEthByShares(_stethShares);
+    }
+
+    function _getPooledEthBySharesRoundUp(uint256 _stethShares) internal view returns (uint256 ethAmount) {
+        ethAmount = STETH.getPooledEthBySharesRoundUp(_stethShares);
+    }
+
+    // =================================================================================
     // ERC20 OVERRIDES
     // =================================================================================
+
+    /**
+     * @notice Returns the number of decimals used to get its user representation.
+     * @return Number of decimals (27)
+     */
+    function decimals() public pure override returns (uint8) {
+        return uint8(DECIMALS);
+    }
 
     /**
      * @dev Overridden method from ERC20 to prevent updates if there are unassigned liability
@@ -348,116 +363,30 @@ contract StvPool is Initializable, ERC20Upgradeable, AllowList {
     // =================================================================================
 
     /**
-     * @notice Calculate the amount of ETH that can be withdrawn by an account
-     * @param _account The address of the account
-     * @return ethAmount The amount of ETH that can be withdrawn (18 decimals)
-     * @dev Overridable method to include locked assets if needed
+     * @notice Transfer stv from user to WithdrawalQueue contract when enqueuing withdrawal requests
+     * @param _from Address of the user
+     * @param _stv Amount of stv to transfer (27 decimals)
+     * @dev Can only be called by the WithdrawalQueue contract
      */
-    function withdrawableEthOf(address _account) public view virtual returns (uint256 ethAmount) {
-        ethAmount = assetsOf(_account);
+    function transferFromForWithdrawalQueue(address _from, uint256 _stv) external {
+        _checkOnlyWithdrawalQueue();
+        _transfer(_from, address(WITHDRAWAL_QUEUE), _stv);
     }
 
     /**
-     * @notice Calculate the amount of stv that can be withdrawn by an account
-     * @param _account The address of the account
-     * @return stv The amount of stv that can be withdrawn (18 decimals)
-     * @dev Overridable method to include locked assets if needed
-     */
-    function withdrawableStvOf(address _account) public view virtual returns (uint256 stv) {
-        stv = _convertToStv(withdrawableEthOf(_account), Math.Rounding.Floor);
-    }
-
-    /**
-     * @notice Request a withdrawal by specifying the amount of assets to withdraw
-     * @param _assetsToWithdraw The amount of assets to withdraw (18 decimals)
-     * @return requestId The ID of the withdrawal request
-     */
-    function requestWithdrawalETH(uint256 _assetsToWithdraw) public virtual returns (uint256 requestId) {
-        uint256 stvToWithdraw = _convertToStv(_assetsToWithdraw, Math.Rounding.Ceil);
-        requestId = requestWithdrawal(stvToWithdraw);
-    }
-
-    /**
-     * @notice Request a withdrawal by specifying the amount of stv to withdraw
-     * @param _stvToWithdraw The amount of stv to withdraw (27 decimals)
-     * @param _receiver The address to receive the claimed ether, or address(0)
-     * @return requestId The ID of the withdrawal request
-     */
-    function requestWithdrawal(uint256 _stvToWithdraw, address _receiver) public virtual returns (uint256 requestId) {
-        address receiver = _receiver == address(0) ? msg.sender : _receiver;
-        _transfer(msg.sender, address(WITHDRAWAL_QUEUE), _stvToWithdraw);
-        requestId = WITHDRAWAL_QUEUE.requestWithdrawal(_stvToWithdraw, 0 /** stethSharesToRebalance */, receiver);
-    }
-
-    /**
-     * @notice Request a withdrawal by specifying the amount of stv to withdraw
-     * @param _stvToWithdraw The amount of stv to withdraw (27 decimals)
-     * @return requestId The ID of the withdrawal request
-     */
-    function requestWithdrawal(uint256 _stvToWithdraw) public virtual returns (uint256 requestId) {
-        requestId = requestWithdrawal(_stvToWithdraw, msg.sender);
-    }
-
-    /**
-     * @notice Request multiple withdrawals by specifying the amounts of stv to withdraw
-     * @param _stvToWithdraw The array of amounts of stv to withdraw (27 decimals)
-     * @param _receiver The address to receive the claimed ether, or address(0)
-     * @return requestIds The array of IDs of the created withdrawal requests
-     * @dev If _receiver is address(0), it defaults to msg.sender
-     */
-    function requestWithdrawals(
-        uint256[] calldata _stvToWithdraw,
-        address _receiver
-    ) public virtual returns (uint256[] memory requestIds) {
-        address receiver = _receiver == address(0) ? msg.sender : _receiver;
-        uint256[] memory stethSharesToRebalance = new uint256[](_stvToWithdraw.length);
-        uint256 totalStvToTransfer;
-
-        for (uint256 i = 0; i < _stvToWithdraw.length; ++i) {
-            totalStvToTransfer += _stvToWithdraw[i];
-        }
-
-        _transfer(msg.sender, address(WITHDRAWAL_QUEUE), totalStvToTransfer);
-        requestIds = WITHDRAWAL_QUEUE.requestWithdrawals(_stvToWithdraw, stethSharesToRebalance, receiver);
-    }
-
-    /**
-     * @notice Claim finalized withdrawal request
-     * @param _requestId The withdrawal request ID to claim
-     * @param _recipient The address to receive the claimed ether
-     * @return ethClaimed The amount of ether claimed (18 decimals)
-     * @dev If _recipient is address(0), it defaults to msg.sender
-     */
-    function claimWithdrawal(uint256 _requestId, address _recipient) external virtual returns (uint256 ethClaimed) {
-        address recipient = _recipient == address(0) ? msg.sender : _recipient;
-        ethClaimed = WITHDRAWAL_QUEUE.claimWithdrawal(_requestId, msg.sender, recipient);
-    }
-
-    /**
-     * @notice Claim multiple finalized withdrawal requests
-     * @param _requestIds The array of withdrawal request IDs to claim
-     * @param _hints Checkpoint hints. Can be found with `WQ.findCheckpointHints(_requestIds, 1, getLastCheckpointIndex())`
-     * @param _recipient The address to receive the claimed ether
-     * @return claimedEth The array of amounts of ether claimed for each request (18 decimals)
-     * @dev If _recipient is address(0), it defaults to msg.sender
-     */
-    function claimWithdrawals(
-        uint256[] calldata _requestIds,
-        uint256[] calldata _hints,
-        address _recipient
-    ) external virtual returns (uint256[] memory claimedEth) {
-        address recipient = _recipient == address(0) ? msg.sender : _recipient;
-        claimedEth = WITHDRAWAL_QUEUE.claimWithdrawals(_requestIds, _hints, msg.sender, recipient);
-    }
-
-    /**
-     * @notice Burn stv from WithdrawalQueue contract when processing withdrawal requests
+     * @notice Burn stv from WithdrawalQueue contract when finalizing withdrawal requests
      * @param _stv Amount of stv to burn (27 decimals)
      * @dev Can only be called by the WithdrawalQueue contract
      */
     function burnStvForWithdrawalQueue(uint256 _stv) external {
         _checkOnlyWithdrawalQueue();
-        _burn(msg.sender, _stv);
+        _checkNoUnassignedLiability();
+        _burnUnsafe(address(WITHDRAWAL_QUEUE), _stv);
+    }
+
+    function _burnUnsafe(address _account, uint256 _value) internal {
+        if (_account == address(0)) revert ERC20InvalidSender(address(0));
+        super._update(_account, address(0), _value);
     }
 
     function _checkOnlyWithdrawalQueue() internal view {
@@ -505,15 +434,6 @@ contract StvPool is Initializable, ERC20Upgradeable, AllowList {
             DASHBOARD.withdraw(_recipient, vaultBalance);
             emit ConnectDepositClaimed(_recipient, vaultBalance);
         }
-    }
-
-    // =================================================================================
-    // RECEIVE FUNCTION
-    // =================================================================================
-
-    receive() external payable {
-        // Auto-deposit ETH sent directly to the contract
-        depositETH(msg.sender, address(0));
     }
 
     // =================================================================================

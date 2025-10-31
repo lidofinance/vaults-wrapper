@@ -3,14 +3,9 @@ pragma solidity >=0.8.25;
 
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
-import {Test, console} from "forge-std/Test.sol";
-
 import {StvStETHPoolHarness} from "test/utils/StvStETHPoolHarness.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
-import {Factory} from "src/Factory.sol";
-import {StvPool} from "src/StvPool.sol";
 import {StvStETHPool} from "src/StvStETHPool.sol";
-import {IVaultHub} from "src/interfaces/IVaultHub.sol";
 import {IStETH} from "src/interfaces/IStETH.sol";
 
 /**
@@ -36,7 +31,7 @@ contract StvStETHPoolTest is StvStETHPoolHarness {
         uint256 user1ExpectedMintableStethShares = _calcMaxMintableStShares(ctx, user1Deposit);
 
         vm.prank(USER1);
-        stvStETHPool(ctx).depositETH{value: user1Deposit}(USER1, address(0), 0);
+        stvStETHPool(ctx).depositETH{value: user1Deposit}(USER1, address(0));
 
         _assertUniversalInvariants("Step 1", ctx);
 
@@ -47,7 +42,7 @@ contract StvStETHPoolTest is StvStETHPoolHarness {
             "Mintable stETH shares should equal capacity derived from assets"
         );
         assertEq(
-            stvStETHPool(ctx).stethSharesForWithdrawal(USER1, ctx.pool.balanceOf(USER1)),
+            stvStETHPool(ctx).stethSharesToBurnForStvOf(USER1, ctx.pool.balanceOf(USER1)),
             0,
             "stETH shares for withdrawal should be equal to 0"
         );
@@ -77,7 +72,7 @@ contract StvStETHPoolTest is StvStETHPoolHarness {
             "stETH shares balance of USER1 should be equal to user1ExpectedMintableStethShares"
         );
         assertEq(
-            stvStETHPool(ctx).stethSharesForWithdrawal(USER1, ctx.pool.balanceOf(USER1)),
+            stvStETHPool(ctx).stethSharesToBurnForStvOf(USER1, ctx.pool.balanceOf(USER1)),
             user1ExpectedMintableStethShares,
             "stETH shares for withdrawal should be equal to user1ExpectedMintableStethShares"
         );
@@ -97,29 +92,29 @@ contract StvStETHPoolTest is StvStETHPoolHarness {
         WrapperContext memory ctx = _deployStvStETHPool(false, 0, 0);
 
         //
-        // Step 1: User deposits ETH and mints max stETH shares in one transaction using MAX_MINTABLE_AMOUNT
+        // Step 1: User deposits ETH and mints max stETH shares in one transaction
         //
         uint256 user1Deposit = 10_000 wei;
-        uint256 user1ExpectedMintableStethShares = _calcMaxMintableStShares(ctx, user1Deposit);
-
+        uint256 user1StethSharesToMint = _calcMaxMintableStShares(ctx, user1Deposit);
+        
         vm.prank(USER1);
-        stvStETHPool(ctx).depositETH{value: user1Deposit}(USER1, address(0), stvStETHPool(ctx).MAX_MINTABLE_AMOUNT());
+        stvStETHPool(ctx).depositETHAndMintStethShares{value: user1Deposit}(USER1, address(0), user1StethSharesToMint);
 
         _assertUniversalInvariants("Step 1", ctx);
 
         assertEq(
             steth.sharesOf(USER1),
-            user1ExpectedMintableStethShares,
+            user1StethSharesToMint,
             "stETH shares balance of USER1 should equal max mintable for deposit"
         );
         assertEq(
             stvStETHPool(ctx).mintedStethSharesOf(USER1),
-            user1ExpectedMintableStethShares,
+            user1StethSharesToMint,
             "Minted stETH shares should equal expected"
         );
         assertEq(
             ctx.dashboard.liabilityShares(),
-            user1ExpectedMintableStethShares,
+            user1StethSharesToMint,
             "Vault's liability shares should equal minted shares"
         );
         assertEq(stvStETHPool(ctx).remainingMintingCapacitySharesOf(USER1, 0), 0, "No additional mintable shares should remain");
@@ -128,21 +123,21 @@ contract StvStETHPoolTest is StvStETHPoolHarness {
         // Step 2: User deposits more ETH and mints max for new deposit
         //
         uint256 user1Deposit2 = 15_000 wei;
-        uint256 user1ExpectedMintableStethShares2 = _calcMaxMintableStShares(ctx, user1Deposit2);
+        uint256 user1StethSharesToMint2 = _calcMaxMintableStShares(ctx, user1Deposit2);
 
         vm.prank(USER1);
-        stvStETHPool(ctx).depositETH{value: user1Deposit2}(USER1, address(0), stvStETHPool(ctx).MAX_MINTABLE_AMOUNT());
+        stvStETHPool(ctx).depositETHAndMintStethShares{value: user1Deposit2}(USER1, address(0), user1StethSharesToMint2);
 
         _assertUniversalInvariants("Step 2", ctx);
 
         assertEq(
             steth.sharesOf(USER1),
-            user1ExpectedMintableStethShares + user1ExpectedMintableStethShares2,
+            user1StethSharesToMint + user1StethSharesToMint2,
             "stETH shares should equal sum of both deposits"
         );
         assertEq(
             ctx.dashboard.liabilityShares(),
-            user1ExpectedMintableStethShares + user1ExpectedMintableStethShares2,
+            user1StethSharesToMint + user1StethSharesToMint2,
             "Vault's liability should equal sum of both minted amounts"
         );
     }
@@ -157,7 +152,7 @@ contract StvStETHPoolTest is StvStETHPoolHarness {
         uint256 user1ExpectedMintableStethShares = _calcMaxMintableStShares(ctx, user1Deposit);
 
         vm.prank(USER1);
-        stvStETHPool(ctx).depositETH{value: user1Deposit}(USER1, address(0), 0);
+        stvStETHPool(ctx).depositETH{value: user1Deposit}(USER1, address(0));
 
         // _assertUniversalInvariants("Step 1");
 
@@ -168,7 +163,7 @@ contract StvStETHPoolTest is StvStETHPoolHarness {
             "Mintable stETH shares should be equal to 0"
         );
         assertEq(
-            stvStETHPool(ctx).stethSharesForWithdrawal(USER1, ctx.pool.balanceOf(USER1)),
+            stvStETHPool(ctx).stethSharesToBurnForStvOf(USER1, ctx.pool.balanceOf(USER1)),
             0,
             "stETH shares for withdrawal should be equal to 0"
         );
@@ -197,7 +192,7 @@ contract StvStETHPoolTest is StvStETHPoolHarness {
             "stETH shares balance of USER1 should be equal to user1StSharesToMint"
         );
         assertEq(
-            stvStETHPool(ctx).stethSharesForWithdrawal(USER1, ctx.pool.balanceOf(USER1)),
+            stvStETHPool(ctx).stethSharesToBurnForStvOf(USER1, ctx.pool.balanceOf(USER1)),
             user1StSharesPart1,
             "stETH shares for withdrawal should be equal to user1StSharesToMint"
         );
@@ -234,7 +229,7 @@ contract StvStETHPoolTest is StvStETHPoolHarness {
             "stETH shares balance of USER1 should be equal to user1StSharesToMint"
         );
         assertEq(
-            stvStETHPool(ctx).stethSharesForWithdrawal(USER1, ctx.pool.balanceOf(USER1)),
+            stvStETHPool(ctx).stethSharesToBurnForStvOf(USER1, ctx.pool.balanceOf(USER1)),
             user1ExpectedMintableStethShares,
             "stETH shares for withdrawal should be equal to user1StSharesToMint"
         );
@@ -258,7 +253,7 @@ contract StvStETHPoolTest is StvStETHPoolHarness {
         uint256 user1ExpectedMintableStethShares = _calcMaxMintableStShares(ctx, user1Deposit);
 
         vm.prank(USER1);
-        stvStETHPool(ctx).depositETH{value: user1Deposit}(USER1, address(0), 0);
+        stvStETHPool(ctx).depositETH{value: user1Deposit}(USER1, address(0));
 
         assertEq(steth.sharesOf(USER1), 0, "stETH shares balance of USER1 should be equal to 0");
         assertEq(
@@ -275,7 +270,7 @@ contract StvStETHPoolTest is StvStETHPoolHarness {
         uint256 user2ExpectedMintableStethShares = _calcMaxMintableStShares(ctx, user2Deposit);
 
         vm.prank(USER2);
-        stvStETHPool(ctx).depositETH{value: user2Deposit}(USER2, address(0), 0);
+        stvStETHPool(ctx).depositETH{value: user2Deposit}(USER2, address(0));
 
         assertEq(steth.sharesOf(USER2), 0, "stETH shares balance of USER2 should be equal to 0");
         assertEq(
@@ -310,7 +305,7 @@ contract StvStETHPoolTest is StvStETHPoolHarness {
 
         assertEq(steth.sharesOf(USER1), user1StSharesPart1, "USER1 stETH shares should equal part1 minted");
         assertEq(
-            stvStETHPool(ctx).stethSharesForWithdrawal(USER1, ctx.pool.balanceOf(USER1)),
+            stvStETHPool(ctx).stethSharesToBurnForStvOf(USER1, ctx.pool.balanceOf(USER1)),
             user1StSharesPart1,
             "USER1 stSharesForWithdrawal should equal part1 minted"
         );
@@ -335,7 +330,7 @@ contract StvStETHPoolTest is StvStETHPoolHarness {
 
         assertEq(steth.sharesOf(USER2), user2StSharesPart1, "USER2 stETH shares should equal part1 minted");
         assertEq(
-            stvStETHPool(ctx).stethSharesForWithdrawal(USER2, ctx.pool.balanceOf(USER2)),
+            stvStETHPool(ctx).stethSharesToBurnForStvOf(USER2, ctx.pool.balanceOf(USER2)),
             user2StSharesPart1,
             "USER2 stSharesForWithdrawal should equal part1 minted"
         );
@@ -366,7 +361,7 @@ contract StvStETHPoolTest is StvStETHPoolHarness {
             "USER1 stETH shares should equal full expected after second mint"
         );
         assertEq(
-            stvStETHPool(ctx).stethSharesForWithdrawal(USER1, ctx.pool.balanceOf(USER1)),
+            stvStETHPool(ctx).stethSharesToBurnForStvOf(USER1, ctx.pool.balanceOf(USER1)),
             user1ExpectedMintableStethShares,
             "USER1 stSharesForWithdrawal should equal full expected"
         );
@@ -393,7 +388,7 @@ contract StvStETHPoolTest is StvStETHPoolHarness {
             "USER2 stETH shares should equal full expected after second mint"
         );
         assertEq(
-            stvStETHPool(ctx).stethSharesForWithdrawal(USER2, ctx.pool.balanceOf(USER2)),
+            stvStETHPool(ctx).stethSharesToBurnForStvOf(USER2, ctx.pool.balanceOf(USER2)),
             user2ExpectedMintableStethShares,
             "USER2 stSharesForWithdrawal should equal full expected"
         );
@@ -418,7 +413,7 @@ contract StvStETHPoolTest is StvStETHPoolHarness {
         uint256 user1Deposit = 200 ether;
         uint256 user1ExpectedMintable = _calcMaxMintableStShares(ctx, user1Deposit);
         vm.prank(USER1);
-        stvStETHPool(ctx).depositETH{value: user1Deposit}(USER1, address(0), user1ExpectedMintable);
+        stvStETHPool(ctx).depositETHAndMintStethShares{value: user1Deposit}(USER1, address(0), user1ExpectedMintable);
 
         assertEq(steth.sharesOf(USER1), user1ExpectedMintable, "USER1 stETH shares should equal expected minted");
         assertEq(stvStETHPool(ctx).remainingMintingCapacitySharesOf(USER1, 0), 0, "USER1 remaining mintable should be zero");
@@ -435,7 +430,7 @@ contract StvStETHPoolTest is StvStETHPoolHarness {
 
         uint256 user2Deposit = 10_000 wei;
         vm.prank(USER2);
-        stvStETHPool(ctx).depositETH{value: user2Deposit}(USER2, address(0), 0);
+        stvStETHPool(ctx).depositETH{value: user2Deposit}(USER2, address(0));
 
         {
             uint256 user2ExpectedMintableStethShares = _calcMaxMintableStShares(ctx, user2Deposit);
@@ -463,7 +458,7 @@ contract StvStETHPoolTest is StvStETHPoolHarness {
 
         uint256 sharesForDeposit = _calcMaxMintableStShares(ctx, user1Deposit);
         vm.prank(USER1);
-        w.depositETH{value: user1Deposit}(USER1, address(0), sharesForDeposit);
+        w.depositETHAndMintStethShares{value: user1Deposit}(USER1, address(0), sharesForDeposit);
 
         uint256 expectedUser1MintedStShares = sharesForDeposit;
         assertEq(
@@ -473,7 +468,7 @@ contract StvStETHPoolTest is StvStETHPoolHarness {
         );
         assertEq(w.remainingMintingCapacitySharesOf(USER1, 0), 0, "USER1 mintable stETH shares should be equal to 0");
         assertEq(
-            w.stethSharesForWithdrawal(USER1, w.balanceOf(USER1)),
+            w.stethSharesToBurnForStvOf(USER1, w.balanceOf(USER1)),
             expectedUser1MintedStShares,
             "USER1 stSharesForWithdrawal should be equal to expectedUser1MintedStShares"
         );
@@ -498,34 +493,33 @@ contract StvStETHPoolTest is StvStETHPoolHarness {
             "USER1 mintable stETH shares should equal capacity from rewards"
         );
 
-        assertEq(w.withdrawableEthOf(USER1, 0), user1Rewards, "USER1 withdrawable eth should be equal to user1Rewards");
-        assertEq(w.withdrawableEthOf(USER1, expectedUser1MintedStShares), w.previewRedeem(w.balanceOf(USER1)), "USER1 withdrawable eth should be equal to user1Deposit + user1Rewards");
+        assertEq(w.unlockedAssetsOf(USER1, 0), user1Rewards, "USER1 withdrawable eth should be equal to user1Rewards");
+        assertEq(w.unlockedAssetsOf(USER1, expectedUser1MintedStShares), w.previewRedeem(w.balanceOf(USER1)), "USER1 withdrawable eth should be equal to user1Deposit + user1Rewards");
 
-        assertEq(w.stethSharesForWithdrawal(USER1, w.balanceOf(USER1)), expectedUser1MintedStShares, "USER1 stSharesForWithdrawal should be equal to expectedUser1MintedStShares");
+        assertEq(w.stethSharesToBurnForStvOf(USER1, w.balanceOf(USER1)), expectedUser1MintedStShares, "USER1 stSharesForWithdrawal should be equal to expectedUser1MintedStShares");
 
         uint256 rewardsStv =
             Math.mulDiv(user1Rewards, w.balanceOf(USER1), user1Deposit + user1Rewards, Math.Rounding.Floor);
         // TODO: fix fail here
         assertLe(
-            w.stethSharesForWithdrawal(USER1, rewardsStv), WEI_ROUNDING_TOLERANCE,
+            w.stethSharesToBurnForStvOf(USER1, rewardsStv), WEI_ROUNDING_TOLERANCE,
             "USER1 stSharesForWithdrawal for rewards-only should be ~0"
         );
-        assertEq(w.stethSharesForWithdrawal(USER1, rewardsStv), 0, "USER1 stSharesForWithdrawal should be equal to 0");
+        assertEq(w.stethSharesToBurnForStvOf(USER1, rewardsStv), 0, "USER1 stSharesForWithdrawal should be equal to 0");
 
         _assertUniversalInvariants("Step 1", ctx);
 
         //
         // Step 2.0: User1 withdraws rewards without burning any stethShares
         //
-        uint256 withdrawableStvWithoutBurning = w.withdrawableStvOf(USER1, 0);
+        uint256 withdrawableStvWithoutBurning = w.unlockedStvOf(USER1, 0);
 
         assertEq(
             withdrawableStvWithoutBurning, rewardsStv, "Withdrawable stv should be equal to rewardsStv"
         );
 
         vm.prank(USER1);
-        uint256 requestId = w.requestWithdrawal(rewardsStv, 0, 0, USER1);
-        // same as: uint256 requestId = w.requestWithdrawal(rewardsStv);
+        uint256 requestId = ctx.withdrawalQueue.requestWithdrawal(USER1, rewardsStv, 0);
 
         WithdrawalQueue.WithdrawalRequestStatus memory status = ctx.withdrawalQueue.getWithdrawalStatus(requestId);
         assertEq(status.amountOfAssets, user1Rewards, "Withdrawal request amount should match previewRedeem");
@@ -550,7 +544,7 @@ contract StvStETHPoolTest is StvStETHPoolHarness {
         // User1 claims their withdrawal
         uint256 user1EthBalanceBeforeClaim = USER1.balance;
         vm.prank(USER1);
-        w.claimWithdrawal(requestId, USER1);
+        ctx.withdrawalQueue.claimWithdrawal(USER1, requestId);
 
         assertApproxEqAbs(
             USER1.balance,
@@ -568,29 +562,30 @@ contract StvStETHPoolTest is StvStETHPoolHarness {
         assertGt(w.balanceOf(USER1), stvFor1Wei, "USER1 stv balance should be greater than stvFor1Wei");
 
         vm.startPrank(USER1);
-        vm.expectRevert(StvStETHPool.InsufficientReservedBalance.selector);
-        w.requestWithdrawal(stvFor1Wei);
+        vm.expectRevert(abi.encodeWithSelector(WithdrawalQueue.RequestAmountTooSmall.selector, 1 wei));
+        ctx.withdrawalQueue.requestWithdrawal(USER1, stvFor1Wei, 0);
         vm.stopPrank();
 
         //
         // Step 2.2: User1 withdraws stv with burning stethShares
         //
         uint256 stvForMinWithdrawal = w.previewWithdraw(ctx.withdrawalQueue.MIN_WITHDRAWAL_AMOUNT());
-        uint256 stethSharesToBurn = w.stethSharesForWithdrawal(USER1, stvForMinWithdrawal);
+        uint256 stethSharesToBurn = w.stethSharesToBurnForStvOf(USER1, stvForMinWithdrawal);
 
         vm.startPrank(USER1);
 
         vm.expectRevert(StvStETHPool.InsufficientReservedBalance.selector);
-        w.requestWithdrawal(stvForMinWithdrawal);
+        ctx.withdrawalQueue.requestWithdrawal(USER1, stvForMinWithdrawal, 0);
 
         steth.approve(address(w), steth.getPooledEthByShares(stethSharesToBurn));
         vm.expectRevert(StvStETHPool.InsufficientReservedBalance.selector);
-        w.requestWithdrawal(stvForMinWithdrawal);
+        ctx.withdrawalQueue.requestWithdrawal(USER1, stvForMinWithdrawal, 0);
 
         steth.increaseAllowance(address(w), steth.getPooledEthByShares(1));
 
         uint256 user1StethSharesBefore = steth.sharesOf(USER1);
-        requestId = w.requestWithdrawal(stvForMinWithdrawal, stethSharesToBurn, 0, USER1);
+        w.burnStethShares(stethSharesToBurn);
+        requestId = ctx.withdrawalQueue.requestWithdrawal(USER1, stvForMinWithdrawal, 0);
 
         vm.stopPrank();
 
@@ -613,7 +608,7 @@ contract StvStETHPoolTest is StvStETHPoolHarness {
 
         uint256 user1EthBefore2 = USER1.balance;
         vm.prank(USER1);
-        w.claimWithdrawal(requestId, USER1);
+        ctx.withdrawalQueue.claimWithdrawal(USER1, requestId);
 
         assertApproxEqAbs(
             USER1.balance,
@@ -628,11 +623,12 @@ contract StvStETHPoolTest is StvStETHPoolHarness {
         //
         uint256 remainingStv = w.balanceOf(USER1);
         if (remainingStv > 0) {
-            uint256 burnForRest = w.stethSharesForWithdrawal(USER1, remainingStv);
+            uint256 burnForRest = w.stethSharesToBurnForStvOf(USER1, remainingStv);
 
             vm.startPrank(USER1);
             steth.approve(address(w), steth.getPooledEthByShares(burnForRest));
-            uint256 requestId3 = w.requestWithdrawal(remainingStv, burnForRest, 0, USER1);
+            w.burnStethShares(burnForRest);
+            uint256 requestId3 = ctx.withdrawalQueue.requestWithdrawal(USER1, remainingStv, 0);
             vm.stopPrank();
 
             _advancePastMinDelayAndRefreshReport(ctx, requestId3);
@@ -645,7 +641,7 @@ contract StvStETHPoolTest is StvStETHPoolHarness {
 
             uint256 user1EthBefore3 = USER1.balance;
             vm.prank(USER1);
-            w.claimWithdrawal(requestId3, USER1);
+            ctx.withdrawalQueue.claimWithdrawal(USER1, requestId3);
 
             assertApproxEqAbs(
                 USER1.balance,
@@ -682,10 +678,10 @@ contract StvStETHPoolTest is StvStETHPoolHarness {
         //
         uint256 user1Deposit = 100 ether;
         uint256 user1MintedShares = _calcMaxMintableStShares(ctx, user1Deposit);
-        user1MintedShares = user1MintedShares / 2 * 2; // make even for easier half transfer
+        user1MintedShares = user1MintedShares / 4 * 4; // Make it divisible by 4 for easier splits
 
         vm.prank(USER1);
-        w.depositETH{value: user1Deposit}(USER1, address(0), user1MintedShares);
+        w.depositETHAndMintStethShares{value: user1Deposit}(USER1, address(0), user1MintedShares);
 
         uint256 user1Stv = w.balanceOf(USER1);
 
@@ -789,7 +785,7 @@ contract StvStETHPoolTest is StvStETHPoolHarness {
         uint256 userDeposit = 100 ether;
 
         vm.prank(USER1);
-        w.depositETH{value: userDeposit}(USER1, address(0), _calcMaxMintableStShares(ctx, userDeposit));
+        w.depositETHAndMintStethShares{value: userDeposit}(USER1, address(0), _calcMaxMintableStShares(ctx, userDeposit));
 
         vm.startPrank(USER1);
         vm.expectRevert(StvStETHPool.InsufficientReservedBalance.selector);
@@ -807,7 +803,7 @@ contract StvStETHPoolTest is StvStETHPoolHarness {
         uint256 user1Deposit = 50 ether;
         vm.prank(USER1);
         uint256 stethSharesToMint = _calcMaxMintableStShares(ctx, user1Deposit) / 2 * 2; // make even for easier half transfer
-        w.depositETH{value: user1Deposit}(USER1, address(0), stethSharesToMint);
+        w.depositETHAndMintStethShares{value: user1Deposit}(USER1, address(0), stethSharesToMint);
 
         uint256 sharesToTransfer = w.mintedStethSharesOf(USER1) / 2;
         uint256 minStvRequired = w.calcStvToLockForStethShares(sharesToTransfer);
@@ -833,7 +829,7 @@ contract StvStETHPoolTest is StvStETHPoolHarness {
         // User deposits and mints max shares
         uint256 userDeposit = 100 ether;
         vm.prank(USER1);
-        w.depositETH{value: userDeposit}(USER1, address(0), _calcMaxMintableStShares(ctx, userDeposit));
+        w.depositETHAndMintStethShares{value: userDeposit}(USER1, address(0), _calcMaxMintableStShares(ctx, userDeposit));
 
         // Vault loses 10% value - user now below reserve ratio
         vm.warp(block.timestamp + 1 days);
@@ -880,7 +876,7 @@ contract StvStETHPoolTest is StvStETHPoolHarness {
         // User deposits and mints max shares
         uint256 userDeposit = 100 ether;
         vm.prank(USER1);
-        w.depositETH{value: userDeposit}(USER1, address(0), _calcMaxMintableStShares(ctx, userDeposit));
+        w.depositETHAndMintStethShares{value: userDeposit}(USER1, address(0), _calcMaxMintableStShares(ctx, userDeposit));
 
         // Vault loses value
         vm.warp(block.timestamp + 1 days);
@@ -914,7 +910,7 @@ contract StvStETHPoolTest is StvStETHPoolHarness {
         // User deposits and mints max shares
         uint256 userDeposit = 100 ether;
         vm.prank(USER1);
-        w.depositETH{value: userDeposit}(USER1, address(0), _calcMaxMintableStShares(ctx, userDeposit));
+        w.depositETHAndMintStethShares{value: userDeposit}(USER1, address(0), _calcMaxMintableStShares(ctx, userDeposit));
 
         // Initially can't transfer - at exact reserve ratio
         vm.startPrank(USER1);
@@ -947,7 +943,7 @@ contract StvStETHPoolTest is StvStETHPoolHarness {
         // User deposits and mints
         uint256 userDeposit = 100 ether;
         vm.prank(USER1);
-        w.depositETH{value: userDeposit}(USER1, address(0), _calcMaxMintableStShares(ctx, userDeposit));
+        w.depositETHAndMintStethShares{value: userDeposit}(USER1, address(0), _calcMaxMintableStShares(ctx, userDeposit));
 
         // Vault gains 1%
         reportVaultValueChangeNoFees(ctx, 100_00 + 100);
@@ -971,7 +967,7 @@ contract StvStETHPoolTest is StvStETHPoolHarness {
 
         // User deposits WITHOUT minting shares
         vm.prank(USER1);
-        w.depositETH{value: 10 ether}(USER1, address(0), 0);
+        w.depositETH{value: 10 ether}(USER1, address(0));
 
         assertEq(w.mintedStethSharesOf(USER1), 0, "USER1 has no minted shares");
 
@@ -993,7 +989,7 @@ contract StvStETHPoolTest is StvStETHPoolHarness {
         // User deposits and mints max
         uint256 userDeposit = 100 ether;
         vm.prank(USER1);
-        w.depositETH{value: userDeposit}(USER1, address(0), _calcMaxMintableStShares(ctx, userDeposit));
+        w.depositETHAndMintStethShares{value: userDeposit}(USER1, address(0), _calcMaxMintableStShares(ctx, userDeposit));
 
         uint256 initialMinted = w.mintedStethSharesOf(USER1);
         assertEq(w.remainingMintingCapacitySharesOf(USER1, 0), 0, "No capacity initially");
@@ -1022,7 +1018,7 @@ contract StvStETHPoolTest is StvStETHPoolHarness {
 
         // User deposits and mints
         vm.prank(USER1);
-        w.depositETH{value: 50 ether}(USER1, address(0), _calcMaxMintableStShares(ctx, 50 ether));
+        w.depositETHAndMintStethShares{value: 50 ether}(USER1, address(0), _calcMaxMintableStShares(ctx, 50 ether));
 
         uint256 allStv = w.balanceOf(USER1);
         uint256 allShares = w.mintedStethSharesOf(USER1);

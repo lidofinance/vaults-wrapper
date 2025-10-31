@@ -5,7 +5,6 @@ import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
 import {ITellerWithMultiAssetSupport} from "src/interfaces/ggv/ITellerWithMultiAssetSupport.sol";
 import {GGVVaultMock} from "./GGVVaultMock.sol";
-import {BorrowedMath} from "./BorrowedMath.sol";
 import {IStETH} from "src/interfaces/IStETH.sol";
 
 contract GGVMockTeller is ITellerWithMultiAssetSupport {
@@ -60,7 +59,11 @@ contract GGVMockTeller is ITellerWithMultiAssetSupport {
     }
 
     function _updateAssetData(ERC20 asset, bool allowDeposits, bool allowWithdraws, uint16 sharePremium) internal {
-        assets[asset] = Asset(allowDeposits, allowWithdraws, sharePremium);
+        assets[asset] = Asset({
+            allowDeposits: allowDeposits,
+            allowWithdraws: allowWithdraws,
+            sharePremium: sharePremium
+        });
     }
 
     function updateAssetData(ERC20 asset, bool allowDeposits, bool allowWithdraws, uint16 sharePremium) external {

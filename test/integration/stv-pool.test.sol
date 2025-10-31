@@ -1,14 +1,7 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity >=0.8.25;
 
-import {Test, console} from "forge-std/Test.sol";
-
 import {StvPoolHarness} from "test/utils/StvPoolHarness.sol";
-import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
-import {Factory} from "src/Factory.sol";
-import {StvPool} from "src/StvPool.sol";
-import {IDashboard} from "src/interfaces/IDashboard.sol";
-import {IStakingVault} from "src/interfaces/IStakingVault.sol";
 
 /**
  * @title StvPoolTest
@@ -33,7 +26,7 @@ contract StvPoolTest is StvPoolHarness {
 
         // 2) USER1 immediately requests withdrawal of all their shares
         vm.prank(USER1);
-        uint256 requestId = ctx.pool.requestWithdrawal(expectedStv);
+        uint256 requestId = ctx.withdrawalQueue.requestWithdrawal(USER1, expectedStv, 0);
 
         // Expected ETH to withdraw
         uint256 expectedEth = ctx.pool.previewRedeem(expectedStv);
@@ -48,7 +41,7 @@ contract StvPoolTest is StvPoolHarness {
         // 5) USER1 claims
         uint256 userBalanceBefore = USER1.balance;
         vm.prank(USER1);
-        ctx.pool.claimWithdrawal(requestId, USER1);
+        ctx.withdrawalQueue.claimWithdrawal(USER1, requestId);
 
         assertEq(USER1.balance, userBalanceBefore + expectedEth, "user should receive expected ETH on claim");
     }
@@ -67,7 +60,7 @@ contract StvPoolTest is StvPoolHarness {
 
         // 2) USER1 immediately requests withdrawal of all their shares
         vm.prank(USER1);
-        uint256 requestId = ctx.pool.requestWithdrawal(expectedStv);
+        uint256 requestId = ctx.withdrawalQueue.requestWithdrawal(USER1, expectedStv, 0);
 
         // Expected ETH to withdraw is locked at request time
         uint256 expectedEth = ctx.pool.previewRedeem(expectedStv);
@@ -86,7 +79,7 @@ contract StvPoolTest is StvPoolHarness {
         // 7) USER1 claims
         uint256 userBalanceBefore = USER1.balance;
         vm.prank(USER1);
-        ctx.pool.claimWithdrawal(requestId, USER1);
+        ctx.withdrawalQueue.claimWithdrawal(USER1, requestId);
 
         // Expected claim equals the amount locked at request time (no discount on rewards)
         assertEq(USER1.balance, userBalanceBefore + expectedEth, "user should receive expected ETH on claim");
@@ -113,7 +106,7 @@ contract StvPoolTest is StvPoolHarness {
         assertApproxEqAbs(expectedEth, (depositAmount * 103) / 100, WEI_ROUNDING_TOLERANCE, "expected eth should be ~+3% of deposit");
 
         vm.prank(USER1);
-        uint256 requestId = ctx.pool.requestWithdrawal(expectedStv);
+        uint256 requestId = ctx.withdrawalQueue.requestWithdrawal(USER1, expectedStv, 0);
         // 4) Advance past min delay and ensure a fresh report after the request (required by WQ)
         _advancePastMinDelayAndRefreshReport(ctx, requestId);
 
@@ -124,7 +117,7 @@ contract StvPoolTest is StvPoolHarness {
         // 7) USER1 claims and receives the increased amount
         uint256 userBalanceBefore = USER1.balance;
         vm.prank(USER1);
-        ctx.pool.claimWithdrawal(requestId, USER1);
+        ctx.withdrawalQueue.claimWithdrawal(USER1, requestId);
 
         assertApproxEqAbs(
             USER1.balance,
@@ -148,7 +141,7 @@ contract StvPoolTest is StvPoolHarness {
 
         // 2) USER1 immediately requests withdrawal of all their shares
         vm.prank(USER1);
-        ctx.pool.requestWithdrawal(expectedStv);
+        ctx.withdrawalQueue.requestWithdrawal(USER1, expectedStv, 0);
 
         // Expected ETH to withdraw is locked at request time (equals initial deposit for StvPool)
         uint256 expectedEthAtRequest = ctx.pool.previewRedeem(expectedStv);
@@ -181,7 +174,7 @@ contract StvPoolTest is StvPoolHarness {
 
         // 2) USER1 requests withdrawal of all their shares
         vm.prank(USER1);
-        uint256 requestId = ctx.pool.requestWithdrawal(expectedStv);
+        uint256 requestId = ctx.withdrawalQueue.requestWithdrawal(USER1, expectedStv, 0);
 
         // 3) Advance past min delay and ensure a fresh report after the request (required by WQ)
         _advancePastMinDelayAndRefreshReport(ctx, requestId);
@@ -196,7 +189,7 @@ contract StvPoolTest is StvPoolHarness {
         // 7) USER1 claims and receives the decreased amount
         uint256 userBalanceBefore = USER1.balance;
         vm.prank(USER1);
-        ctx.pool.claimWithdrawal(requestId, USER1);
+        ctx.withdrawalQueue.claimWithdrawal(USER1, requestId);
 
         assertApproxEqAbs(
             USER1.balance,
@@ -222,14 +215,14 @@ contract StvPoolTest is StvPoolHarness {
         uint256 firstShares = userShares / 2;
         uint256 firstAssets = ctx.pool.previewRedeem(firstShares);
         vm.prank(USER1);
-        uint256 requestId1 = ctx.pool.requestWithdrawal(firstShares);
+        uint256 requestId1 = ctx.withdrawalQueue.requestWithdrawal(USER1, firstShares, 0);
 
         // Second partial: the remaining shares
         uint256 remainingShares = ctx.pool.balanceOf(USER1);
         uint256 secondShares = remainingShares;
         uint256 secondAssets = ctx.pool.previewRedeem(secondShares);
         vm.prank(USER1);
-        uint256 requestId2 = ctx.pool.requestWithdrawal(secondShares);
+        uint256 requestId2 = ctx.withdrawalQueue.requestWithdrawal(USER1, secondShares, 0);
 
         // 3) Advance past min delay and ensure fresh report
         _advancePastMinDelayAndRefreshReport(ctx, requestId2);
@@ -242,9 +235,9 @@ contract StvPoolTest is StvPoolHarness {
         // 5) Claim both and verify total equals sum of previews; user ends with zero shares
         uint256 userBalanceBefore = USER1.balance;
         vm.prank(USER1);
-        ctx.pool.claimWithdrawal(requestId1, USER1);
+        ctx.withdrawalQueue.claimWithdrawal(USER1, requestId1);
         vm.prank(USER1);
-        ctx.pool.claimWithdrawal(requestId2, USER1);
+        ctx.withdrawalQueue.claimWithdrawal(USER1, requestId2);
 
         assertApproxEqAbs(
             USER1.balance,
@@ -272,8 +265,8 @@ contract StvPoolTest is StvPoolHarness {
         uint256 secondAssets = ctx.pool.previewRedeem(secondShares);
 
         vm.startPrank(USER1);
-        uint256 requestId1 = ctx.pool.requestWithdrawal(firstShares);
-        uint256 requestId2 = ctx.pool.requestWithdrawal(secondShares);
+        uint256 requestId1 = ctx.withdrawalQueue.requestWithdrawal(USER1, firstShares, 0);
+        uint256 requestId2 = ctx.withdrawalQueue.requestWithdrawal(USER1, secondShares, 0);
         vm.stopPrank();
 
         // 3) Advance past min delay for both
@@ -290,7 +283,7 @@ contract StvPoolTest is StvPoolHarness {
         // 5) Claim first, second remains unfinalized
         uint256 userBalBefore = USER1.balance;
         vm.prank(USER1);
-        ctx.pool.claimWithdrawal(requestId1, USER1);
+        ctx.withdrawalQueue.claimWithdrawal(USER1, requestId1);
         assertApproxEqAbs(USER1.balance, userBalBefore + firstAssets, WEI_ROUNDING_TOLERANCE);
 
         // 6) Return remaining via CL and finalize second
@@ -303,7 +296,7 @@ contract StvPoolTest is StvPoolHarness {
         // 7) Claim second
         uint256 userBalBefore2 = USER1.balance;
         vm.prank(USER1);
-        ctx.pool.claimWithdrawal(requestId2, USER1);
+        ctx.withdrawalQueue.claimWithdrawal(USER1, requestId2);
         assertApproxEqAbs(USER1.balance, userBalBefore2 + secondAssets, WEI_ROUNDING_TOLERANCE);
     }
 
@@ -343,12 +336,12 @@ contract StvPoolTest is StvPoolHarness {
         ctx.pool.depositETH{value: depositAmount}(USER1, address(0));
         uint256 userShares = ctx.pool.balanceOf(USER1);
         vm.prank(USER1);
-        uint256 requestId = ctx.pool.requestWithdrawal(userShares);
+        uint256 requestId = ctx.withdrawalQueue.requestWithdrawal(USER1, userShares, 0);
 
         // Claim before finalize reverts
         vm.expectRevert("RequestNotFoundOrNotFinalized(1)");
         vm.prank(USER1);
-        ctx.pool.claimWithdrawal(requestId, USER1);
+        ctx.withdrawalQueue.claimWithdrawal(USER1, requestId);
 
         // Satisfy min delay and freshness
         _advancePastMinDelayAndRefreshReport(ctx, requestId);
@@ -360,7 +353,7 @@ contract StvPoolTest is StvPoolHarness {
         // Claim succeeds
         uint256 before = USER1.balance;
         vm.prank(USER1);
-        ctx.pool.claimWithdrawal(requestId, USER1);
+        ctx.withdrawalQueue.claimWithdrawal(USER1, requestId);
         assertApproxEqAbs(USER1.balance, before + depositAmount, WEI_ROUNDING_TOLERANCE);
     }
 }

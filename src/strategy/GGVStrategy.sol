@@ -9,6 +9,7 @@ import {IBoringOnChainQueue} from "src/interfaces/ggv/IBoringOnChainQueue.sol";
 import {Strategy} from "src/strategy/Strategy.sol";
 import {IStrategyCallForwarder} from "src/interfaces/IStrategyCallForwarder.sol";
 import {StvStETHPool} from "src/StvStETHPool.sol";
+import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
 
 contract GGVStrategy is Strategy {
 
@@ -53,7 +54,7 @@ contract GGVStrategy is Strategy {
     function supply(address _referral, bytes calldata _params) external payable {
         address callForwarder = _getOrCreateCallForwarder(msg.sender);
         uint256 stethShares = POOL.calcStethSharesToMintForAssets(msg.value);
-        uint256 stv = POOL.depositETH{value: msg.value}(callForwarder, _referral, stethShares);
+        uint256 stv = POOL.depositETHAndMintStethShares{value: msg.value}(callForwarder, _referral, stethShares);
 
         uint256 stethAmount = STETH.getPooledEthByShares(stethShares);
 
@@ -177,7 +178,7 @@ contract GGVStrategy is Strategy {
     }
 
     /// @notice Finalizes a withdrawal of stETH from the strategy
-    function finalizeRequestExit(address /*_receiver*/, bytes32 /*_requestId*/) external {
+    function finalizeRequestExit(address /*_receiver*/, bytes32 /*_requestId*/) external pure {
         // GGV does not provide a way to check request status, so we cannot verify if the request
         // was actually finalized in GGV Queue. Additionally, GGV allows multiple withdrawal requests,
         // so it's possible to have request->finalize->request sequence where 2 unfinalised requests
@@ -218,9 +219,9 @@ contract GGVStrategy is Strategy {
     /// @param _user The user to calculate the amount of stv to withdraw for
     /// @param _stethSharesToBurn The amount of stETH shares to burn
     /// @return stv The amount of stv that can be withdrawn
-    function proxyWithdrawableStvOf(address _user, uint256 _stethSharesToBurn) external view returns(uint256 stv) {
+    function proxyUnlockedStvOf(address _user, uint256 _stethSharesToBurn) external view returns(uint256 stv) {
         address callForwarder = getStrategyCallForwarderAddress(_user);
-        stv = POOL.withdrawableStvOf(callForwarder, _stethSharesToBurn);
+        stv = POOL.unlockedStvOf(callForwarder, _stethSharesToBurn);
     }
 
     /// @notice Requests a withdrawal from the Withdrawal Queue
@@ -242,15 +243,22 @@ contract GGVStrategy is Strategy {
             abi.encodeWithSelector(WSTETH.unwrap.selector, WSTETH.balanceOf(callForwarder))
         );
 
-        // request withdrawal from pool
-        bytes memory withdrawalData = IStrategyCallForwarder(callForwarder).call(
+        IStrategyCallForwarder(callForwarder).call(
             address(POOL),
             abi.encodeWithSelector(
-                StvStETHPool.requestWithdrawal.selector,
+                StvStETHPool.burnStethShares.selector,
+                _stethSharesToBurn
+            )
+        );
+
+        // request withdrawal from pool
+        bytes memory withdrawalData = IStrategyCallForwarder(callForwarder).call(
+            address(POOL.WITHDRAWAL_QUEUE()),
+            abi.encodeWithSelector(
+                WithdrawalQueue.requestWithdrawal.selector,
+                _receiver,
                 _stvToWithdraw,
-                _stethSharesToBurn,
-                _stethSharesToRebalance,
-                _receiver
+                _stethSharesToRebalance
             )
         );
         requestId = abi.decode(withdrawalData, (uint256));

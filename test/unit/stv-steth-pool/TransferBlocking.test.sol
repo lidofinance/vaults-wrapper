@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity >=0.8.25;
 
-import {Test, console} from "forge-std/Test.sol";
+import {Test} from "forge-std/Test.sol";
 import {SetupStvStETHPool} from "./SetupStvStETHPool.sol";
 import {StvStETHPool} from "src/StvStETHPool.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
@@ -11,7 +11,7 @@ contract TransferBlockingTest is Test, SetupStvStETHPool {
 
     function setUp() public override {
         super.setUp();
-        pool.depositETH{value: ethToDeposit}(address(0));
+        pool.depositETH{value: ethToDeposit}(address(this), address(0));
     }
 
     // Basic transfer tests without debt

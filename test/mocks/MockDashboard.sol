@@ -2,14 +2,15 @@
 pragma solidity >=0.8.25;
 
 import {MockStETH} from "./MockStETH.sol";
+import {MockWstETH} from "./MockWstETH.sol";
 import {MockVaultHub} from "./MockVaultHub.sol";
 import {MockStakingVault} from "./MockStakingVault.sol";
 import {AccessControlEnumerable} from "@openzeppelin/contracts/access/extensions/AccessControlEnumerable.sol";
-import {IStakingVault} from "../../src/interfaces/IStakingVault.sol";
 import {IVaultHub} from "../../src/interfaces/IVaultHub.sol";
 
 contract MockDashboard is AccessControlEnumerable {
     MockStETH public immutable STETH;
+    MockWstETH public immutable WSTETH;
     MockVaultHub public immutable VAULT_HUB;
     address public immutable STAKING_VAULT;
 
@@ -23,8 +24,9 @@ contract MockDashboard is AccessControlEnumerable {
     bytes32 public constant WITHDRAW_ROLE = keccak256("WITHDRAW_ROLE");
     bytes32 public constant REBALANCE_ROLE = keccak256("REBALANCE_ROLE");
 
-    constructor(address _steth, address _vaultHub, address _stakingVault, address _admin) {
+    constructor(address _steth, address _wsteth, address _vaultHub, address _stakingVault, address _admin) {
         STETH = MockStETH(_steth);
+        WSTETH = MockWstETH(payable(_wsteth));
         VAULT_HUB = MockVaultHub(payable(_vaultHub));
         STAKING_VAULT = _stakingVault; // Mock staking vault address
         _grantRole(DEFAULT_ADMIN_ROLE, _admin);
@@ -32,6 +34,10 @@ contract MockDashboard is AccessControlEnumerable {
         // Set default report freshness to true
         VAULT_HUB.mock_setReportFreshness(STAKING_VAULT, true);
         VAULT_HUB.mock_setConnectionParameters(STAKING_VAULT, 10_00, 9_75); // 10% reserve, 9.75% forced rebalance
+    }
+
+    function initialize() external {
+        STETH.approve(address(WSTETH), type(uint256).max);
     }
 
     function fund() external payable {
@@ -80,8 +86,24 @@ contract MockDashboard is AccessControlEnumerable {
         VAULT_HUB.mintShares(STAKING_VAULT, to, amount);
     }
 
+    function mintWstETH(address to, uint256 amount) external {
+        VAULT_HUB.mintShares(STAKING_VAULT, address(this), amount);
+        uint256 mintedStETH = STETH.getPooledEthBySharesRoundUp(amount);
+        uint256 wrappedWstETH = WSTETH.wrap(mintedStETH);
+        WSTETH.transfer(to, wrappedWstETH);
+    }
+
     function burnShares(uint256 amount) external {
         STETH.transferSharesFrom(msg.sender, address(VAULT_HUB), amount);
+        VAULT_HUB.burnShares(STAKING_VAULT, amount);
+    }
+
+    function burnWstETH(uint256 amount) external {
+        WSTETH.transferFrom(msg.sender, address(this), amount);
+        uint256 unwrappedStETH = WSTETH.unwrap(amount);
+        uint256 unwrappedShares = STETH.getSharesByPooledEth(unwrappedStETH);
+
+        STETH.transferShares(address(VAULT_HUB), unwrappedShares);
         VAULT_HUB.burnShares(STAKING_VAULT, amount);
     }
 
@@ -133,11 +155,20 @@ contract MockDashboardFactory {
     function createMockDashboard(address _owner) external returns (MockDashboard) {
         MockVaultHub vaultHub = new MockVaultHub();
         MockStakingVault stakingVault = new MockStakingVault();
-
         MockStETH steth = MockStETH(vaultHub.LIDO());
+        MockWstETH wsteth = new MockWstETH(address(steth));
+
         steth.mock_setTotalPooled(1000 ether, 800 * 10 ** 18);
 
-        MockDashboard dashboard = new MockDashboard(address(steth), address(vaultHub), address(stakingVault), _owner);
+        MockDashboard dashboard = new MockDashboard(
+            address(steth),
+            address(wsteth),
+            address(vaultHub),
+            address(stakingVault),
+            _owner
+        );
+
+        dashboard.initialize();
 
         return dashboard;
     }

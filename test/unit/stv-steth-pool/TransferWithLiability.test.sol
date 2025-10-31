@@ -2,7 +2,6 @@
 pragma solidity >=0.8.25;
 
 import {Test} from "forge-std/Test.sol";
-import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
 import {SetupStvStETHPool} from "./SetupStvStETHPool.sol";
 import {StvStETHPool} from "src/StvStETHPool.sol";
@@ -10,7 +9,7 @@ import {StvStETHPool} from "src/StvStETHPool.sol";
 contract TransferWithLiabilityTest is Test, SetupStvStETHPool {
     function setUp() public override {
         super.setUp();
-        pool.depositETH{value: 20 ether}(address(0));
+        pool.depositETH{value: 20 ether}(address(this), address(0));
     }
 
     function test_TransferWithLiability_TransfersDebtAndStv() public {

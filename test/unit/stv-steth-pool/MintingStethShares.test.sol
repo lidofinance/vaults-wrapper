@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity >=0.8.25;
 
-import {Test, console} from "forge-std/Test.sol";
+import {Test} from "forge-std/Test.sol";
 import {SetupStvStETHPool} from "./SetupStvStETHPool.sol";
 import {StvStETHPool} from "src/StvStETHPool.sol";
 
@@ -12,7 +12,7 @@ contract MintingStethSharesTest is Test, SetupStvStETHPool {
     function setUp() public override {
         super.setUp();
         // Deposit some ETH to get minting capacity
-        pool.depositETH{value: ethToDeposit}(address(0));
+        pool.depositETH{value: ethToDeposit}(address(this), address(0));
     }
 
     // Initial state tests
@@ -20,6 +20,7 @@ contract MintingStethSharesTest is Test, SetupStvStETHPool {
     function test_InitialState_NoMintedStethShares() public view {
         assertEq(pool.totalMintedStethShares(), 0);
         assertEq(pool.mintedStethSharesOf(address(this)), 0);
+        assertEq(steth.balanceOf(address(this)), 0);
     }
 
     function test_InitialState_HasMintingCapacity() public view {
@@ -43,6 +44,14 @@ contract MintingStethSharesTest is Test, SetupStvStETHPool {
         pool.mintStethShares(stethSharesToMint);
 
         assertEq(pool.totalMintedStethShares(), totalBefore + stethSharesToMint);
+    }
+
+    function test_MintStethShares_IncreasesUserStethBalance() public {
+        uint256 userStethBefore = steth.sharesOf(address(this));
+        pool.mintStethShares(stethSharesToMint);
+        uint256 userStethAfter = steth.sharesOf(address(this));
+
+        assertEq(userStethAfter, userStethBefore + stethSharesToMint);
     }
 
     function test_MintStethShares_IncreasesUserMintedShares() public {
@@ -166,7 +175,7 @@ contract MintingStethSharesTest is Test, SetupStvStETHPool {
     function test_MintingCapacity_IncreasesWithMoreDeposits() public {
         uint256 capacityBefore = pool.remainingMintingCapacitySharesOf(address(this), 0);
 
-        pool.depositETH{value: ethToDeposit}(address(0));
+        pool.depositETH{value: ethToDeposit}(address(this), address(0));
 
         uint256 capacityAfter = pool.remainingMintingCapacitySharesOf(address(this), 0);
         assertGt(capacityAfter, capacityBefore);

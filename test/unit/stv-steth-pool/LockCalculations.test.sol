@@ -9,7 +9,7 @@ import {SetupStvStETHPool} from "./SetupStvStETHPool.sol";
 contract LockCalculationsTest is Test, SetupStvStETHPool {
     function setUp() public override {
         super.setUp();
-        pool.depositETH{value: 10 ether}(address(0));
+        pool.depositETH{value: 10 ether}(address(this), address(0));
     }
 
     function test_CalcAssetsToLockForStethShares_Zero() public view {

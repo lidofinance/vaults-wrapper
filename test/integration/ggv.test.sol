@@ -169,7 +169,7 @@ contract GGVTest is StvStrategyPoolHarness {
         // Check that user is not allowed to deposit directly
         vm.prank(USER1);
         vm.expectRevert(abi.encodeWithSelector(AllowList.NotAllowListed.selector, USER1));
-        pool.depositETH{value: depositAmount}(USER1);
+        pool.depositETH{value: depositAmount}(USER1, address(0));
 
         // 1. Initial Deposit
         vm.prank(USER1);
@@ -231,7 +231,7 @@ contract GGVTest is StvStrategyPoolHarness {
 
         uint256 _stethSharesToBurn = ggvStrategy.proxyStethSharesOf(USER1);
         uint256 _stethSharesToRebalance = ggvStrategy.proxyStethSharesToRebalance(USER1);
-        uint256 _stvToWithdraw = ggvStrategy.proxyWithdrawableStvOf(USER1, _stethSharesToRebalance + _stethSharesToBurn);
+        uint256 _stvToWithdraw = ggvStrategy.proxyUnlockedStvOf(USER1, _stethSharesToRebalance + _stethSharesToBurn);
 
         vm.startPrank(USER1);
         ggvStrategy.requestWithdrawal(_stvToWithdraw, _stethSharesToBurn, _stethSharesToRebalance, USER1);
@@ -251,12 +251,12 @@ contract GGVTest is StvStrategyPoolHarness {
         console.log("\n[SCENARIO] Step 7. Claim final ETH");
         uint256 userBalanceBeforeClaim = USER1.balance;
 
-        uint256[] memory wqRequestIds = withdrawalQueue.getWithdrawalRequests(USER1);
+        uint256[] memory wqRequestIds = withdrawalQueue.withdrawalRequestsOf(USER1);
 
         //  console.log("requestIds length", wqRequestIds[0]);
 
         vm.prank(USER1);
-        pool.claimWithdrawal(wqRequestIds[0], USER1);
+        withdrawalQueue.claimWithdrawal(USER1, wqRequestIds[0]);
 
         uint256 ethClaimed = USER1.balance - userBalanceBeforeClaim;
         console.log("ETH Claimed:", ethClaimed);

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity >=0.8.25;
 
-import {Test, console} from "forge-std/Test.sol";
+import {Test} from "forge-std/Test.sol";
 import {SetupStvStETHPool} from "./SetupStvStETHPool.sol";
 
 contract ExceedingMintedStethTest is Test, SetupStvStETHPool {
@@ -11,7 +11,7 @@ contract ExceedingMintedStethTest is Test, SetupStvStETHPool {
     function setUp() public override {
         super.setUp();
 
-        pool.depositETH{value: 3 ether}(address(0));
+        pool.depositETH{value: 3 ether}(address(this), address(0));
         pool.mintStethShares(initialMintedStethShares);
     }
 

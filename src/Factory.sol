@@ -286,7 +286,8 @@ contract Factory {
             address(dashboard.stakingVault()),
             LAZY_ORACLE,
             config.maxFinalizationTime,
-            config.minWithdrawalDelayTime
+            config.minWithdrawalDelayTime,
+            config.mintingEnabled
         );
 
         address wqAdmin = config.owner;
@@ -375,5 +376,4 @@ contract Factory {
 
         // TODO: LOSS_SOCIALIZER_ROLE
     }
-
 }

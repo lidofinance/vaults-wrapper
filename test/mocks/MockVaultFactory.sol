@@ -5,6 +5,7 @@ import {IVaultFactory} from "../../src/interfaces/IVaultFactory.sol";
 import {MockDashboard} from "./MockDashboard.sol";
 import {MockStakingVault} from "./MockStakingVault.sol";
 import {MockVaultHub} from "./MockVaultHub.sol";
+import {MockWstETH} from "./MockWstETH.sol";
 
 contract MockVaultFactory is IVaultFactory {
     address public VAULT_HUB;
@@ -38,7 +39,8 @@ contract MockVaultFactory is IVaultFactory {
         }
         vault = address(new MockStakingVault());
         address steth = address(MockVaultHub(payable(VAULT_HUB)).LIDO());
-        dashboard = address(new MockDashboard(steth, VAULT_HUB, vault, _admin));
+        address wsteth = address(new MockWstETH(steth));
+        dashboard = address(new MockDashboard(steth, wsteth, VAULT_HUB, vault, _admin));
 
         // Send the connect deposit to the vault to simulate the real factory behavior
         (bool success, ) = vault.call{value: msg.value}("");
@@ -58,7 +60,8 @@ contract MockVaultFactory is IVaultFactory {
         require(msg.value == 0 ether, "invalid value sent");
         vault = address(new MockStakingVault());
         address steth = address(MockVaultHub(payable(VAULT_HUB)).LIDO());
-        dashboard = address(new MockDashboard(steth, VAULT_HUB, vault, _admin));
+        address wsteth = address(new MockWstETH(steth));
+        dashboard = address(new MockDashboard(steth, wsteth, VAULT_HUB, vault, _admin));
         return (vault, dashboard);
     }
 }
