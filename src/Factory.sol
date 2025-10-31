@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >=0.8.25;
 
-import {BasePool} from "./BasePool.sol";
+import {StvPool} from "./StvPool.sol";
 import {WithdrawalQueue} from "./WithdrawalQueue.sol";
 import {StvPoolFactory} from "./factories/StvPoolFactory.sol";
 import {StvStETHPoolFactory} from "./factories/StvStETHPoolFactory.sol";
-import {StvStrategyPoolFactory} from "./factories/StvStrategyPoolFactory.sol";
 import {WithdrawalQueueFactory} from "./factories/WithdrawalQueueFactory.sol";
 import {DistributorFactory} from "./factories/DistributorFactory.sol";
 import {LoopStrategyFactory} from "./factories/LoopStrategyFactory.sol";
@@ -13,670 +12,409 @@ import {GGVStrategyFactory} from "./factories/GGVStrategyFactory.sol";
 import {TimelockFactory} from "./factories/TimelockFactory.sol";
 import {OssifiableProxy} from "./proxy/OssifiableProxy.sol";
 import {Distributor} from "./Distributor.sol";
+import {DummyImplementation} from "./proxy/DummyImplementation.sol";
+import {ILidoLocator} from "./interfaces/ILidoLocator.sol";
+import {IVaultHub} from "./interfaces/IVaultHub.sol";
+import {IStrategyFactory} from "./interfaces/IStrategyFactory.sol";
 
 import {IVaultFactory} from "./interfaces/IVaultFactory.sol";
 import {IDashboard} from "./interfaces/IDashboard.sol";
+import {WithdrawalQueue} from "./WithdrawalQueue.sol";
 
 error InvalidConfiguration();
+error InsufficientConnectDeposit(uint256 required, uint256 provided);
 
 contract Factory {
-    struct WrapperConfig {
-        address vaultFactory;
-        address steth;
-        address wsteth;
-        address lazyOracle;
+    struct SubFactories {
         address stvPoolFactory;
         address stvStETHPoolFactory;
-        address stvStrategyPoolFactory;
         address withdrawalQueueFactory;
         address distributorFactory;
         address loopStrategyFactory;
         address ggvStrategyFactory;
-        address dummyImplementation;
         address timelockFactory;
     }
 
     struct TimelockConfig {
         uint256 minDelaySeconds;
+        address executor;
+    }
+
+    struct StrategyParameters {
+        address ggvTeller;
+        address ggvBoringOnChainQueue;
+    }
+
+    enum PoolType {
+        STV,
+        STV_STETH,
+        STRATEGY
     }
 
     IVaultFactory public immutable VAULT_FACTORY;
+    IVaultHub public immutable VAULT_HUB;
     address public immutable STETH;
     address public immutable WSTETH;
     address public immutable LAZY_ORACLE;
+
     StvPoolFactory public immutable STV_POOL_FACTORY;
     StvStETHPoolFactory public immutable STV_STETH_POOL_FACTORY;
-    StvStrategyPoolFactory public immutable STV_STRATEGY_POOL_FACTORY;
     WithdrawalQueueFactory public immutable WITHDRAWAL_QUEUE_FACTORY;
     DistributorFactory public immutable DISTRIBUTOR_FACTORY;
     LoopStrategyFactory public immutable LOOP_STRATEGY_FACTORY;
     GGVStrategyFactory public immutable GGV_STRATEGY_FACTORY;
     TimelockFactory public immutable TIMELOCK_FACTORY;
     address public immutable DUMMY_IMPLEMENTATION;
-    uint256 public immutable TIMELOCK_MIN_DELAY;
-    uint256 public constant TOTAL_BASIS_POINTS = 100_00;
-    string constant NAME = "Staked ETH Vault Wrapper";
-    string constant SYMBOL = "stvToken";
 
-    event VaultWrapperCreated(
+    address public immutable GGV_TELLER;
+    address public immutable GGV_BORING_ON_CHAIN_QUEUE;
+
+    bytes32 public immutable DEFAULT_ADMIN_ROLE = 0x00;
+
+    uint256 public immutable TIMELOCK_MIN_DELAY;
+    address public immutable TIMELOCK_EXECUTOR;
+    uint256 public constant TOTAL_BASIS_POINTS = 100_00;
+
+    string public constant SYMBOL = "stv";
+
+    string public constant NAME_STV = "Staked ETH Vault Pool";
+    string public constant NAME_STV_STETH = "Staked ETH Vault StETH Pool";
+    string public constant NAME_STV_STRATEGY = "Staked ETH Vault Strategy Pool";
+
+    event VaultPoolCreated(
         address indexed vault,
         address indexed pool,
         address indexed withdrawalQueue,
-        address strategy,
-        WrapperType configuration
+        address strategy
     );
 
-    enum WrapperType {
-        NO_MINTING_NO_STRATEGY,
-        MINTING_NO_STRATEGY,
-        LOOP_STRATEGY,
-        GGV_STRATEGY
+    struct StvPoolConfig {
+        bool allowlistEnabled;
+        address owner;
+        address nodeOperator;
+        address nodeOperatorManager;
+        uint256 nodeOperatorFeeBP;
+        uint256 confirmExpiry;
+        uint256 maxFinalizationTime;
+        uint256 minWithdrawalDelayTime;
     }
 
-    constructor(WrapperConfig memory poolConfig, TimelockConfig memory timelockConfig) {
-        VAULT_FACTORY = IVaultFactory(poolConfig.vaultFactory);
-        STETH = poolConfig.steth;
-        WSTETH = poolConfig.wsteth;
-        LAZY_ORACLE = poolConfig.lazyOracle;
-        STV_POOL_FACTORY = StvPoolFactory(poolConfig.stvPoolFactory);
-        STV_STETH_POOL_FACTORY = StvStETHPoolFactory(poolConfig.stvStETHPoolFactory);
-        STV_STRATEGY_POOL_FACTORY = StvStrategyPoolFactory(poolConfig.stvStrategyPoolFactory);
-        WITHDRAWAL_QUEUE_FACTORY = WithdrawalQueueFactory(poolConfig.withdrawalQueueFactory);
-        DISTRIBUTOR_FACTORY = DistributorFactory(poolConfig.distributorFactory);
-        LOOP_STRATEGY_FACTORY = LoopStrategyFactory(poolConfig.loopStrategyFactory);
-        GGV_STRATEGY_FACTORY = GGVStrategyFactory(poolConfig.ggvStrategyFactory);
-        DUMMY_IMPLEMENTATION = poolConfig.dummyImplementation;
-        TIMELOCK_FACTORY = TimelockFactory(poolConfig.timelockFactory);
+    struct StvStETHPoolConfig {
+        bool allowlistEnabled;
+        address owner;
+        address nodeOperator;
+        address nodeOperatorManager;
+        uint256 nodeOperatorFeeBP;
+        uint256 confirmExpiry;
+        uint256 maxFinalizationTime;
+        uint256 minWithdrawalDelayTime;
+        uint256 reserveRatioGapBP;
+    }
+
+    struct GGVPoolConfig {
+        address owner;
+        address nodeOperator;
+        address nodeOperatorManager;
+        uint256 nodeOperatorFeeBP;
+        uint256 confirmExpiry;
+        uint256 maxFinalizationTime;
+        uint256 minWithdrawalDelayTime;
+        uint256 reserveRatioGapBP;
+    }
+
+    struct PoolFullConfig {
+        bool allowlistEnabled;
+        bool mintingEnabled;
+        address owner; // TODO: owner of what?
+        address nodeOperator;
+        address nodeOperatorManager;
+        uint256 nodeOperatorFeeBP;
+        uint256 confirmExpiry;
+        uint256 maxFinalizationTime;
+        uint256 minWithdrawalDelayTime;
+        uint256 reserveRatioGapBP;
+    }
+
+    struct StrategyConfig {
+        address factory;
+    }
+
+    struct StvPoolIntermediate {
+        address vault;
+        address dashboard;
+        address pool;
+        address withdrawalQueue;
+        address distributor;
+        address timelock;
+    }
+
+    struct StvPoolDeployment {
+        address vault;
+        address dashboard;
+        address pool;
+        address withdrawalQueue;
+        address distributor;
+        address timelock;
+        address strategy;
+    }
+
+    constructor(
+        address locatorAddress,
+        SubFactories memory subFactories,
+        TimelockConfig memory timelockConfig,
+        StrategyParameters memory strategyParameters
+    ) {
+        ILidoLocator locator = ILidoLocator(locatorAddress);
+        VAULT_FACTORY = IVaultFactory(locator.vaultFactory());
+        STETH = address(locator.lido());
+        WSTETH = address(locator.wstETH());
+        LAZY_ORACLE = locator.lazyOracle();
+        VAULT_HUB = IVaultHub(locator.vaultHub());
+
+        STV_POOL_FACTORY = StvPoolFactory(subFactories.stvPoolFactory);
+        STV_STETH_POOL_FACTORY = StvStETHPoolFactory(subFactories.stvStETHPoolFactory);
+        WITHDRAWAL_QUEUE_FACTORY = WithdrawalQueueFactory(subFactories.withdrawalQueueFactory);
+        DISTRIBUTOR_FACTORY = DistributorFactory(subFactories.distributorFactory);
+        LOOP_STRATEGY_FACTORY = LoopStrategyFactory(subFactories.loopStrategyFactory);
+        GGV_STRATEGY_FACTORY = GGVStrategyFactory(subFactories.ggvStrategyFactory);
+        TIMELOCK_FACTORY = TimelockFactory(subFactories.timelockFactory);
+        DUMMY_IMPLEMENTATION = address(new DummyImplementation());
 
         TIMELOCK_MIN_DELAY = timelockConfig.minDelaySeconds;
-    }
+        TIMELOCK_EXECUTOR = timelockConfig.executor;
 
-    function createVaultWithConfiguredWrapper(
-        address _nodeOperator,
-        address _nodeOperatorManager,
-        uint256 _nodeOperatorFeeBP,
-        uint256 _confirmExpiry,
-        uint256 _maxFinalizationTime,
-        uint256 _minWithdrawalDelayTime,
-        WrapperType _configuration,
-        address _strategy,
-        bool _allowlistEnabled,
-        uint256 _reserveRatioGapBP,
-        address _timelockExecutor
-    )
-        external
-        payable
-        returns (address vault, address dashboard, address payable poolProxy, address withdrawalQueueProxy, address distributor)
-    {
-        bool isRebalancingSupported = _configuration == WrapperType.NO_MINTING_NO_STRATEGY ? false : true;
-
-        IDashboard _dashboard;
-        address payable _poolProxy;
-        address _withdrawalQueueProxy;
-        address _distributor;
-        (vault, dashboard, _dashboard, _poolProxy, _withdrawalQueueProxy, _distributor) = _setupVaultAndProxies(
-            _nodeOperator, _nodeOperatorManager, _nodeOperatorFeeBP, _confirmExpiry, _maxFinalizationTime, _minWithdrawalDelayTime, isRebalancingSupported
-        );
-
-        address usedStrategy = _strategy;
-        if (_configuration == WrapperType.LOOP_STRATEGY && usedStrategy == address(0)) {
-            usedStrategy = LOOP_STRATEGY_FACTORY.deploy(STETH, address(_poolProxy), 1);
-        }
-
-        BasePool pool = _deployAndInitWrapper(
-            _configuration,
-            dashboard,
-            _allowlistEnabled,
-            _reserveRatioGapBP,
-            _withdrawalQueueProxy,
-            _distributor,
-            usedStrategy,
-            _poolProxy
-        );
-
-        _configureAndFinalize(
-            _dashboard, pool, _poolProxy, _withdrawalQueueProxy, vault, _configuration, usedStrategy
-        );
-        _finalizeDistributor(_distributor);
-
-        _finalizeGovernance(_poolProxy, _withdrawalQueueProxy, _timelockExecutor);
-        return (vault, dashboard, _poolProxy, _withdrawalQueueProxy, _distributor);
-    }
-
-    // =================================================================================
-    // Overloads per configuration
-    // =================================================================================
-
-    function createVaultWithNoMintingNoStrategy(
-        address _nodeOperator,
-        address _nodeOperatorManager,
-        uint256 _nodeOperatorFeeBP,
-        uint256 _confirmExpiry,
-        uint256 _maxFinalizationTime,
-        uint256 _minWithdrawalDelayTime,
-        bool _allowlistEnabled,
-        address _timelockExecutor
-    )
-        external
-        payable
-        returns (address vault, address dashboard, address payable poolProxy, address withdrawalQueueProxy, address distributor)
-    {
-        return _createVaultWithNoMintingNoStrategy(
-            _nodeOperator,
-            _nodeOperatorManager,
-            _nodeOperatorFeeBP,
-            _confirmExpiry,
-            _maxFinalizationTime,
-            _minWithdrawalDelayTime,
-            _allowlistEnabled,
-            _timelockExecutor
-        );
-    }
-
-    // Backward-compatible overload without timelock executor
-    function createVaultWithNoMintingNoStrategy(
-        address _nodeOperator,
-        address _nodeOperatorManager,
-        uint256 _nodeOperatorFeeBP,
-        uint256 _confirmExpiry,
-        uint256 _maxFinalizationTime,
-        uint256 _minWithdrawalDelayTime,
-        bool _allowlistEnabled
-    ) external payable returns (address vault, address dashboard, address payable poolProxy, address withdrawalQueueProxy, address distributor) {
-        return _createVaultWithNoMintingNoStrategy(
-            _nodeOperator,
-            _nodeOperatorManager,
-            _nodeOperatorFeeBP,
-            _confirmExpiry,
-            _maxFinalizationTime,
-            _minWithdrawalDelayTime,
-            _allowlistEnabled,
-            address(0)
-        );
-    }
-
-    function _createVaultWithNoMintingNoStrategy(
-        address _nodeOperator,
-        address _nodeOperatorManager,
-        uint256 _nodeOperatorFeeBP,
-        uint256 _confirmExpiry,
-        uint256 _maxFinalizationTime,
-        uint256 _minWithdrawalDelayTime,
-        bool _allowlistEnabled,
-        address _timelockExecutor
-    ) internal returns (address vault, address dashboard, address payable _poolProxy, address _withdrawalQueueProxy, address _distributor) {
-        IDashboard _dashboard;
-        (vault, dashboard, _dashboard, _poolProxy, _withdrawalQueueProxy, _distributor) = _setupVaultAndProxies(
-            _nodeOperator, _nodeOperatorManager, _nodeOperatorFeeBP, _confirmExpiry, _maxFinalizationTime, _minWithdrawalDelayTime, false
-        );
-
-        BasePool pool = _deployAndInitWrapper(
-            WrapperType.NO_MINTING_NO_STRATEGY,
-            dashboard,
-            _allowlistEnabled,
-            0,
-            _withdrawalQueueProxy,
-            _distributor,
-            address(0),
-            _poolProxy
-        );
-
-        _configureAndFinalize(
-            _dashboard,
-            pool,
-            _poolProxy,
-            _withdrawalQueueProxy,
-            vault,
-            WrapperType.NO_MINTING_NO_STRATEGY,
-            address(0)
-        );
-        _finalizeDistributor(_distributor);
-
-        _finalizeGovernance(_poolProxy, _withdrawalQueueProxy, _timelockExecutor);
-    }
-
-    function createVaultWithMintingNoStrategy(
-        address _nodeOperator,
-        address _nodeOperatorManager,
-        uint256 _nodeOperatorFeeBP,
-        uint256 _confirmExpiry,
-        uint256 _maxFinalizationTime,
-        uint256 _minWithdrawalDelayTime,
-        bool _allowlistEnabled,
-        uint256 _reserveRatioGapBP,
-        address _timelockExecutor
-    )
-        external
-        payable
-        returns (address vault, address dashboard, address payable poolProxy, address withdrawalQueueProxy, address distributor)
-    {
-        return _createVaultWithMintingNoStrategy(
-            _nodeOperator,
-            _nodeOperatorManager,
-            _nodeOperatorFeeBP,
-            _confirmExpiry,
-            _maxFinalizationTime,
-            _minWithdrawalDelayTime,
-            _allowlistEnabled,
-            _reserveRatioGapBP,
-            _timelockExecutor
-        );
-    }
-
-    // Backward-compatible overload without timelock executor
-    function createVaultWithMintingNoStrategy(
-        address _nodeOperator,
-        address _nodeOperatorManager,
-        uint256 _nodeOperatorFeeBP,
-        uint256 _confirmExpiry,
-        uint256 _maxFinalizationTime,
-        uint256 _minWithdrawalDelayTime,
-        bool _allowlistEnabled,
-        uint256 _reserveRatioGapBP
-    ) external payable returns (address vault, address dashboard, address payable poolProxy, address withdrawalQueueProxy, address distributor) {
-        return _createVaultWithMintingNoStrategy(
-            _nodeOperator,
-            _nodeOperatorManager,
-            _nodeOperatorFeeBP,
-            _confirmExpiry,
-            _maxFinalizationTime,
-            _minWithdrawalDelayTime,
-            _allowlistEnabled,
-            _reserveRatioGapBP,
-            address(0)
-        );
-    }
-
-    function _createVaultWithMintingNoStrategy(
-        address _nodeOperator,
-        address _nodeOperatorManager,
-        uint256 _nodeOperatorFeeBP,
-        uint256 _confirmExpiry,
-        uint256 _maxFinalizationTime,
-        uint256 _minWithdrawalDelayTime,
-        bool _allowlistEnabled,
-        uint256 _reserveRatioGapBP,
-        address _timelockExecutor
-    ) internal returns (address vault, address dashboard, address payable _poolProxy, address _withdrawalQueueProxy, address _distributor) {
-        IDashboard _dashboard;
-
-        (vault, dashboard, _dashboard, _poolProxy, _withdrawalQueueProxy, _distributor) = _setupVaultAndProxies(
-            _nodeOperator, _nodeOperatorManager, _nodeOperatorFeeBP, _confirmExpiry, _maxFinalizationTime, _minWithdrawalDelayTime, true
-        );
-
-        BasePool pool = _deployAndInitWrapper(
-            WrapperType.MINTING_NO_STRATEGY,
-            dashboard,
-            _allowlistEnabled,
-            _reserveRatioGapBP,
-            _withdrawalQueueProxy,
-            _distributor,
-            address(0),
-            _poolProxy
-        );
-
-        _configureAndFinalize(
-            _dashboard,
-            pool,
-            _poolProxy,
-            _withdrawalQueueProxy,
-            vault,
-            WrapperType.MINTING_NO_STRATEGY,
-            address(0)
-        );
-        
-        _finalizeDistributor(_distributor);
-        _finalizeGovernance(_poolProxy, _withdrawalQueueProxy, _timelockExecutor);
-    }
-
-    function createVaultWithLoopStrategy(
-        address _nodeOperator,
-        address _nodeOperatorManager,
-        uint256 _nodeOperatorFeeBP,
-        uint256 _confirmExpiry,
-        uint256 _maxFinalizationTime,
-        uint256 _minWithdrawalDelayTime,
-        bool _allowlistEnabled,
-        uint256 _reserveRatioGapBP,
-        uint256 _loops,
-        address _timelockExecutor
-    )
-        external
-        payable
-        returns (address vault, address dashboard, address payable poolProxy, address withdrawalQueueProxy, address strategy, address distributor)
-    {
-        return _createVaultWithLoopStrategy(
-            _nodeOperator,
-            _nodeOperatorManager,
-            _nodeOperatorFeeBP,
-            _confirmExpiry,
-            _maxFinalizationTime,
-            _minWithdrawalDelayTime,
-            _allowlistEnabled,
-            _reserveRatioGapBP,
-            _loops,
-            _timelockExecutor
-        );
-    }
-
-    // Backward-compatible overload without timelock executor
-    function createVaultWithLoopStrategy(
-        address _nodeOperator,
-        address _nodeOperatorManager,
-        uint256 _nodeOperatorFeeBP,
-        uint256 _confirmExpiry,
-        uint256 _maxFinalizationTime,
-        uint256 _minWithdrawalDelayTime,
-        bool _allowlistEnabled,
-        uint256 _reserveRatioGapBP,
-        uint256 _loops
-    ) external payable returns (address vault, address dashboard, address payable poolProxy, address withdrawalQueueProxy, address strategy, address distributor) {
-        return _createVaultWithLoopStrategy(
-            _nodeOperator,
-            _nodeOperatorManager,
-            _nodeOperatorFeeBP,
-            _confirmExpiry,
-            _maxFinalizationTime,
-            _minWithdrawalDelayTime,
-            _allowlistEnabled,
-            _reserveRatioGapBP,
-            _loops,
-            address(0)
-        );
-    }
-
-    function _createVaultWithLoopStrategy(
-        address _nodeOperator,
-        address _nodeOperatorManager,
-        uint256 _nodeOperatorFeeBP,
-        uint256 _confirmExpiry,
-        uint256 _maxFinalizationTime,
-        uint256 _minWithdrawalDelayTime,
-        bool _allowlistEnabled,
-        uint256 _reserveRatioGapBP,
-        uint256 _loops,
-        address _timelockExecutor
-    ) internal returns (address vault, address dashboard, address payable _poolProxy, address _withdrawalQueueProxy, address loopStrategy, address _distributor) {
-        IDashboard _dashboard;
-        (vault, dashboard, _dashboard, _poolProxy, _withdrawalQueueProxy, _distributor) = _setupVaultAndProxies(
-            _nodeOperator, _nodeOperatorManager, _nodeOperatorFeeBP, _confirmExpiry, _maxFinalizationTime, _minWithdrawalDelayTime, true
-        );
-
-        loopStrategy = LOOP_STRATEGY_FACTORY.deploy(STETH, address(_poolProxy), _loops);
-
-        BasePool pool = _deployAndInitWrapper(
-            WrapperType.LOOP_STRATEGY,
-            dashboard,
-            _allowlistEnabled,
-            _reserveRatioGapBP,
-            _withdrawalQueueProxy,
-            _distributor,
-            loopStrategy,
-            _poolProxy
-        );
-
-        _configureAndFinalize(
-            _dashboard, pool, _poolProxy, _withdrawalQueueProxy, vault, WrapperType.LOOP_STRATEGY, loopStrategy
-        );
-        _finalizeDistributor(_distributor);
-
-        _finalizeGovernance(_poolProxy, _withdrawalQueueProxy, _timelockExecutor);
-    }
-
-    function createVaultWithGGVStrategy(
-        address _nodeOperator,
-        address _nodeOperatorManager,
-        uint256 _nodeOperatorFeeBP,
-        uint256 _confirmExpiry,
-        uint256 _maxFinalizationTime,
-        uint256 _minWithdrawalDelayTime,
-        bool _allowlistEnabled,
-        uint256 _reserveRatioGapBP,
-        address _teller,
-        address _boringQueue,
-        address _timelockExecutor
-    )
-        external
-        payable
-        returns (address vault, address dashboard, address payable poolProxy, address withdrawalQueueProxy, address strategy, address distributor)
-    {
-        return _createVaultWithGGVStrategy(
-            _nodeOperator,
-            _nodeOperatorManager,
-            _nodeOperatorFeeBP,
-            _confirmExpiry,
-            _maxFinalizationTime,
-            _minWithdrawalDelayTime,
-            _allowlistEnabled,
-            _reserveRatioGapBP,
-            _teller,
-            _boringQueue,
-            _timelockExecutor
-        );
-    }
-
-    // Backward-compatible overload without timelock executor
-    function createVaultWithGGVStrategy(
-        address _nodeOperator,
-        address _nodeOperatorManager,
-        uint256 _nodeOperatorFeeBP,
-        uint256 _confirmExpiry,
-        uint256 _maxFinalizationTime,
-        uint256 _minWithdrawalDelayTime,
-        bool _allowlistEnabled,
-        uint256 _reserveRatioGapBP,
-        address _teller,
-        address _boringQueue
-    ) external payable returns (address vault, address dashboard, address payable poolProxy, address withdrawalQueueProxy, address strategy, address distributor) {
-        return _createVaultWithGGVStrategy(
-            _nodeOperator,
-            _nodeOperatorManager,
-            _nodeOperatorFeeBP,
-            _confirmExpiry,
-            _maxFinalizationTime,
-            _minWithdrawalDelayTime,
-            _allowlistEnabled,
-            _reserveRatioGapBP,
-            _teller,
-            _boringQueue,
-            address(0)
-        );
-    }
-
-    function _createVaultWithGGVStrategy(
-        address _nodeOperator,
-        address _nodeOperatorManager,
-        uint256 _nodeOperatorFeeBP,
-        uint256 _confirmExpiry,
-        uint256 _maxFinalizationTime,
-        uint256 _minWithdrawalDelayTime,
-        bool _allowlistEnabled,
-        uint256 _reserveRatioGapBP,
-        address _teller,
-        address _boringQueue,
-        address _timelockExecutor
-    ) internal returns (address vault, address dashboard, address payable _poolProxy, address _withdrawalQueueProxy, address ggvStrategy, address _distributor) {
-        IDashboard _dashboard;
-        (vault, dashboard, _dashboard, _poolProxy, _withdrawalQueueProxy, _distributor) = _setupVaultAndProxies(
-            _nodeOperator, _nodeOperatorManager, _nodeOperatorFeeBP, _confirmExpiry, _maxFinalizationTime, _minWithdrawalDelayTime, true
-        );
-
-        ggvStrategy = GGV_STRATEGY_FACTORY.deploy(_poolProxy, STETH, WSTETH, _teller, _boringQueue);
-
-        BasePool pool = _deployAndInitWrapper(
-            WrapperType.GGV_STRATEGY,
-            dashboard,
-            _allowlistEnabled,
-            _reserveRatioGapBP,
-            _withdrawalQueueProxy,
-            _distributor,
-            ggvStrategy,
-            _poolProxy
-        );
-
-        _configureAndFinalize(
-            _dashboard, pool, _poolProxy, _withdrawalQueueProxy, vault, WrapperType.GGV_STRATEGY, ggvStrategy
-        );
-        _finalizeDistributor(_distributor);
-
-        _finalizeGovernance(_poolProxy, _withdrawalQueueProxy, _timelockExecutor);
-    }
-
-    function _deployWrapper(
-        WrapperType _configuration,
-        address dashboard,
-        bool _allowlistEnabled,
-        uint256 _reserveRatioGapBP,
-        address withdrawalQueueProxy,
-        address distributor,
-        address _strategy
-    ) internal returns (address poolImpl) {
-        if (_reserveRatioGapBP >= TOTAL_BASIS_POINTS) revert InvalidConfiguration();
-
-        if (_configuration == WrapperType.NO_MINTING_NO_STRATEGY) {
-            poolImpl = STV_POOL_FACTORY.deploy(dashboard, _allowlistEnabled, withdrawalQueueProxy, distributor);
-            assert(keccak256(bytes(BasePool(payable(poolImpl)).wrapperType())) == keccak256(bytes("StvPool")));
-        } else if (_configuration == WrapperType.MINTING_NO_STRATEGY) {
-            poolImpl = STV_STETH_POOL_FACTORY.deploy(dashboard, _allowlistEnabled, _reserveRatioGapBP, withdrawalQueueProxy, distributor);
-            assert(keccak256(bytes(BasePool(payable(poolImpl)).wrapperType())) == keccak256(bytes("StvStETHPool")));
-        } else if (_configuration == WrapperType.LOOP_STRATEGY || _configuration == WrapperType.GGV_STRATEGY) {
-            if (_strategy == address(0)) revert InvalidConfiguration();
-            poolImpl = STV_STRATEGY_POOL_FACTORY.deploy(
-                dashboard,
-                _allowlistEnabled,
-                _reserveRatioGapBP,
-                withdrawalQueueProxy,
-                distributor
-            );
-            assert(keccak256(bytes(BasePool(payable(poolImpl)).wrapperType())) == keccak256(bytes("StvStrategyPool")));
-        } else {
+        if (strategyParameters.ggvTeller == address(0) || strategyParameters.ggvBoringOnChainQueue == address(0)) {
             revert InvalidConfiguration();
         }
+
+        GGV_TELLER = strategyParameters.ggvTeller;
+        GGV_BORING_ON_CHAIN_QUEUE = strategyParameters.ggvBoringOnChainQueue;
     }
 
-    function _setupVaultAndProxies(
-        address _nodeOperator,
-        address _nodeOperatorManager,
-        uint256 _nodeOperatorFeeBP,
-        uint256 _confirmExpiry,
-        uint256 _maxFinalizationTime,
-        uint256 _minWithdrawalDelayTime,
-        bool _isRebalancingSupported
-    )
-        internal
-        returns (
-            address vault,
-            address dashboard,
-            IDashboard _dashboard,
-            address payable poolProxy,
-            address withdrawalQueueProxy,
-            address distributor
-        )
-    {
-        (vault, dashboard) = VAULT_FACTORY.createVaultWithDashboard{value: msg.value}(
-            address(this),
-            _nodeOperator,
-            _nodeOperatorManager,
-            _nodeOperatorFeeBP,
-            _confirmExpiry,
+    function createPoolStvStart(
+        StvPoolConfig memory _config
+    ) external payable returns (StvPoolIntermediate memory intermediate) {
+        return
+            createPoolStart(
+                PoolFullConfig({
+                    allowlistEnabled: _config.allowlistEnabled,
+                    mintingEnabled: false,
+                    owner: _config.owner,
+                    nodeOperator: _config.nodeOperator,
+                    nodeOperatorManager: _config.nodeOperatorManager,
+                    nodeOperatorFeeBP: _config.nodeOperatorFeeBP,
+                    confirmExpiry: _config.confirmExpiry,
+                    maxFinalizationTime: _config.maxFinalizationTime,
+                    minWithdrawalDelayTime: _config.minWithdrawalDelayTime,
+                    reserveRatioGapBP: 0
+                }),
+                StrategyConfig({factory: address(0)})
+            );
+    }
+
+    function createPoolStvStETHStart(
+        StvStETHPoolConfig memory _config
+    ) external payable returns (StvPoolIntermediate memory intermediate) {
+        return
+            createPoolStart(
+                PoolFullConfig({
+                    allowlistEnabled: _config.allowlistEnabled,
+                    mintingEnabled: true,
+                    owner: _config.owner,
+                    nodeOperator: _config.nodeOperator,
+                    nodeOperatorManager: _config.nodeOperatorManager,
+                    nodeOperatorFeeBP: _config.nodeOperatorFeeBP,
+                    confirmExpiry: _config.confirmExpiry,
+                    maxFinalizationTime: _config.maxFinalizationTime,
+                    minWithdrawalDelayTime: _config.minWithdrawalDelayTime,
+                    reserveRatioGapBP: _config.reserveRatioGapBP
+                }),
+                StrategyConfig({factory: address(0)})
+            );
+    }
+
+    function createPoolGGVStart(
+        GGVPoolConfig memory _config
+    ) external payable returns (StvPoolIntermediate memory intermediate) {
+        return
+            createPoolStart(
+                PoolFullConfig({
+                    allowlistEnabled: true,
+                    mintingEnabled: true,
+                    owner: _config.owner,
+                    nodeOperator: _config.nodeOperator,
+                    nodeOperatorManager: _config.nodeOperatorManager,
+                    nodeOperatorFeeBP: _config.nodeOperatorFeeBP,
+                    confirmExpiry: _config.confirmExpiry,
+                    maxFinalizationTime: _config.maxFinalizationTime,
+                    minWithdrawalDelayTime: _config.minWithdrawalDelayTime,
+                    reserveRatioGapBP: _config.reserveRatioGapBP
+                }),
+                StrategyConfig({factory: address(GGV_STRATEGY_FACTORY)})
+            );
+    }
+
+    function createPoolStart(
+        PoolFullConfig memory config,
+        StrategyConfig memory strategyConfig
+    ) public payable returns (StvPoolIntermediate memory intermediate) {
+        if (msg.value != VAULT_HUB.CONNECT_DEPOSIT()) {
+            revert InsufficientConnectDeposit(VAULT_HUB.CONNECT_DEPOSIT(), msg.value);
+        }
+
+        PoolType poolType = PoolType.STV;
+        string memory name = NAME_STV;
+        if (strategyConfig.factory != address(0)) {
+            poolType = PoolType.STRATEGY;
+            name = NAME_STV_STRATEGY;
+        } else if (config.mintingEnabled) {
+            poolType = PoolType.STV_STETH;
+            name = NAME_STV_STETH;
+        }
+
+        if (poolType == PoolType.STRATEGY && !config.allowlistEnabled) {
+            revert InvalidConfiguration();
+        }
+        if (poolType == PoolType.STV_STETH && !config.mintingEnabled) {
+            revert InvalidConfiguration();
+        }
+        // TODO: check if reserveRatioGapBP is valid
+
+        address timelock = TIMELOCK_FACTORY.deploy(TIMELOCK_MIN_DELAY, config.nodeOperator, TIMELOCK_EXECUTOR);
+        address tempAdmin = address(this);
+
+        (address vaultAddress, address dashboardAddress) = VAULT_FACTORY.createVaultWithDashboard{value: msg.value}(
+            tempAdmin, // TODO
+            config.nodeOperator,
+            config.nodeOperatorManager,
+            config.nodeOperatorFeeBP,
+            config.confirmExpiry,
             new IVaultFactory.RoleAssignment[](0)
         );
 
-        _dashboard = IDashboard(payable(dashboard));
+        address poolProxy = payable(address(new OssifiableProxy(DUMMY_IMPLEMENTATION, address(this), bytes(""))));
 
-        poolProxy = payable(address(new OssifiableProxy(DUMMY_IMPLEMENTATION, address(this), bytes(""))));
-        
-        distributor = DISTRIBUTOR_FACTORY.deploy(address(this));
-        
+        IDashboard dashboard = IDashboard(payable(dashboardAddress));
+
         address wqImpl = WITHDRAWAL_QUEUE_FACTORY.deploy(
-            address(poolProxy),
-            dashboard,
-            _dashboard.VAULT_HUB(),
-            _dashboard.STETH(),
-            vault,
+            poolProxy,
+            address(dashboard),
+            address(VAULT_HUB),
+            STETH,
+            address(dashboard.stakingVault()),
             LAZY_ORACLE,
-            _maxFinalizationTime,
-            _minWithdrawalDelayTime,
-            _isRebalancingSupported
+            config.maxFinalizationTime,
+            config.minWithdrawalDelayTime,
+            config.mintingEnabled
         );
-        withdrawalQueueProxy = address(
+
+        address wqAdmin = config.owner;
+        address wqFinalizeRoleHolder = config.nodeOperator;
+        address withdrawalQueueProxy = address(
             new OssifiableProxy(
-                wqImpl, address(this), abi.encodeCall(WithdrawalQueue.initialize, (_nodeOperator, _nodeOperator))
+                wqImpl,
+                timelock,
+                abi.encodeCall(WithdrawalQueue.initialize, (wqAdmin, wqFinalizeRoleHolder))
             )
         );
-    }
 
-    function _deployAndInitWrapper(
-        WrapperType _configuration,
-        address dashboard,
-        bool _allowlistEnabled,
-        uint256 _reserveRatioGapBP,
-        address withdrawalQueueProxy,
-        address distributor,
-        address _strategy,
-        address payable poolProxy
-    ) internal returns (BasePool pool) {
-        address poolImpl = _deployWrapper(
-            _configuration, dashboard, _allowlistEnabled, _reserveRatioGapBP, withdrawalQueueProxy, distributor, _strategy
+        Distributor distributor = Distributor(
+            DISTRIBUTOR_FACTORY.deploy(config.nodeOperator, config.nodeOperatorManager)
         );
 
-        OssifiableProxy(poolProxy).proxy__upgradeToAndCall(
-            poolImpl, abi.encodeCall(BasePool.initialize, (address(this), NAME, SYMBOL))
+        address poolImpl = address(0);
+        if (poolType == PoolType.STV) {
+            poolImpl = STV_POOL_FACTORY.deploy(
+                address(dashboard),
+                config.allowlistEnabled,
+                withdrawalQueueProxy,
+                address(distributor)
+            );
+        } else if (poolType == PoolType.STV_STETH || poolType == PoolType.STRATEGY) {
+            poolImpl = STV_STETH_POOL_FACTORY.deploy(
+                address(dashboard),
+                config.allowlistEnabled,
+                config.reserveRatioGapBP,
+                withdrawalQueueProxy,
+                address(distributor)
+            );
+        }
+
+        OssifiableProxy(payable(poolProxy)).proxy__upgradeToAndCall(
+            poolImpl,
+            abi.encodeCall(StvPool.initialize, (tempAdmin, name, SYMBOL))
         );
-        pool = BasePool(payable(address(poolProxy)));
+        OssifiableProxy(payable(poolProxy)).proxy__changeAdmin(timelock);
+
+        // TODO
+        // emit VaultPoolCreated(vault, address(pool.), withdrawalQueueProxy, strategy);
+
+        intermediate = StvPoolIntermediate({
+            vault: vaultAddress,
+            dashboard: address(dashboard),
+            pool: poolProxy,
+            withdrawalQueue: withdrawalQueueProxy,
+            distributor: address(distributor),
+            timelock: timelock
+        });
     }
 
-    function _finalizeGovernance(
-        address payable _poolProxy,
-        address _withdrawalQueueProxy,
-        address _timelockExecutor
-    ) internal {
-        uint256 minDelay = TIMELOCK_MIN_DELAY;
-        address proposer = msg.sender;
-        address timelock = TIMELOCK_FACTORY.deploy(minDelay, proposer, _timelockExecutor);
+    function createPoolFinish(
+        StvPoolIntermediate memory intermediate,
+        StrategyConfig memory strategyConfig
+    ) external returns (StvPoolDeployment memory deployment) {
+        IDashboard dashboard = IDashboard(payable(intermediate.dashboard));
+        StvPool pool = StvPool(payable(intermediate.pool));
+        WithdrawalQueue withdrawalQueue = WithdrawalQueue(payable(intermediate.withdrawalQueue));
+        address timelock = intermediate.timelock;
+        address tempAdmin = address(this);
 
-        OssifiableProxy(_poolProxy).proxy__changeAdmin(timelock);
-        OssifiableProxy(payable(_withdrawalQueueProxy)).proxy__changeAdmin(timelock);
-    }
+        dashboard.grantRole(dashboard.FUND_ROLE(), address(pool));
+        dashboard.grantRole(dashboard.REBALANCE_ROLE(), address(pool));
+        dashboard.grantRole(dashboard.WITHDRAW_ROLE(), address(withdrawalQueue));
 
-    function _configureAndFinalize(
-        IDashboard _dashboard,
-        BasePool pool,
-        address payable poolProxy,
-        address withdrawalQueueProxy,
-        address vault,
-        WrapperType _configuration,
-        address _strategy
-    ) internal {
-        _dashboard.grantRole(_dashboard.FUND_ROLE(), address(poolProxy));
-        _dashboard.grantRole(_dashboard.WITHDRAW_ROLE(), withdrawalQueueProxy);
-        _dashboard.grantRole(_dashboard.REBALANCE_ROLE(), address(poolProxy));
-
-        if (_configuration != WrapperType.NO_MINTING_NO_STRATEGY) {
-            _dashboard.grantRole(_dashboard.MINT_ROLE(), address(poolProxy));
-            _dashboard.grantRole(_dashboard.BURN_ROLE(), address(poolProxy));
+        if (keccak256(bytes(pool.name())) != keccak256(bytes(NAME_STV))) {
+            dashboard.grantRole(dashboard.MINT_ROLE(), address(pool));
+            dashboard.grantRole(dashboard.BURN_ROLE(), address(pool));
         }
 
-        // Add strategy to allowlist if provided
-        if (_strategy != address(0)) {
-            pool.grantRole(pool.DEPOSIT_ROLE(), _strategy);
+        address strategy = address(0);
+
+        if (strategyConfig.factory == address(GGV_STRATEGY_FACTORY)) {
+            strategy = IStrategyFactory(strategyConfig.factory).deploy(
+                address(pool),
+                STETH,
+                WSTETH,
+                GGV_TELLER,
+                GGV_BORING_ON_CHAIN_QUEUE
+            );
         }
 
-        pool.grantRole(pool.ALLOW_LIST_MANAGER_ROLE(), msg.sender);
-        pool.grantRole(pool.DEFAULT_ADMIN_ROLE(), msg.sender);
-        pool.revokeRole(pool.DEFAULT_ADMIN_ROLE(), address(this));
+        if (strategy != address(0)) {
+            pool.grantRole(pool.ALLOW_LIST_MANAGER_ROLE(), tempAdmin);
+            pool.addToAllowList(strategy);
+            pool.revokeRole(pool.ALLOW_LIST_MANAGER_ROLE(), tempAdmin);
 
-        _dashboard.grantRole(_dashboard.DEFAULT_ADMIN_ROLE(), msg.sender);
-        _dashboard.revokeRole(_dashboard.DEFAULT_ADMIN_ROLE(), address(this));
+            // NB: can be shortened to:
+            // pool.grantRole(pool.DEPOSIT_ROLE(), strategy); // effectively means
+        }
 
-        emit VaultWrapperCreated(vault, address(pool), withdrawalQueueProxy, _strategy, _configuration);
-    }
+        pool.grantRole(DEFAULT_ADMIN_ROLE, timelock);
+        pool.renounceRole(DEFAULT_ADMIN_ROLE, tempAdmin);
 
-    function _finalizeDistributor(address _distributor) internal {
-        Distributor distributor = Distributor(_distributor);
-        distributor.grantRole(distributor.DEFAULT_ADMIN_ROLE(), msg.sender);
-        distributor.grantRole(distributor.MANAGER_ROLE(), msg.sender);
-        distributor.revokeRole(distributor.MANAGER_ROLE(), address(this));
-        distributor.revokeRole(distributor.DEFAULT_ADMIN_ROLE(), address(this));
+        dashboard.grantRole(DEFAULT_ADMIN_ROLE, timelock);
+        dashboard.renounceRole(DEFAULT_ADMIN_ROLE, tempAdmin);
+
+        deployment = StvPoolDeployment({
+            vault: intermediate.vault,
+            dashboard: intermediate.dashboard,
+            pool: intermediate.pool,
+            withdrawalQueue: intermediate.withdrawalQueue,
+            distributor: intermediate.distributor,
+            timelock: intermediate.timelock,
+            strategy: strategy
+        });
+
+        // TODO: LOSS_SOCIALIZER_ROLE
     }
 }

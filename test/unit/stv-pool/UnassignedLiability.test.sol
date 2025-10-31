@@ -3,7 +3,7 @@ pragma solidity >=0.8.25;
 
 import {Test} from "forge-std/Test.sol";
 import {SetupStvPool} from "./SetupStvPool.sol";
-import {BasePool} from "src/BasePool.sol";
+import {StvPool} from "src/StvPool.sol";
 
 contract UnassignedLiabilityTest is Test, SetupStvPool {
     function test_InitialState_UnassignedLiabilityIsZero() public view {
@@ -40,7 +40,7 @@ contract UnassignedLiabilityTest is Test, SetupStvPool {
         dashboard.mock_increaseLiability(100);
 
         vm.prank(userAlice);
-        vm.expectRevert(BasePool.UnassignedLiabilityOnVault.selector);
+        vm.expectRevert(StvPool.UnassignedLiabilityOnVault.selector);
         pool.depositETH{value: 1 ether}(userAlice, address(0));
     }
 
@@ -51,7 +51,7 @@ contract UnassignedLiabilityTest is Test, SetupStvPool {
         dashboard.mock_increaseLiability(100);
 
         vm.prank(userAlice);
-        vm.expectRevert(BasePool.UnassignedLiabilityOnVault.selector);
+        vm.expectRevert(StvPool.UnassignedLiabilityOnVault.selector);
         pool.transfer(userBob, 1);
     }
 

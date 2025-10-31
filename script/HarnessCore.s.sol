@@ -14,33 +14,36 @@ interface IHashConsensus {
 /// Requires an agent key with permissions to call Lido setters and HashConsensus;
 /// on Anvil use any pre-funded key that matches the agent account in deployed-local.json
 contract HarnessCore is Script {
-    struct CoreAddresses {
-        address locator;
-        address steth;
-        address hashConsensus;
-        address agent;
-    }
-
     function run() external {
-        string memory deployedJsonPath = vm.envOr("CORE_DEPLOYED_JSON", string("lido-core/deployed-local.json"));
+        string memory locatorAddressStr = vm.envString("CORE_LOCATOR_ADDRESS");
         string memory rpcUrl = vm.envOr("RPC_URL", string("http://localhost:9123"));
         uint256 initialSubmit = vm.envOr("INITIAL_LIDO_SUBMISSION", uint256(20_000 ether));
 
-        CoreAddresses memory a = _readCore(deployedJsonPath);
+        address locator = vm.parseAddress(locatorAddressStr);
 
-        // Prefer stETH address from Locator if available, fallback to JSON
-        (bool lidoOk, address stethFromLocator) = _safeStaticCallAddr(a.locator, abi.encodeWithSignature("lido()"));
-        if (lidoOk && stethFromLocator != address(0)) {
-            a.steth = stethFromLocator;
-        }
+        // Discover stETH from Locator
+        (bool lidoOk, address steth) = _safeStaticCallAddr(locator, abi.encodeWithSignature("lido()"));
+        require(lidoOk && steth != address(0), "locator.lido() unavailable");
+
+        // Discover Agent (Aragon) from Locator proxy admin
+        (bool agentOk, address agent) = _safeStaticCallAddr(locator, abi.encodeWithSignature("proxy__getAdmin()"));
+        require(agentOk && agent != address(0), "locator.proxy__getAdmin() unavailable");
+
+        // Discover HashConsensus for AccountingOracle via Locator
+        (bool aoOk, address accountingOracle) =
+            _safeStaticCallAddr(locator, abi.encodeWithSignature("accountingOracle()"));
+        require(aoOk && accountingOracle != address(0), "locator.accountingOracle() unavailable");
+        (bool hcOk, address hashConsensus) =
+            _safeStaticCallAddr(accountingOracle, abi.encodeWithSignature("getConsensusContract()"));
+        require(hcOk && hashConsensus != address(0), "getConsensusContract() unavailable");
 
         // 1) Impersonate agent on local Anvil
-        _cast(_arr6("cast", "rpc", "anvil_impersonateAccount", vm.toString(a.agent), "--rpc-url", rpcUrl));
+        _cast(_arr6("cast", "rpc", "anvil_impersonateAccount", vm.toString(agent), "--rpc-url", rpcUrl));
 
         // 1.1) Fund agent to cover value + gas
         _cast(
             _arr7(
-                "cast", "rpc", "anvil_setBalance", vm.toString(a.agent), "0x3635C9ADC5DEA0000000", "--rpc-url", rpcUrl
+                "cast", "rpc", "anvil_setBalance", vm.toString(agent), "0x3635C9ADC5DEA0000000", "--rpc-url", rpcUrl
             )
         ); // ~256,000 ETH
 
@@ -50,7 +53,7 @@ contract HarnessCore is Script {
         //     "cast","send",
         //     "--from", vm.toString(a.agent),
         //     "--unlocked",
-        //     vm.toString(a.hashConsensus),
+        //     vm.toString(hashConsensus),
         //     "updateInitialEpoch(uint256)",
         //     "1",
         //     "--rpc-url", rpcUrl
@@ -62,9 +65,9 @@ contract HarnessCore is Script {
                 "cast",
                 "send",
                 "--from",
-                vm.toString(a.agent),
+                vm.toString(agent),
                 "--unlocked",
-                vm.toString(a.steth),
+                vm.toString(steth),
                 "setMaxExternalRatioBP(uint256)",
                 "10000",
                 "--rpc-url",
@@ -78,9 +81,9 @@ contract HarnessCore is Script {
                 "cast",
                 "send",
                 "--from",
-                vm.toString(a.agent),
+                vm.toString(agent),
                 "--unlocked",
-                vm.toString(a.steth),
+                vm.toString(steth),
                 "resume()",
                 "--rpc-url",
                 rpcUrl
@@ -91,9 +94,9 @@ contract HarnessCore is Script {
                 "cast",
                 "send",
                 "--from",
-                vm.toString(a.agent),
+                vm.toString(agent),
                 "--unlocked",
-                vm.toString(a.steth),
+                vm.toString(steth),
                 "removeStakingLimit()",
                 "--rpc-url",
                 rpcUrl
@@ -104,9 +107,9 @@ contract HarnessCore is Script {
                 "cast",
                 "send",
                 "--from",
-                vm.toString(a.agent),
+                vm.toString(agent),
                 "--unlocked",
-                vm.toString(a.steth),
+                vm.toString(steth),
                 "resumeStaking()",
                 "--rpc-url",
                 rpcUrl
@@ -119,39 +122,30 @@ contract HarnessCore is Script {
                 "cast",
                 "send",
                 "--from",
-                vm.toString(a.agent),
+                vm.toString(agent),
                 "--unlocked",
                 "--value",
                 vm.toString(initialSubmit),
-                vm.toString(a.steth),
+                vm.toString(steth),
                 "submit(address)",
-                vm.toString(a.agent),
+                vm.toString(agent),
                 "--rpc-url",
                 rpcUrl
             )
         );
 
         console2.log("Harnessed core via impersonation:");
-        console2.log(" locator:", a.locator);
-        console2.log(" stETH:", a.steth);
-        console2.log(" hashConsensus:", a.hashConsensus);
-        console2.log(" agent:", a.agent);
+        console2.log(" locator:", locator);
+        console2.log(" stETH:", steth);
+        console2.log(" hashConsensus:", hashConsensus);
+        console2.log(" agent:", agent);
         console2.log(" submitted:", initialSubmit);
-        (bool tsOk, uint256 ts) = _safeStaticCallUint(a.steth, abi.encodeWithSignature("getTotalShares()"));
+        (bool tsOk, uint256 ts) = _safeStaticCallUint(steth, abi.encodeWithSignature("getTotalShares()"));
         if (tsOk) {
             console2.log(" total shares:", ts);
         } else {
             console2.log(" total shares: unknown");
         }
-    }
-
-    function _readCore(string memory path) internal view returns (CoreAddresses memory a) {
-        string memory json = vm.readFile(path);
-        a.locator = vm.parseJsonAddress(json, "$.lidoLocator.proxy.address");
-        a.agent = vm.parseJsonAddress(json, "$.['app:aragon-agent'].proxy.address");
-        a.hashConsensus = vm.parseJsonAddress(json, "$.hashConsensusForAccountingOracle.address");
-        // Read stETH directly from JSON to avoid calling into Locator on fresh deployments
-        a.steth = vm.parseJsonAddress(json, "$.['app:lido'].proxy.address");
     }
 
     function _cast(string[] memory args) internal {

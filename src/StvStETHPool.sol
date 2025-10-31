@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >=0.8.25;
 
-import {BasePool} from "./BasePool.sol";
+import {StvPool} from "./StvPool.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
 import {IStETH} from "./interfaces/IStETH.sol";
@@ -12,7 +12,7 @@ import {IVaultHub} from "./interfaces/IVaultHub.sol";
  * @title StvStETHPool
  * @notice Configuration B: Minting, no strategy - stv + maximum stETH minting for user
  */
-contract StvStETHPool is BasePool {
+contract StvStETHPool is StvPool {
     event StethSharesMinted(address indexed account, uint256 stethShares);
     event StethSharesBurned(address indexed account, uint256 stethShares);
     event StethSharesRebalanced(address indexed account, uint256 stethShares, uint256 stvBurned);
@@ -63,7 +63,7 @@ contract StvStETHPool is BasePool {
         uint256 _reserveRatioGapBP,
         address _withdrawalQueue,
         address _distributor
-    ) BasePool(_dashboard, _allowListEnabled, _withdrawalQueue, _distributor) {
+    ) StvPool(_dashboard, _allowListEnabled, _withdrawalQueue, _distributor) {
         RESERVE_RATIO_GAP_BP = _reserveRatioGapBP;
         WSTETH = IWstETH(DASHBOARD.WSTETH());
     }
@@ -77,10 +77,6 @@ contract StvStETHPool is BasePool {
 
         // Sync reserve ratio and forced rebalance threshold from the VaultHub
         syncVaultParameters();
-    }
-
-    function wrapperType() external pure virtual override returns (string memory) {
-        return "StvStETHPool";
     }
 
     // =================================================================================
@@ -537,7 +533,7 @@ contract StvStETHPool is BasePool {
     /**
      * @notice Total unassigned liability shares in the Staking Vault
      * @return unassignedLiabilityShares Total unassigned liability shares (18 decimals)
-     * @dev Overridden method from BasePool to include unassigned liability shares
+     * @dev Overridden method from StvPool to include unassigned liability shares
      * @dev May occur if liability was transferred from another Staking Vault
      */
     function totalUnassignedLiabilityShares() public view override returns (uint256 unassignedLiabilityShares) {

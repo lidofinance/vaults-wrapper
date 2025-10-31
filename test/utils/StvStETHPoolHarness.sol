@@ -3,7 +3,6 @@ pragma solidity >=0.8.25;
 
 import {StvPoolHarness} from "test/utils/StvPoolHarness.sol";
 import {StvStETHPool} from "src/StvStETHPool.sol";
-import {Factory} from "src/Factory.sol";
 
 /**
  * @title StvStETHPoolHarness
@@ -15,17 +14,19 @@ contract StvStETHPoolHarness is StvPoolHarness {
         returns (WrapperContext memory)
     {
         DeploymentConfig memory config = DeploymentConfig({
-            configuration: Factory.WrapperType.MINTING_NO_STRATEGY,
-            enableAllowlist: enableAllowlist,
-            reserveRatioGapBP: reserveRatioGapBP,
+            allowlistEnabled: enableAllowlist,
+            mintingEnabled: true,
+            owner: NODE_OPERATOR,
             nodeOperator: NODE_OPERATOR,
             nodeOperatorManager: NODE_OPERATOR,
             nodeOperatorFeeBP: nodeOperatorFeeBP,
             confirmExpiry: CONFIRM_EXPIRY,
             maxFinalizationTime: 30 days,
             minWithdrawalDelayTime: 1 days,
-            teller: address(0),
-            boringQueue: address(0)
+            reserveRatioGapBP: reserveRatioGapBP,
+            strategyKind: StrategyKind.NONE,
+            ggvTeller: address(0),
+            ggvBoringQueue: address(0)
         });
 
         WrapperContext memory context = _deployWrapperSystem(config);

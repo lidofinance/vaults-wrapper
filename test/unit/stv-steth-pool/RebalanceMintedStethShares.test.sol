@@ -3,7 +3,7 @@ pragma solidity >=0.8.25;
 
 import {Test} from "forge-std/Test.sol";
 import {SetupStvStETHPool} from "./SetupStvStETHPool.sol";
-import {BasePool} from "src/BasePool.sol";
+import {StvPool} from "src/StvPool.sol";
 import {StvStETHPool} from "src/StvStETHPool.sol";
 
 contract RebalanceMintedStethSharesTest is Test, SetupStvStETHPool {
@@ -25,7 +25,7 @@ contract RebalanceMintedStethSharesTest is Test, SetupStvStETHPool {
 
     function test_RebalanceMintedStethShares_RevertOnCallFromStranger() public {
         vm.prank(userAlice);
-        vm.expectRevert(BasePool.NotWithdrawalQueue.selector);
+        vm.expectRevert(StvPool.NotWithdrawalQueue.selector);
         pool.rebalanceMintedStethShares(1, unlimitedStvToBurn);
     }
 

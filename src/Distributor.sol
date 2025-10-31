@@ -43,12 +43,13 @@ contract Distributor is AccessControlEnumerable {
     error TokenAlreadyAdded(address token);
     error ZeroAddress();
 
-    /// @param _owner The address of the owner
-    constructor(address _owner) {
+    /// @param _owner The address of the owner (admin)
+    /// @param _manager The address of the manager (MANAGER_ROLE)
+    constructor(address _owner, address _manager) {
         lastProcessedBlock = block.number;
 
         _grantRole(DEFAULT_ADMIN_ROLE, _owner);
-        _grantRole(MANAGER_ROLE, _owner);
+        _grantRole(MANAGER_ROLE, _manager);
     }
 
     /// @notice Add a token to the list of supported tokens

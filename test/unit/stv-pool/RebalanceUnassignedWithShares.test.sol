@@ -3,7 +3,7 @@ pragma solidity >=0.8.25;
 
 import {Test} from "forge-std/Test.sol";
 import {SetupStvPool} from "./SetupStvPool.sol";
-import {BasePool} from "src/BasePool.sol";
+import {StvPool} from "src/StvPool.sol";
 
 contract RebalanceUnassignedWithSharesTest is Test, SetupStvPool {
     function test_DecreasesUnassignedLiability() public {
@@ -31,14 +31,14 @@ contract RebalanceUnassignedWithSharesTest is Test, SetupStvPool {
         uint256 liabilityToTransfer = 100;
         dashboard.mock_increaseLiability(liabilityToTransfer);
 
-        vm.expectRevert(BasePool.NotEnoughToRebalance.selector);
+        vm.expectRevert(StvPool.NotEnoughToRebalance.selector);
         pool.rebalanceUnassignedLiability(liabilityToTransfer + 1);
     }
 
     function test_RevertIfZeroShares() public {
         dashboard.mock_increaseLiability(100);
 
-        vm.expectRevert(BasePool.NotEnoughToRebalance.selector);
+        vm.expectRevert(StvPool.NotEnoughToRebalance.selector);
         pool.rebalanceUnassignedLiability(0);
     }
 }

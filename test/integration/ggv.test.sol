@@ -14,7 +14,7 @@ import {StvStrategyPoolHarness} from "test/utils/StvStrategyPoolHarness.sol";
 import {GGVStrategy} from "src/strategy/GGVStrategy.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
 import {IStrategy} from "src/interfaces/IStrategy.sol";
-import {StvStrategyPool} from "src/StvStrategyPool.sol";
+import {StvStETHPool} from "src/StvStETHPool.sol";
 
 import {TableUtils} from "../utils/format/TableUtils.sol";
 import {GGVVaultMock} from "src/mock/ggv/GGVVaultMock.sol";
@@ -59,7 +59,7 @@ contract GGVTest is StvStrategyPoolHarness {
     IBoringOnChainQueue public boringOnChainQueue;
     IBoringSolver public solver;
 
-    StvStrategyPool public pool;
+    StvStETHPool public pool;
     WithdrawalQueue public withdrawalQueue;
 
     GGVStrategy public ggvStrategy;
@@ -84,8 +84,8 @@ contract GGVTest is StvStrategyPoolHarness {
         teller = GGVMockTeller(address(boringVault.TELLER()));
         boringOnChainQueue = GGVQueueMock(address(boringVault.BORING_QUEUE()));
 
-        ctx = _deployStvStrategyPool(true, 0, 0, address(teller), address(boringOnChainQueue));
-        pool = StvStrategyPool(payable(ctx.pool));
+        ctx = _deployStvStETHPool(true, 0, 0, address(teller), address(boringOnChainQueue));
+        pool = StvStETHPool(payable(ctx.pool));
         vm.label(address(pool), "WrapperProxy");
 
         strategy = IStrategy(ctx.strategy);
