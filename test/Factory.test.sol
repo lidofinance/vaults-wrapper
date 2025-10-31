@@ -65,7 +65,10 @@ contract FactoryTest is Test {
         subFactories.ggvStrategyFactory = address(new GGVStrategyFactory());
         subFactories.timelockFactory = address(new TimelockFactory());
 
-        Factory.TimelockConfig memory timelockConfig = Factory.TimelockConfig({minDelaySeconds: 0, executor: admin});
+        Factory.TimelockConfig memory timelockConfig = Factory.TimelockConfig({
+            minDelaySeconds: 0,
+            executor: admin
+        });
 
         Factory.StrategyParameters memory strategyParams = Factory.StrategyParameters({
             ggvTeller: address(0x1111),
@@ -77,24 +80,23 @@ contract FactoryTest is Test {
         vm.deal(admin, 100 ether);
     }
 
-    function _basePoolConfig(
-        bool allowlistEnabled,
-        bool mintingEnabled,
-        uint256 reserveRatioGapBP
-    ) internal view returns (Factory.PoolFullConfig memory) {
-        return
-            Factory.PoolFullConfig({
-                allowlistEnabled: allowlistEnabled,
-                mintingEnabled: mintingEnabled,
-                owner: admin,
-                nodeOperator: nodeOperator,
-                nodeOperatorManager: nodeOperatorManager,
-                nodeOperatorFeeBP: 100,
-                confirmExpiry: 3600,
-                maxFinalizationTime: 30 days,
-                minWithdrawalDelayTime: 1 days,
-                reserveRatioGapBP: reserveRatioGapBP
-            });
+    function _basePoolConfig(bool allowlistEnabled, bool mintingEnabled, uint256 reserveRatioGapBP)
+        internal
+        view
+        returns (Factory.PoolFullConfig memory)
+    {
+        return Factory.PoolFullConfig({
+            allowlistEnabled: allowlistEnabled,
+            mintingEnabled: mintingEnabled,
+            owner: admin,
+            nodeOperator: nodeOperator,
+            nodeOperatorManager: nodeOperatorManager,
+            nodeOperatorFeeBP: 100,
+            confirmExpiry: 3600,
+            maxFinalizationTime: 30 days,
+            minWithdrawalDelayTime: 1 days,
+            reserveRatioGapBP: reserveRatioGapBP
+        });
     }
 
     function test_canCreatePool() public {
@@ -102,10 +104,8 @@ contract FactoryTest is Test {
         Factory.StrategyConfig memory strategyConfig = Factory.StrategyConfig({factory: address(0)});
 
         vm.startPrank(admin);
-        Factory.StvPoolIntermediate memory intermediate = wrapperFactory.createPoolStart{value: connectDeposit}(
-            poolConfig,
-            strategyConfig
-        );
+        Factory.StvPoolIntermediate memory intermediate =
+            wrapperFactory.createPoolStart{value: connectDeposit}(poolConfig, strategyConfig);
         Factory.StvPoolDeployment memory deployment = wrapperFactory.createPoolFinish(intermediate, strategyConfig);
         vm.stopPrank();
 
@@ -148,10 +148,8 @@ contract FactoryTest is Test {
         address ggvFactory = address(wrapperFactory.GGV_STRATEGY_FACTORY());
 
         vm.startPrank(admin);
-        Factory.StvPoolIntermediate memory intermediate = wrapperFactory.createPoolStart{value: connectDeposit}(
-            poolConfig,
-            strategyConfig
-        );
+        Factory.StvPoolIntermediate memory intermediate =
+            wrapperFactory.createPoolStart{value: connectDeposit}(poolConfig, strategyConfig);
         uint256 nonceBefore = vm.getNonce(ggvFactory);
         Factory.StvPoolDeployment memory deployment = wrapperFactory.createPoolFinish(intermediate, strategyConfig);
         vm.stopPrank();
@@ -173,10 +171,8 @@ contract FactoryTest is Test {
         Factory.StrategyConfig memory strategyConfig = Factory.StrategyConfig({factory: address(0)});
 
         vm.startPrank(admin);
-        Factory.StvPoolIntermediate memory intermediate = wrapperFactory.createPoolStart{value: connectDeposit}(
-            poolConfig,
-            strategyConfig
-        );
+        Factory.StvPoolIntermediate memory intermediate =
+            wrapperFactory.createPoolStart{value: connectDeposit}(poolConfig, strategyConfig);
         Factory.StvPoolDeployment memory deployment = wrapperFactory.createPoolFinish(intermediate, strategyConfig);
         vm.stopPrank();
 
