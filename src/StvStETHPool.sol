@@ -668,6 +668,8 @@ contract StvStETHPool is BasePool {
         uint256 _stethShares,
         uint256 _maxStvToBurn
     ) internal returns (uint256 stvToBurn) {
+        _checkNoUnassignedLiability();
+
         if (_stethShares == 0) revert ZeroArgument();
         if (_stethShares > mintedStethSharesOf(_account)) revert InsufficientMintedShares();
 
@@ -748,13 +750,5 @@ contract StvStETHPool is BasePool {
         uint256 stvToLock = calcStvToLockForStethShares(mintedStethShares);
 
         if (balanceOf(_from) < stvToLock) revert InsufficientReservedBalance();
-    }
-
-    /**
-     * @dev Unsafe burn that skips reserved balance check
-     */
-    function _burnUnsafe(address _account, uint256 _value) internal {
-        if (_account == address(0)) revert ERC20InvalidSender(address(0));
-        super._update(_account, address(0), _value);
     }
 }

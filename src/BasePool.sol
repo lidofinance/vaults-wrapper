@@ -114,7 +114,7 @@ abstract contract BasePool is Initializable, ERC20Upgradeable, AllowList {
     function wrapperType() external pure virtual returns (string memory);
 
     // =================================================================================
-    // CORE VAULT FUNCTIONS
+    // ASSETS
     // =================================================================================
 
     /**
@@ -158,13 +158,9 @@ abstract contract BasePool is Initializable, ERC20Upgradeable, AllowList {
         assets = nominalAssetsOf(_account); /* plus other assets if any */
     }
 
-    /**
-     * @notice Returns the number of decimals used to get its user representation.
-     * @return Number of decimals (27)
-     */
-    function decimals() public pure override returns (uint8) {
-        return uint8(DECIMALS);
-    }
+    // =================================================================================
+    // CONVERSION
+    // =================================================================================
 
     function _convertToStv(uint256 _assetsE18, Math.Rounding _rounding) internal view returns (uint256 stv) {
         uint256 totalAssetsE18 = totalAssets();
@@ -188,6 +184,10 @@ abstract contract BasePool is Initializable, ERC20Upgradeable, AllowList {
         uint256 assetsShare = Math.mulDiv(_stv * EXTRA_DECIMALS_BASE, _assetsE18, supplyE27, Math.Rounding.Ceil);
         assets = assetsShare / EXTRA_DECIMALS_BASE;
     }
+
+    // =================================================================================
+    // PREVIEW
+    // =================================================================================
 
     /**
      * @notice Preview the amount of stv that would be received for a given asset amount
@@ -214,6 +214,15 @@ abstract contract BasePool is Initializable, ERC20Upgradeable, AllowList {
      */
     function previewRedeem(uint256 _stv) external view returns (uint256 assets) {
         assets = _convertToAssets(_stv);
+    }
+
+    // =================================================================================
+    // DEPOSIT
+    // =================================================================================
+
+    receive() external payable {
+        // Auto-deposit ETH sent directly to the contract
+        depositETH(msg.sender, address(0));
     }
 
     /**
@@ -334,6 +343,14 @@ abstract contract BasePool is Initializable, ERC20Upgradeable, AllowList {
     // =================================================================================
 
     /**
+     * @notice Returns the number of decimals used to get its user representation.
+     * @return Number of decimals (27)
+     */
+    function decimals() public pure override returns (uint8) {
+        return uint8(DECIMALS);
+    }
+
+    /**
      * @dev Overridden method from ERC20 to prevent updates if there are unassigned liability
      */
     function _update(address _from, address _to, uint256 _value) internal virtual override {
@@ -341,15 +358,6 @@ abstract contract BasePool is Initializable, ERC20Upgradeable, AllowList {
         // In such cases, it prevents any transfers until the unassigned liability is rebalanced
         _checkNoUnassignedLiability();
         super._update(_from, _to, _value);
-    }
-
-    /**
-     * @dev Overridden method from ERC20 bypassing checks in overridden `_update` method
-     * Note that `_update` method is overridable and can have additional checks in child contracts
-     */
-    function _burnForWithdrawalQueue(uint256 _stv) internal {
-        _checkNoUnassignedLiability();
-        super._update(address(WITHDRAWAL_QUEUE), address(0), _stv);
     }
 
     // =================================================================================
@@ -374,7 +382,13 @@ abstract contract BasePool is Initializable, ERC20Upgradeable, AllowList {
      */
     function burnStvForWithdrawalQueue(uint256 _stv) external {
         _checkOnlyWithdrawalQueue();
-        _burnForWithdrawalQueue(_stv);
+        _checkNoUnassignedLiability();
+        _burnUnsafe(address(WITHDRAWAL_QUEUE), _stv);
+    }
+
+    function _burnUnsafe(address _account, uint256 _value) internal {
+        if (_account == address(0)) revert ERC20InvalidSender(address(0));
+        super._update(_account, address(0), _value);
     }
 
     function _checkOnlyWithdrawalQueue() internal view {
@@ -422,15 +436,6 @@ abstract contract BasePool is Initializable, ERC20Upgradeable, AllowList {
             DASHBOARD.withdraw(_recipient, vaultBalance);
             emit ConnectDepositClaimed(_recipient, vaultBalance);
         }
-    }
-
-    // =================================================================================
-    // RECEIVE FUNCTION
-    // =================================================================================
-
-    receive() external payable {
-        // Auto-deposit ETH sent directly to the contract
-        depositETH(msg.sender, address(0));
     }
 
     // =================================================================================
