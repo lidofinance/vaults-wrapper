@@ -92,7 +92,7 @@ contract MerkleRootTest is Test, SetupDistributor {
         bytes32 oldRoot = distributor.root();
         string memory oldCid = distributor.cid();
         uint256 oldBlock = distributor.lastProcessedBlock();
-        
+
         bytes32 newRoot = keccak256("testRoot");
         string memory newCid = "QmTestCID";
 
@@ -103,12 +103,14 @@ contract MerkleRootTest is Test, SetupDistributor {
         distributor.setMerkleRoot(newRoot, newCid);
     }
 
-    function test_SetMerkleRoot_OwnerCanSetRoot() public {
+    function test_SetMerkleRoot_OwnerCanSetRootAfterGrant() public {
         bytes32 newRoot = keccak256("testRoot");
         string memory newCid = "QmTestCID";
 
-        vm.prank(owner);
+        vm.startPrank(owner);
+        distributor.grantRole(distributor.MANAGER_ROLE(), owner);
         distributor.setMerkleRoot(newRoot, newCid);
+        vm.stopPrank();
 
         assertEq(distributor.root(), newRoot);
     }
