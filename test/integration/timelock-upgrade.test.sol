@@ -21,7 +21,7 @@ contract TimelockUpgradeIntegrationTest is Test {
         ILidoLocator locator = ILidoLocator(locatorAddress);
 
         FactoryHelper helper = new FactoryHelper();
-        factory = helper.deployMainFactory(locator.vaultFactory(), locator.lido(), locator.wstETH(), locator.lazyOracle());
+        factory = helper.deployMainFactory(locatorAddress);
     }
 
     // function test_timelockControlsProxyAdmins() public {

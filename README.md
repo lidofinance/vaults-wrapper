@@ -51,12 +51,12 @@ The Factory orchestrates deployment of the entire pool system (Vault, Dashboard,
 
 - Prerequisites (addresses required to deploy `Factory`):
   - **Core (auto-discovered from Locator)**: `IVaultFactory`, `stETH`, `wstETH`, `lazyOracle`
-  - **Implementation factories**: `StvPoolFactory`, `StvStETHPoolFactory`, `StvStrategyPoolFactory`, `WithdrawalQueueFactory`, `LoopStrategyFactory`, `GGVStrategyFactory`
+  - **Implementation factories**: `StvPoolFactory`, `StvStETHPoolFactory`, `StvStETHPoolFactory`, `WithdrawalQueueFactory`, `LoopStrategyFactory`, `GGVStrategyFactory`
   - **Proxy stub**: `DummyImplementation` (for `OssifiableProxy` bootstrap)
 
 - Deploy `Factory` (either deploy the factories yourself or use `script/DeployWrapperFactory.s.sol`):
   - `DeployWrapperFactory` now requires `CORE_LOCATOR_ADDRESS` and `FACTORY_PARAMS_JSON`; it derives all core addresses from the Locator.
-  - Constructor shape for reference: `new Factory(WrapperConfig{ vaultFactory, stETH, wstETH, lazyOracle, stvPoolFactory, stvStETHPoolFactory, stvStrategyPoolFactory, withdrawalQueueFactory, loopStrategyFactory, ggvStrategyFactory, dummyImplementation, timelockFactory }, TimelockConfig{ minDelaySeconds })`
+- Constructor shape for reference: `new Factory(locator, SubFactories{ ... }, TimelockConfig{ ... }, StrategyParameters{ ggvTeller, ggvBoringOnChainQueue })`
 
 - Create a complete pool system using one of the specialized entrypoints (send `msg.value == VaultHub.CONNECT_DEPOSIT`):
   - `createVaultWithNoMintingNoStrategy(nodeOperator, nodeOperatorManager, nodeOperatorFeeBP, confirmExpiry, allowlistEnabled)`
@@ -79,14 +79,14 @@ What gets deployed and by whom
 - By: `Factory` using the implementation factory
   - A: `StvPoolFactory.deploy(dashboard, allowlistEnabled, withdrawalQueue)`
   - B: `StvStETHPoolFactory.deploy(dashboard, stETH, allowlistEnabled, reserveRatioGapBP, withdrawalQueue)`
-  - C (strategy): `StvStrategyPoolFactory.deploy(dashboard, stETH, allowlistEnabled, strategy, reserveRatioGapBP, withdrawalQueue)`
+  - C (strategy): `StvStETHPoolFactory.deploy(dashboard, stETH, allowlistEnabled, strategy, reserveRatioGapBP, withdrawalQueue)`
 
 4) Strategy (only for C)
 - Loop: `LoopStrategyFactory.deploy(stETH, poolProxy, loops)` (pool address required)
 - GGV: `GGVStrategyFactory.deploy(stETH, teller, boringQueue)`
 
 5) Initialize pool proxy and wire roles
-- Proxy upgrade + init: `proxy__upgradeToAndCall(poolImpl, abi.encodeCall(BasePool.initialize, (Factory, NAME, SYMBOL)))`
+- Proxy upgrade + init: `proxy__upgradeToAndCall(poolImpl, abi.encodeCall(StvPool.initialize, (Factory, NAME, SYMBOL)))`
 - Dashboard roles: grant `FUND_ROLE` to pool, `WITHDRAW_ROLE` to withdrawal queue; for B/C also grant `MINT_ROLE` and `BURN_ROLE`
 - Admin handover: transfer `DEFAULT_ADMIN_ROLE` on pool and dashboard from `Factory` to `msg.sender`
 - Event: `VaultWrapperCreated(vault, pool, withdrawalQueue, strategy, configuration)`
@@ -95,19 +95,19 @@ Configuration summary
 
 - Common: `nodeOperator`, `nodeOperatorManager`, `nodeOperatorFeeBP`, `confirmExpiry`, `allowlistEnabled`
 - B/C only: `reserveRatioGapBP` (extra reserve ratio on top of vault RR)
-- Loop strategy: `loops` (leverage cycles); strategy address is auto-deployed and passed to `StvStrategyPool`
+- Loop strategy: `loops` (leverage cycles); strategy address is auto-deployed and passed to `StvStETHPool`
 - GGV strategy: `teller`, `boringQueue`
 - Funding: `msg.value` must equal `VaultHub.CONNECT_DEPOSIT`
 
 Note on circular dependencies and gas savings
 
-- Wrapper ↔ Withdrawal Queue and StvStrategyPool ↔ Strategy have apparent circular dependencies (each needs the other's address).
+- Wrapper ↔ Withdrawal Queue and StvStETHPool ↔ Strategy have apparent circular dependencies (each needs the other's address).
 - This is solved by pre-deploying proxies first:
   - Deploy pool proxy upfront (with `DummyImplementation`), obtain its address
   - Deploy Withdrawal Queue implementation passing the pool proxy address; then proxy + initialize
   - For Loop strategy, deploy the strategy with the pool proxy address
   - Finally, deploy pool implementation with concrete dependencies (WQ, strategy) and upgrade the pool proxy to it
-- Because the definitive addresses are known at constructor-time for implementations, contracts store them as `immutable` (e.g., `BasePool` references, `StvStrategyPool.STRATEGY`, strategy’s `WRAPPER`). This reduces storage reads and saves gas on regular transactions.
+- Because the definitive addresses are known at constructor-time for implementations, contracts store them as `immutable` (e.g., `StvPool` references, `StvStETHPool.STRATEGY`, strategy's `WRAPPER`). This reduces storage reads and saves gas on regular transactions.
 
 Dedicated factories for wrappers, withdrawal queue and strategies are required to keep Factory contract bytecode size withing the limit.
 

@@ -196,7 +196,7 @@ contract RequestCreationTest is Test, SetupWithdrawalQueue {
 
     function test_RequestWithdrawal_RevertOnlyPool() public {
         vm.prank(userAlice);
-        vm.expectRevert(WithdrawalQueue.OnlyStvStrategyPoolan.selector);
+        vm.expectRevert(WithdrawalQueue.OnlyStvStETHPoolan.selector);
         withdrawalQueue.requestWithdrawal(10 ** STV_DECIMALS, 0, userAlice);
     }
 
