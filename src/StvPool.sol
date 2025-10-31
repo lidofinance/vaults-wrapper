@@ -111,10 +111,6 @@ contract StvPool is Initializable, ERC20Upgradeable, AllowList {
         _mint(address(this), _convertToStv(connectDeposit, Math.Rounding.Floor));
     }
 
-    function wrapperType() external virtual pure returns (string memory) {
-        return "StvPool";
-    }
-
     // =================================================================================
     // CORE VAULT FUNCTIONS
     // =================================================================================

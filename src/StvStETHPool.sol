@@ -78,10 +78,6 @@ contract StvStETHPool is StvPool {
         syncVaultParameters();
     }
 
-    function wrapperType() external pure virtual override returns (string memory) {
-        return "StvStETHPool";
-    }
-
     // =================================================================================
     // DEPOSIT
     // =================================================================================

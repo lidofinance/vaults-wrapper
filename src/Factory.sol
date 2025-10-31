@@ -46,6 +46,12 @@ contract Factory {
         address ggvBoringOnChainQueue;
     }
 
+    enum PoolType {
+        STV,
+        STV_STETH,
+        STRATEGY
+    }
+
     IVaultFactory public immutable VAULT_FACTORY;
     IVaultHub public immutable VAULT_HUB;
     address public immutable STETH;
@@ -70,8 +76,12 @@ contract Factory {
     uint256 public immutable TIMELOCK_MIN_DELAY;
     address public immutable TIMELOCK_EXECUTOR;
     uint256 public constant TOTAL_BASIS_POINTS = 100_00;
-    string constant NAME = "Staked ETH Vault Pool";
-    string constant SYMBOL = "stv";
+
+    string public constant SYMBOL = "stv";
+
+    string public constant NAME_STV = "Staked ETH Vault Pool";
+    string public constant NAME_STV_STETH = "Staked ETH Vault StETH Pool";
+    string public constant NAME_STV_STRATEGY = "Staked ETH Vault Strategy Pool";
 
     event VaultPoolCreated(
         address indexed vault,
@@ -79,12 +89,6 @@ contract Factory {
         address indexed withdrawalQueue,
         address strategy
     );
-
-    enum PoolType {
-        STV,
-        STV_STETH,
-        STRATEGY
-    }
 
     struct StvPoolConfig {
         bool allowlistEnabled;
@@ -233,10 +237,13 @@ contract Factory {
         }
 
         PoolType poolType = PoolType.STV;
+        string memory name = NAME_STV;
         if (strategyConfig.factory != address(0)) {
             poolType = PoolType.STRATEGY;
+            name = NAME_STV_STRATEGY;
         } else if (config.mintingEnabled) {
             poolType = PoolType.STV_STETH;
+            name = NAME_STV_STETH;
         }
 
         if (poolType == PoolType.STRATEGY && !config.allowlistEnabled) {
@@ -293,7 +300,7 @@ contract Factory {
         }
 
         OssifiableProxy(payable(poolProxy)).proxy__upgradeToAndCall(
-            poolImpl, abi.encodeCall(StvPool.initialize, (tempAdmin, NAME, SYMBOL))
+            poolImpl, abi.encodeCall(StvPool.initialize, (tempAdmin, name, SYMBOL))
         );
         OssifiableProxy(payable(poolProxy)).proxy__changeAdmin(timelock);
 
@@ -320,7 +327,7 @@ contract Factory {
         dashboard.grantRole(dashboard.REBALANCE_ROLE(), address(pool));
         dashboard.grantRole(dashboard.WITHDRAW_ROLE(), withdrawalQueue);
 
-        if (keccak256(bytes(pool.wrapperType())) != keccak256(bytes("StvPool"))) {
+        if (keccak256(bytes(pool.name())) != keccak256(bytes(NAME_STV))) {
             dashboard.grantRole(dashboard.MINT_ROLE(), address(pool));
             dashboard.grantRole(dashboard.BURN_ROLE(), address(pool));
         }
@@ -354,46 +361,4 @@ contract Factory {
         // TODO: LOSS_SOCIALIZER_ROLE
     }
 
-    // /**
-    //  * @notice Verifies ACL setup for a deployed pool system
-    //  * @param _dashboard The Dashboard address
-    //  * @param _pool The Pool (wrapper proxy) address
-    //  * @param _withdrawalQueue The Withdrawal Queue proxy address
-    //  * @param _timelock The Timelock admin address expected to hold DEFAULT_ADMIN_ROLEs
-    //  * @param _nodeOperator The Node Operator expected to hold FINALIZE_ROLE on Withdrawal Queue
-    //  * @return ok True if ACL matches expected configuration
-    //  * @return reason Short reason on first mismatch (empty if ok)
-    //  */
-    // function verifyACL(
-    //     address _dashboard,
-    //     address _pool,
-    //     address _withdrawalQueue,
-    //     address _timelock,
-    //     address _nodeOperator
-    // ) external view returns (bool ok, string memory reason) {
-    //     IDashboard dashboard = IDashboard(payable(_dashboard));
-    //     StvPool pool = StvPool(payable(_pool));
-    //     WithdrawalQueue wq = WithdrawalQueue(payable(_withdrawalQueue));
-
-    //     // Dashboard operational roles
-    //     if (!dashboard.hasRole(dashboard.FUND_ROLE(), _pool)) return (false, "dashboard.FUND_ROLE not set to pool");
-    //     if (!dashboard.hasRole(dashboard.REBALANCE_ROLE(), _pool)) return (false, "dashboard.REBALANCE_ROLE not set to pool");
-    //     if (!dashboard.hasRole(dashboard.WITHDRAW_ROLE(), _withdrawalQueue)) return (false, "dashboard.WITHDRAW_ROLE not set to WQ");
-
-    //     // If pool supports minting, MINT/BURN should be set
-    //     if (keccak256(bytes(pool.wrapperType())) != keccak256(bytes("StvPool"))) {
-    //         if (!dashboard.hasRole(dashboard.MINT_ROLE(), _pool)) return (false, "dashboard.MINT_ROLE not set to pool");
-    //         if (!dashboard.hasRole(dashboard.BURN_ROLE(), _pool)) return (false, "dashboard.BURN_ROLE not set to pool");
-    //     }
-
-    //     // Admin roles owned by timelock
-    //     if (!pool.hasRole(DEFAULT_ADMIN_ROLE, _timelock)) return (false, "pool DEFAULT_ADMIN not timelock");
-    //     if (!dashboard.hasRole(dashboard.DEFAULT_ADMIN_ROLE(), _timelock)) return (false, "dashboard DEFAULT_ADMIN not timelock");
-
-    //     // Withdrawal Queue roles
-    //     if (!wq.hasRole(wq.DEFAULT_ADMIN_ROLE(), _timelock)) return (false, "WQ DEFAULT_ADMIN not timelock");
-    //     if (!wq.hasRole(wq.FINALIZE_ROLE(), _nodeOperator)) return (false, "WQ FINALIZE_ROLE not nodeOperator");
-
-    //     return (true, "");
-    // }
 }
