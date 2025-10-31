@@ -39,6 +39,8 @@ contract StvStETHPool is StvPool {
 
     IWstETH public immutable WSTETH;
 
+    bytes32 private immutable POOL_TYPE;
+
     /// @custom:storage-location erc7201:pool.storage.StvStETHPool
     struct StvStETHPoolStorage {
         mapping(address => uint256) mintedStethShares;
@@ -62,10 +64,17 @@ contract StvStETHPool is StvPool {
         bool _allowListEnabled,
         uint256 _reserveRatioGapBP,
         address _withdrawalQueue,
-        address _distributor
+        address _distributor,
+        bytes32 _poolType
     ) StvPool(_dashboard, _allowListEnabled, _withdrawalQueue, _distributor) {
         RESERVE_RATIO_GAP_BP = _reserveRatioGapBP;
         WSTETH = IWstETH(DASHBOARD.WSTETH());
+
+        POOL_TYPE = _poolType;
+    }
+
+    function poolType() external view override returns (bytes32) {
+        return POOL_TYPE;
     }
 
     function initialize(address _owner, string memory _name, string memory _symbol) public override initializer {

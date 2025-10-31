@@ -66,6 +66,8 @@ contract StvPoolHarness is Test {
         StrategyKind strategyKind;
         address ggvTeller;
         address ggvBoringQueue;
+        string name;
+        string symbol;
     }
 
     struct WrapperContext {
@@ -121,7 +123,9 @@ contract StvPoolHarness is Test {
             confirmExpiry: config.confirmExpiry,
             maxFinalizationTime: config.maxFinalizationTime,
             minWithdrawalDelayTime: config.minWithdrawalDelayTime,
-            reserveRatioGapBP: config.reserveRatioGapBP
+            reserveRatioGapBP: config.reserveRatioGapBP,
+            name: config.name,
+            symbol: config.symbol
         });
 
         address strategyFactoryAddress = address(0);
@@ -168,16 +172,18 @@ contract StvPoolHarness is Test {
             allowlistEnabled: enableAllowlist,
             mintingEnabled: false,
             owner: NODE_OPERATOR,
-            reserveRatioGapBP: 0,
             nodeOperator: NODE_OPERATOR,
             nodeOperatorManager: NODE_OPERATOR,
             nodeOperatorFeeBP: nodeOperatorFeeBP,
             confirmExpiry: CONFIRM_EXPIRY,
             maxFinalizationTime: 30 days,
             minWithdrawalDelayTime: 1 days,
+            reserveRatioGapBP: 0,
             strategyKind: StrategyKind.NONE,
             ggvTeller: address(0),
-            ggvBoringQueue: address(0)
+            ggvBoringQueue: address(0),
+            name: "Test STV Pool",
+            symbol: "tSTV"
         });
 
         context = _deployWrapperSystem(config);

@@ -22,6 +22,8 @@ contract DeployWrapper is Script {
         address strategyFactory; // optional; if set => strategy pool
         uint256 value; // msg.value to send (CONNECT_DEPOSIT)
         address timelockExecutor; // optional (not used by new Factory)
+        string name;
+        string symbol;
     }
 
     // struct DeploymentResult {
@@ -135,6 +137,14 @@ contract DeployWrapper is Script {
         try vm.parseJsonAddress(json, "$.timelock.executor") returns (address ex) {
             p.timelockExecutor = ex;
         } catch {}
+
+        try vm.parseJsonString(json, "$.token.name") returns (string memory tokenName) {
+            p.name = tokenName;
+        } catch {}
+
+        try vm.parseJsonString(json, "$.token.symbol") returns (string memory tokenSymbol) {
+            p.symbol = tokenSymbol;
+        } catch {}
     }
 
     function run() external {
@@ -163,6 +173,9 @@ contract DeployWrapper is Script {
         Factory factory = Factory(_readFactoryAddress(factoryJsonPath));
         PoolParams memory p = _readPoolParams(paramsJsonPath);
 
+        require(bytes(p.name).length != 0, "token.name missing");
+        require(bytes(p.symbol).length != 0, "token.symbol missing");
+
         // Check Lido total shares before broadcasting
         // uint256 totalShares = IStETH(factory.STETH()).getTotalShares();
         // console2.log("Lido getTotalShares:", totalShares);
@@ -185,17 +198,12 @@ contract DeployWrapper is Script {
                 confirmExpiry: p.confirmExpiry,
                 maxFinalizationTime: p.maxFinalizationTime,
                 minWithdrawalDelayTime: p.minWithdrawalDelayTime,
-                reserveRatioGapBP: p.reserveRatioGapBP
+                reserveRatioGapBP: p.reserveRatioGapBP,
+                name: p.name,
+                symbol: p.symbol
             }),
             strategyConfig
         );
-
-        console2.log("Vault", intermediate.vault);
-        console2.log("Dashboard", intermediate.dashboard);
-        console2.log("Pool", intermediate.pool);
-        console2.log("WithdrawalQueue", intermediate.withdrawalQueue);
-        console2.log("Distributor", intermediate.distributor);
-        console2.log("Timelock", intermediate.timelock);
 
         Factory.StvPoolDeployment memory deployment = factory.createPoolFinish(intermediate, strategyConfig);
 
@@ -205,6 +213,7 @@ contract DeployWrapper is Script {
         console2.log("Deployment WithdrawalQueue", deployment.withdrawalQueue);
         console2.log("Deployment Distributor", deployment.distributor);
         console2.log("Deployment Timelock", deployment.timelock);
+        console2.log("Deployment PoolType", uint256(deployment.poolType));
         console2.log("Strategy", deployment.strategy);
 
         vm.stopBroadcast();

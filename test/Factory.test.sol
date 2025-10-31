@@ -95,7 +95,9 @@ contract FactoryTest is Test {
             confirmExpiry: 3600,
             maxFinalizationTime: 30 days,
             minWithdrawalDelayTime: 1 days,
-            reserveRatioGapBP: reserveRatioGapBP
+            reserveRatioGapBP: reserveRatioGapBP,
+            name: mintingEnabled ? "Factory stETH Pool" : "Factory STV Pool",
+            symbol: mintingEnabled ? "FSTETH" : "FSTV"
         });
     }
 
@@ -127,6 +129,7 @@ contract FactoryTest is Test {
         assertEq(pool.ALLOW_LIST_ENABLED(), false);
         assertEq(deployment.distributor, address(distributor));
         assertEq(deployment.strategy, address(0));
+        assertEq(deployment.poolType, wrapperFactory.STV_POOL_TYPE());
     }
 
     function test_revertWithoutConnectDeposit() public {
@@ -164,6 +167,7 @@ contract FactoryTest is Test {
         MockDashboard mockDashboard = MockDashboard(payable(deployment.dashboard));
         assertTrue(mockDashboard.hasRole(mockDashboard.MINT_ROLE(), address(pool)));
         assertTrue(mockDashboard.hasRole(mockDashboard.BURN_ROLE(), address(pool)));
+        assertEq(deployment.poolType, wrapperFactory.STRATEGY_POOL_TYPE());
     }
 
     function test_allowlistEnabled() public {
@@ -178,5 +182,6 @@ contract FactoryTest is Test {
 
         StvPool pool = StvPool(payable(deployment.pool));
         assertTrue(pool.ALLOW_LIST_ENABLED());
+        assertEq(deployment.poolType, wrapperFactory.STV_POOL_TYPE());
     }
 }

@@ -32,7 +32,9 @@ contract StvStrategyPoolHarness is StvStETHPoolHarness {
             reserveRatioGapBP: reserveRatioGapBP,
             strategyKind: StrategyKind.GGV,
             ggvTeller: _teller,
-            ggvBoringQueue: _boringQueue
+            ggvBoringQueue: _boringQueue,
+            name: "Integration Strategy Pool",
+            symbol: "iSTRAT"
         });
 
         WrapperContext memory ctx = _deployWrapperSystem(config);

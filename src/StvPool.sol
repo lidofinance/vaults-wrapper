@@ -90,6 +90,10 @@ contract StvPool is Initializable, ERC20Upgradeable, AllowList {
         _disableInitializers();
     }
 
+    function poolType() external view virtual returns (bytes32) {
+        return keccak256("StvPool");
+    }
+
     function initialize(address _owner, string memory _name, string memory _symbol) public virtual initializer {
         _initializeBasePool(_owner, _name, _symbol);
     }

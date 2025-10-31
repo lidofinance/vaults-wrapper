@@ -26,7 +26,9 @@ contract StvStETHPoolHarness is StvPoolHarness {
             reserveRatioGapBP: reserveRatioGapBP,
             strategyKind: StrategyKind.NONE,
             ggvTeller: address(0),
-            ggvBoringQueue: address(0)
+            ggvBoringQueue: address(0),
+            name: "Test stETH Pool",
+            symbol: "tSTETH"
         });
 
         WrapperContext memory context = _deployWrapperSystem(config);

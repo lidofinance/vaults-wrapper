@@ -1,4 +1,8 @@
 {
+  "token": {
+    "name": "Staked ETH StETH Pool",
+    "symbol": "STV"
+  },
   "nodeOperator": "0xcc95b0Dbe1519AfaC58d954444839A80700380a2",
   "nodeOperatorManager": "0xcc95b0Dbe1519AfaC58d954444839A80700380a2",
   "nodeOperatorFeeBP": 10,
