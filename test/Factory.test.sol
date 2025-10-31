@@ -111,20 +111,22 @@ contract FactoryTest is Test {
 
         StvPool pool = StvPool(payable(deployment.pool));
         WithdrawalQueue withdrawalQueue = WithdrawalQueue(payable(deployment.withdrawalQueue));
-        IDashboard dashboard = IDashboard(payable(intermediate.dashboard));
+        IDashboard dashboard = IDashboard(payable(deployment.dashboard));
         Distributor distributor = pool.DISTRIBUTOR();
 
         assertEq(address(pool.DASHBOARD()), address(dashboard));
         assertEq(address(pool.WITHDRAWAL_QUEUE()), address(withdrawalQueue));
         assertEq(address(pool.DISTRIBUTOR()), address(distributor));
 
-        address vault = address(dashboard.stakingVault());
-        assertEq(address(pool.STAKING_VAULT()), vault);
+        assertEq(deployment.vault, address(dashboard.stakingVault()));
+        assertEq(address(pool.STAKING_VAULT()), deployment.vault);
 
         MockDashboard mockDashboard = MockDashboard(payable(address(dashboard)));
-        assertTrue(mockDashboard.hasRole(mockDashboard.DEFAULT_ADMIN_ROLE(), intermediate.timelock));
+        assertTrue(mockDashboard.hasRole(mockDashboard.DEFAULT_ADMIN_ROLE(), deployment.timelock));
 
         assertEq(pool.ALLOW_LIST_ENABLED(), false);
+        assertEq(deployment.distributor, address(distributor));
+        assertEq(deployment.strategy, address(0));
     }
 
     function test_revertWithoutConnectDeposit() public {
@@ -155,17 +157,11 @@ contract FactoryTest is Test {
         StvStETHPool pool = StvStETHPool(payable(deployment.pool));
 
         uint256 nonceAfter = vm.getNonce(ggvFactory);
-        address strategy = address(0);
-        if (nonceAfter > nonceBefore) {
-            uint256 creations = nonceAfter - nonceBefore;
-            uint256 guessNonce = creations > 1 ? nonceBefore + creations - 1 : nonceBefore;
-            strategy = vm.computeCreateAddress(ggvFactory, guessNonce);
-        }
+        assertTrue(nonceAfter >= nonceBefore);
+        assertTrue(deployment.strategy != address(0));
+        assertTrue(pool.isAllowListed(deployment.strategy));
 
-        assertTrue(strategy != address(0));
-        assertTrue(pool.isAllowListed(strategy));
-
-        MockDashboard mockDashboard = MockDashboard(payable(intermediate.dashboard));
+        MockDashboard mockDashboard = MockDashboard(payable(deployment.dashboard));
         assertTrue(mockDashboard.hasRole(mockDashboard.MINT_ROLE(), address(pool)));
         assertTrue(mockDashboard.hasRole(mockDashboard.BURN_ROLE(), address(pool)));
     }

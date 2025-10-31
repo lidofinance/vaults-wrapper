@@ -142,15 +142,22 @@ contract Factory {
     }
 
     struct StvPoolIntermediate {
+        address vault;
         address dashboard;
         address pool;
+        address withdrawalQueue;
+        address distributor;
         address timelock;
     }
 
     struct StvPoolDeployment {
+        address vault;
+        address dashboard;
         address pool;
         address withdrawalQueue;
-        // address distributor;
+        address distributor;
+        address timelock;
+        address strategy;
     }
 
     constructor(
@@ -258,7 +265,7 @@ contract Factory {
         address timelock = TIMELOCK_FACTORY.deploy(TIMELOCK_MIN_DELAY, config.nodeOperator, TIMELOCK_EXECUTOR);
         address tempAdmin = address(this);
 
-        ( , address dashboardAddress) = VAULT_FACTORY.createVaultWithDashboard{value: msg.value}(
+        (address vaultAddress, address dashboardAddress) = VAULT_FACTORY.createVaultWithDashboard{value: msg.value}(
             tempAdmin, // TODO
             config.nodeOperator,
             config.nodeOperatorManager,
@@ -309,8 +316,11 @@ contract Factory {
         // emit VaultPoolCreated(vault, address(pool.), withdrawalQueueProxy, strategy);
 
         intermediate = StvPoolIntermediate({
+            vault: vaultAddress,
             dashboard: address(dashboard),
             pool: poolProxy,
+            withdrawalQueue: withdrawalQueueProxy,
+            distributor: address(distributor),
             timelock: timelock
         });
 
@@ -319,13 +329,13 @@ contract Factory {
     function createPoolFinish(StvPoolIntermediate memory intermediate, StrategyConfig memory strategyConfig) external returns (StvPoolDeployment memory deployment) {
         IDashboard dashboard = IDashboard(payable(intermediate.dashboard));
         StvPool pool = StvPool(payable(intermediate.pool));
-        address withdrawalQueue = address(pool.WITHDRAWAL_QUEUE());
+        WithdrawalQueue withdrawalQueue = WithdrawalQueue(payable(intermediate.withdrawalQueue));
         address timelock = intermediate.timelock;
         address tempAdmin = address(this);
 
         dashboard.grantRole(dashboard.FUND_ROLE(), address(pool));
         dashboard.grantRole(dashboard.REBALANCE_ROLE(), address(pool));
-        dashboard.grantRole(dashboard.WITHDRAW_ROLE(), withdrawalQueue);
+        dashboard.grantRole(dashboard.WITHDRAW_ROLE(), address(withdrawalQueue));
 
         if (keccak256(bytes(pool.name())) != keccak256(bytes(NAME_STV))) {
             dashboard.grantRole(dashboard.MINT_ROLE(), address(pool));
@@ -354,8 +364,13 @@ contract Factory {
         dashboard.renounceRole(DEFAULT_ADMIN_ROLE, tempAdmin);
 
         deployment = StvPoolDeployment({
+            vault: intermediate.vault,
+            dashboard: intermediate.dashboard,
             pool: intermediate.pool,
-            withdrawalQueue: withdrawalQueue
+            withdrawalQueue: intermediate.withdrawalQueue,
+            distributor: intermediate.distributor,
+            timelock: intermediate.timelock,
+            strategy: strategy
         });
 
         // TODO: LOSS_SOCIALIZER_ROLE

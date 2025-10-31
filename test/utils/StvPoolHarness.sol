@@ -134,36 +134,19 @@ contract StvPoolHarness is Test {
 
         Factory.StrategyConfig memory strategyConfig = Factory.StrategyConfig({factory: strategyFactoryAddress});
 
-        uint256 strategyFactoryNonceBefore;
-        if (strategyFactoryAddress != address(0)) {
-            strategyFactoryNonceBefore = vm.getNonce(strategyFactoryAddress);
-        }
-
         vm.startPrank(config.nodeOperator);
         Factory.StvPoolIntermediate memory intermediate =
             factory.createPoolStart{value: CONNECT_DEPOSIT}(poolConfig, strategyConfig);
         Factory.StvPoolDeployment memory deployment = factory.createPoolFinish(intermediate, strategyConfig);
         vm.stopPrank();
 
-        IDashboard dashboard = IDashboard(payable(intermediate.dashboard));
-        address vault_ = address(dashboard.stakingVault());
+        IDashboard dashboard = IDashboard(payable(deployment.dashboard));
+        address vault_ = deployment.vault;
         StvPool pool = StvPool(payable(deployment.pool));
         WithdrawalQueue withdrawalQueue = WithdrawalQueue(payable(deployment.withdrawalQueue));
-        Distributor distributor = pool.DISTRIBUTOR();
+        Distributor distributor = Distributor(deployment.distributor);
 
-        address strategy_ = address(0);
-        if (strategyFactoryAddress != address(0)) {
-            uint256 strategyFactoryNonceAfter = vm.getNonce(strategyFactoryAddress);
-            if (strategyFactoryNonceAfter > strategyFactoryNonceBefore) {
-                uint256 creations = strategyFactoryNonceAfter - strategyFactoryNonceBefore;
-                uint256 guessNonce =
-                    creations > 1 ? strategyFactoryNonceBefore + creations - 1 : strategyFactoryNonceBefore;
-                strategy_ = vm.computeCreateAddress(strategyFactoryAddress, guessNonce);
-                if (strategy_.code.length == 0 && creations > 1) {
-                    strategy_ = vm.computeCreateAddress(strategyFactoryAddress, guessNonce - 1);
-                }
-            }
-        }
+        address strategy_ = deployment.strategy;
 
         // Apply initial vault report with current total value equal to connect deposit
         core.applyVaultReport(vault_, CONNECT_DEPOSIT, 0, 0, 0);

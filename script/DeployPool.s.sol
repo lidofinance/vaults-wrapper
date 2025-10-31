@@ -190,7 +190,22 @@ contract DeployWrapper is Script {
             strategyConfig
         );
 
+        console2.log("Vault", intermediate.vault);
+        console2.log("Dashboard", intermediate.dashboard);
+        console2.log("Pool", intermediate.pool);
+        console2.log("WithdrawalQueue", intermediate.withdrawalQueue);
+        console2.log("Distributor", intermediate.distributor);
+        console2.log("Timelock", intermediate.timelock);
+
         Factory.StvPoolDeployment memory deployment = factory.createPoolFinish(intermediate, strategyConfig);
+
+        console2.log("Deployment Vault", deployment.vault);
+        console2.log("Deployment Dashboard", deployment.dashboard);
+        console2.log("Deployment Pool", deployment.pool);
+        console2.log("Deployment WithdrawalQueue", deployment.withdrawalQueue);
+        console2.log("Deployment Distributor", deployment.distributor);
+        console2.log("Deployment Timelock", deployment.timelock);
+        console2.log("Strategy", deployment.strategy);
 
         vm.stopBroadcast();
 
