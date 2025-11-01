@@ -94,7 +94,6 @@ contract FeeFinalizationTest is Test, SetupWithdrawalQueue {
 
         uint256 requestId = withdrawalQueue.requestWithdrawal(address(this), stvToRequest, 0);
         dashboard.mock_simulateRewards(-int256(1 ether));
-        uint256 expectedAssets = pool.previewRedeem(stvToRequest);
 
         uint256 finalizerBalanceBefore = finalizeRoleHolder.balance;
         _finalizeRequests(1);

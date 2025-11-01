@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >=0.8.25;
 
-import {Test} from "forge-std/Test.sol";
 import {SetupWithdrawalQueue} from "./SetupWithdrawalQueue.sol";
+import {Test} from "forge-std/Test.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
 
 contract ClaimingTest is Test, SetupWithdrawalQueue {
@@ -64,26 +64,26 @@ contract ClaimingTest is Test, SetupWithdrawalQueue {
         requestIds[1] = requestId2;
         requestIds[2] = requestId3;
 
-        uint256[] memory hints = withdrawalQueue.findCheckpointHintBatch(
-            requestIds,
-            1,
-            withdrawalQueue.getLastCheckpointIndex()
-        );
+        uint256[] memory hints =
+            withdrawalQueue.findCheckpointHintBatch(requestIds, 1, withdrawalQueue.getLastCheckpointIndex());
 
         // Record initial balance and claimable amounts
         uint256 initialBalance = address(this).balance;
         uint256 totalClaimable = 0;
+        uint256[] memory expected = new uint256[](requestIds.length);
         for (uint256 i = 0; i < requestIds.length; i++) {
-            totalClaimable += withdrawalQueue.getClaimableEther(requestIds[i]);
+            expected[i] = withdrawalQueue.getClaimableEther(requestIds[i]);
+            totalClaimable += expected[i];
         }
 
         // Batch claim
-        withdrawalQueue.claimWithdrawalBatch(address(this), requestIds, hints);
+        uint256[] memory claimed = withdrawalQueue.claimWithdrawalBatch(address(this), requestIds, hints);
 
-        // Verify all claims
+        // Verify all claims and returned amounts
         for (uint256 i = 0; i < requestIds.length; i++) {
             assertTrue(withdrawalQueue.getWithdrawalStatus(requestIds[i]).isClaimed);
             assertEq(withdrawalQueue.getClaimableEther(requestIds[i]), 0);
+            assertEq(claimed[i], expected[i]);
         }
         assertEq(address(this).balance, initialBalance + totalClaimable);
     }
@@ -193,11 +193,8 @@ contract ClaimingTest is Test, SetupWithdrawalQueue {
         requestIds[0] = _requestWithdrawalAndFinalize(10 ** STV_DECIMALS);
         requestIds[1] = _requestWithdrawalAndFinalize(10 ** STV_DECIMALS);
 
-        uint256[] memory hints = withdrawalQueue.findCheckpointHintBatch(
-            requestIds,
-            1,
-            withdrawalQueue.getLastCheckpointIndex()
-        );
+        uint256[] memory hints =
+            withdrawalQueue.findCheckpointHintBatch(requestIds, 1, withdrawalQueue.getLastCheckpointIndex());
 
         uint256 initialBalance = address(this).balance;
         uint256 totalClaimable;
@@ -231,6 +228,32 @@ contract ClaimingTest is Test, SetupWithdrawalQueue {
 
         vm.expectRevert(abi.encodeWithSelector(WithdrawalQueue.InvalidHint.selector, hints[0]));
         withdrawalQueue.claimWithdrawalBatch(address(this), requestIds, hints);
+    }
+
+    function test_ClaimWithdrawals_RevertWithPreviousCheckpointHint() public {
+        uint256 requestId1 = _requestWithdrawalAndFinalize(10 ** STV_DECIMALS);
+        uint256 requestId2 = _requestWithdrawalAndFinalize(10 ** STV_DECIMALS);
+
+        uint256[] memory requestIds = new uint256[](2);
+        requestIds[0] = requestId1;
+        requestIds[1] = requestId2;
+
+        uint256[] memory correctHints =
+            withdrawalQueue.findCheckpointHintBatch(requestIds, 1, withdrawalQueue.getLastCheckpointIndex());
+        assertEq(correctHints[0], 1);
+        assertEq(correctHints[1], 2);
+
+        uint256[] memory wrongHints = new uint256[](2);
+        wrongHints[0] = correctHints[0];
+        wrongHints[1] = correctHints[0];
+
+        vm.expectRevert(abi.encodeWithSelector(WithdrawalQueue.InvalidHint.selector, wrongHints[1]));
+        withdrawalQueue.claimWithdrawalBatch(address(this), requestIds, wrongHints);
+    }
+
+    function test_GetClaimableEther_ReturnsZeroForUnknownRequest() public {
+        vm.expectRevert(abi.encodeWithSelector(WithdrawalQueue.InvalidRequestId.selector, 999));
+        withdrawalQueue.getClaimableEther(999);
     }
 
     function test_GetClaimableEtherBatch_RevertArraysLengthMismatch() public {
