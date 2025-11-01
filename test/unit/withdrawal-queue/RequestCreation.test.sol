@@ -2,6 +2,7 @@
 pragma solidity >=0.8.25;
 
 import {SetupWithdrawalQueue} from "./SetupWithdrawalQueue.sol";
+import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
 import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 import {Test} from "forge-std/Test.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
@@ -214,6 +215,35 @@ contract RequestCreationTest is Test, SetupWithdrawalQueue {
         withdrawalQueue.requestWithdrawal(address(this), 10 ** STV_DECIMALS, 0);
     }
 
+    function test_Pause_RevertWhenCallerUnauthorized() public {
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IAccessControl.AccessControlUnauthorizedAccount.selector, address(this), withdrawalQueue.PAUSE_ROLE()
+            )
+        );
+        withdrawalQueue.pause();
+    }
+
+    function test_Resume_RevertWhenCallerUnauthorized() public {
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IAccessControl.AccessControlUnauthorizedAccount.selector, address(this), withdrawalQueue.RESUME_ROLE()
+            )
+        );
+        withdrawalQueue.resume();
+    }
+
+    function test_Resume_AllowsRequestsAfterPause() public {
+        vm.prank(pauseRoleHolder);
+        withdrawalQueue.pause();
+
+        vm.prank(resumeRoleHolder);
+        withdrawalQueue.resume();
+
+        uint256 requestId = withdrawalQueue.requestWithdrawal(address(this), 10 ** STV_DECIMALS, 0);
+        assertEq(requestId, 1);
+    }
+
     // Edge cases
 
     function test_RequestWithdrawal_ReversOnZeroRecipient() public {
@@ -296,6 +326,20 @@ contract RequestCreationTest is Test, SetupWithdrawalQueue {
 
         assertEq(withdrawalQueue.unfinalizedStv(), 0);
         assertEq(withdrawalQueue.unfinalizedAssets(), 0);
+    }
+
+    function test_UnfinalizedStats_TrackStethShares() public {
+        uint256 stvAmount = 2 * 10 ** STV_DECIMALS;
+        uint256 mintedShares = 10 ** ASSETS_DECIMALS;
+
+        pool.mintStethShares(mintedShares);
+        withdrawalQueue.requestWithdrawal(address(this), stvAmount, mintedShares);
+
+        assertEq(withdrawalQueue.unfinalizedStethShares(), mintedShares);
+
+        _finalizeRequests(1);
+
+        assertEq(withdrawalQueue.unfinalizedStethShares(), 0);
     }
 
     // Receive function to accept ETH refunds
