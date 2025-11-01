@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity >=0.8.25;
 
-import {Test} from "forge-std/Test.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+import {Test} from "forge-std/Test.sol";
 
 import {SetupStvStETHPool} from "./SetupStvStETHPool.sol";
 import {StvStETHPool} from "src/StvStETHPool.sol";
@@ -45,9 +45,7 @@ contract ForceRebalanceTest is Test, SetupStvStETHPool {
         // liability / (assets - x) = (1 - threshold)
         // x = assets - liability / (1 - threshold)
         lossToBreachThreshold =
-            assets -
-            (mintedSteth * pool.TOTAL_BASIS_POINTS()) /
-            (pool.TOTAL_BASIS_POINTS() - threshold);
+            assets - (mintedSteth * pool.TOTAL_BASIS_POINTS()) / (pool.TOTAL_BASIS_POINTS() - threshold);
 
         // scale loss to user's share of the pool
         lossToBreachThreshold = (lossToBreachThreshold * pool.totalAssets()) / assets;

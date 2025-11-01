@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity >=0.8.25;
 
-import {Test} from "forge-std/Test.sol";
 import {SetupStvStETHPool} from "./SetupStvStETHPool.sol";
+import {Test} from "forge-std/Test.sol";
 import {StvStETHPool} from "src/StvStETHPool.sol";
 
 contract MintingStethSharesTest is Test, SetupStvStETHPool {
@@ -72,8 +72,7 @@ contract MintingStethSharesTest is Test, SetupStvStETHPool {
     function test_MintStethShares_CallsDashboardMintShares() public {
         // Check that dashboard's mint function is called with correct parameters
         vm.expectCall(
-            address(dashboard),
-            abi.encodeWithSelector(dashboard.mintShares.selector, address(this), stethSharesToMint)
+            address(dashboard), abi.encodeWithSelector(dashboard.mintShares.selector, address(this), stethSharesToMint)
         );
 
         pool.mintStethShares(stethSharesToMint);

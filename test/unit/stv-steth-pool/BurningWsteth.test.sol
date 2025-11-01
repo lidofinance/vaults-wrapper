@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity >=0.8.25;
 
-import {Test} from "forge-std/Test.sol";
 import {SetupStvStETHPool} from "./SetupStvStETHPool.sol";
+import {Test} from "forge-std/Test.sol";
 import {StvStETHPool} from "src/StvStETHPool.sol";
 
 contract BurningWstethTest is Test, SetupStvStETHPool {

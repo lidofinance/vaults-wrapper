@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >=0.8.25;
 
-import {Test} from "forge-std/Test.sol";
 import {SetupDistributor} from "./SetupDistributor.sol";
+import {Test} from "forge-std/Test.sol";
 import {Distributor} from "src/Distributor.sol";
 
 contract ConstructorTest is Test, SetupDistributor {
