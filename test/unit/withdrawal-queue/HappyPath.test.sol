@@ -4,8 +4,8 @@ pragma solidity >=0.8.25;
 import {Test} from "forge-std/Test.sol";
 
 import {SetupWithdrawalQueue} from "./SetupWithdrawalQueue.sol";
-import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
 import {StvStETHPool} from "src/StvStETHPool.sol";
+import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
 
 contract WithdrawalQueueHappyPathTest is Test, SetupWithdrawalQueue {
     function setUp() public override {
@@ -36,9 +36,7 @@ contract WithdrawalQueueHappyPathTest is Test, SetupWithdrawalQueue {
         uint256 firstRequestId = withdrawalQueue.requestWithdrawal(address(this), firstWithdrawStv, 0);
 
         // Request 1: Check withdrawal status
-        WithdrawalQueue.WithdrawalRequestStatus memory firstStatus = withdrawalQueue.getWithdrawalStatus(
-            firstRequestId
-        );
+        WithdrawalQueue.WithdrawalRequestStatus memory firstStatus = withdrawalQueue.getWithdrawalStatus(firstRequestId);
         assertEq(firstStatus.amountOfStethShares, 0);
         assertEq(firstStatus.amountOfAssets, 2 ether); // initial deposit / 5
         assertEq(firstStatus.amountOfStv, firstWithdrawStv);
@@ -106,25 +104,19 @@ contract WithdrawalQueueHappyPathTest is Test, SetupWithdrawalQueue {
         assertEq(remainingStv, initialStv - firstWithdrawStv - secondWithdrawStv);
 
         // Request 2: Check withdrawal status
-        WithdrawalQueue.WithdrawalRequestStatus memory secondStatus = withdrawalQueue.getWithdrawalStatus(
-            secondRequestId
-        );
+        WithdrawalQueue.WithdrawalRequestStatus memory secondStatus =
+            withdrawalQueue.getWithdrawalStatus(secondRequestId);
         assertEq(secondStatus.amountOfStv, secondWithdrawStv);
         assertEq(secondStatus.owner, address(this));
 
         // Request 3: Request another withdrawal with rebalance
         uint256 thirdWithdrawStv = remainingStv;
         uint256 thirdSharesToRebalance = mintedSharesRemaining;
-        uint256 thirdRequestId = withdrawalQueue.requestWithdrawal(
-            address(this),
-            thirdWithdrawStv,
-            thirdSharesToRebalance
-        );
+        uint256 thirdRequestId =
+            withdrawalQueue.requestWithdrawal(address(this), thirdWithdrawStv, thirdSharesToRebalance);
 
         // Request 3: Check withdrawal status
-        WithdrawalQueue.WithdrawalRequestStatus memory thirdStatus = withdrawalQueue.getWithdrawalStatus(
-            thirdRequestId
-        );
+        WithdrawalQueue.WithdrawalRequestStatus memory thirdStatus = withdrawalQueue.getWithdrawalStatus(thirdRequestId);
         assertEq(thirdStatus.amountOfStv, thirdWithdrawStv);
         assertEq(thirdStatus.amountOfStethShares, thirdSharesToRebalance);
         assertEq(thirdStatus.owner, address(this));

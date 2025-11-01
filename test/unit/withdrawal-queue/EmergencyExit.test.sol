@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >=0.8.25;
 
-import {Test} from "forge-std/Test.sol";
 import {SetupWithdrawalQueue} from "./SetupWithdrawalQueue.sol";
+import {Test} from "forge-std/Test.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
 
 contract EmergencyExitTest is Test, SetupWithdrawalQueue {

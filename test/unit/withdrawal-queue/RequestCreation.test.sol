@@ -2,8 +2,8 @@
 pragma solidity >=0.8.25;
 
 import {SetupWithdrawalQueue} from "./SetupWithdrawalQueue.sol";
-import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
 import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
+import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
 import {Test} from "forge-std/Test.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
 
