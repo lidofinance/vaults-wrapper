@@ -90,7 +90,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
         uint64 withdrawalFee;
     }
 
-    /// @notice Output format struct for `getWithdrawalStatus()` / `getWithdrawalStatuses()` methods
+    /// @notice Output format struct for `getWithdrawalStatus()` / `getWithdrawalStatusBatch()` methods
     struct WithdrawalRequestStatus {
         /// @notice Amount of stv locked for this request
         uint256 amountOfStv;
@@ -405,6 +405,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
      * @param _maxRequests The maximum number of requests to finalize
      * @return finalizedRequests The number of requests that were finalized
      * @dev Reverts if there are no requests to finalize
+     * @dev In emergency exit mode, anyone can finalize without restrictions
      */
     function finalize(uint256 _maxRequests) external returns (uint256 finalizedRequests) {
         if (!isEmergencyExitActivated()) {
