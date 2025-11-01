@@ -4,9 +4,9 @@ pragma solidity >=0.8.25;
 import "forge-std/Script.sol";
 import "forge-std/console2.sol";
 import {Factory} from "src/Factory.sol";
-import {IStETH} from "src/interfaces/IStETH.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
 import {IOssifiableProxy} from "src/interfaces/IOssifiableProxy.sol";
+import {IStETH} from "src/interfaces/IStETH.sol";
 
 contract DeployWrapper is Script {
     struct PoolParams {
@@ -38,8 +38,6 @@ contract DeployWrapper is Script {
     //     address stethAddr;
     //     address wstethAddr;
     // }
-
-
 
     // function _writePoolArtifact(
     //     Factory factoryView,
@@ -154,11 +152,7 @@ contract DeployWrapper is Script {
         // string memory outputJsonPath = vm.envString("WRAPPER_DEPLOYED_JSON");
         string memory outputJsonPath = string(
             abi.encodePacked(
-                "deployments/pool-",
-                vm.toString(block.chainid),
-                "-",
-                vm.toString(block.timestamp),
-                ".json"
+                "deployments/pool-", vm.toString(block.chainid), "-", vm.toString(block.timestamp), ".json"
             )
         );
 
@@ -183,9 +177,7 @@ contract DeployWrapper is Script {
 
         vm.startBroadcast();
 
-        Factory.StrategyConfig memory strategyConfig = Factory.StrategyConfig({
-            factory: p.strategyFactory
-        });
+        Factory.StrategyConfig memory strategyConfig = Factory.StrategyConfig({factory: p.strategyFactory});
 
         Factory.StvPoolIntermediate memory intermediate = factory.createPoolStart{value: p.value}(
             Factory.PoolFullConfig({
@@ -217,6 +209,5 @@ contract DeployWrapper is Script {
         console2.log("Strategy", deployment.strategy);
 
         vm.stopBroadcast();
-
     }
 }

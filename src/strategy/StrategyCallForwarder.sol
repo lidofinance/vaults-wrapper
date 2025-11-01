@@ -1,14 +1,18 @@
 // SPDX-License-Identifier: GPL-3.0
 pragma solidity >=0.8.25;
 
-import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {IStrategyCallForwarder} from "src/interfaces/IStrategyCallForwarder.sol";
 
-contract StrategyCallForwarder is Initializable, ReentrancyGuardUpgradeable, OwnableUpgradeable, IStrategyCallForwarder {
-
+contract StrategyCallForwarder is
+    Initializable,
+    ReentrancyGuardUpgradeable,
+    OwnableUpgradeable,
+    IStrategyCallForwarder
+{
     constructor() {
         _disableInitializers();
     }

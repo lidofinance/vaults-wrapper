@@ -106,6 +106,7 @@ deploy-pool-from-factory:
 		$$VERIFY_FLAGS \
 		$$GAS_FLAGS \
 		--enable-tx-gas-limit \
+		--gas-limit 16777216 \
 		--slow \
 		--sig 'run()' \
 		--non-interactive

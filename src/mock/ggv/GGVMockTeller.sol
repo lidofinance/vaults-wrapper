@@ -3,9 +3,9 @@ pragma solidity >=0.8.25;
 
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
-import {ITellerWithMultiAssetSupport} from "src/interfaces/ggv/ITellerWithMultiAssetSupport.sol";
 import {GGVVaultMock} from "./GGVVaultMock.sol";
 import {IStETH} from "src/interfaces/IStETH.sol";
+import {ITellerWithMultiAssetSupport} from "src/interfaces/ggv/ITellerWithMultiAssetSupport.sol";
 
 contract GGVMockTeller is ITellerWithMultiAssetSupport {
     struct Asset {
@@ -59,11 +59,8 @@ contract GGVMockTeller is ITellerWithMultiAssetSupport {
     }
 
     function _updateAssetData(ERC20 asset, bool allowDeposits, bool allowWithdraws, uint16 sharePremium) internal {
-        assets[asset] = Asset({
-            allowDeposits: allowDeposits,
-            allowWithdraws: allowWithdraws,
-            sharePremium: sharePremium
-        });
+        assets[asset] =
+            Asset({allowDeposits: allowDeposits, allowWithdraws: allowWithdraws, sharePremium: sharePremium});
     }
 
     function updateAssetData(ERC20 asset, bool allowDeposits, bool allowWithdraws, uint16 sharePremium) external {

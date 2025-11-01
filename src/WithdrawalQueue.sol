@@ -1,16 +1,18 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >=0.8.25;
 
-import {AccessControlEnumerableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/extensions/AccessControlEnumerableUpgradeable.sol";
-import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
-import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
-import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {IDashboard} from "./interfaces/IDashboard.sol";
-import {IVaultHub} from "./interfaces/IVaultHub.sol";
 import {ILazyOracle} from "./interfaces/ILazyOracle.sol";
-import {IStvStETHPool} from "./interfaces/IStvStETHPool.sol";
 import {IStETH} from "./interfaces/IStETH.sol";
 import {IStakingVault} from "./interfaces/IStakingVault.sol";
+import {IStvStETHPool} from "./interfaces/IStvStETHPool.sol";
+import {IVaultHub} from "./interfaces/IVaultHub.sol";
+import {
+    AccessControlEnumerableUpgradeable
+} from "@openzeppelin/contracts-upgradeable/access/extensions/AccessControlEnumerableUpgradeable.sol";
+import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 
 /// @title Withdrawal Queue V3 for Staking Vault Pool
 /// @notice Handles withdrawal requests for stvToken holders
@@ -148,10 +150,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
         uint256 timestamp
     );
     event WithdrawalClaimed(
-        uint256 indexed requestId,
-        address indexed owner,
-        address indexed receiver,
-        uint256 amountOfETH
+        uint256 indexed requestId, address indexed owner, address indexed receiver, uint256 amountOfETH
     );
     event EmergencyExitActivated(uint256 timestamp);
 
@@ -280,20 +279,18 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
      * @return requestId The created withdrawal request id
      * @dev Transfers stv and steth shares from the requester to the pool
      */
-    function requestWithdrawal(
-        address _recipient,
-        uint256 _stvToWithdraw,
-        uint256 _stethSharesToRebalance
-    ) external returns (uint256 requestId) {
+    function requestWithdrawal(address _recipient, uint256 _stvToWithdraw, uint256 _stethSharesToRebalance)
+        external
+        returns (uint256 requestId)
+    {
         _checkResumedOrEmergencyExit();
         requestId = _requestWithdrawal(_recipient, _stvToWithdraw, _stethSharesToRebalance);
     }
 
-    function _requestWithdrawal(
-        address _recipient,
-        uint256 _stvToWithdraw,
-        uint256 _stethSharesToRebalance
-    ) internal returns (uint256 requestId) {
+    function _requestWithdrawal(address _recipient, uint256 _stvToWithdraw, uint256 _stethSharesToRebalance)
+        internal
+        returns (uint256 requestId)
+    {
         if (_recipient == address(0)) revert ZeroAddress();
         if (_stethSharesToRebalance > 0 && !IS_REBALANCING_SUPPORTED) revert RebalancingIsNotSupported();
 
@@ -386,19 +383,11 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
         for (uint256 i = firstRequestIdToFinalize; i <= lastRequestIdToFinalize; ++i) {
             WithdrawalRequest memory request = $.requests[i];
             WithdrawalRequest memory prevRequest = $.requests[i - 1];
-            (
-                uint256 stv,
-                uint256 ethToClaim,
-                uint256 stethSharesToRebalance,
-                uint256 stethToRebalance
-            ) = _calcRequestStats(prevRequest, request, currentStvRate, currentStethShareRate);
+            (uint256 stv, uint256 ethToClaim, uint256 stethSharesToRebalance, uint256 stethToRebalance) =
+                _calcRequestStats(prevRequest, request, currentStvRate, currentStethShareRate);
 
-            uint256 stvToRebalance = Math.mulDiv(
-                stethToRebalance,
-                E36_PRECISION_BASE,
-                currentStvRate,
-                Math.Rounding.Ceil
-            );
+            uint256 stvToRebalance =
+                Math.mulDiv(stethToRebalance, E36_PRECISION_BASE, currentStvRate, Math.Rounding.Ceil);
 
             // Cap stvToRebalance to stv in the request, the rest will be socialized to users
             if (stvToRebalance > stv) {
@@ -419,10 +408,9 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
                 // stop if insufficient ETH to cover this request
                 // stop if not enough time has passed since the request was created
                 // stop if the request was created after the latest report was published, at least one oracle report is required
-                ethToClaim > withdrawableValue ||
-                ethToClaim + ethToRebalance > availableBalance ||
-                request.timestamp + MIN_WITHDRAWAL_DELAY_TIME_IN_SECONDS > block.timestamp ||
-                request.timestamp > latestReportTimestamp
+                ethToClaim > withdrawableValue || ethToClaim + ethToRebalance > availableBalance
+                    || request.timestamp + MIN_WITHDRAWAL_DELAY_TIME_IN_SECONDS > block.timestamp
+                    || request.timestamp > latestReportTimestamp
             ) {
                 break;
             }
@@ -470,9 +458,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
         // Create checkpoint with stvRate and stethShareRate
         uint256 lastCheckpointIndex = $.lastCheckpointIndex + 1;
         $.checkpoints[lastCheckpointIndex] = Checkpoint({
-            fromRequestId: firstRequestIdToFinalize,
-            stvRate: currentStvRate,
-            stethShareRate: currentStethShareRate
+            fromRequestId: firstRequestIdToFinalize, stvRate: currentStvRate, stethShareRate: currentStethShareRate
         });
 
         $.lastCheckpointIndex = uint96(lastCheckpointIndex);
@@ -533,11 +519,10 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
      * @param _hints Checkpoint hints. can be found with `findCheckpointHintBatch(_requestIds, 1, getLastCheckpointIndex())`
      * @return claimedAmounts Array of claimed amounts for each request
      */
-    function claimWithdrawalBatch(
-        address _recipient,
-        uint256[] calldata _requestIds,
-        uint256[] calldata _hints
-    ) external returns (uint256[] memory claimedAmounts) {
+    function claimWithdrawalBatch(address _recipient, uint256[] calldata _requestIds, uint256[] calldata _hints)
+        external
+        returns (uint256[] memory claimedAmounts)
+    {
         _checkArrayLength(_requestIds.length, _hints.length);
 
         claimedAmounts = new uint256[](_requestIds.length);
@@ -560,12 +545,10 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
         claimedEth = _claim(msg.sender, _recipient, _requestId, checkpoint);
     }
 
-    function _claim(
-        address _requestor,
-        address _recipient,
-        uint256 _requestId,
-        uint256 _hint
-    ) internal returns (uint256 ethWithDiscount) {
+    function _claim(address _requestor, address _recipient, uint256 _requestId, uint256 _hint)
+        internal
+        returns (uint256 ethWithDiscount)
+    {
         if (_recipient == address(0)) revert ZeroAddress();
         if (_requestId == 0) revert InvalidRequestId(_requestId);
 
@@ -584,7 +567,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
         // Because of the rounding issue some dust could be accumulated upon claiming on the contract
         $.totalLockedAssets -= uint96(ethWithDiscount);
 
-        (bool success, ) = _recipient.call{value: ethWithDiscount}("");
+        (bool success,) = _recipient.call{value: ethWithDiscount}("");
         if (!success) revert CantSendValueRecipientMayHaveReverted();
 
         emit WithdrawalClaimed(_requestId, _requestor, _recipient, ethWithDiscount);
@@ -605,11 +588,11 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
      * @param _lastIndex Right boundary of the search range. Should be less than or equal to getLastCheckpointIndex()
      * @return hintIds Array of hints used to find required checkpoint for the request
      */
-    function findCheckpointHintBatch(
-        uint256[] calldata _requestIds,
-        uint256 _firstIndex,
-        uint256 _lastIndex
-    ) external view returns (uint256[] memory hintIds) {
+    function findCheckpointHintBatch(uint256[] calldata _requestIds, uint256 _firstIndex, uint256 _lastIndex)
+        external
+        view
+        returns (uint256[] memory hintIds)
+    {
         hintIds = new uint256[](_requestIds.length);
         uint256 prevRequestId = 0;
         for (uint256 i = 0; i < _requestIds.length; ++i) {
@@ -704,11 +687,11 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
      * this function has an unbounded cost, and using it as part of a state-changing function may render the function
      * uncallable if the set grows to a point where copying to memory consumes too much gas to fit in a block.
      */
-    function withdrawalRequestsInRangeOf(
-        address _owner,
-        uint256 _start,
-        uint256 _end
-    ) external view returns (uint256[] memory requestIds) {
+    function withdrawalRequestsInRangeOf(address _owner, uint256 _start, uint256 _end)
+        external
+        view
+        returns (uint256[] memory requestIds)
+    {
         requestIds = _getWithdrawalQueueStorage().requestsByOwner[_owner].values(_start, _end);
     }
 
@@ -730,9 +713,11 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
      * @param _requestIds Array of withdrawal request ids
      * @return statuses Array of withdrawal request statuses
      */
-    function getWithdrawalStatusBatch(
-        uint256[] calldata _requestIds
-    ) external view returns (WithdrawalRequestStatus[] memory statuses) {
+    function getWithdrawalStatusBatch(uint256[] calldata _requestIds)
+        external
+        view
+        returns (WithdrawalRequestStatus[] memory statuses)
+    {
         statuses = new WithdrawalRequestStatus[](_requestIds.length);
         for (uint256 i = 0; i < _requestIds.length; ++i) {
             statuses[i] = _getStatus(_requestIds[i]);
@@ -777,10 +762,11 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
      * @return claimableEthValues Amount of claimable ether for each request, amount is equal to 0 if request
      * is not finalized or already claimed
      */
-    function getClaimableEtherBatch(
-        uint256[] calldata _requestIds,
-        uint256[] calldata _hints
-    ) external view returns (uint256[] memory claimableEthValues) {
+    function getClaimableEtherBatch(uint256[] calldata _requestIds, uint256[] calldata _hints)
+        external
+        view
+        returns (uint256[] memory claimableEthValues)
+    {
         _checkArrayLength(_requestIds.length, _hints.length);
 
         claimableEthValues = new uint256[](_requestIds.length);
@@ -810,11 +796,11 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
         claimableEth = _calcClaimableEther(request, _requestId, _hint);
     }
 
-    function _calcClaimableEther(
-        WithdrawalRequest storage _request,
-        uint256 _requestId,
-        uint256 _hint
-    ) internal view returns (uint256 claimableEth) {
+    function _calcClaimableEther(WithdrawalRequest storage _request, uint256 _requestId, uint256 _hint)
+        internal
+        view
+        returns (uint256 claimableEth)
+    {
         if (_hint == 0) revert InvalidHint(_hint);
 
         WithdrawalQueueStorage storage $ = _getWithdrawalQueueStorage();
@@ -835,7 +821,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
         }
 
         WithdrawalRequest memory prevRequest = $.requests[_requestId - 1];
-        (, claimableEth, , ) = _calcRequestStats(prevRequest, _request, checkpoint.stvRate, checkpoint.stethShareRate);
+        (, claimableEth,,) = _calcRequestStats(prevRequest, _request, checkpoint.stvRate, checkpoint.stethShareRate);
     }
 
     function _calcRequestStats(
@@ -860,12 +846,8 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
         }
 
         if (stethSharesToRebalance > 0) {
-            assetsToRebalance = Math.mulDiv(
-                stethSharesToRebalance,
-                stethShareRate,
-                E27_PRECISION_BASE,
-                Math.Rounding.Ceil
-            );
+            assetsToRebalance =
+                Math.mulDiv(stethSharesToRebalance, stethShareRate, E27_PRECISION_BASE, Math.Rounding.Ceil);
 
             // Decrease assets to claim by the amount of assets to rebalance
             assetsToClaim = Math.saturatingSub(assetsToClaim, assetsToRebalance);
@@ -900,9 +882,8 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
      */
     function unfinalizedStethShares() external view returns (uint256 stethShares) {
         WithdrawalQueueStorage storage $ = _getWithdrawalQueueStorage();
-        stethShares =
-            $.requests[$.lastRequestId].cumulativeStethShares -
-            $.requests[$.lastFinalizedRequestId].cumulativeStethShares;
+        stethShares = $.requests[$.lastRequestId].cumulativeStethShares
+            - $.requests[$.lastFinalizedRequestId].cumulativeStethShares;
     }
 
     /**

@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >=0.8.25;
 
-import {ERC20Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
-import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
-import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
-import {WithdrawalQueue} from "./WithdrawalQueue.sol";
-import {Distributor} from "./Distributor.sol";
-import {IStETH} from "./interfaces/IStETH.sol";
-import {IVaultHub} from "./interfaces/IVaultHub.sol";
-import {IDashboard} from "./interfaces/IDashboard.sol";
-import {IStakingVault} from "./interfaces/IStakingVault.sol";
 import {AllowList} from "./AllowList.sol";
+import {Distributor} from "./Distributor.sol";
+import {WithdrawalQueue} from "./WithdrawalQueue.sol";
+import {IDashboard} from "./interfaces/IDashboard.sol";
+import {IStETH} from "./interfaces/IStETH.sol";
+import {IStakingVault} from "./interfaces/IStakingVault.sol";
+import {IVaultHub} from "./interfaces/IVaultHub.sol";
+import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import {ERC20Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
 contract StvPool is Initializable, ERC20Upgradeable, AllowList {
     // Custom errors
@@ -62,23 +62,16 @@ contract StvPool is Initializable, ERC20Upgradeable, AllowList {
     event ValidatorExitRequested(bytes pubkeys);
     event ValidatorWithdrawalsTriggered(bytes pubkeys, uint64[] amountsInGwei);
     event Deposit(
-        address indexed sender,
-        address indexed receiver,
-        address indexed referral,
-        uint256 assets,
-        uint256 stv
+        address indexed sender, address indexed receiver, address indexed referral, uint256 assets, uint256 stv
     );
 
     event VaultDisconnected(address indexed initiator);
     event ConnectDepositClaimed(address indexed recipient, uint256 amount);
     event UnassignedLiabilityRebalanced(uint256 stethShares, uint256 ethAmount);
 
-    constructor(
-        address _dashboard,
-        bool _allowListEnabled,
-        address _withdrawalQueue,
-        address _distributor
-    ) AllowList(_allowListEnabled) {
+    constructor(address _dashboard, bool _allowListEnabled, address _withdrawalQueue, address _distributor)
+        AllowList(_allowListEnabled)
+    {
         DASHBOARD = IDashboard(payable(_dashboard));
         VAULT_HUB = IVaultHub(DASHBOARD.VAULT_HUB());
         STAKING_VAULT = IStakingVault(DASHBOARD.stakingVault());
@@ -144,10 +137,7 @@ contract StvPool is Initializable, ERC20Upgradeable, AllowList {
      * @dev Subtract unassigned liability stETH from total nominal assets
      */
     function totalAssets() public view virtual returns (uint256 assets) {
-        assets = Math.saturatingSub(
-            totalNominalAssets(),
-            totalUnassignedLiabilitySteth()
-        ); /* plus other assets if any */
+        assets = Math.saturatingSub(totalNominalAssets(), totalUnassignedLiabilitySteth()); /* plus other assets if any */
     }
 
     /**

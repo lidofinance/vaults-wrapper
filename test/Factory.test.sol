@@ -4,26 +4,26 @@ pragma solidity >=0.8.25;
 import {Test} from "forge-std/Test.sol";
 
 import {Factory} from "src/Factory.sol";
+import {DistributorFactory} from "src/factories/DistributorFactory.sol";
+import {GGVStrategyFactory} from "src/factories/GGVStrategyFactory.sol";
+import {LoopStrategyFactory} from "src/factories/LoopStrategyFactory.sol";
 import {StvPoolFactory} from "src/factories/StvPoolFactory.sol";
 import {StvStETHPoolFactory} from "src/factories/StvStETHPoolFactory.sol";
-import {WithdrawalQueueFactory} from "src/factories/WithdrawalQueueFactory.sol";
-import {DistributorFactory} from "src/factories/DistributorFactory.sol";
-import {LoopStrategyFactory} from "src/factories/LoopStrategyFactory.sol";
-import {GGVStrategyFactory} from "src/factories/GGVStrategyFactory.sol";
 import {TimelockFactory} from "src/factories/TimelockFactory.sol";
+import {WithdrawalQueueFactory} from "src/factories/WithdrawalQueueFactory.sol";
 
+import {Distributor} from "src/Distributor.sol";
 import {StvPool} from "src/StvPool.sol";
 import {StvStETHPool} from "src/StvStETHPool.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
-import {Distributor} from "src/Distributor.sol";
 import {IDashboard} from "src/interfaces/IDashboard.sol";
 
-import {MockERC20} from "test/mocks/MockERC20.sol";
-import {MockVaultHub} from "test/mocks/MockVaultHub.sol";
 import {MockDashboard} from "test/mocks/MockDashboard.sol";
-import {MockVaultFactory} from "test/mocks/MockVaultFactory.sol";
+import {MockERC20} from "test/mocks/MockERC20.sol";
 import {MockLazyOracle} from "test/mocks/MockLazyOracle.sol";
 import {MockLidoLocator} from "test/mocks/MockLidoLocator.sol";
+import {MockVaultFactory} from "test/mocks/MockVaultFactory.sol";
+import {MockVaultHub} from "test/mocks/MockVaultHub.sol";
 
 contract FactoryTest is Test {
     Factory public wrapperFactory;
@@ -49,11 +49,7 @@ contract FactoryTest is Test {
         lazyOracle = new MockLazyOracle();
 
         locator = new MockLidoLocator(
-            address(stETH),
-            address(wstETH),
-            address(lazyOracle),
-            address(vaultHub),
-            address(vaultFactory)
+            address(stETH), address(wstETH), address(lazyOracle), address(vaultHub), address(vaultFactory)
         );
 
         Factory.SubFactories memory subFactories;
@@ -65,15 +61,10 @@ contract FactoryTest is Test {
         subFactories.ggvStrategyFactory = address(new GGVStrategyFactory());
         subFactories.timelockFactory = address(new TimelockFactory());
 
-        Factory.TimelockConfig memory timelockConfig = Factory.TimelockConfig({
-            minDelaySeconds: 0,
-            executor: admin
-        });
+        Factory.TimelockConfig memory timelockConfig = Factory.TimelockConfig({minDelaySeconds: 0, executor: admin});
 
-        Factory.StrategyParameters memory strategyParams = Factory.StrategyParameters({
-            ggvTeller: address(0x1111),
-            ggvBoringOnChainQueue: address(0x2222)
-        });
+        Factory.StrategyParameters memory strategyParams =
+            Factory.StrategyParameters({ggvTeller: address(0x1111), ggvBoringOnChainQueue: address(0x2222)});
 
         wrapperFactory = new Factory(address(locator), subFactories, timelockConfig, strategyParams);
 
@@ -144,9 +135,8 @@ contract FactoryTest is Test {
 
     function test_canCreateWithStrategy() public {
         Factory.PoolFullConfig memory poolConfig = _basePoolConfig(true, true, 0);
-        Factory.StrategyConfig memory strategyConfig = Factory.StrategyConfig({
-            factory: address(wrapperFactory.GGV_STRATEGY_FACTORY())
-        });
+        Factory.StrategyConfig memory strategyConfig =
+            Factory.StrategyConfig({factory: address(wrapperFactory.GGV_STRATEGY_FACTORY())});
 
         address ggvFactory = address(wrapperFactory.GGV_STRATEGY_FACTORY());
 

@@ -4,14 +4,14 @@ pragma solidity >=0.8.25;
 import "forge-std/Script.sol";
 
 import {Factory} from "src/Factory.sol";
+import {DistributorFactory} from "src/factories/DistributorFactory.sol";
+import {GGVStrategyFactory} from "src/factories/GGVStrategyFactory.sol";
+import {LoopStrategyFactory} from "src/factories/LoopStrategyFactory.sol";
 import {StvPoolFactory} from "src/factories/StvPoolFactory.sol";
 import {StvStETHPoolFactory} from "src/factories/StvStETHPoolFactory.sol";
-import {WithdrawalQueueFactory} from "src/factories/WithdrawalQueueFactory.sol";
-import {DistributorFactory} from "src/factories/DistributorFactory.sol";
-import {LoopStrategyFactory} from "src/factories/LoopStrategyFactory.sol";
-import {GGVStrategyFactory} from "src/factories/GGVStrategyFactory.sol";
-import {DummyImplementation} from "src/proxy/DummyImplementation.sol";
 import {TimelockFactory} from "src/factories/TimelockFactory.sol";
+import {WithdrawalQueueFactory} from "src/factories/WithdrawalQueueFactory.sol";
+import {DummyImplementation} from "src/proxy/DummyImplementation.sol";
 
 import {ILidoLocator} from "src/interfaces/ILidoLocator.sol";
 
@@ -34,11 +34,16 @@ contract DeployFactory is Script {
         f.timelockFactory = address(new TimelockFactory());
     }
 
-    function _writeArtifacts(Factory.SubFactories memory subFactories, address factoryAddr, string memory outputJsonPath) internal {
+    function _writeArtifacts(
+        Factory.SubFactories memory subFactories,
+        address factoryAddr,
+        string memory outputJsonPath
+    ) internal {
         string memory factoriesSection = "";
         factoriesSection = vm.serializeAddress("factories", "stvPoolFactory", subFactories.stvPoolFactory);
         factoriesSection = vm.serializeAddress("factories", "stvStETHPoolFactory", subFactories.stvStETHPoolFactory);
-        factoriesSection = vm.serializeAddress("factories", "withdrawalQueueFactory", subFactories.withdrawalQueueFactory);
+        factoriesSection =
+            vm.serializeAddress("factories", "withdrawalQueueFactory", subFactories.withdrawalQueueFactory);
         factoriesSection = vm.serializeAddress("factories", "loopStrategyFactory", subFactories.loopStrategyFactory);
         factoriesSection = vm.serializeAddress("factories", "ggvStrategyFactory", subFactories.ggvStrategyFactory);
         factoriesSection = vm.serializeAddress("factories", "timelockFactory", subFactories.timelockFactory);
@@ -59,7 +64,9 @@ contract DeployFactory is Script {
         view
         returns (Factory.TimelockConfig memory timelockConfig)
     {
-        require(vm.isFile(paramsPath), string(abi.encodePacked("FACTORY_PARAMS_JSON file does not exist at: ", paramsPath)));
+        require(
+            vm.isFile(paramsPath), string(abi.encodePacked("FACTORY_PARAMS_JSON file does not exist at: ", paramsPath))
+        );
         string memory json = vm.readFile(paramsPath);
 
         timelockConfig.minDelaySeconds = vm.parseJsonUint(json, "$.timelock.minDelaySeconds");
@@ -70,7 +77,9 @@ contract DeployFactory is Script {
         view
         returns (Factory.StrategyParameters memory strategyParams)
     {
-        require(vm.isFile(paramsPath), string(abi.encodePacked("FACTORY_PARAMS_JSON file does not exist at: ", paramsPath)));
+        require(
+            vm.isFile(paramsPath), string(abi.encodePacked("FACTORY_PARAMS_JSON file does not exist at: ", paramsPath))
+        );
         string memory json = vm.readFile(paramsPath);
 
         try vm.parseJsonAddress(json, "$.strategies.ggv.teller") returns (address teller) {
@@ -89,11 +98,7 @@ contract DeployFactory is Script {
         string memory locatorAddressStr = vm.envString("CORE_LOCATOR_ADDRESS");
         string memory outputJsonPath = string(
             abi.encodePacked(
-                "deployments/pool-factory-",
-                vm.toString(block.chainid),
-                "-",
-                vm.toString(block.timestamp),
-                ".json"
+                "deployments/pool-factory-", vm.toString(block.chainid), "-", vm.toString(block.timestamp), ".json"
             )
         );
         string memory paramsJsonPath = vm.envString("FACTORY_PARAMS_JSON");

@@ -5,8 +5,8 @@ import {StvPool} from "./StvPool.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
 import {IStETH} from "./interfaces/IStETH.sol";
-import {IWstETH} from "./interfaces/IWstETH.sol";
 import {IVaultHub} from "./interfaces/IVaultHub.sol";
+import {IWstETH} from "./interfaces/IWstETH.sol";
 
 /**
  * @title StvStETHPool
@@ -100,11 +100,12 @@ contract StvStETHPool is StvPool {
      * @return stv Amount of stv minted (27 decimals)
      * @dev If the recipient is different from msg.sender, checks that enough stv is deposited to lock the requested stETH shares
      */
-    function depositETHAndMintStethShares(
-        address _recipient,
-        address _referral,
-        uint256 _stethSharesToMint
-    ) external payable virtual returns (uint256 stv) {
+    function depositETHAndMintStethShares(address _recipient, address _referral, uint256 _stethSharesToMint)
+        external
+        payable
+        virtual
+        returns (uint256 stv)
+    {
         stv = depositETH(_recipient, _referral);
 
         if (_stethSharesToMint != 0) {
@@ -121,11 +122,12 @@ contract StvStETHPool is StvPool {
      * @return stv Amount of stv minted (27 decimals)
      * @dev If the recipient is different from msg.sender, checks that enough stv is deposited to lock the requested wstETH
      */
-    function depositETHAndMintWsteth(
-        address _recipient,
-        address _referral,
-        uint256 _wstethToMint
-    ) external payable virtual returns (uint256 stv) {
+    function depositETHAndMintWsteth(address _recipient, address _referral, uint256 _wstethToMint)
+        external
+        payable
+        virtual
+        returns (uint256 stv)
+    {
         stv = depositETH(_recipient, _referral);
 
         if (_wstethToMint != 0) {
@@ -295,10 +297,11 @@ contract StvStETHPool is StvPool {
      * @param _account The address of the account
      * @return stethShares The remaining minting capacity in stETH shares
      */
-    function remainingMintingCapacitySharesOf(
-        address _account,
-        uint256 _ethToFund
-    ) public view returns (uint256 stethShares) {
+    function remainingMintingCapacitySharesOf(address _account, uint256 _ethToFund)
+        public
+        view
+        returns (uint256 stethShares)
+    {
         uint256 stethSharesForAssets = calcStethSharesToMintForAssets(assetsOf(_account) + _ethToFund);
         stethShares = Math.saturatingSub(stethSharesForAssets, mintedStethSharesOf(_account));
     }
@@ -413,12 +416,8 @@ contract StvStETHPool is StvPool {
      * @return stethShares The corresponding amount of stETH shares to mint (18 decimals)
      */
     function calcStethSharesToMintForAssets(uint256 _assets) public view returns (uint256 stethShares) {
-        uint256 maxStethToMint = Math.mulDiv(
-            _assets,
-            TOTAL_BASIS_POINTS - reserveRatioBP(),
-            TOTAL_BASIS_POINTS,
-            Math.Rounding.Floor
-        );
+        uint256 maxStethToMint =
+            Math.mulDiv(_assets, TOTAL_BASIS_POINTS - reserveRatioBP(), TOTAL_BASIS_POINTS, Math.Rounding.Floor);
 
         stethShares = _getSharesByPooledEth(maxStethToMint);
     }
@@ -496,12 +495,9 @@ contract StvStETHPool is StvPool {
         assert(connection.forcedRebalanceThresholdBP > 0);
         assert(connection.forcedRebalanceThresholdBP <= connection.reserveRatioBP);
 
-        uint16 newReserveRatioBP = uint16(
-            Math.min(connection.reserveRatioBP + RESERVE_RATIO_GAP_BP, maxReserveRatioBP)
-        );
-        uint16 newThresholdBP = uint16(
-            Math.min(connection.forcedRebalanceThresholdBP + RESERVE_RATIO_GAP_BP, maxReserveRatioBP)
-        );
+        uint16 newReserveRatioBP = uint16(Math.min(connection.reserveRatioBP + RESERVE_RATIO_GAP_BP, maxReserveRatioBP));
+        uint16 newThresholdBP =
+            uint16(Math.min(connection.forcedRebalanceThresholdBP + RESERVE_RATIO_GAP_BP, maxReserveRatioBP));
 
         StvStETHPoolStorage storage $ = _getStvStETHPoolStorage();
 
@@ -562,10 +558,10 @@ contract StvStETHPool is StvPool {
      * @dev Second, if there are remaining liability shares, rebalances Staking Vault
      * @dev Requires fresh oracle report, which is checked in the Withdrawal Queue
      */
-    function rebalanceMintedStethShares(
-        uint256 _stethShares,
-        uint256 _maxStvToBurn
-    ) public returns (uint256 stvBurned) {
+    function rebalanceMintedStethShares(uint256 _stethShares, uint256 _maxStvToBurn)
+        public
+        returns (uint256 stvBurned)
+    {
         _checkOnlyWithdrawalQueue();
         stvBurned = _rebalanceMintedStethShares(msg.sender, _stethShares, _maxStvToBurn);
     }
@@ -609,9 +605,11 @@ contract StvStETHPool is StvPool {
      * @return isUndercollateralized True if the user's assets are insufficient to cover the liability
      * @dev Requires fresh oracle report to price stv accurately
      */
-    function previewForceRebalance(
-        address _account
-    ) public view returns (uint256 stethShares, uint256 stv, bool isUndercollateralized) {
+    function previewForceRebalance(address _account)
+        public
+        view
+        returns (uint256 stethShares, uint256 stv, bool isUndercollateralized)
+    {
         _checkFreshReport();
 
         uint256 stethSharesLiability = mintedStethSharesOf(_account);
@@ -668,11 +666,10 @@ contract StvStETHPool is StvPool {
     /**
      * @dev Requires fresh oracle report to price stv accurately
      */
-    function _rebalanceMintedStethShares(
-        address _account,
-        uint256 _stethShares,
-        uint256 _maxStvToBurn
-    ) internal returns (uint256 stvToBurn) {
+    function _rebalanceMintedStethShares(address _account, uint256 _stethShares, uint256 _maxStvToBurn)
+        internal
+        returns (uint256 stvToBurn)
+    {
         _checkNoUnassignedLiability();
 
         if (_stethShares == 0) revert ZeroArgument();

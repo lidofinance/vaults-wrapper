@@ -1,16 +1,15 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >=0.8.25;
 
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
-
+import {StvStETHPool} from "src/StvStETHPool.sol";
 import {IStETH} from "src/interfaces/IStETH.sol";
-import {IWstETH} from "src/interfaces/IWstETH.sol";
 import {IStrategy} from "src/interfaces/IStrategy.sol";
 import {IStrategyCallForwarder} from "src/interfaces/IStrategyCallForwarder.sol";
-import {StvStETHPool} from "src/StvStETHPool.sol";
+import {IWstETH} from "src/interfaces/IWstETH.sol";
 
 abstract contract Strategy is IStrategy {
     StvStETHPool public immutable POOL;
@@ -44,9 +43,8 @@ abstract contract Strategy is IStrategy {
 
         address proxy = getStrategyCallForwarderAddress(msg.sender);
 
-        IStrategyCallForwarder(proxy).call(
-            address(STETH), abi.encodeWithSelector(IERC20.transfer.selector, _recipient, _amount)
-        );
+        IStrategyCallForwarder(proxy)
+            .call(address(STETH), abi.encodeWithSelector(IERC20.transfer.selector, _recipient, _amount));
     }
 
     /// @notice Returns the address of the strategy proxy for a given user
@@ -66,9 +64,8 @@ abstract contract Strategy is IStrategy {
 
         callForwarder = Clones.cloneDeterministic(STRATEGY_CALL_FORWARDER_IMPL, salt);
         IStrategyCallForwarder(callForwarder).initialize(address(this));
-        IStrategyCallForwarder(callForwarder).call(
-            address(STETH), abi.encodeWithSelector(STETH.approve.selector, address(POOL), type(uint256).max)
-        );
+        IStrategyCallForwarder(callForwarder)
+            .call(address(STETH), abi.encodeWithSelector(STETH.approve.selector, address(POOL), type(uint256).max));
         userStrategyCallForwarder[salt] = callForwarder;
     }
 

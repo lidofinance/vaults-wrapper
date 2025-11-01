@@ -42,9 +42,7 @@ contract HarnessCore is Script {
 
         // 1.1) Fund agent to cover value + gas
         _cast(
-            _arr7(
-                "cast", "rpc", "anvil_setBalance", vm.toString(agent), "0x3635C9ADC5DEA0000000", "--rpc-url", rpcUrl
-            )
+            _arr7("cast", "rpc", "anvil_setBalance", vm.toString(agent), "0x3635C9ADC5DEA0000000", "--rpc-url", rpcUrl)
         ); // ~256,000 ETH
 
         // 2) (optional) updateInitialEpoch(1) on HashConsensus — skipped by default
@@ -170,11 +168,14 @@ contract HarnessCore is Script {
         return (true, abi.decode(ret, (address)));
     }
 
-    function _arr6(string memory a, string memory b, string memory c, string memory d, string memory e, string memory f)
-        private
-        pure
-        returns (string[] memory r)
-    {
+    function _arr6(
+        string memory a,
+        string memory b,
+        string memory c,
+        string memory d,
+        string memory e,
+        string memory f
+    ) private pure returns (string[] memory r) {
         r = new string[](6);
         r[0] = a;
         r[1] = b;

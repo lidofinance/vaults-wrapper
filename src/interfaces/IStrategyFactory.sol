@@ -11,11 +11,7 @@ interface IStrategyFactory {
     /// @param _teller Address of the teller contract
     /// @param _boringQueue Address of the boring queue contract
     /// @return impl The address of the newly deployed strategy contract
-    function deploy(
-        address _pool,
-        address _steth,
-        address _wsteth,
-        address _teller,
-        address _boringQueue
-    ) external returns (address impl);
+    function deploy(address _pool, address _steth, address _wsteth, address _teller, address _boringQueue)
+        external
+        returns (address impl);
 }

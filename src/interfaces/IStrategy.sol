@@ -18,7 +18,9 @@ interface IStrategy {
     ) external returns (uint256 requestId);
 
     /// @notice Requests a withdrawal from the strategy
-    function requestExitByStethShares(uint256 stethSharesToBurn, bytes calldata params) external returns (bytes32 requestId);
+    function requestExitByStethShares(uint256 stethSharesToBurn, bytes calldata params)
+        external
+        returns (bytes32 requestId);
 
     /// @notice Finalizes a withdrawal from the strategy
     function finalizeRequestExit(address receiver, bytes32 requestId) external;
