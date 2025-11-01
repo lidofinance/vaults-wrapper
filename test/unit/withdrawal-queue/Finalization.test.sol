@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity >=0.8.25;
 
-import {Test} from "forge-std/Test.sol";
-import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
-import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 import {SetupWithdrawalQueue} from "./SetupWithdrawalQueue.sol";
+import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
+import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
+import {Test} from "forge-std/Test.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
 
 contract FinalizationTest is Test, SetupWithdrawalQueue {
@@ -132,9 +132,7 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
         // Try to finalize without proper role
         vm.expectRevert(
             abi.encodeWithSelector(
-                IAccessControl.AccessControlUnauthorizedAccount.selector,
-                userAlice,
-                withdrawalQueue.FINALIZE_ROLE()
+                IAccessControl.AccessControlUnauthorizedAccount.selector, userAlice, withdrawalQueue.FINALIZE_ROLE()
             )
         );
         vm.prank(userAlice);
@@ -306,6 +304,41 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
         withdrawalQueue.finalize(1);
     }
 
+    function test_Finalize_RevertWhenFinalizerCannotReceiveFee() public {
+        uint256 fee = 0.0001 ether;
+        vm.prank(finalizeRoleHolder);
+        withdrawalQueue.setWithdrawalFee(fee);
+
+        RevertingFinalizer finalizer = new RevertingFinalizer(withdrawalQueue);
+        bytes32 finalizeRole = withdrawalQueue.FINALIZE_ROLE();
+
+        vm.prank(owner);
+        withdrawalQueue.grantRole(finalizeRole, address(finalizer));
+
+        uint256 requestId = withdrawalQueue.requestWithdrawal(address(this), 10 ** STV_DECIMALS, 0);
+        assertEq(requestId, 1);
+
+        _warpAndMockOracleReport();
+
+        vm.expectRevert(WithdrawalQueue.CantSendValueRecipientMayHaveReverted.selector);
+        finalizer.callFinalize(1);
+    }
+
+    function test_Finalize_RevertWhenWithdrawableInsufficientButAvailableEnough() public {
+        uint256 stvToRequest = 10 ** STV_DECIMALS;
+        uint256 expectedAssets = pool.previewRedeem(stvToRequest);
+        uint256 requestId = withdrawalQueue.requestWithdrawal(address(this), stvToRequest, 0);
+
+        assertEq(requestId, 1);
+
+        _warpAndMockOracleReport();
+        dashboard.mock_setLocked(pool.totalAssets() - expectedAssets + 1);
+
+        vm.prank(finalizeRoleHolder);
+        vm.expectRevert(WithdrawalQueue.NoRequestsToFinalize.selector);
+        withdrawalQueue.finalize(1);
+    }
+
     // Checkpoint Tests
 
     function test_Finalize_CreatesCheckpoint() public {
@@ -384,5 +417,21 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
 
         // Check finalized request has correct ETH amount unaffected by rewards
         assertEq(withdrawalQueue.getClaimableEther(requestId), expectedEth);
+    }
+}
+
+contract RevertingFinalizer {
+    WithdrawalQueue public immutable withdrawalQueue;
+
+    constructor(WithdrawalQueue _withdrawalQueue) {
+        withdrawalQueue = _withdrawalQueue;
+    }
+
+    function callFinalize(uint256 maxRequests) external {
+        withdrawalQueue.finalize(maxRequests);
+    }
+
+    receive() external payable {
+        revert("cannot receive");
     }
 }

@@ -2,11 +2,11 @@
 pragma solidity >=0.8.25;
 
 import {Test} from "forge-std/Test.sol";
-import {OssifiableProxy} from "src/proxy/OssifiableProxy.sol";
-import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
 import {StvStETHPool} from "src/StvStETHPool.sol";
-import {MockLazyOracle} from "test/mocks/MockLazyOracle.sol";
+import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
+import {OssifiableProxy} from "src/proxy/OssifiableProxy.sol";
 import {MockDashboard, MockDashboardFactory} from "test/mocks/MockDashboard.sol";
+import {MockLazyOracle} from "test/mocks/MockLazyOracle.sol";
 import {MockStETH} from "test/mocks/MockStETH.sol";
 
 abstract contract SetupWithdrawalQueue is Test {
@@ -55,12 +55,7 @@ abstract contract SetupWithdrawalQueue is Test {
 
         // Deploy StvStETHPool proxy with temporary implementation
         StvStETHPool tempImpl = new StvStETHPool(
-            address(dashboard),
-            false,
-            reserveRatioGapBP,
-            address(0),
-            address(0),
-            keccak256("test.wq.pool")
+            address(dashboard), false, reserveRatioGapBP, address(0), address(0), keccak256("test.wq.pool")
         );
         OssifiableProxy poolProxy = new OssifiableProxy(address(tempImpl), owner, "");
         pool = StvStETHPool(payable(poolProxy));
@@ -117,9 +112,14 @@ abstract contract SetupWithdrawalQueue is Test {
     }
 
     function _finalizeRequests(uint256 _maxRequests) internal {
-        lazyOracle.mock__updateLatestReportTimestamp(block.timestamp);
-        vm.warp(MIN_WITHDRAWAL_DELAY_TIME + 1 + block.timestamp);
+        _warpAndMockOracleReport();
+
         vm.prank(finalizeRoleHolder);
         withdrawalQueue.finalize(_maxRequests);
+    }
+
+    function _warpAndMockOracleReport() internal {
+        lazyOracle.mock__updateLatestReportTimestamp(block.timestamp);
+        vm.warp(MIN_WITHDRAWAL_DELAY_TIME + 1 + block.timestamp);
     }
 }
