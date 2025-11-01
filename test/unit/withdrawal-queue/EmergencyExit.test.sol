@@ -84,6 +84,27 @@ contract EmergencyExitTest is Test, SetupWithdrawalQueue {
         assertTrue(withdrawalQueue.isEmergencyExitActivated());
     }
 
+    function test_EmergencyExit_SetsMaxWithdrawalFee() public {
+        withdrawalQueue.requestWithdrawal(address(this), 10 ** STV_DECIMALS, 0);
+
+        // Make queue stuck
+        vm.warp(block.timestamp + withdrawalQueue.MAX_ACCEPTABLE_WQ_FINALIZATION_TIME_IN_SECONDS() + 1);
+        assertTrue(withdrawalQueue.isWithdrawalQueueStuck());
+
+        // Anyone can activate emergency exit
+        vm.prank(userAlice);
+        vm.expectEmit(true, false, false, true);
+        emit WithdrawalQueue.EmergencyExitActivated(block.timestamp);
+
+        // Initially fee is zero
+        assertEq(withdrawalQueue.getWithdrawalFee(), 0);
+
+        withdrawalQueue.activateEmergencyExit();
+
+        // After activation fee is set to max
+        assertEq(withdrawalQueue.getWithdrawalFee(), withdrawalQueue.MAX_WITHDRAWAL_FEE());
+    }
+
     function test_EmergencyExit_RevertWhenNotStuck() public {
         withdrawalQueue.requestWithdrawal(address(this), 10 ** STV_DECIMALS, 0);
 

@@ -16,7 +16,7 @@ contract StvPoolTest is StvPoolHarness {
         // Deploy pool system
         WrapperContext memory ctx = _deployStvPool(false, 0);
 
-        // 1) USER1 deposits 0.01 ether (above MIN_WITHDRAWAL_AMOUNT)
+        // 1) USER1 deposits 0.01 ether (above MIN_WITHDRAWAL_VALUE)
         uint256 depositAmount = 0.01 ether;
         uint256 expectedStv = ctx.pool.previewDeposit(depositAmount);
         vm.prank(USER1);
@@ -50,7 +50,7 @@ contract StvPoolTest is StvPoolHarness {
         // Deploy pool system
         WrapperContext memory ctx = _deployStvPool(false, 0);
 
-        // 1) USER1 deposits 0.01 ether (above MIN_WITHDRAWAL_AMOUNT)
+        // 1) USER1 deposits 0.01 ether (above MIN_WITHDRAWAL_VALUE)
         uint256 depositAmount = 0.01 ether;
         uint256 expectedStv = ctx.pool.previewDeposit(depositAmount);
         vm.prank(USER1);
@@ -89,7 +89,7 @@ contract StvPoolTest is StvPoolHarness {
         // Deploy pool system
         WrapperContext memory ctx = _deployStvPool(false, 0);
 
-        // 1) USER1 deposits 0.01 ether (above MIN_WITHDRAWAL_AMOUNT)
+        // 1) USER1 deposits 0.01 ether (above MIN_WITHDRAWAL_VALUE)
         uint256 depositAmount = 0.01 ether;
         uint256 expectedStv = ctx.pool.previewDeposit(depositAmount);
         vm.prank(USER1);
@@ -131,8 +131,8 @@ contract StvPoolTest is StvPoolHarness {
         // Deploy pool system
         WrapperContext memory ctx = _deployStvPool(false, 0);
 
-        // 1) USER1 deposits 0.0001 ether (above MIN_WITHDRAWAL_AMOUNT)
-        uint256 depositAmount = 0.0001 ether;
+        // 1) USER1 deposits 0.01 ether (above MIN_WITHDRAWAL_VALUE)
+        uint256 depositAmount = 0.01 ether;
         uint256 expectedStv = ctx.pool.previewDeposit(depositAmount);
         vm.prank(USER1);
         ctx.pool.depositETH{value: depositAmount}(USER1, address(0));
@@ -166,7 +166,7 @@ contract StvPoolTest is StvPoolHarness {
         // Simulate a +3% vault value report before deposit
         reportVaultValueChangeNoFees(ctx, 10300); // +3%
 
-        // 1) USER1 deposits 0.01 ether (above MIN_WITHDRAWAL_AMOUNT)
+        // 1) USER1 deposits 0.01 ether (above MIN_WITHDRAWAL_VALUE)
         uint256 depositAmount = 0.01 ether;
         uint256 expectedStv = ctx.pool.previewDeposit(depositAmount);
         vm.prank(USER1);

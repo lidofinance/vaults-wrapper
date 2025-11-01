@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity >=0.8.25;
 
-import {Test} from "forge-std/Test.sol";
-import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 import {SetupWithdrawalQueue} from "./SetupWithdrawalQueue.sol";
+import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
+import {Test} from "forge-std/Test.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
 
 contract RequestCreationTest is Test, SetupWithdrawalQueue {
@@ -179,20 +179,29 @@ contract RequestCreationTest is Test, SetupWithdrawalQueue {
         withdrawalQueue.requestWithdrawalBatch(address(this), stvAmounts, stethShares);
     }
 
-    function test_RequestWithdrawal_RevertOnTooSmallAmount() public {
-        uint256 tinyStvAmount = pool.previewWithdraw(withdrawalQueue.MIN_WITHDRAWAL_AMOUNT()) - 1;
+    function test_RequestWithdrawal_RevertOnTooSmallValue() public {
+        uint256 tinyStvAmount = pool.previewWithdraw(withdrawalQueue.MIN_WITHDRAWAL_VALUE()) - 1;
         uint256 expectedAssets = pool.previewRedeem(tinyStvAmount);
 
-        vm.expectRevert(abi.encodeWithSelector(WithdrawalQueue.RequestAmountTooSmall.selector, expectedAssets));
+        vm.expectRevert(abi.encodeWithSelector(WithdrawalQueue.RequestValueTooSmall.selector, expectedAssets));
         withdrawalQueue.requestWithdrawal(address(this), tinyStvAmount, 0);
+    }
+
+    function test_RequestWithdrawal_RevertOnTooSmallValueWithRebalance() public {
+        uint256 minStvAmount = pool.previewWithdraw(withdrawalQueue.MIN_WITHDRAWAL_VALUE());
+        uint256 minMintedShares = 1;
+        uint256 expectedAssets = pool.previewRedeem(minStvAmount) - steth.getPooledEthBySharesRoundUp(minMintedShares);
+
+        vm.expectRevert(abi.encodeWithSelector(WithdrawalQueue.RequestValueTooSmall.selector, expectedAssets));
+        withdrawalQueue.requestWithdrawal(address(this), minStvAmount, minMintedShares);
     }
 
     function test_RequestWithdrawal_RevertOnTooLargeAmount() public {
         uint256 extraAssetsWei = 10 ** (STV_DECIMALS - ASSETS_DECIMALS);
-        uint256 hugeStvAmount = pool.previewWithdraw(withdrawalQueue.MAX_WITHDRAWAL_AMOUNT()) + extraAssetsWei;
+        uint256 hugeStvAmount = pool.previewWithdraw(withdrawalQueue.MAX_WITHDRAWAL_ASSETS()) + extraAssetsWei;
         uint256 expectedAssets = pool.previewRedeem(hugeStvAmount);
 
-        vm.expectRevert(abi.encodeWithSelector(WithdrawalQueue.RequestAmountTooLarge.selector, expectedAssets));
+        vm.expectRevert(abi.encodeWithSelector(WithdrawalQueue.RequestAssetsTooLarge.selector, expectedAssets));
         withdrawalQueue.requestWithdrawal(address(this), hugeStvAmount, 0);
     }
 
@@ -218,8 +227,8 @@ contract RequestCreationTest is Test, SetupWithdrawalQueue {
     }
 
     function test_RequestWithdrawal_ExactMinAmount() public {
-        // Calculate STV amount needed for MIN_WITHDRAWAL_AMOUNT
-        uint256 minAmount = withdrawalQueue.MIN_WITHDRAWAL_AMOUNT();
+        // Calculate STV amount needed for MAX_WITHDRAWAL_ASSETS
+        uint256 minAmount = withdrawalQueue.MAX_WITHDRAWAL_ASSETS();
         uint256 stvAmount = pool.previewWithdraw(minAmount);
 
         // This should succeed
@@ -228,8 +237,8 @@ contract RequestCreationTest is Test, SetupWithdrawalQueue {
     }
 
     function test_RequestWithdrawal_ExactMaxAmount() public {
-        // Calculate STV amount needed for MAX_WITHDRAWAL_AMOUNT
-        uint256 maxAmount = withdrawalQueue.MAX_WITHDRAWAL_AMOUNT();
+        // Calculate STV amount needed for MAX_WITHDRAWAL_ASSETS
+        uint256 maxAmount = withdrawalQueue.MAX_WITHDRAWAL_ASSETS();
         uint256 stvAmount = pool.previewWithdraw(maxAmount);
 
         // This should succeed

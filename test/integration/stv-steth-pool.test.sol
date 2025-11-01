@@ -454,7 +454,7 @@ contract StvStETHPoolTest is StvStETHPoolHarness {
         //
         // Step 1: User1 deposits
         //
-        uint256 user1Deposit = 2 * ctx.withdrawalQueue.MIN_WITHDRAWAL_AMOUNT() * 100; // * 100 to have +1% rewards enough for min withdrawal
+        uint256 user1Deposit = 2 * ctx.withdrawalQueue.MIN_WITHDRAWAL_VALUE() * 100; // * 100 to have +1% rewards enough for min withdrawal
 
         uint256 sharesForDeposit = _calcMaxMintableStShares(ctx, user1Deposit);
         vm.prank(USER1);
@@ -562,14 +562,14 @@ contract StvStETHPoolTest is StvStETHPoolHarness {
         assertGt(w.balanceOf(USER1), stvFor1Wei, "USER1 stv balance should be greater than stvFor1Wei");
 
         vm.startPrank(USER1);
-        vm.expectRevert(abi.encodeWithSelector(WithdrawalQueue.RequestAmountTooSmall.selector, 1 wei));
+        vm.expectRevert(abi.encodeWithSelector(WithdrawalQueue.RequestValueTooSmall.selector, 1 wei));
         ctx.withdrawalQueue.requestWithdrawal(USER1, stvFor1Wei, 0);
         vm.stopPrank();
 
         //
         // Step 2.2: User1 withdraws stv with burning stethShares
         //
-        uint256 stvForMinWithdrawal = w.previewWithdraw(ctx.withdrawalQueue.MIN_WITHDRAWAL_AMOUNT());
+        uint256 stvForMinWithdrawal = w.previewWithdraw(ctx.withdrawalQueue.MIN_WITHDRAWAL_VALUE());
         uint256 stethSharesToBurn = w.stethSharesToBurnForStvOf(USER1, stvForMinWithdrawal);
 
         vm.startPrank(USER1);
