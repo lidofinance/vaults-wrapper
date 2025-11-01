@@ -7,6 +7,12 @@ import {Test} from "forge-std/Test.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
 
 contract FeeConfigTest is Test, SetupWithdrawalQueue {
+    function setUp() public override {
+        super.setUp();
+
+        pool.depositETH{value: 1_000 ether}(address(this), address(0));
+    }
+
     // Default value
 
     function test_GetWithdrawalFee_DefaultZero() public view {
@@ -52,6 +58,17 @@ contract FeeConfigTest is Test, SetupWithdrawalQueue {
                 IAccessControl.AccessControlUnauthorizedAccount.selector, address(this), withdrawalQueue.FINALIZE_ROLE()
             )
         );
+        withdrawalQueue.setWithdrawalFee(0.0001 ether);
+    }
+
+    function test_SetWithdrawalFee_RevertInEmergencyExit() public {
+        withdrawalQueue.requestWithdrawal(address(this), 10 ** STV_DECIMALS, 0);
+
+        vm.warp(block.timestamp + withdrawalQueue.MAX_ACCEPTABLE_WQ_FINALIZATION_TIME_IN_SECONDS() + 1);
+        withdrawalQueue.activateEmergencyExit();
+
+        vm.prank(finalizeRoleHolder);
+        vm.expectRevert(WithdrawalQueue.CantBeSetInEmergencyExitMode.selector);
         withdrawalQueue.setWithdrawalFee(0.0001 ether);
     }
 }
