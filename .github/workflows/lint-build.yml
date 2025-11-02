@@ -10,7 +10,6 @@ env:
 jobs:
   lint:
     name: forge fmt
-    if: github.ref != 'refs/heads/testnet-2'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: true
