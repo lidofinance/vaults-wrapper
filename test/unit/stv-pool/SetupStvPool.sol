@@ -6,10 +6,12 @@ import {Test} from "forge-std/Test.sol";
 import {StvPool} from "src/StvPool.sol";
 import {MockDashboard, MockDashboardFactory} from "test/mocks/MockDashboard.sol";
 import {MockStETH} from "test/mocks/MockStETH.sol";
+import {MockVaultHub} from "test/mocks/MockVaultHub.sol";
 
 abstract contract SetupStvPool is Test {
     StvPool public pool;
     MockDashboard public dashboard;
+    MockVaultHub public vaultHub;
     MockStETH public steth;
 
     address public owner;
@@ -31,6 +33,7 @@ abstract contract SetupStvPool is Test {
         // Deploy mocks
         dashboard = new MockDashboardFactory().createMockDashboard(owner);
         steth = dashboard.STETH();
+        vaultHub = dashboard.VAULT_HUB();
 
         // Fund the dashboard with 1 ETH
         dashboard.fund{value: initialDeposit}();

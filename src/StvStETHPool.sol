@@ -671,6 +671,7 @@ contract StvStETHPool is StvPool {
         returns (uint256 stvToBurn)
     {
         _checkNoUnassignedLiability();
+        _checkNoBadDebt();
 
         if (_stethShares == 0) revert ZeroArgument();
         if (_stethShares > mintedStethSharesOf(_account)) revert InsufficientMintedShares();
