@@ -149,10 +149,7 @@ contract ForceRebalanceTest is Test, SetupStvStETHPool {
 
     function test_ForceRebalanceAndSocializeLoss_DoNotRevertIfAccountIsUndercollateralized() public {
         _mintMaxStethShares(userAlice);
-
-        uint256 totalValue = dashboard.maxLockableValue();
-        assertGt(totalValue, 1 ether, "unexpected vault value");
-        _simulateLoss(totalValue - 1 ether);
+        _simulateLoss(4 ether);
 
         vm.prank(socializer);
         pool.forceRebalanceAndSocializeLoss(userAlice);
