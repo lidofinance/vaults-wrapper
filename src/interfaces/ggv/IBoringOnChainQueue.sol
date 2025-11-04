@@ -57,12 +57,9 @@ interface IBoringOnChainQueue {
         uint96 minimumShares
     ) external;
 
-    function requestOnChainWithdraw(
-        address assetOut,
-        uint128 amountOfShares,
-        uint16 discount,
-        uint24 secondsToDeadline
-    ) external returns (bytes32 requestId);
+    function requestOnChainWithdraw(address assetOut, uint128 amountOfShares, uint16 discount, uint24 secondsToDeadline)
+        external
+        returns (bytes32 requestId);
     function cancelOnChainWithdraw(OnChainWithdraw memory request) external returns (bytes32 requestId);
     function replaceOnChainWithdraw(OnChainWithdraw memory oldRequest, uint16 discount, uint24 secondsToDeadline)
         external
