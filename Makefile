@@ -26,6 +26,14 @@ test-integration-b:
 		-$(VERBOSITY) \
 		--fork-url "$$RPC_URL"
 
+test-integration-dashboard:
+	[ -f .env ] && . .env; \
+	FOUNDRY_PROFILE=test \
+	CORE_LOCATOR_ADDRESS="$$CORE_LOCATOR_ADDRESS" \
+	forge test \
+		test/integration/dashboard.test.sol \
+		-$(VERBOSITY) \
+		--fork-url "$$RPC_URL"
 
 test-integration-ggv:
 	[ -f .env ] && . .env; \

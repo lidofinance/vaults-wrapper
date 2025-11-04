@@ -425,7 +425,7 @@ contract StvPool is Initializable, ERC20Upgradeable, AllowList {
         // After disconnection, the connect deposit is available in the vault
         uint256 vaultBalance = address(STAKING_VAULT).balance;
         if (vaultBalance > 0) {
-            DASHBOARD.withdraw(_recipient, vaultBalance);
+            DASHBOARD.withdraw(_recipient, vaultBalance); // TODO: should revert since WITHDRAW_ROLE is granted to WQ
             emit ConnectDepositClaimed(_recipient, vaultBalance);
         }
     }

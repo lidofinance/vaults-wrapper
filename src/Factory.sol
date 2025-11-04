@@ -186,7 +186,7 @@ contract Factory {
         DUMMY_IMPLEMENTATION = address(new DummyImplementation());
 
         TIMELOCK_MIN_DELAY = timelockConfig.minDelaySeconds;
-        TIMELOCK_EXECUTOR = timelockConfig.executor;
+        TIMELOCK_EXECUTOR = timelockConfig.executor; // TODO: should be configurable per Vault
 
         if (strategyParameters.ggvTeller == address(0) || strategyParameters.ggvBoringOnChainQueue == address(0)) {
             revert InvalidConfiguration();
