@@ -497,18 +497,20 @@ contract StvStETHPool is StvPool {
         assert(connection.forcedRebalanceThresholdBP < connection.reserveRatioBP);
 
         uint16 newReserveRatioBP = uint16(Math.min(connection.reserveRatioBP + RESERVE_RATIO_GAP_BP, maxReserveRatioBP));
-        uint16 newThresholdBP = uint16(
+        uint16 newForcedRebalanceThresholdBP = uint16(
             Math.min(connection.forcedRebalanceThresholdBP + RESERVE_RATIO_GAP_BP, maxForcedRebalanceThresholdBP)
         );
 
         StvStETHPoolStorage storage $ = _getStvStETHPoolStorage();
 
-        if (newReserveRatioBP == $.reserveRatioBP && newThresholdBP == $.forcedRebalanceThresholdBP) return;
+        if (newReserveRatioBP == $.reserveRatioBP && newForcedRebalanceThresholdBP == $.forcedRebalanceThresholdBP) {
+            return;
+        }
 
         $.reserveRatioBP = newReserveRatioBP;
-        $.forcedRebalanceThresholdBP = newThresholdBP;
+        $.forcedRebalanceThresholdBP = newForcedRebalanceThresholdBP;
 
-        emit VaultParametersUpdated(newReserveRatioBP, newThresholdBP);
+        emit VaultParametersUpdated(newReserveRatioBP, newForcedRebalanceThresholdBP);
     }
 
     // =================================================================================
