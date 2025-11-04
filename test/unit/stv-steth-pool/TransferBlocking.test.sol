@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity >=0.8.25;
 
-import {Test, console} from "forge-std/Test.sol";
+import {Test} from "forge-std/Test.sol";
 import {SetupStvStETHPool} from "./SetupStvStETHPool.sol";
 import {StvStETHPool} from "src/StvStETHPool.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
@@ -11,7 +11,7 @@ contract TransferBlockingTest is Test, SetupStvStETHPool {
 
     function setUp() public override {
         super.setUp();
-        pool.depositETH{value: ethToDeposit}();
+        pool.depositETH{value: ethToDeposit}(address(this), address(0));
     }
 
     // Basic transfer tests without debt
@@ -32,7 +32,7 @@ contract TransferBlockingTest is Test, SetupStvStETHPool {
         assertEq(pool.balanceOf(userAlice), 0);
 
         // Zero transfer should also work with maximum debt
-        uint256 mintCapacity = pool.mintingCapacitySharesOf(address(this));
+        uint256 mintCapacity = pool.remainingMintingCapacitySharesOf(address(this), 0);
         pool.mintStethShares(mintCapacity);
 
         pool.transfer(userAlice, 0);
@@ -42,7 +42,7 @@ contract TransferBlockingTest is Test, SetupStvStETHPool {
     // Test minting creates restrictions
 
     function test_MintingCreatesDebt() public {
-        uint256 sharesToMint = pool.mintingCapacitySharesOf(address(this)) / 4;
+        uint256 sharesToMint = pool.remainingMintingCapacitySharesOf(address(this), 0) / 4;
         pool.mintStethShares(sharesToMint);
         assertEq(pool.mintedStethSharesOf(address(this)), sharesToMint);
     }
@@ -50,7 +50,7 @@ contract TransferBlockingTest is Test, SetupStvStETHPool {
     // Core transfer blocking tests
 
     function test_Transfer_BlockedWhenInsufficientBalanceAfterMinting() public {
-        uint256 sharesToMint = pool.mintingCapacitySharesOf(address(this)) / 2;
+        uint256 sharesToMint = pool.remainingMintingCapacitySharesOf(address(this), 0) / 2;
         pool.mintStethShares(sharesToMint);
 
         uint256 balance = pool.balanceOf(address(this));
@@ -62,7 +62,7 @@ contract TransferBlockingTest is Test, SetupStvStETHPool {
     }
 
     function test_Transfer_AllowedWhenWithinAvailableBalance() public {
-        uint256 sharesToMint = pool.mintingCapacitySharesOf(address(this)) / 4;
+        uint256 sharesToMint = pool.remainingMintingCapacitySharesOf(address(this), 0) / 4;
         pool.mintStethShares(sharesToMint);
 
         uint256 balance = pool.balanceOf(address(this));
@@ -77,7 +77,7 @@ contract TransferBlockingTest is Test, SetupStvStETHPool {
     // TransferFrom tests
 
     function test_TransferFrom_BlockedWhenInsufficientBalance() public {
-        uint256 sharesToMint = pool.mintingCapacitySharesOf(address(this)) / 2;
+        uint256 sharesToMint = pool.remainingMintingCapacitySharesOf(address(this), 0) / 2;
         pool.mintStethShares(sharesToMint);
 
         uint256 balance = pool.balanceOf(address(this));
@@ -92,7 +92,7 @@ contract TransferBlockingTest is Test, SetupStvStETHPool {
     }
 
     function test_TransferFrom_AllowedWhenWithinBalance() public {
-        uint256 sharesToMint = pool.mintingCapacitySharesOf(address(this)) / 2;
+        uint256 sharesToMint = pool.remainingMintingCapacitySharesOf(address(this), 0) / 2;
         pool.mintStethShares(sharesToMint);
 
         uint256 balance = pool.balanceOf(address(this));
@@ -114,7 +114,7 @@ contract TransferBlockingTest is Test, SetupStvStETHPool {
         vm.prank(userAlice);
         pool.depositETH{value: ethToDeposit}(userAlice, address(0));
 
-        uint256 aliceMintCapacity = pool.mintingCapacitySharesOf(userAlice);
+        uint256 aliceMintCapacity = pool.remainingMintingCapacitySharesOf(userAlice, 0);
         vm.prank(userAlice);
         pool.mintStethShares(aliceMintCapacity / 2);
 
@@ -149,7 +149,7 @@ contract TransferBlockingTest is Test, SetupStvStETHPool {
         vm.prank(userAlice);
         pool.depositETH{value: ethToDeposit}(userAlice, address(0));
 
-        uint256 aliceMintCapacity = pool.mintingCapacitySharesOf(userAlice);
+        uint256 aliceMintCapacity = pool.remainingMintingCapacitySharesOf(userAlice, 0);
         vm.prank(userAlice);
         pool.mintStethShares(aliceMintCapacity);
 
@@ -166,7 +166,7 @@ contract TransferBlockingTest is Test, SetupStvStETHPool {
     // Debt changes affect transfer restrictions
 
     function test_Transfer_RestrictionUpdatesAfterAdditionalMinting() public {
-        uint256 mintCapacity = pool.mintingCapacitySharesOf(address(this));
+        uint256 mintCapacity = pool.remainingMintingCapacitySharesOf(address(this), 0);
         uint256 firstMint = mintCapacity / 4;
 
         // First mint
@@ -186,7 +186,7 @@ contract TransferBlockingTest is Test, SetupStvStETHPool {
     }
 
     function test_Transfer_RestrictionReleasesAfterBurning() public {
-        uint256 mintCapacity = pool.mintingCapacitySharesOf(address(this));
+        uint256 mintCapacity = pool.remainingMintingCapacitySharesOf(address(this), 0);
         uint256 sharesToMint = mintCapacity / 2;
 
         pool.mintStethShares(sharesToMint);
@@ -216,7 +216,7 @@ contract TransferBlockingTest is Test, SetupStvStETHPool {
     // Edge cases
 
     function test_Transfer_CorrectCalculationOfRequiredLocked() public {
-        uint256 mintCapacity = pool.mintingCapacitySharesOf(address(this));
+        uint256 mintCapacity = pool.remainingMintingCapacitySharesOf(address(this), 0);
         uint256 sharesToMint = mintCapacity / 3;
 
         pool.mintStethShares(sharesToMint);
@@ -237,7 +237,7 @@ contract TransferBlockingTest is Test, SetupStvStETHPool {
 
     function test_Transfer_ReserveRatioImpactOnCalculations() public view {
         uint256 testShares = 1 ether;
-        uint256 reserveRatio = pool.WRAPPER_RR_BP();
+        uint256 reserveRatio = pool.reserveRatioBP();
         uint256 totalBasisPoints = pool.TOTAL_BASIS_POINTS();
 
         // Verify reserve ratio is configured correctly

@@ -9,11 +9,10 @@ env:
 
 jobs:
   lint:
-    strategy:
-      fail-fast: true
-
     name: forge fmt
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
     steps:
       - uses: actions/checkout@v4
         with:

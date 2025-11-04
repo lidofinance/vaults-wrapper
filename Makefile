@@ -11,7 +11,7 @@ DEBUG_TEST ?= test_debug
 test-integration-a:
 	[ -f .env ] && . .env; \
 	FOUNDRY_PROFILE=test \
-	CORE_DEPLOYED_JSON="$$CORE_DEPLOYED_JSON" \
+	CORE_LOCATOR_ADDRESS="$$CORE_LOCATOR_ADDRESS" \
 	forge test \
 		test/integration/stv-pool.test.sol \
 		-$(VERBOSITY) \
@@ -20,7 +20,7 @@ test-integration-a:
 test-integration-b:
 	[ -f .env ] && . .env; \
 	FOUNDRY_PROFILE=test \
-	CORE_DEPLOYED_JSON="$$CORE_DEPLOYED_JSON" \
+	CORE_LOCATOR_ADDRESS="$$CORE_LOCATOR_ADDRESS" \
 	forge test \
 		test/integration/stv-steth-pool.test.sol \
 		-$(VERBOSITY) \
@@ -30,7 +30,7 @@ test-integration-b:
 test-integration-ggv:
 	[ -f .env ] && . .env; \
 	FOUNDRY_PROFILE=test \
-	CORE_DEPLOYED_JSON="$$CORE_DEPLOYED_JSON" \
+	CORE_LOCATOR_ADDRESS="$$CORE_LOCATOR_ADDRESS" \
 	forge test \
 		test/integration/ggv.test.sol \
 		-$(VERBOSITY) \
@@ -38,11 +38,11 @@ test-integration-ggv:
 
 test-integration:
 	[ -f .env ] && . .env; \
-	FOUNDRY_PROFILE=test CORE_DEPLOYED_JSON="$$CORE_DEPLOYED_JSON" forge test test/integration/**/*.test.sol -$(VERBOSITY) --fork-url "$$RPC_URL"
+	FOUNDRY_PROFILE=test CORE_LOCATOR_ADDRESS="$$CORE_LOCATOR_ADDRESS" forge test test/integration/**/*.test.sol -$(VERBOSITY) --fork-url "$$RPC_URL"
 
 test-integration-debug:
 	[ -f .env ] && . .env; \
-	FOUNDRY_PROFILE=test CORE_DEPLOYED_JSON="$$CORE_DEPLOYED_JSON" forge test --match-test $(DEBUG_TEST) -$(VERBOSITY) --fork-url "$$RPC_URL"
+	FOUNDRY_PROFILE=test CORE_LOCATOR_ADDRESS="$$CORE_LOCATOR_ADDRESS" forge test --match-test $(DEBUG_TEST) -$(VERBOSITY) --fork-url "$$RPC_URL"
 
 test-unit:
 	FOUNDRY_PROFILE=test forge test -$(VERBOSITY) --no-match-path 'test/integration/*' test
@@ -58,15 +58,23 @@ deploy-factory:
 		export ETHERSCAN_API_KEY="$${ETHERSCAN_API_KEY:-$${ETHERSCAN_TOKEN}}"; \
 		VERIFY_FLAGS="--verify --verifier etherscan"; \
 	fi; \
+	GAS_FLAGS=""; \
+	if [ -n "$$GAS_PRIORITY_FEE" ]; then \
+		GAS_FLAGS="$$GAS_FLAGS --priority-gas-price $$GAS_PRIORITY_FEE"; \
+	fi; \
+	if [ -n "$$GAS_MAX_FEE" ]; then \
+		GAS_FLAGS="$$GAS_FLAGS --with-gas-price $$GAS_MAX_FEE"; \
+	fi; \
 	OUTPUT_JSON=$(OUTPUT_JSON) \
-	forge script script/DeployWrapperFactory.s.sol:DeployWrapperFactory \
+	forge script script/DeployFactory.s.sol:DeployFactory \
 		--rpc-url $${RPC_URL:-http://localhost:9123} \
 		--broadcast \
 		--private-key $${PRIVATE_KEY:-$(PRIVATE_KEY)} \
 		--sender $${DEPLOYER:-$(DEPLOYER)} \
 		$$VERIFY_FLAGS \
+		$$GAS_FLAGS \
+		--enable-tx-gas-limit \
 		--slow \
-		-vvvv \
 		--sig 'run()' \
 		--non-interactive
 
@@ -82,16 +90,24 @@ deploy-pool-from-factory:
 		export ETHERSCAN_API_KEY="$${ETHERSCAN_API_KEY:-$${ETHERSCAN_TOKEN}}"; \
 		VERIFY_FLAGS="--verify --verifier etherscan"; \
 	fi; \
-	export WRAPPER_PARAMS_JSON="$$PARAMS_JSON"; \
-	forge script script/DeployWrapper.s.sol:DeployWrapper \
-		BUMP_CORE_FACTORY_NONCE=$${BUMP_CORE_FACTORY_NONCE:-0} \
+	GAS_FLAGS=""; \
+	if [ -n "$$GAS_PRIORITY_FEE" ]; then \
+		GAS_FLAGS="$$GAS_FLAGS --priority-gas-price $$GAS_PRIORITY_FEE"; \
+	fi; \
+	if [ -n "$$GAS_MAX_FEE" ]; then \
+		GAS_FLAGS="$$GAS_FLAGS --with-gas-price $$GAS_MAX_FEE"; \
+	fi; \
+	export POOL_PARAMS_JSON="$$PARAMS_JSON"; \
+	forge script script/DeployPool.s.sol:DeployWrapper \
 		--rpc-url $${RPC_URL} \
 		--broadcast \
 		--sender $${DEPLOYER:-$(DEPLOYER)} \
 		--private-key $${PRIVATE_KEY:-$(PRIVATE_KEY)} \
 		$$VERIFY_FLAGS \
+		$$GAS_FLAGS \
+		--enable-tx-gas-limit \
+		--gas-limit 16777216 \
 		--slow \
-		-vvvv \
 		--sig 'run()' \
 		--non-interactive
 
@@ -237,3 +253,39 @@ mock-strategy:
 	VAULT_FACTORY=$(VAULT_FACTORY) \
 	STETH=$(STETH) \
 	forge script script/DeployStrategy.s.sol --rpc-url $(RPC_URL) --broadcast
+
+deploy-all:
+	[ -f .env ] && . .env; \
+	set -e; \
+	# 1) Deploy Factory using existing make target
+	CORE_LOCATOR_ADDRESS="$$CORE_LOCATOR_ADDRESS" \
+	FACTORY_PARAMS_JSON="$$FACTORY_PARAMS_JSON" \
+	RPC_URL="$$RPC_URL" \
+	PRIVATE_KEY="$$PRIVATE_KEY" \
+	DEPLOYER="$$DEPLOYER" \
+	PUBLISH_SOURCES="$$PUBLISH_SOURCES" \
+	GAS_PRIORITY_FEE="$$GAS_PRIORITY_FEE" \
+	GAS_MAX_FEE="$$GAS_MAX_FEE" \
+	$(MAKE) -s deploy-factory; \
+	# 2) Deploy all wrappers from configs using existing make target
+	WRAPPER_CONFIGS=$${WRAPPER_CONFIGS:-"script/stv-pool-deploy-config-hoodi.json script/stv-steth-pool-deploy-config-hoodi.json script/stv-ggv-pool-deploy-config-hoodi.json "}; \
+	CHAIN_ID=$$(cast chain-id --rpc-url "$$RPC_URL"); \
+	for CFG in $$WRAPPER_CONFIGS; do \
+		if [ -f "$$CFG" ]; then \
+			BASENAME=$$(basename "$$CFG" .json); \
+			OUT="deployments/pool-instance-$$BASENAME-$$CHAIN_ID-$$(date +%s).json"; \
+			WRAPPER_DEPLOYED_JSON="$$OUT" \
+			BUMP_CORE_FACTORY_NONCE="$$${BUMP_CORE_FACTORY_NONCE:-0}" \
+			RPC_URL="$$RPC_URL" \
+			DEPLOYER="$$DEPLOYER" \
+			PRIVATE_KEY="$$PRIVATE_KEY" \
+			GAS_PRIORITY_FEE="$$GAS_PRIORITY_FEE" \
+			GAS_MAX_FEE="$$GAS_MAX_FEE" \
+			$(MAKE) -s deploy-pool-from-factory PARAMS_JSON="$$CFG"; \
+			echo "Deployed wrapper: $$CFG -> $$OUT"; \
+		else \
+			echo "Config not found, skipping: $$CFG"; \
+		fi; \
+	done
+
+# WRAPPER_CONFIGS=$${WRAPPER_CONFIGS:-"script/stv-pool-deploy-config-hoodi.json script/stv-steth-pool-deploy-config-hoodi.json script/stv-ggv-pool-deploy-config-hoodi.json"}; \

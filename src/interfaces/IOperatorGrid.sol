@@ -40,8 +40,7 @@ interface IOperatorGrid {
             uint256 infraFeeBP,
             uint256 liquidityFeeBP,
             uint256 reservationFeeBP
-        )
-    ;
+        );
 
     function alterTiers(uint256[] calldata _tierIds, TierParams[] calldata _tierParams) external;
 }

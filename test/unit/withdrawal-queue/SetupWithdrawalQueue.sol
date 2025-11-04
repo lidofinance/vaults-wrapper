@@ -54,7 +54,14 @@ abstract contract SetupWithdrawalQueue is Test {
         dashboard.fund{value: initialDeposit}();
 
         // Deploy StvStETHPool proxy with temporary implementation
-        StvStETHPool tempImpl = new StvStETHPool(address(dashboard), false, reserveRatioGapBP, address(0));
+        StvStETHPool tempImpl = new StvStETHPool(
+            address(dashboard),
+            false,
+            reserveRatioGapBP,
+            address(0),
+            address(0),
+            keccak256("test.wq.pool")
+        );
         OssifiableProxy poolProxy = new OssifiableProxy(address(tempImpl), owner, "");
         pool = StvStETHPool(payable(poolProxy));
 
@@ -67,7 +74,8 @@ abstract contract SetupWithdrawalQueue is Test {
             address(dashboard.STAKING_VAULT()),
             address(lazyOracle),
             MAX_ACCEPTABLE_WQ_FINALIZATION_TIME,
-            MIN_WITHDRAWAL_DELAY_TIME
+            MIN_WITHDRAWAL_DELAY_TIME,
+            true
         );
 
         OssifiableProxy wqProxy = new OssifiableProxy(address(wqImpl), owner, "");
@@ -80,21 +88,20 @@ abstract contract SetupWithdrawalQueue is Test {
         vm.startPrank(owner);
         withdrawalQueue.grantRole(withdrawalQueue.PAUSE_ROLE(), pauseRoleHolder);
         withdrawalQueue.grantRole(withdrawalQueue.RESUME_ROLE(), resumeRoleHolder);
-
-        // Pause first (since initialize resets pause state), then resume
-        withdrawalQueue.grantRole(withdrawalQueue.PAUSE_ROLE(), owner);
-        withdrawalQueue.pause();
         vm.stopPrank();
-
-        // Resume the queue
-        vm.prank(resumeRoleHolder);
-        withdrawalQueue.resume();
 
         // Set oracle timestamp to current time
         lazyOracle.mock__updateLatestReportTimestamp(block.timestamp);
 
         // Deploy Wrapper implementation
-        StvStETHPool poolImpl = new StvStETHPool(address(dashboard), false, reserveRatioGapBP, address(withdrawalQueue));
+        StvStETHPool poolImpl = new StvStETHPool(
+            address(dashboard),
+            false,
+            reserveRatioGapBP,
+            address(withdrawalQueue),
+            address(0),
+            keccak256("test.wq.pool")
+        );
         vm.prank(owner);
         poolProxy.proxy__upgradeTo(address(poolImpl));
 
@@ -105,13 +112,13 @@ abstract contract SetupWithdrawalQueue is Test {
     // Helper function to create and finalize a withdrawal request
 
     function _requestWithdrawalAndFinalize(uint256 _stvAmount) internal returns (uint256 requestId) {
-        requestId = pool.requestWithdrawal(_stvAmount);
+        requestId = withdrawalQueue.requestWithdrawal(address(this), _stvAmount, 0);
         _finalizeRequests(1);
     }
 
     function _finalizeRequests(uint256 _maxRequests) internal {
         lazyOracle.mock__updateLatestReportTimestamp(block.timestamp);
-        vm.warp(block.timestamp + MIN_WITHDRAWAL_DELAY_TIME + 1);
+        vm.warp(MIN_WITHDRAWAL_DELAY_TIME + 1 + block.timestamp);
         vm.prank(finalizeRoleHolder);
         withdrawalQueue.finalize(_maxRequests);
     }

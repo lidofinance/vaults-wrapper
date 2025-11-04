@@ -52,9 +52,6 @@ interface ILazyOracle {
     function vaultsCount() external view returns (uint256);
     function batchVaultsInfo(uint256 _offset, uint256 _limit) external view returns (VaultInfo[] memory);
     function removeVaultQuarantine(address _vault) external;
-    function updateSanityParams(
-        uint256 _quarantinePeriod,
-        uint256 _maxRewardRatioBP,
-        uint256 _maxLidoFeeRatePerSecond
-    ) external;
+    function updateSanityParams(uint256 _quarantinePeriod, uint256 _maxRewardRatioBP, uint256 _maxLidoFeeRatePerSecond)
+        external;
 }

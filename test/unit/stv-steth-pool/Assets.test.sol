@@ -1,10 +1,8 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity >=0.8.25;
 
-import {Test, console} from "forge-std/Test.sol";
+import {Test} from "forge-std/Test.sol";
 import {SetupStvStETHPool} from "./SetupStvStETHPool.sol";
-
-import {MockVaultHub} from "../../mocks/MockVaultHub.sol";
 
 contract AssetsTest is Test, SetupStvStETHPool {
     uint8 supplyDecimals = 27;
@@ -38,7 +36,7 @@ contract AssetsTest is Test, SetupStvStETHPool {
     }
 
     function test_Rebalance_DoNotChangeUserAssets() public {
-        pool.depositETH{value: 4 ether}();
+        pool.depositETH{value: 4 ether}(address(this), address(0));
         pool.mintStethShares(1 * 10 ** 18);
 
         uint256 assetsBefore = pool.assetsOf(address(this));
@@ -47,8 +45,5 @@ contract AssetsTest is Test, SetupStvStETHPool {
 
         assertEq(pool.assetsOf(address(this)), assetsBefore);
         assertLt(pool.nominalAssetsOf(address(this)), assetsBefore);
-        assertGt(pool.exceedingMintedStethOf(address(this)), 0);
     }
 }
-
-

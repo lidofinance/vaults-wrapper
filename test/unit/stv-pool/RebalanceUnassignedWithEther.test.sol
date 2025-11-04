@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity >=0.8.25;
 
-import {Test, console} from "forge-std/Test.sol";
+import {Test} from "forge-std/Test.sol";
 
 import {SetupStvPool} from "./SetupStvPool.sol";
-import {BasePool} from "src/BasePool.sol";
+import {StvPool} from "src/StvPool.sol";
 
 contract RebalanceUnassignedWithEtherTest is Test, SetupStvPool {
     function test_DecreasesUnassignedLiability() public {
@@ -18,13 +18,13 @@ contract RebalanceUnassignedWithEtherTest is Test, SetupStvPool {
         assertEq(pool.totalUnassignedLiabilityShares(), liabilityToTransfer - expectedLiabilityDecrease);
     }
 
-    function test_DoesNotDecreaseTotalValue() public {
+    function test_DecreasesTotalValue() public {
         uint256 totalAssetsBefore = pool.totalAssets();
 
         dashboard.mock_increaseLiability(100);
         pool.rebalanceUnassignedLiabilityWithEther{value: 50}();
 
-        assertEq(pool.totalAssets(), totalAssetsBefore);
+        assertLt(pool.totalAssets(), totalAssetsBefore);
     }
 
     function test_RevertIfMoreThanUnassignedLiability() public {
@@ -33,7 +33,7 @@ contract RebalanceUnassignedWithEtherTest is Test, SetupStvPool {
 
         uint256 liabilityInEth = steth.getPooledEthBySharesRoundUp(liabilityToTransfer);
 
-        vm.expectRevert(BasePool.NotEnoughToRebalance.selector);
+        vm.expectRevert(StvPool.NotEnoughToRebalance.selector);
         // 2 wei extra to account for rounding errors
         pool.rebalanceUnassignedLiabilityWithEther{value: liabilityInEth + 2}();
     }
@@ -41,7 +41,7 @@ contract RebalanceUnassignedWithEtherTest is Test, SetupStvPool {
     function test_RevertIfZeroShares() public {
         dashboard.mock_increaseLiability(100);
 
-        vm.expectRevert(BasePool.NotEnoughToRebalance.selector);
+        vm.expectRevert(StvPool.NotEnoughToRebalance.selector);
         pool.rebalanceUnassignedLiabilityWithEther{value: 0}();
     }
 }

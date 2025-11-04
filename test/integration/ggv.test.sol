@@ -14,7 +14,7 @@ import {StvStrategyPoolHarness} from "test/utils/StvStrategyPoolHarness.sol";
 import {GGVStrategy} from "src/strategy/GGVStrategy.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
 import {IStrategy} from "src/interfaces/IStrategy.sol";
-import {StvStrategyPool} from "src/StvStrategyPool.sol";
+import {StvStETHPool} from "src/StvStETHPool.sol";
 
 import {TableUtils} from "../utils/format/TableUtils.sol";
 import {GGVVaultMock} from "src/mock/ggv/GGVVaultMock.sol";
@@ -59,7 +59,7 @@ contract GGVTest is StvStrategyPoolHarness {
     IBoringOnChainQueue public boringOnChainQueue;
     IBoringSolver public solver;
 
-    StvStrategyPool public pool;
+    StvStETHPool public pool;
     WithdrawalQueue public withdrawalQueue;
 
     GGVStrategy public ggvStrategy;
@@ -71,8 +71,8 @@ contract GGVTest is StvStrategyPoolHarness {
 
     WrapperContext public ctx;
 
-    address public user1StrategyProxy;
-    address public user2StrategyProxy;
+    address public user1StrategyCallForwarder;
+    address public user2StrategyCallForwarder;
 
     function setUp() public {
         _initializeCore();
@@ -84,18 +84,18 @@ contract GGVTest is StvStrategyPoolHarness {
         teller = GGVMockTeller(address(boringVault.TELLER()));
         boringOnChainQueue = GGVQueueMock(address(boringVault.BORING_QUEUE()));
 
-        ctx = _deployStvStrategyPool(true, 0, address(strategy), 0, address(teller), address(boringOnChainQueue));
-        pool = StvStrategyPool(payable(ctx.pool));
+        ctx = _deployStvStETHPool(true, 0, 0, address(teller), address(boringOnChainQueue));
+        pool = StvStETHPool(payable(ctx.pool));
         vm.label(address(pool), "WrapperProxy");
 
-        strategy = IStrategy(pool.STRATEGY());
+        strategy = IStrategy(ctx.strategy);
         ggvStrategy = GGVStrategy(address(strategy));
 
-        user1StrategyProxy = ggvStrategy.getStrategyProxyAddress(USER1);
-        vm.label(user1StrategyProxy, "User1StrategyProxy");
+        user1StrategyCallForwarder = ggvStrategy.getStrategyCallForwarderAddress(USER1);
+        vm.label(user1StrategyCallForwarder, "User1StrategyCallForwarder");
 
-        user2StrategyProxy = ggvStrategy.getStrategyProxyAddress(USER2);
-        vm.label(user2StrategyProxy, "User2StrategyProxy");
+        user2StrategyCallForwarder = ggvStrategy.getStrategyCallForwarderAddress(USER2);
+        vm.label(user2StrategyCallForwarder, "User2StrategyCallForwarder");
 
         _log.init(
             address(pool),
@@ -118,10 +118,6 @@ contract GGVTest is StvStrategyPoolHarness {
         vm.stopPrank();
 
         withdrawalQueue = pool.WITHDRAWAL_QUEUE();
-
-        vm.startPrank(NODE_OPERATOR);
-        pool.addToAllowList(address(strategy));
-        vm.stopPrank();
 
         // Skip external GGV mainnet setup when using local mocks
         // _setupGGV();
@@ -158,7 +154,7 @@ contract GGVTest is StvStrategyPoolHarness {
         uint256 vaultProfit = depositAmount * vaultIncrease / 100; // 0.05 ether profit
 
         logUsers.push(TableUtils.User(USER1, "user1"));
-        logUsers.push(TableUtils.User(user1StrategyProxy, "user1_proxy"));
+        logUsers.push(TableUtils.User(user1StrategyCallForwarder, "user1_call_forwarder"));
         logUsers.push(TableUtils.User(address(pool), "pool"));
         logUsers.push(TableUtils.User(address(pool.WITHDRAWAL_QUEUE()), "wq"));
         logUsers.push(TableUtils.User(address(boringVault), "boringVault"));
@@ -173,7 +169,7 @@ contract GGVTest is StvStrategyPoolHarness {
         // Check that user is not allowed to deposit directly
         vm.prank(USER1);
         vm.expectRevert(abi.encodeWithSelector(AllowList.NotAllowListed.selector, USER1));
-        pool.depositETH{value: depositAmount}(USER1);
+        pool.depositETH{value: depositAmount}(USER1, address(0));
 
         // 1. Initial Deposit
         vm.prank(USER1);
@@ -193,7 +189,7 @@ contract GGVTest is StvStrategyPoolHarness {
         // _log.printUsers("[SCENARIO] After report (increase vault balance)", logUsers, ggvDiscount);
 
 //         3. Request withdrawal (full amount, based on appreciated value)
-        uint256 totalGgvShares = boringVault.balanceOf(user1StrategyProxy);
+        uint256 totalGgvShares = boringVault.balanceOf(user1StrategyCallForwarder);
         uint256 withdrawalStethAmount =
             boringOnChainQueue.previewAssetsOut(address(steth), uint128(totalGgvShares), uint16(ggvDiscount));
 
@@ -220,10 +216,8 @@ contract GGVTest is StvStrategyPoolHarness {
         // 4. Solve GGV requests (Simulate GGV Solver)
         console.log("\n[SCENARIO] Step 4. Solve GGV requests");
 
-        bytes32 ggvRequestId = ggvStrategy.getExitRequestId(USER1);
-
         IBoringOnChainQueue.OnChainWithdraw memory req =
-            GGVQueueMock(address(boringOnChainQueue)).mockGetRequestById(ggvRequestId);
+            GGVQueueMock(address(boringOnChainQueue)).mockGetRequestById(requestId);
         IBoringOnChainQueue.OnChainWithdraw[] memory requests = new IBoringOnChainQueue.OnChainWithdraw[](1);
         requests[0] = req;
 
@@ -237,7 +231,7 @@ contract GGVTest is StvStrategyPoolHarness {
 
         uint256 _stethSharesToBurn = ggvStrategy.proxyStethSharesOf(USER1);
         uint256 _stethSharesToRebalance = ggvStrategy.proxyStethSharesToRebalance(USER1);
-        uint256 _stvToWithdraw = ggvStrategy.proxyWithdrawableStvOf(USER1, _stethSharesToRebalance + _stethSharesToBurn);
+        uint256 _stvToWithdraw = ggvStrategy.proxyUnlockedStvOf(USER1, _stethSharesToRebalance + _stethSharesToBurn);
 
         vm.startPrank(USER1);
         ggvStrategy.requestWithdrawal(_stvToWithdraw, _stethSharesToBurn, _stethSharesToRebalance, USER1);
@@ -257,12 +251,12 @@ contract GGVTest is StvStrategyPoolHarness {
         console.log("\n[SCENARIO] Step 7. Claim final ETH");
         uint256 userBalanceBeforeClaim = USER1.balance;
 
-        uint256[] memory wqRequestIds = withdrawalQueue.getWithdrawalRequests(USER1);
+        uint256[] memory wqRequestIds = withdrawalQueue.withdrawalRequestsOf(USER1);
 
         //  console.log("requestIds length", wqRequestIds[0]);
 
         vm.prank(USER1);
-        pool.claimWithdrawal(wqRequestIds[0], USER1);
+        withdrawalQueue.claimWithdrawal(USER1, wqRequestIds[0]);
 
         uint256 ethClaimed = USER1.balance - userBalanceBeforeClaim;
         console.log("ETH Claimed:", ethClaimed);
@@ -270,10 +264,10 @@ contract GGVTest is StvStrategyPoolHarness {
         _log.printUsers("After User Claims ETH", logUsers, ggvDiscount);
 
 //         // 8. Recover Surplus stETH (если есть)
-//         uint256 surplusStETH = steth.balanceOf(user1StrategyProxy);
+//         uint256 surplusStETH = steth.balanceOf(user1StrategyCallForwarder);
 //         if (surplusStETH > 0) {
-//             uint256 stethBalance = steth.sharesOf(user1StrategyProxy);
-//             uint256 stethDebt = pool.mintedStethSharesOf(user1StrategyProxy);
+//             uint256 stethBalance = steth.sharesOf(user1StrategyCallForwarder);
+//             uint256 stethDebt = pool.mintedStethSharesOf(user1StrategyCallForwarder);
 //             uint256 surplusInShares = stethBalance > stethDebt ? stethBalance - stethDebt : 0;
 //             uint256 maxAmount = steth.getPooledEthByShares(surplusInShares);
 

@@ -3,12 +3,12 @@ pragma solidity >=0.8.25;
 
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
-import {ITellerWithMultiAssetSupport} from "src/interfaces/ggv/ITellerWithMultiAssetSupport.sol";
-import {IBoringOnChainQueue} from "src/interfaces/ggv/IBoringOnChainQueue.sol";
-import {IStETH} from "src/interfaces/IStETH.sol";
-import {GGVQueueMock} from "./GGVQueueMock.sol";
-import {GGVMockTeller} from "./GGVMockTeller.sol";
 import {BorrowedMath} from "./BorrowedMath.sol";
+import {GGVMockTeller} from "./GGVMockTeller.sol";
+import {GGVQueueMock} from "./GGVQueueMock.sol";
+import {IStETH} from "src/interfaces/IStETH.sol";
+import {IBoringOnChainQueue} from "src/interfaces/ggv/IBoringOnChainQueue.sol";
+import {ITellerWithMultiAssetSupport} from "src/interfaces/ggv/ITellerWithMultiAssetSupport.sol";
 
 contract GGVVaultMock is ERC20 {
     address public immutable owner;
@@ -75,7 +75,7 @@ contract GGVVaultMock is ERC20 {
         assetOut.transfer(user, assets);
     }
 
-    function totalAssets() public view returns(uint256) {
+    function totalAssets() public view returns (uint256) {
         return _totalAssets;
     }
 }

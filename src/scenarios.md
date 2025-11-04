@@ -87,7 +87,7 @@ There are multiple possible Wrapper configurations to be chosen from upon deploy
 - (B) minting, no strategy
 - (C) minting and strategy
 
-Each configuration is represented by its own contract which inherits BasePool contract implementing features that are common between all configurations.
+Each configuration is represented by its own contract which inherits StvPool contract implementing features that are common between all configurations.
 The common features include:
 - non-transferrable ERC-20
 - access control

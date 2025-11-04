@@ -3,10 +3,9 @@ pragma solidity >=0.8.25;
 
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
-import {ITellerWithMultiAssetSupport} from "src/interfaces/ggv/ITellerWithMultiAssetSupport.sol";
 import {GGVVaultMock} from "./GGVVaultMock.sol";
-import {BorrowedMath} from "./BorrowedMath.sol";
 import {IStETH} from "src/interfaces/IStETH.sol";
+import {ITellerWithMultiAssetSupport} from "src/interfaces/ggv/ITellerWithMultiAssetSupport.sol";
 
 contract GGVMockTeller is ITellerWithMultiAssetSupport {
     struct Asset {
@@ -22,6 +21,8 @@ contract GGVMockTeller is ITellerWithMultiAssetSupport {
 
     mapping(ERC20 asset => Asset) public assets;
 
+    event ReferralAddress(address indexed referralAddress);
+
     constructor(address _owner, address __vault, address _steth, address _wsteth) {
         owner = _owner;
         _vault = GGVVaultMock(__vault);
@@ -34,7 +35,7 @@ contract GGVMockTeller is ITellerWithMultiAssetSupport {
         _updateAssetData(ERC20(_wsteth), false, true, 0);
     }
 
-    function deposit(ERC20 depositAsset, uint256 depositAmount, uint256 minimumMint)
+    function deposit(ERC20 depositAsset, uint256 depositAmount, uint256 minimumMint, address referralAddress)
         external
         returns (uint256 shares)
     {
@@ -53,10 +54,13 @@ contract GGVMockTeller is ITellerWithMultiAssetSupport {
         if (shares < minimumMint) revert("Minted shares less than minimumMint");
 
         _vault.depositByTeller(address(depositAsset), shares, stethShares, msg.sender);
+
+        emit ReferralAddress(referralAddress);
     }
 
     function _updateAssetData(ERC20 asset, bool allowDeposits, bool allowWithdraws, uint16 sharePremium) internal {
-        assets[asset] = Asset(allowDeposits, allowWithdraws, sharePremium);
+        assets[asset] =
+            Asset({allowDeposits: allowDeposits, allowWithdraws: allowWithdraws, sharePremium: sharePremium});
     }
 
     function updateAssetData(ERC20 asset, bool allowDeposits, bool allowWithdraws, uint16 sharePremium) external {

@@ -2,7 +2,6 @@
 pragma solidity >=0.8.25;
 
 import {Test} from "forge-std/Test.sol";
-import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
 import {SetupStvStETHPool} from "./SetupStvStETHPool.sol";
 import {StvStETHPool} from "src/StvStETHPool.sol";
@@ -10,11 +9,11 @@ import {StvStETHPool} from "src/StvStETHPool.sol";
 contract TransferWithLiabilityTest is Test, SetupStvStETHPool {
     function setUp() public override {
         super.setUp();
-        pool.depositETH{value: 20 ether}();
+        pool.depositETH{value: 20 ether}(address(this), address(0));
     }
 
     function test_TransferWithLiability_TransfersDebtAndStv() public {
-        uint256 sharesToTransfer = pool.mintingCapacitySharesOf(address(this)) / 2;
+        uint256 sharesToTransfer = pool.remainingMintingCapacitySharesOf(address(this), 0) / 2;
         pool.mintStethShares(sharesToTransfer);
 
         uint256 stvToTransfer = pool.balanceOf(address(this));
@@ -39,7 +38,7 @@ contract TransferWithLiabilityTest is Test, SetupStvStETHPool {
     }
 
     function test_TransferWithLiability_RevertsWhenStvInsufficient() public {
-        uint256 sharesToTransfer = pool.mintingCapacitySharesOf(address(this)) / 2;
+        uint256 sharesToTransfer = pool.remainingMintingCapacitySharesOf(address(this), 0) / 2;
         pool.mintStethShares(sharesToTransfer);
 
         uint256 minStv = pool.calcStvToLockForStethShares(sharesToTransfer);
@@ -51,7 +50,7 @@ contract TransferWithLiabilityTest is Test, SetupStvStETHPool {
     }
 
     function test_TransferWithLiability_RevertsWhenSharesExceedLiability() public {
-        uint256 mintedShares = pool.mintingCapacitySharesOf(address(this)) / 4;
+        uint256 mintedShares = pool.remainingMintingCapacitySharesOf(address(this), 0) / 4;
         pool.mintStethShares(mintedShares);
 
         uint256 mintedRecorded = pool.mintedStethSharesOf(address(this));
@@ -64,7 +63,7 @@ contract TransferWithLiabilityTest is Test, SetupStvStETHPool {
     }
 
     function test_TransferWithLiability_RevertsWhenZeroStvButHasShares() public {
-        uint256 sharesToTransfer = pool.mintingCapacitySharesOf(address(this)) / 5;
+        uint256 sharesToTransfer = pool.remainingMintingCapacitySharesOf(address(this), 0) / 5;
         pool.mintStethShares(sharesToTransfer);
 
         vm.expectRevert(StvStETHPool.InsufficientStv.selector);

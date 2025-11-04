@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >=0.8.25;
 
-import {MerkleProof} from "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
+import {AccessControlEnumerable} from "@openzeppelin/contracts/access/extensions/AccessControlEnumerable.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {MerkleProof} from "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
 import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
-import {AccessControlEnumerable} from "@openzeppelin/contracts/access/extensions/AccessControlEnumerable.sol";
 
 contract Distributor is AccessControlEnumerable {
     using SafeERC20 for IERC20;
@@ -43,12 +43,13 @@ contract Distributor is AccessControlEnumerable {
     error TokenAlreadyAdded(address token);
     error ZeroAddress();
 
-    /// @param _owner The address of the owner
-    constructor(address _owner) {
+    /// @param _owner The address of the owner (admin)
+    /// @param _manager The address of the manager (MANAGER_ROLE)
+    constructor(address _owner, address _manager) {
         lastProcessedBlock = block.number;
 
         _grantRole(DEFAULT_ADMIN_ROLE, _owner);
-        _grantRole(MANAGER_ROLE, _owner);
+        _grantRole(MANAGER_ROLE, _manager);
     }
 
     /// @notice Add a token to the list of supported tokens
@@ -95,11 +96,9 @@ contract Distributor is AccessControlEnumerable {
         returns (uint256 claimedAmount)
     {
         if (root == bytes32(0)) revert RootNotSet();
-        if (
-            !MerkleProof.verifyCalldata(
+        if (!MerkleProof.verifyCalldata(
                 _proof, root, keccak256(bytes.concat(keccak256(abi.encode(_recipient, _token, _amount))))
-            )
-        ) revert InvalidProof();
+            )) revert InvalidProof();
 
         if (_amount <= claimed[_recipient][_token]) revert ClaimableTooLow();
 

@@ -9,12 +9,12 @@ import {IVaultHub} from "src/interfaces/IVaultHub.sol";
 import {IStakingVault} from "src/interfaces/IStakingVault.sol";
 import {ILido} from "src/interfaces/ILido.sol";
 import {IWstETH} from "src/interfaces/IWstETH.sol";
-import {ILazyOracle} from "src/interfaces/ILazyOracle.sol";
 
 import {StvPool} from "src/StvPool.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
 import {Factory} from "src/Factory.sol";
 import {FactoryHelper} from "test/utils/FactoryHelper.sol";
+import {Distributor} from "src/Distributor.sol";
 
 /**
  * @title StvPoolHarness
@@ -46,19 +46,28 @@ contract StvPoolHarness is Test {
     uint256 public immutable EXTRA_BASE = 10 ** (27 - 18); // not configurable
 
     // Deployment configuration struct
+    enum StrategyKind {
+        NONE,
+        LOOP,
+        GGV
+    }
+
     struct DeploymentConfig {
-        Factory.WrapperType configuration;
-        address strategy;
-        bool enableAllowlist;
-        uint256 reserveRatioGapBP;
+        bool allowlistEnabled;
+        bool mintingEnabled;
+        address owner;
         address nodeOperator;
         address nodeOperatorManager;
         uint256 nodeOperatorFeeBP;
         uint256 confirmExpiry;
         uint256 maxFinalizationTime;
         uint256 minWithdrawalDelayTime;
-        address teller;
-        address boringQueue;
+        uint256 reserveRatioGapBP;
+        StrategyKind strategyKind;
+        address ggvTeller;
+        address ggvBoringQueue;
+        string name;
+        string symbol;
     }
 
     struct WrapperContext {
@@ -66,6 +75,8 @@ contract StvPoolHarness is Test {
         WithdrawalQueue withdrawalQueue;
         IDashboard dashboard;
         IStakingVault vault;
+        address strategy;
+        Distributor distributor;
     }
 
     function _initializeCore() internal {
@@ -85,109 +96,80 @@ contract StvPoolHarness is Test {
     }
 
     function _deployWrapperSystem(DeploymentConfig memory config) internal returns (WrapperContext memory) {
-        address vault_;
-        address dashboard_;
-        address payable poolAddress;
-        address withdrawalQueue_;
-
         require(address(core) != address(0), "CoreHarness not initialized");
+        address owner = config.owner == address(0) ? config.nodeOperator : config.owner;
 
-        address vaultFactory = core.locator().vaultFactory();
-        address lazyOracle = core.locator().lazyOracle();
-
-        // Decide whether to deploy a new pool Factory or use a pre-deployed one
         Factory factory;
-        string memory factoryJsonPath = "";
-        try vm.envString("FACTORY_DEPLOYED_JSON") returns (string memory p) {
-            factoryJsonPath = p;
-        } catch {}
+        address factoryFromEnv = vm.envOr("FACTORY_ADDRESS", address(0));
 
-        if (bytes(factoryJsonPath).length != 0) {
-            string memory deployedJson = vm.readFile(factoryJsonPath);
-            address existingFactory = vm.parseJsonAddress(deployedJson, "$.deployment.factory");
-            factory = Factory(existingFactory);
+        if (factoryFromEnv != address(0)) {
+            factory = Factory(factoryFromEnv);
+            console.log("Using predeployed factory from FACTORY_ADDRESS", factoryFromEnv);
         } else {
             FactoryHelper helper = new FactoryHelper();
-            factory = helper.deployMainFactory(vaultFactory, address(steth), address(wsteth), lazyOracle);
+
+            Factory.StrategyParameters memory strategyParams = Factory.StrategyParameters({
+                ggvTeller: config.ggvTeller,
+                ggvBoringOnChainQueue: config.ggvBoringQueue
+            });
+
+            Factory.TimelockConfig memory timelockConfig = Factory.TimelockConfig({
+                minDelaySeconds: 0,
+                executor: owner
+            });
+
+            factory = helper.deployMainFactory(address(core.locator()), strategyParams, timelockConfig);
         }
 
-        if (bytes(factoryJsonPath).length > 0) {
-            console.log("factoryJsonPath", factoryJsonPath);
-            console.log("NB: using existingFactory for testing: %s", address(factory));
+        Factory.PoolFullConfig memory poolConfig = Factory.PoolFullConfig({
+            allowlistEnabled: config.allowlistEnabled,
+            mintingEnabled: config.mintingEnabled,
+            owner: owner,
+            nodeOperator: config.nodeOperator,
+            nodeOperatorManager: config.nodeOperatorManager,
+            nodeOperatorFeeBP: config.nodeOperatorFeeBP,
+            confirmExpiry: config.confirmExpiry,
+            maxFinalizationTime: config.maxFinalizationTime,
+            minWithdrawalDelayTime: config.minWithdrawalDelayTime,
+            reserveRatioGapBP: config.reserveRatioGapBP,
+            name: config.name,
+            symbol: config.symbol
+        });
+
+        address strategyFactoryAddress = address(0);
+        if (config.strategyKind == StrategyKind.LOOP) {
+            strategyFactoryAddress = address(factory.LOOP_STRATEGY_FACTORY());
+        } else if (config.strategyKind == StrategyKind.GGV) {
+            strategyFactoryAddress = address(factory.GGV_STRATEGY_FACTORY());
         }
+
+        Factory.StrategyConfig memory strategyConfig = Factory.StrategyConfig({factory: strategyFactoryAddress});
 
         vm.startPrank(config.nodeOperator);
-        if (config.configuration == Factory.WrapperType.NO_MINTING_NO_STRATEGY) {
-            (vault_, dashboard_, poolAddress, withdrawalQueue_) = factory.createVaultWithNoMintingNoStrategy{
-                value: CONNECT_DEPOSIT
-            }(
-                config.nodeOperator,
-                config.nodeOperatorManager,
-                config.nodeOperatorFeeBP,
-                config.confirmExpiry,
-                config.maxFinalizationTime,
-                config.minWithdrawalDelayTime,
-                config.enableAllowlist
-            );
-        } else if (config.configuration == Factory.WrapperType.MINTING_NO_STRATEGY) {
-            (vault_, dashboard_, poolAddress, withdrawalQueue_) = factory.createVaultWithMintingNoStrategy{
-                value: CONNECT_DEPOSIT
-            }(
-                config.nodeOperator,
-                config.nodeOperatorManager,
-                config.nodeOperatorFeeBP,
-                config.confirmExpiry,
-                config.maxFinalizationTime,
-                config.minWithdrawalDelayTime,
-                config.enableAllowlist,
-                config.reserveRatioGapBP
-            );
-        } else if (config.configuration == Factory.WrapperType.LOOP_STRATEGY) {
-            uint256 loops = 1;
-            (vault_, dashboard_, poolAddress, withdrawalQueue_) = factory.createVaultWithLoopStrategy{
-                value: CONNECT_DEPOSIT
-            }(
-                config.nodeOperator,
-                config.nodeOperatorManager,
-                config.nodeOperatorFeeBP,
-                config.confirmExpiry,
-                config.maxFinalizationTime,
-                config.minWithdrawalDelayTime,
-                config.enableAllowlist,
-                config.reserveRatioGapBP,
-                loops
-            );
-        } else if (config.configuration == Factory.WrapperType.GGV_STRATEGY) {
-            (vault_, dashboard_, poolAddress, withdrawalQueue_) = factory.createVaultWithGGVStrategy{
-                value: CONNECT_DEPOSIT
-            }(
-                config.nodeOperator,
-                config.nodeOperatorManager,
-                config.nodeOperatorFeeBP,
-                config.confirmExpiry,
-                config.maxFinalizationTime,
-                config.minWithdrawalDelayTime,
-                config.enableAllowlist,
-                config.reserveRatioGapBP,
-                config.teller,
-                config.boringQueue
-            );
-        } else {
-            revert("Invalid configuration");
-        }
+        Factory.StvPoolIntermediate memory intermediate =
+            factory.createPoolStart{value: CONNECT_DEPOSIT}(poolConfig, strategyConfig);
+        Factory.StvPoolDeployment memory deployment = factory.createPoolFinish(intermediate, strategyConfig);
         vm.stopPrank();
+
+        IDashboard dashboard = IDashboard(payable(deployment.dashboard));
+        address vault_ = deployment.vault;
+        StvPool pool = StvPool(payable(deployment.pool));
+        WithdrawalQueue withdrawalQueue = WithdrawalQueue(payable(deployment.withdrawalQueue));
+        Distributor distributor = Distributor(deployment.distributor);
+
+        address strategy_ = deployment.strategy;
 
         // Apply initial vault report with current total value equal to connect deposit
         core.applyVaultReport(vault_, CONNECT_DEPOSIT, 0, 0, 0);
 
-        WrapperContext memory ctx = WrapperContext({
-            pool: StvPool(payable(poolAddress)),
-            withdrawalQueue: WithdrawalQueue(payable(withdrawalQueue_)),
-            dashboard: IDashboard(payable(dashboard_)),
-            vault: IStakingVault(vault_)
+        return WrapperContext({
+            pool: pool,
+            withdrawalQueue: withdrawalQueue,
+            dashboard: dashboard,
+            vault: IStakingVault(vault_),
+            strategy: strategy_,
+            distributor: distributor
         });
-
-        return ctx;
     }
 
     function _deployStvPool(bool enableAllowlist, uint256 nodeOperatorFeeBP)
@@ -195,18 +177,21 @@ contract StvPoolHarness is Test {
         returns (WrapperContext memory context)
     {
         DeploymentConfig memory config = DeploymentConfig({
-            configuration: Factory.WrapperType.NO_MINTING_NO_STRATEGY,
-            strategy: address(0),
-            enableAllowlist: enableAllowlist,
-            reserveRatioGapBP: 0,
+            allowlistEnabled: enableAllowlist,
+            mintingEnabled: false,
+            owner: NODE_OPERATOR,
             nodeOperator: NODE_OPERATOR,
             nodeOperatorManager: NODE_OPERATOR,
             nodeOperatorFeeBP: nodeOperatorFeeBP,
             confirmExpiry: CONFIRM_EXPIRY,
             maxFinalizationTime: 30 days,
             minWithdrawalDelayTime: 1 days,
-            teller: address(0),
-            boringQueue: address(0)
+            reserveRatioGapBP: 0,
+            strategyKind: StrategyKind.NONE,
+            ggvTeller: address(0),
+            ggvBoringQueue: address(0),
+            name: "Test STV Pool",
+            symbol: "tSTV"
         });
 
         context = _deployWrapperSystem(config);
@@ -216,7 +201,7 @@ contract StvPoolHarness is Test {
 
     function _checkInitialState(WrapperContext memory ctx) internal virtual {
         // Basic checks common to all pools
-        assertEq(ctx.pool.EXTRA_DECIMALS_BASE(), EXTRA_BASE, "EXTRA_DECIMALS_BASE should match EXTRA_BASE constant");
+        assertEq(10 ** (ctx.pool.decimals() - 18), EXTRA_BASE, "should match EXTRA_BASE constant");
 
         assertEq(
             ctx.pool.totalSupply(),

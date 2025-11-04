@@ -10,7 +10,7 @@ contract CheckpointsTest is Test, SetupWithdrawalQueue {
         super.setUp();
 
         // Deposit initial ETH to pool for withdrawals
-        pool.depositETH{value: 1000 ether}();
+        pool.depositETH{value: 1000 ether}(address(this), address(0));
     }
 
     // Basic Checkpoint Operations
@@ -21,7 +21,7 @@ contract CheckpointsTest is Test, SetupWithdrawalQueue {
     }
 
     function test_Checkpoints_CreatedOnFinalization() public {
-        pool.requestWithdrawal(10 ** STV_DECIMALS);
+        withdrawalQueue.requestWithdrawal(address(this), 10 ** STV_DECIMALS, 0);
 
         // No checkpoints before finalization
         assertEq(withdrawalQueue.getLastCheckpointIndex(), 0);
@@ -34,9 +34,9 @@ contract CheckpointsTest is Test, SetupWithdrawalQueue {
 
     function test_Checkpoints_MultipleFinalizationsCreateMultipleCheckpoints() public {
         // Create 3 separate requests
-        pool.requestWithdrawal(10 ** STV_DECIMALS);
-        pool.requestWithdrawal(10 ** STV_DECIMALS);
-        pool.requestWithdrawal(10 ** STV_DECIMALS);
+        withdrawalQueue.requestWithdrawal(address(this), 10 ** STV_DECIMALS, 0);
+        withdrawalQueue.requestWithdrawal(address(this), 10 ** STV_DECIMALS, 0);
+        withdrawalQueue.requestWithdrawal(address(this), 10 ** STV_DECIMALS, 0);
 
         // Finalize first request
         _finalizeRequests(1);
@@ -53,9 +53,9 @@ contract CheckpointsTest is Test, SetupWithdrawalQueue {
 
     function test_Checkpoints_BatchFinalizationCreatesSingleCheckpoint() public {
         // Create 3 separate requests
-        pool.requestWithdrawal(10 ** STV_DECIMALS);
-        pool.requestWithdrawal(10 ** STV_DECIMALS);
-        pool.requestWithdrawal(10 ** STV_DECIMALS);
+        withdrawalQueue.requestWithdrawal(address(this), 10 ** STV_DECIMALS, 0);
+        withdrawalQueue.requestWithdrawal(address(this), 10 ** STV_DECIMALS, 0);
+        withdrawalQueue.requestWithdrawal(address(this), 10 ** STV_DECIMALS, 0);
 
         // Batch finalize all requests
         _finalizeRequests(3);
@@ -72,7 +72,7 @@ contract CheckpointsTest is Test, SetupWithdrawalQueue {
         uint256[] memory requestIds = new uint256[](1);
         requestIds[0] = requestId;
 
-        uint256[] memory hints = withdrawalQueue.findCheckpointHints(
+        uint256[] memory hints = withdrawalQueue.findCheckpointHintBatch(
             requestIds,
             1,
             withdrawalQueue.getLastCheckpointIndex()
@@ -89,7 +89,7 @@ contract CheckpointsTest is Test, SetupWithdrawalQueue {
         requestIds[1] = _requestWithdrawalAndFinalize(10 ** STV_DECIMALS);
         requestIds[2] = _requestWithdrawalAndFinalize(10 ** STV_DECIMALS);
 
-        uint256[] memory hints = withdrawalQueue.findCheckpointHints(
+        uint256[] memory hints = withdrawalQueue.findCheckpointHintBatch(
             requestIds,
             1,
             withdrawalQueue.getLastCheckpointIndex()
@@ -105,12 +105,12 @@ contract CheckpointsTest is Test, SetupWithdrawalQueue {
         _requestWithdrawalAndFinalize(10 ** STV_DECIMALS);
 
         // Create a second request but do not finalize
-        uint256 requestId2 = pool.requestWithdrawal(10 ** STV_DECIMALS);
+        uint256 requestId2 = withdrawalQueue.requestWithdrawal(address(this), 10 ** STV_DECIMALS, 0);
 
         uint256[] memory requestIds = new uint256[](1);
         requestIds[0] = requestId2; // Second request not finalized
 
-        uint256[] memory hints = withdrawalQueue.findCheckpointHints(
+        uint256[] memory hints = withdrawalQueue.findCheckpointHintBatch(
             requestIds,
             1,
             withdrawalQueue.getLastCheckpointIndex()
@@ -128,11 +128,11 @@ contract CheckpointsTest is Test, SetupWithdrawalQueue {
 
         // Invalid range: start = 0 (should be >= 1)
         vm.expectRevert(abi.encodeWithSelector(WithdrawalQueue.InvalidRange.selector, 0, 1));
-        withdrawalQueue.findCheckpointHints(requestIds, 0, 1);
+        withdrawalQueue.findCheckpointHintBatch(requestIds, 0, 1);
 
         // Invalid range: end > lastCheckpointIndex
         vm.expectRevert(abi.encodeWithSelector(WithdrawalQueue.InvalidRange.selector, 1, 999));
-        withdrawalQueue.findCheckpointHints(requestIds, 1, 999);
+        withdrawalQueue.findCheckpointHintBatch(requestIds, 1, 999);
     }
 
     // Binary Search Logic Tests
@@ -150,7 +150,7 @@ contract CheckpointsTest is Test, SetupWithdrawalQueue {
         searchIds[1] = requestIds[2]; // Request 3
         searchIds[2] = requestIds[3]; // Request 4
 
-        uint256[] memory hints = withdrawalQueue.findCheckpointHints(
+        uint256[] memory hints = withdrawalQueue.findCheckpointHintBatch(
             searchIds,
             1,
             withdrawalQueue.getLastCheckpointIndex()
@@ -163,13 +163,13 @@ contract CheckpointsTest is Test, SetupWithdrawalQueue {
 
     function test_CheckpointHints_EdgeCaseBoundaries() public {
         uint256[] memory requestIds = new uint256[](3);
-        requestIds[0] = pool.requestWithdrawal(10 ** STV_DECIMALS);
-        requestIds[1] = pool.requestWithdrawal(10 ** STV_DECIMALS);
-        requestIds[2] = pool.requestWithdrawal(10 ** STV_DECIMALS);
+        requestIds[0] = withdrawalQueue.requestWithdrawal(address(this), 10 ** STV_DECIMALS, 0);
+        requestIds[1] = withdrawalQueue.requestWithdrawal(address(this), 10 ** STV_DECIMALS, 0);
+        requestIds[2] = withdrawalQueue.requestWithdrawal(address(this), 10 ** STV_DECIMALS, 0);
 
         _finalizeRequests(3); // All requests in one checkpoint
 
-        uint256[] memory hints = withdrawalQueue.findCheckpointHints(
+        uint256[] memory hints = withdrawalQueue.findCheckpointHintBatch(
             requestIds,
             1,
             withdrawalQueue.getLastCheckpointIndex()
@@ -193,7 +193,7 @@ contract CheckpointsTest is Test, SetupWithdrawalQueue {
         uint256 lastCheckpointIndex = withdrawalQueue.getLastCheckpointIndex();
 
         vm.expectRevert(WithdrawalQueue.RequestIdsNotSorted.selector);
-        withdrawalQueue.findCheckpointHints(requestIds, 1, lastCheckpointIndex);
+        withdrawalQueue.findCheckpointHintBatch(requestIds, 1, lastCheckpointIndex);
     }
 
     function test_CheckpointHints_ReturnsZeroWhenOutsideRange() public {
@@ -205,7 +205,7 @@ contract CheckpointsTest is Test, SetupWithdrawalQueue {
         uint256[] memory requestIds = new uint256[](1);
         requestIds[0] = finalizedRequests[0];
 
-        uint256[] memory hints = withdrawalQueue.findCheckpointHints(requestIds, 2, 2);
+        uint256[] memory hints = withdrawalQueue.findCheckpointHintBatch(requestIds, 2, 2);
 
         assertEq(hints[0], 0);
     }
