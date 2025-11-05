@@ -106,6 +106,29 @@ contract GasCostCoverageTest is Test, SetupWithdrawalQueue {
         assertEq(withdrawalQueue.getClaimableEther(requestId), 0);
     }
 
+    function test_FinalizeGasCostCoverage_DifferentGasCostRecipient() public {
+        uint256 coverage = 0.0005 ether;
+        _setGasCostCoverage(coverage);
+
+        address recipient = makeAddr("finalizerRecipient");
+        withdrawalQueue.requestWithdrawal(address(this), 10 ** STV_DECIMALS, 0);
+
+        uint256 finalizerBalanceBefore = finalizeRoleHolder.balance;
+        uint256 recipientBalanceBefore = recipient.balance;
+
+        _warpAndMockOracleReport();
+        vm.prank(finalizeRoleHolder);
+        uint256 finalizedRequests = withdrawalQueue.finalize(1, recipient);
+
+        assertEq(finalizedRequests, 1);
+
+        uint256 finalizerBalanceAfter = finalizeRoleHolder.balance;
+        uint256 recipientBalanceAfter = recipient.balance;
+
+        assertEq(finalizerBalanceAfter, finalizerBalanceBefore);
+        assertEq(recipientBalanceAfter - recipientBalanceBefore, coverage);
+    }
+
     // Receive ETH for claiming tests
     receive() external payable {}
 }

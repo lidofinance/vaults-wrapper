@@ -409,11 +409,15 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
     /**
      * @notice Finalize withdrawal requests
      * @param _maxRequests The maximum number of requests to finalize
+     * @param _gasCostCoverageRecipient The address to receive gas cost coverage
      * @return finalizedRequests The number of requests that were finalized
      * @dev Reverts if there are no requests to finalize
      * @dev In emergency exit mode, anyone can finalize without restrictions
      */
-    function finalize(uint256 _maxRequests) external returns (uint256 finalizedRequests) {
+    function finalize(uint256 _maxRequests, address _gasCostCoverageRecipient)
+        external
+        returns (uint256 finalizedRequests)
+    {
         if (!isEmergencyExitActivated()) {
             _requireNotPaused();
             _checkRole(FINALIZE_ROLE, msg.sender);
@@ -562,7 +566,10 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
 
         // Send gas coverage to the caller
         if (totalGasCoverage > 0) {
-            (bool success,) = msg.sender.call{value: totalGasCoverage}("");
+            // Set gas cost coverage recipient to msg.sender if not specified
+            if (_gasCostCoverageRecipient == address(0)) _gasCostCoverageRecipient = msg.sender;
+
+            (bool success,) = _gasCostCoverageRecipient.call{value: totalGasCoverage}("");
             if (!success) revert CantSendValueRecipientMayHaveReverted();
         }
 

@@ -76,6 +76,6 @@ contract BadDebtTest is Test, SetupWithdrawalQueue {
 
         vm.prank(finalizeRoleHolder);
         vm.expectRevert(StvPool.VaultInBadDebt.selector);
-        withdrawalQueue.finalize(1);
+        withdrawalQueue.finalize(1, address(0));
     }
 }

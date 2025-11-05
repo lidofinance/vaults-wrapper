@@ -22,7 +22,9 @@ contract StvPoolTest is StvPoolHarness {
         vm.prank(USER1);
         ctx.pool.depositETH{value: depositAmount}(USER1, address(0));
         assertEq(ctx.pool.balanceOf(USER1), expectedStv, "minted shares should match previewDeposit");
-        assertEq(address(ctx.vault).balance, depositAmount + CONNECT_DEPOSIT, "vault balance should match deposit amount");
+        assertEq(
+            address(ctx.vault).balance, depositAmount + CONNECT_DEPOSIT, "vault balance should match deposit amount"
+        );
 
         // 2) USER1 immediately requests withdrawal of all their shares
         vm.prank(USER1);
@@ -36,7 +38,7 @@ contract StvPoolTest is StvPoolHarness {
 
         // 4) Node Operator finalizes one request
         vm.prank(NODE_OPERATOR);
-        ctx.withdrawalQueue.finalize(1);
+        ctx.withdrawalQueue.finalize(1, address(0));
 
         // 5) USER1 claims
         uint256 userBalanceBefore = USER1.balance;
@@ -56,7 +58,9 @@ contract StvPoolTest is StvPoolHarness {
         vm.prank(USER1);
         ctx.pool.depositETH{value: depositAmount}(USER1, address(0));
         assertEq(ctx.pool.balanceOf(USER1), expectedStv, "minted shares should match previewDeposit");
-        assertEq(address(ctx.vault).balance, depositAmount + CONNECT_DEPOSIT, "vault balance should match deposit amount");
+        assertEq(
+            address(ctx.vault).balance, depositAmount + CONNECT_DEPOSIT, "vault balance should match deposit amount"
+        );
 
         // 2) USER1 immediately requests withdrawal of all their shares
         vm.prank(USER1);
@@ -74,7 +78,7 @@ contract StvPoolTest is StvPoolHarness {
 
         // 6) Node Operator finalizes one request
         vm.prank(NODE_OPERATOR);
-        ctx.withdrawalQueue.finalize(1);
+        ctx.withdrawalQueue.finalize(1, address(0));
 
         // 7) USER1 claims
         uint256 userBalanceBefore = USER1.balance;
@@ -95,7 +99,9 @@ contract StvPoolTest is StvPoolHarness {
         vm.prank(USER1);
         ctx.pool.depositETH{value: depositAmount}(USER1, address(0));
         assertEq(ctx.pool.balanceOf(USER1), expectedStv, "minted shares should match previewDeposit");
-        assertEq(address(ctx.vault).balance, depositAmount + CONNECT_DEPOSIT, "vault balance should match deposit amount");
+        assertEq(
+            address(ctx.vault).balance, depositAmount + CONNECT_DEPOSIT, "vault balance should match deposit amount"
+        );
 
         // 2) Apply +3% rewards via vault report BEFORE withdrawal request
         reportVaultValueChangeNoFees(ctx, 10300); // +3%
@@ -103,7 +109,9 @@ contract StvPoolTest is StvPoolHarness {
         // 3) Now request withdrawal of all USER1 shares
         //    Expected ETH is increased by ~3% compared to initial deposit
         uint256 expectedEth = ctx.pool.previewRedeem(expectedStv);
-        assertApproxEqAbs(expectedEth, (depositAmount * 103) / 100, WEI_ROUNDING_TOLERANCE, "expected eth should be ~+3% of deposit");
+        assertApproxEqAbs(
+            expectedEth, (depositAmount * 103) / 100, WEI_ROUNDING_TOLERANCE, "expected eth should be ~+3% of deposit"
+        );
 
         vm.prank(USER1);
         uint256 requestId = ctx.withdrawalQueue.requestWithdrawal(USER1, expectedStv, 0);
@@ -112,7 +120,7 @@ contract StvPoolTest is StvPoolHarness {
 
         // 6) Node Operator finalizes one request
         vm.prank(NODE_OPERATOR);
-        ctx.withdrawalQueue.finalize(1);
+        ctx.withdrawalQueue.finalize(1, address(0));
 
         // 7) USER1 claims and receives the increased amount
         uint256 userBalanceBefore = USER1.balance;
@@ -137,7 +145,9 @@ contract StvPoolTest is StvPoolHarness {
         vm.prank(USER1);
         ctx.pool.depositETH{value: depositAmount}(USER1, address(0));
         assertEq(ctx.pool.balanceOf(USER1), expectedStv, "minted shares should match previewDeposit");
-        assertEq(address(ctx.vault).balance, depositAmount + CONNECT_DEPOSIT, "vault balance should match deposit amount");
+        assertEq(
+            address(ctx.vault).balance, depositAmount + CONNECT_DEPOSIT, "vault balance should match deposit amount"
+        );
 
         // 2) USER1 immediately requests withdrawal of all their shares
         vm.prank(USER1);
@@ -151,12 +161,16 @@ contract StvPoolTest is StvPoolHarness {
         reportVaultValueChangeNoFees(ctx, 9900); // -1%
 
         // After the loss report, totalValue should be less than CONNECT_DEPOSIT
-        assertLt(ctx.dashboard.totalValue(), CONNECT_DEPOSIT, "totalValue should be less than CONNECT_DEPOSIT after loss report");
+        assertLt(
+            ctx.dashboard.totalValue(),
+            CONNECT_DEPOSIT,
+            "totalValue should be less than CONNECT_DEPOSIT after loss report"
+        );
 
         // Finalization should revert due to insufficient ETH to cover the request
         vm.prank(NODE_OPERATOR);
         vm.expectRevert();
-        ctx.withdrawalQueue.finalize(1);
+        ctx.withdrawalQueue.finalize(1, address(0));
     }
 
     function test_withdrawal_request_finalized_after_reward_and_loss_reports() public {
@@ -184,7 +198,7 @@ contract StvPoolTest is StvPoolHarness {
 
         // 6) Node Operator finalizes one request
         vm.prank(NODE_OPERATOR);
-        ctx.withdrawalQueue.finalize(1);
+        ctx.withdrawalQueue.finalize(1, address(0));
 
         // 7) USER1 claims and receives the decreased amount
         uint256 userBalanceBefore = USER1.balance;
@@ -229,7 +243,7 @@ contract StvPoolTest is StvPoolHarness {
 
         // 4) Finalize both requests
         vm.prank(NODE_OPERATOR);
-        uint256 finalized = ctx.withdrawalQueue.finalize(2);
+        uint256 finalized = ctx.withdrawalQueue.finalize(2, address(0));
         assertEq(finalized, 2, "should finalize both partial requests");
 
         // 5) Claim both and verify total equals sum of previews; user ends with zero shares
@@ -277,7 +291,7 @@ contract StvPoolTest is StvPoolHarness {
         _withdrawFromCL(ctx, firstAssets);
 
         vm.prank(NODE_OPERATOR);
-        uint256 finalized = ctx.withdrawalQueue.finalize(2);
+        uint256 finalized = ctx.withdrawalQueue.finalize(2, address(0));
         assertEq(finalized, 1, "should finalize only the first request due to insufficient withdrawable");
 
         // 5) Claim first, second remains unfinalized
@@ -290,7 +304,7 @@ contract StvPoolTest is StvPoolHarness {
         _withdrawFromCL(ctx, secondAssets);
 
         vm.prank(NODE_OPERATOR);
-        finalized = ctx.withdrawalQueue.finalize(1);
+        finalized = ctx.withdrawalQueue.finalize(1, address(0));
         assertEq(finalized, 1, "second request should now finalize after funding");
 
         // 7) Claim second
@@ -348,7 +362,7 @@ contract StvPoolTest is StvPoolHarness {
 
         // Finalize
         vm.prank(NODE_OPERATOR);
-        ctx.withdrawalQueue.finalize(1);
+        ctx.withdrawalQueue.finalize(1, address(0));
 
         // Claim succeeds
         uint256 before = USER1.balance;

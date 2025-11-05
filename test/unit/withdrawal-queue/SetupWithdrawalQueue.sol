@@ -118,7 +118,7 @@ abstract contract SetupWithdrawalQueue is Test {
         _warpAndMockOracleReport();
 
         vm.prank(finalizeRoleHolder);
-        withdrawalQueue.finalize(_maxRequests);
+        withdrawalQueue.finalize(_maxRequests, address(0));
     }
 
     function _warpAndMockOracleReport() internal {

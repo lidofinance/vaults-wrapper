@@ -5,22 +5,22 @@ import {console} from "forge-std/Test.sol";
 
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
-import {ITellerWithMultiAssetSupport} from "src/interfaces/ggv/ITellerWithMultiAssetSupport.sol";
 import {IBoringOnChainQueue} from "src/interfaces/ggv/IBoringOnChainQueue.sol";
 import {IBoringSolver} from "src/interfaces/ggv/IBoringSolver.sol";
+import {ITellerWithMultiAssetSupport} from "src/interfaces/ggv/ITellerWithMultiAssetSupport.sol";
 
 import {StvStrategyPoolHarness} from "test/utils/StvStrategyPoolHarness.sol";
 
-import {GGVStrategy} from "src/strategy/GGVStrategy.sol";
+import {StvStETHPool} from "src/StvStETHPool.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
 import {IStrategy} from "src/interfaces/IStrategy.sol";
-import {StvStETHPool} from "src/StvStETHPool.sol";
+import {GGVStrategy} from "src/strategy/GGVStrategy.sol";
 
 import {TableUtils} from "../utils/format/TableUtils.sol";
-import {GGVVaultMock} from "src/mock/ggv/GGVVaultMock.sol";
+import {AllowList} from "src/AllowList.sol";
 import {GGVMockTeller} from "src/mock/ggv/GGVMockTeller.sol";
 import {GGVQueueMock} from "src/mock/ggv/GGVQueueMock.sol";
-import {AllowList} from "src/AllowList.sol";
+import {GGVVaultMock} from "src/mock/ggv/GGVVaultMock.sol";
 
 interface IAuthority {
     function setUserRole(address user, uint8 role, bool enabled) external;
@@ -97,13 +97,7 @@ contract GGVTest is StvStrategyPoolHarness {
         user2StrategyCallForwarder = ggvStrategy.getStrategyCallForwarderAddress(USER2);
         vm.label(user2StrategyCallForwarder, "User2StrategyCallForwarder");
 
-        _log.init(
-            address(pool),
-            address(boringVault),
-            address(steth),
-            address(wsteth),
-            address(boringOnChainQueue)
-        );
+        _log.init(address(pool), address(boringVault), address(steth), address(wsteth), address(boringOnChainQueue));
 
         vm.startPrank(ADMIN);
         steth.submit{value: 10 ether}(ADMIN);
@@ -188,18 +182,15 @@ contract GGVTest is StvStrategyPoolHarness {
 
         // _log.printUsers("[SCENARIO] After report (increase vault balance)", logUsers, ggvDiscount);
 
-//         3. Request withdrawal (full amount, based on appreciated value)
+        //         3. Request withdrawal (full amount, based on appreciated value)
         uint256 totalGgvShares = boringVault.balanceOf(user1StrategyCallForwarder);
         uint256 withdrawalStethAmount =
             boringOnChainQueue.previewAssetsOut(address(steth), uint128(totalGgvShares), uint16(ggvDiscount));
 
         console.log("\n[SCENARIO] Requesting withdrawal based on new appreciated assets:", withdrawalStethAmount);
 
-        GGVStrategy.GGVParams memory params = GGVStrategy.GGVParams({
-            discount: uint16(ggvDiscount),
-            minimumMint: 0,
-            secondsToDeadline: type(uint24).max
-        });
+        GGVStrategy.GGVParams memory params =
+            GGVStrategy.GGVParams({discount: uint16(ggvDiscount), minimumMint: 0, secondsToDeadline: type(uint24).max});
 
         vm.prank(USER1);
         bytes32 requestId = ggvStrategy.requestExitByStETH(withdrawalStethAmount, abi.encode(params));
@@ -263,20 +254,20 @@ contract GGVTest is StvStrategyPoolHarness {
 
         _log.printUsers("After User Claims ETH", logUsers, ggvDiscount);
 
-//         // 8. Recover Surplus stETH (если есть)
-//         uint256 surplusStETH = steth.balanceOf(user1StrategyCallForwarder);
-//         if (surplusStETH > 0) {
-//             uint256 stethBalance = steth.sharesOf(user1StrategyCallForwarder);
-//             uint256 stethDebt = pool.mintedStethSharesOf(user1StrategyCallForwarder);
-//             uint256 surplusInShares = stethBalance > stethDebt ? stethBalance - stethDebt : 0;
-//             uint256 maxAmount = steth.getPooledEthByShares(surplusInShares);
+        //         // 8. Recover Surplus stETH (если есть)
+        //         uint256 surplusStETH = steth.balanceOf(user1StrategyCallForwarder);
+        //         if (surplusStETH > 0) {
+        //             uint256 stethBalance = steth.sharesOf(user1StrategyCallForwarder);
+        //             uint256 stethDebt = pool.mintedStethSharesOf(user1StrategyCallForwarder);
+        //             uint256 surplusInShares = stethBalance > stethDebt ? stethBalance - stethDebt : 0;
+        //             uint256 maxAmount = steth.getPooledEthByShares(surplusInShares);
 
-//             console.log("\n[SCENARIO] Step 8. Recover Surplus stETH:", maxAmount);
-//             vm.prank(USER1);
-//             ggvStrategy.recoverERC20(address(steth), USER1, maxAmount);
-//         }
+        //             console.log("\n[SCENARIO] Step 8. Recover Surplus stETH:", maxAmount);
+        //             vm.prank(USER1);
+        //             ggvStrategy.recoverERC20(address(steth), USER1, maxAmount);
+        //         }
 
-//         _log.printUsers("After Recovery", logUsers);
+        //         _log.printUsers("After Recovery", logUsers);
     }
 
     function _finalizeWQ(uint256 _maxRequest, uint256 vaultProfit) public {
@@ -284,11 +275,7 @@ contract GGVTest is StvStrategyPoolHarness {
 
         vm.warp(block.timestamp + 1 days);
         core.applyVaultReport(
-            address(pool.STAKING_VAULT()),
-            pool.totalAssets(),
-            0,
-            pool.DASHBOARD().liabilityShares(),
-            0
+            address(pool.STAKING_VAULT()), pool.totalAssets(), 0, pool.DASHBOARD().liabilityShares(), 0
         );
 
         if (vaultProfit != 0) {
@@ -298,7 +285,7 @@ contract GGVTest is StvStrategyPoolHarness {
         }
 
         vm.startPrank(NODE_OPERATOR);
-        uint256 finalizedRequests = pool.WITHDRAWAL_QUEUE().finalize(_maxRequest);
+        uint256 finalizedRequests = pool.WITHDRAWAL_QUEUE().finalize(_maxRequest, address(0));
         vm.stopPrank();
 
         assertEq(finalizedRequests, _maxRequest, "Invalid finalized requests");

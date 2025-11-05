@@ -156,7 +156,7 @@ contract EmergencyExitTest is Test, SetupWithdrawalQueue {
 
         // Any user can finalize in emergency exit (no FINALIZE_ROLE needed)
         vm.prank(userBob);
-        uint256 finalizedCount = withdrawalQueue.finalize(1);
+        uint256 finalizedCount = withdrawalQueue.finalize(1, address(0));
         assertEq(finalizedCount, 1);
     }
 
@@ -174,7 +174,7 @@ contract EmergencyExitTest is Test, SetupWithdrawalQueue {
 
         // Should still be able to finalize in emergency exit
         vm.prank(userAlice);
-        uint256 finalizedCount = withdrawalQueue.finalize(1);
+        uint256 finalizedCount = withdrawalQueue.finalize(1, address(0));
         assertEq(finalizedCount, 1);
     }
 
