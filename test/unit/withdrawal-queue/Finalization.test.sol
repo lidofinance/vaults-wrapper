@@ -305,9 +305,9 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
     }
 
     function test_Finalize_RevertWhenFinalizerCannotReceiveFee() public {
-        uint256 fee = 0.0001 ether;
+        uint256 coverage = 0.0001 ether;
         vm.prank(finalizeRoleHolder);
-        withdrawalQueue.setWithdrawalFee(fee);
+        withdrawalQueue.setFinalizationGasCostCoverage(coverage);
 
         RevertingFinalizer finalizer = new RevertingFinalizer(withdrawalQueue);
         bytes32 finalizeRole = withdrawalQueue.FINALIZE_ROLE();

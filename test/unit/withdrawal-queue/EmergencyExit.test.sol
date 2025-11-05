@@ -84,7 +84,7 @@ contract EmergencyExitTest is Test, SetupWithdrawalQueue {
         assertTrue(withdrawalQueue.isEmergencyExitActivated());
     }
 
-    function test_EmergencyExit_SetsMaxWithdrawalFee() public {
+    function test_EmergencyExit_SetsMaxGasCoverage() public {
         withdrawalQueue.requestWithdrawal(address(this), 10 ** STV_DECIMALS, 0);
 
         // Make queue stuck
@@ -97,12 +97,12 @@ contract EmergencyExitTest is Test, SetupWithdrawalQueue {
         emit WithdrawalQueue.EmergencyExitActivated(block.timestamp);
 
         // Initially fee is zero
-        assertEq(withdrawalQueue.getWithdrawalFee(), 0);
+        assertEq(withdrawalQueue.getFinalizationGasCostCoverage(), 0);
 
         withdrawalQueue.activateEmergencyExit();
 
         // After activation fee is set to max
-        assertEq(withdrawalQueue.getWithdrawalFee(), withdrawalQueue.MAX_WITHDRAWAL_FEE());
+        assertEq(withdrawalQueue.getFinalizationGasCostCoverage(), withdrawalQueue.MAX_GAS_COST_COVERAGE());
     }
 
     function test_EmergencyExit_RevertWhenNotStuck() public {

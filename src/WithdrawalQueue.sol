@@ -35,10 +35,16 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
     uint256 public constant E27_PRECISION_BASE = 1e27;
     uint256 public constant E36_PRECISION_BASE = 1e36;
 
-    /// @notice Maximum withdrawal fee that can be applied for a single request
-    /// @dev High enough to cover fees for finalization tx
-    /// @dev Low enough to prevent abuse by charging excessive fees
-    uint256 public constant MAX_WITHDRAWAL_FEE = 0.001 ether;
+    /// @notice Maximum gas cost coverage that can be applied for a single request
+    /// @dev High enough to cover gas costs for finalization tx
+    /// @dev Low enough to prevent abuse by excessive gas cost coverage
+    ///
+    /// Request finalization tx for 1 request consumes ~200k gas
+    /// Request finalization tx for 10 requests (in batch) consumes ~300k gas
+    /// Thus, setting max coverage to 0.0005 ether should be sufficient to cover finalization gas costs:
+    /// - when gas price is up to 2.5 gwei for tx with a single request (0.0005 eth / 200k gas = 2.5 gwei per gas)
+    /// - when gas price is up to 16.6 gwei for batched tx of 10 requests (10 * 0.0005 eth / 300k gas = 16.6 gwei per gas)
+    uint256 public constant MAX_GAS_COST_COVERAGE = 0.0005 ether;
 
     /// @notice Minimal value (assets - stETH to rebalance) that is possible to request
     /// @dev Prevents placing many small requests
@@ -86,8 +92,8 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
         uint256 stvRate;
         /// @notice Steth share rate at the moment of finalization (1e18 precision)
         uint128 stethShareRate;
-        /// @notice Withdrawal fee for the requests in this batch
-        uint64 withdrawalFee;
+        /// @notice Gas cost coverage for the requests in this checkpoint
+        uint64 gasCostCoverage;
     }
 
     /// @notice Output format struct for `getWithdrawalStatus()` / `getWithdrawalStatusBatch()` methods
@@ -131,8 +137,8 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
         uint96 lastCheckpointIndex;
         /// @dev amount of ETH locked on contract for further claiming
         uint96 totalLockedAssets;
-        /// @dev withdrawal fee in wei
-        uint64 withdrawalFee;
+        /// @dev request finalization gas cost coverage in wei
+        uint64 gasCostCoverage;
     }
 
     // keccak256(abi.encode(uint256(keccak256("pool.storage.WithdrawalQueue")) - 1)) & ~bytes32(uint256(0xff))
@@ -165,13 +171,13 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
     event WithdrawalClaimed(
         uint256 indexed requestId, address indexed owner, address indexed receiver, uint256 amountOfETH
     );
-    event WithdrawalFeeSet(uint256 newFee);
+    event GasCostCoverageSet(uint256 newCoverage);
     event EmergencyExitActivated(uint256 timestamp);
 
     error ZeroAddress();
     error RequestValueTooSmall(uint256 amount);
     error RequestAssetsTooLarge(uint256 amount);
-    error WithdrawalFeeTooLarge(uint256 amount);
+    error GasCostCoverageTooLarge(uint256 amount);
     error InvalidRequestId(uint256 requestId);
     error InvalidRange(uint256 start, uint256 end);
     error RequestAlreadyClaimed(uint256 requestId);
@@ -359,36 +365,36 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
     }
 
     // =================================================================================
-    // WITHDRAWAL FEES
+    // GAS COST COVERAGE
     // =================================================================================
 
     /**
-     * @notice Set the withdrawal fee
-     * @param _fee The withdrawal fee in wei
-     * @dev Reverts if `_fee` is greater than `MAX_WITHDRAWAL_FEE`
-     * @dev 0 by default. Can be set to compensate for gas costs of finalization transactions
+     * @notice Set the gas cost coverage that applies to each request during finalization
+     * @param _coverage The gas cost coverage per request in wei
+     * @dev Reverts if `_coverage` is greater than `MAX_GAS_COST_COVERAGE`
+     * @dev 0 by default. Increasing coverage discourages malicious actors from creating
+     * excessive requests while compensating finalizers for gas expenses
      */
-    function setWithdrawalFee(uint256 _fee) external {
+    function setFinalizationGasCostCoverage(uint256 _coverage) external {
         _checkRole(FINALIZE_ROLE, msg.sender);
         if (isEmergencyExitActivated()) revert CantBeSetInEmergencyExitMode();
 
-        _setWithdrawalFee(_fee);
+        _setFinalizationGasCostCoverage(_coverage);
     }
 
-    function _setWithdrawalFee(uint256 _fee) internal {
-        if (_fee > MAX_WITHDRAWAL_FEE) revert WithdrawalFeeTooLarge(_fee);
+    function _setFinalizationGasCostCoverage(uint256 _coverage) internal {
+        if (_coverage > MAX_GAS_COST_COVERAGE) revert GasCostCoverageTooLarge(_coverage);
 
-        _getWithdrawalQueueStorage().withdrawalFee = uint64(_fee);
-        emit WithdrawalFeeSet(_fee);
+        _getWithdrawalQueueStorage().gasCostCoverage = uint64(_coverage);
+        emit GasCostCoverageSet(_coverage);
     }
 
     /**
-     * @notice Get the current withdrawal fee
-     * @return fee The withdrawal fee in wei
-     * @dev Used to cover gas costs of finalization transactions
+     * @notice Get the current gas cost coverage that applies to each request during finalization
+     * @return coverage The gas cost coverage per request in wei
      */
-    function getWithdrawalFee() external view returns (uint256 fee) {
-        fee = _getWithdrawalQueueStorage().withdrawalFee;
+    function getFinalizationGasCostCoverage() external view returns (uint256 coverage) {
+        coverage = _getWithdrawalQueueStorage().gasCostCoverage;
     }
 
     // =================================================================================
@@ -434,14 +440,14 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
         uint256 totalStvToBurn;
         uint256 totalStethShares;
         uint256 totalEthToClaim;
-        uint256 totalWithdrawalFee;
+        uint256 totalGasCoverage;
         uint256 maxStvToRebalance;
 
         Checkpoint memory checkpoint = Checkpoint({
             fromRequestId: firstRequestIdToFinalize,
             stvRate: currentStvRate,
             stethShareRate: uint128(currentStethShareRate),
-            withdrawalFee: $.withdrawalFee
+            gasCostCoverage: $.gasCostCoverage
         });
 
         // Finalize requests one by one until conditions are met
@@ -454,13 +460,13 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
             // - ethToClaim: amount of ETH that can be claimed for this request, excluding rebalancing and fees
             // - stethSharesToRebalance: amount of steth shares to rebalance for this request
             // - stethToRebalance: amount of steth corresponding to stethSharesToRebalance at the current rate
-            // - withdrawalFee: fee to be paid for this request
+            // - gasCostCoverage: amount of ETH that should be subtracted as gas cost coverage for this request
             (
                 uint256 stv,
                 uint256 ethToClaim,
                 uint256 stethSharesToRebalance,
                 uint256 stethToRebalance,
-                uint256 withdrawalFee
+                uint256 gasCostCoverage
             ) = _calcRequestAmounts(prevRequest, currRequest, checkpoint);
 
             // Handle rebalancing if applicable
@@ -492,18 +498,18 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
                 // Stop if insufficient available ETH to cover claimable and rebalancable ETH for this request
                 // Stop if not enough time has passed since the request was created
                 // Stop if the request was created after the latest report was published, at least one oracle report is required
-                (ethToClaim + withdrawalFee) > withdrawableValue
-                    || (ethToClaim + ethToRebalance + withdrawalFee) > availableBalance
+                (ethToClaim + gasCostCoverage) > withdrawableValue
+                    || (ethToClaim + ethToRebalance + gasCostCoverage) > availableBalance
                     || currRequest.timestamp + MIN_WITHDRAWAL_DELAY_TIME_IN_SECONDS > block.timestamp
                     || currRequest.timestamp > latestReportTimestamp
             ) {
                 break;
             }
 
-            withdrawableValue -= (ethToClaim + withdrawalFee);
-            availableBalance -= (ethToClaim + withdrawalFee + ethToRebalance);
+            withdrawableValue -= (ethToClaim + gasCostCoverage);
+            availableBalance -= (ethToClaim + gasCostCoverage + ethToRebalance);
             totalEthToClaim += ethToClaim;
-            totalWithdrawalFee += withdrawalFee;
+            totalGasCoverage += gasCostCoverage;
             totalStvToBurn += (stv - stvToRebalance);
             totalStethShares += stethSharesToRebalance;
             maxStvToRebalance += stvToRebalance;
@@ -515,8 +521,8 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
         // 1. Withdraw ETH from the vault to cover finalized requests and burn associated stv
         // Eth to claim or stv to burn could be 0 if all requests are going to be rebalanced
         // Rebalance cannot be done first because it will withdraw eth without unlocking it
-        if (totalEthToClaim + totalWithdrawalFee > 0) {
-            DASHBOARD.withdraw(address(this), totalEthToClaim + totalWithdrawalFee);
+        if (totalEthToClaim + totalGasCoverage > 0) {
+            DASHBOARD.withdraw(address(this), totalEthToClaim + totalGasCoverage);
         }
         if (totalStvToBurn > 0) POOL.burnStvForWithdrawalQueue(totalStvToBurn);
 
@@ -546,7 +552,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
 
         lastFinalizedRequestId = lastFinalizedRequestId + finalizedRequests;
 
-        // Store checkpoint with stvRate, stethShareRate and withdrawalFee
+        // Store checkpoint with current stvRate, stethShareRate and gasCostCoverage
         uint256 lastCheckpointIndex = $.lastCheckpointIndex + 1;
         $.checkpoints[lastCheckpointIndex] = checkpoint;
         $.lastCheckpointIndex = uint96(lastCheckpointIndex);
@@ -554,9 +560,9 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
         $.lastFinalizedRequestId = uint96(lastFinalizedRequestId);
         $.totalLockedAssets += uint96(totalEthToClaim);
 
-        // Send withdrawal fee to the caller
-        if (totalWithdrawalFee > 0) {
-            (bool success,) = msg.sender.call{value: totalWithdrawalFee}("");
+        // Send gas coverage to the caller
+        if (totalGasCoverage > 0) {
+            (bool success,) = msg.sender.call{value: totalGasCoverage}("");
             if (!success) revert CantSendValueRecipientMayHaveReverted();
         }
 
@@ -931,7 +937,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
             uint256 assetsToClaim,
             uint256 stethSharesToRebalance,
             uint256 assetsToRebalance,
-            uint256 withdrawalFee
+            uint256 gasCostCoverage
         )
     {
         stv = _request.cumulativeStv - _prevRequest.cumulativeStv;
@@ -954,10 +960,10 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
             assetsToClaim = Math.saturatingSub(assetsToClaim, assetsToRebalance);
         }
 
-        // Apply withdrawal fee
-        if (checkpoint.withdrawalFee > 0) {
-            withdrawalFee = Math.min(assetsToClaim, checkpoint.withdrawalFee);
-            assetsToClaim -= withdrawalFee;
+        // Apply request finalization gas cost coverage
+        if (checkpoint.gasCostCoverage > 0) {
+            gasCostCoverage = Math.min(assetsToClaim, checkpoint.gasCostCoverage);
+            assetsToClaim -= gasCostCoverage;
         }
     }
 
@@ -1060,7 +1066,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
             revert InvalidEmergencyExitActivation();
         }
 
-        _setWithdrawalFee(MAX_WITHDRAWAL_FEE);
+        _setFinalizationGasCostCoverage(MAX_GAS_COST_COVERAGE);
 
         $.emergencyExitActivationTimestamp = uint40(block.timestamp);
         emit EmergencyExitActivated($.emergencyExitActivationTimestamp);
