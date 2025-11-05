@@ -21,6 +21,7 @@ contract StvPool is Initializable, ERC20Upgradeable, AllowList {
     error InvalidRequestType();
     error NotEnoughToRebalance();
     error UnassignedLiabilityOnVault();
+    error VaultInBadDebt();
 
     bytes32 public constant REQUEST_VALIDATOR_EXIT_ROLE = keccak256("REQUEST_VALIDATOR_EXIT_ROLE");
     bytes32 public constant TRIGGER_VALIDATOR_WITHDRAWAL_ROLE = keccak256("TRIGGER_VALIDATOR_WITHDRAWAL_ROLE");
@@ -314,6 +315,14 @@ contract StvPool is Initializable, ERC20Upgradeable, AllowList {
         if (totalUnassignedLiabilityShares() > 0) revert UnassignedLiabilityOnVault();
     }
 
+    /**
+     * @dev Checks if the vault is not in bad debt (value < liability)
+     */
+    function _checkNoBadDebt() internal view {
+        uint256 totalValueInStethShares = _getSharesByPooledEth(VAULT_HUB.totalValue(address(STAKING_VAULT)));
+        if (totalValueInStethShares < totalLiabilityShares()) revert VaultInBadDebt();
+    }
+
     // =================================================================================
     // STETH HELPERS
     // =================================================================================
@@ -346,9 +355,13 @@ contract StvPool is Initializable, ERC20Upgradeable, AllowList {
      * @dev Overridden method from ERC20 to prevent updates if there are unassigned liability
      */
     function _update(address _from, address _to, uint256 _value) internal virtual override {
+        // Ensure vault is not in bad debt (value < liability) before any transfer
+        _checkNoBadDebt();
+
         // In rare scenarios, the vault could have liability shares that are not assigned to any pool users
         // In such cases, it prevents any transfers until the unassigned liability is rebalanced
         _checkNoUnassignedLiability();
+
         super._update(_from, _to, _value);
     }
 
@@ -374,6 +387,7 @@ contract StvPool is Initializable, ERC20Upgradeable, AllowList {
      */
     function burnStvForWithdrawalQueue(uint256 _stv) external {
         _checkOnlyWithdrawalQueue();
+        _checkNoBadDebt();
         _checkNoUnassignedLiability();
         _burnUnsafe(address(WITHDRAWAL_QUEUE), _stv);
     }

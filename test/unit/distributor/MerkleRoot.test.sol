@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >=0.8.25;
 
-import {Test} from "forge-std/Test.sol";
 import {SetupDistributor} from "./SetupDistributor.sol";
-import {Distributor} from "src/Distributor.sol";
 import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
+import {Test} from "forge-std/Test.sol";
+import {Distributor} from "src/Distributor.sol";
 
 contract MerkleRootTest is Test, SetupDistributor {
     function setUp() public override {
@@ -21,11 +21,7 @@ contract MerkleRootTest is Test, SetupDistributor {
 
         vm.prank(userAlice);
         vm.expectRevert(
-            abi.encodeWithSelector(
-                IAccessControl.AccessControlUnauthorizedAccount.selector,
-                userAlice,
-                managerRole
-            )
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, userAlice, managerRole)
         );
         distributor.setMerkleRoot(newRoot, newCid);
     }
@@ -115,6 +111,4 @@ contract MerkleRootTest is Test, SetupDistributor {
         assertEq(distributor.root(), newRoot);
     }
 }
-
-
 

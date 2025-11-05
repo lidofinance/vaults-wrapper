@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity >=0.8.25;
 
-import {Test} from "forge-std/Test.sol";
 import {SetupWithdrawalQueue} from "./SetupWithdrawalQueue.sol";
+import {Test} from "forge-std/Test.sol";
+import {StvStETHPool} from "src/StvStETHPool.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
 
 contract FinalizationTest is Test, SetupWithdrawalQueue {
@@ -66,7 +67,7 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
             mintedStethShares,
             block.timestamp
         );
-        uint256 finalizedCount = withdrawalQueue.finalize(1);
+        uint256 finalizedCount = withdrawalQueue.finalize(1, address(0));
 
         // Verify finalization succeeded
         assertEq(finalizedCount, 1);
@@ -178,5 +179,27 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
         // Make sure that exceeding minted shares are used in rebalance
         assertEq(pool.totalMintedStethShares(), 0);
         assertEq(pool.totalExceedingMintedStethShares(), 0);
+    }
+
+    function test_RebalanceFinalization_SocializedLossEmitsEvent() public {
+        uint256 mintedStethShares = 10 ** ASSETS_DECIMALS;
+        uint256 stvToRequest = 2 * 10 ** STV_DECIMALS;
+
+        pool.mintStethShares(mintedStethShares);
+        uint256 requestId = withdrawalQueue.requestWithdrawal(address(this), stvToRequest, mintedStethShares);
+
+        // Apply large penalty so position becomes undercollateralized
+        dashboard.mock_simulateRewards(-90_000 ether);
+        assertGt(steth.getPooledEthBySharesRoundUp(mintedStethShares), pool.previewRedeem(stvToRequest));
+
+        _warpAndMockOracleReport();
+
+        vm.expectEmit(true, true, true, false, address(pool));
+        emit StvStETHPool.SocializedLoss(0, 0);
+
+        vm.prank(finalizeRoleHolder);
+        withdrawalQueue.finalize(1, address(0));
+
+        assertEq(withdrawalQueue.getClaimableEther(requestId), 0);
     }
 }

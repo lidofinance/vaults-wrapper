@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >=0.8.25;
 
-import {Test} from "forge-std/Test.sol";
 import {SetupWithdrawalQueue} from "./SetupWithdrawalQueue.sol";
+import {Test} from "forge-std/Test.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
 
 contract EmergencyExitTest is Test, SetupWithdrawalQueue {
@@ -84,6 +84,27 @@ contract EmergencyExitTest is Test, SetupWithdrawalQueue {
         assertTrue(withdrawalQueue.isEmergencyExitActivated());
     }
 
+    function test_EmergencyExit_SetsMaxGasCoverage() public {
+        withdrawalQueue.requestWithdrawal(address(this), 10 ** STV_DECIMALS, 0);
+
+        // Make queue stuck
+        vm.warp(block.timestamp + withdrawalQueue.MAX_ACCEPTABLE_WQ_FINALIZATION_TIME_IN_SECONDS() + 1);
+        assertTrue(withdrawalQueue.isWithdrawalQueueStuck());
+
+        // Anyone can activate emergency exit
+        vm.prank(userAlice);
+        vm.expectEmit(true, false, false, true);
+        emit WithdrawalQueue.EmergencyExitActivated(block.timestamp);
+
+        // Initially fee is zero
+        assertEq(withdrawalQueue.getFinalizationGasCostCoverage(), 0);
+
+        withdrawalQueue.activateEmergencyExit();
+
+        // After activation fee is set to max
+        assertEq(withdrawalQueue.getFinalizationGasCostCoverage(), withdrawalQueue.MAX_GAS_COST_COVERAGE());
+    }
+
     function test_EmergencyExit_RevertWhenNotStuck() public {
         withdrawalQueue.requestWithdrawal(address(this), 10 ** STV_DECIMALS, 0);
 
@@ -135,7 +156,7 @@ contract EmergencyExitTest is Test, SetupWithdrawalQueue {
 
         // Any user can finalize in emergency exit (no FINALIZE_ROLE needed)
         vm.prank(userBob);
-        uint256 finalizedCount = withdrawalQueue.finalize(1);
+        uint256 finalizedCount = withdrawalQueue.finalize(1, address(0));
         assertEq(finalizedCount, 1);
     }
 
@@ -153,7 +174,7 @@ contract EmergencyExitTest is Test, SetupWithdrawalQueue {
 
         // Should still be able to finalize in emergency exit
         vm.prank(userAlice);
-        uint256 finalizedCount = withdrawalQueue.finalize(1);
+        uint256 finalizedCount = withdrawalQueue.finalize(1, address(0));
         assertEq(finalizedCount, 1);
     }
 

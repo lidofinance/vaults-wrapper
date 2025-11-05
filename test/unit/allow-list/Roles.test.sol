@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity >=0.8.25;
 
-import {Test} from "forge-std/Test.sol";
 import {SetupAllowList} from "./SetupAllowList.sol";
+import {Test} from "forge-std/Test.sol";
 
 contract AllowListRolesTest is Test, SetupAllowList {
     bytes32 ALLOW_LIST_MANAGER_ROLE;
