@@ -6,198 +6,241 @@ import "forge-std/console2.sol";
 import {Factory} from "src/Factory.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
 import {IOssifiableProxy} from "src/interfaces/IOssifiableProxy.sol";
+import {OssifiableProxy} from "src/proxy/OssifiableProxy.sol";
+import {StvPool} from "src/StvPool.sol";
+import {StvStETHPool} from "src/StvStETHPool.sol";
 import {IStETH} from "src/interfaces/IStETH.sol";
 
 contract DeployWrapper is Script {
     struct PoolParams {
-        address nodeOperator;
-        address nodeOperatorManager;
-        uint256 nodeOperatorFeeBP;
-        uint256 confirmExpiry;
-        uint256 maxFinalizationTime;
-        uint256 minWithdrawalDelayTime;
-        bool allowlistEnabled;
-        bool mintingEnabled; // required by Factory.StvPoolConfig
-        uint256 reserveRatioGapBP; // optional; used when minting is enabled / strategy present
-        address strategyFactory; // optional; if set => strategy pool
-        uint256 value; // msg.value to send (CONNECT_DEPOSIT)
-        address timelockExecutor; // optional (not used by new Factory)
-        string name;
-        string symbol;
-    }
-
-    // struct DeploymentResult {
-    //     address vault;
-    //     address dashboard;
-    //     address payable poolProxy;
-    //     address withdrawalQueueProxy;
-    //     address poolImpl;
-    //     address withdrawalQueueImpl;
-    //     address strategy;
-    //     address timelockAdmin;
-    //     address stethAddr;
-    //     address wstethAddr;
-    // }
-
-    // function _writePoolArtifact(
-    //     Factory factoryView,
-    //     PoolParams memory p,
-    //     Factory.StvPoolIntermediate memory intermediate,
-    //     string memory outputJsonPath
-    // ) internal {
-    //     string memory out = vm.serializeAddress("pool", "factory", address(factoryView));
-    //     out = vm.serializeAddress("pool", "vault", r.vault);
-    //     out = vm.serializeAddress("pool", "dashboard", r.dashboard);
-    //     out = vm.serializeAddress("pool", "poolProxy", r.poolProxy);
-    //     out = vm.serializeAddress("pool", "poolImpl", r.poolImpl);
-    //     out = vm.serializeAddress("pool", "withdrawalQueue", r.withdrawalQueueProxy);
-    //     out = vm.serializeAddress("pool", "withdrawalQueueImpl", r.withdrawalQueueImpl);
-    //     out = vm.serializeUint("pool", "poolType", p.poolType);
-    //     out = vm.serializeAddress("pool", "strategy", r.strategy);
-    //     out = vm.serializeAddress("pool", "timelock", r.timelockAdmin);
-
-    //     // Proxy constructor args
-    //     bytes memory poolProxyCtorArgs = abi.encode(factoryView.DUMMY_IMPLEMENTATION(), address(factoryView), bytes(""));
-    //     out = vm.serializeBytes("pool", "poolProxyCtorArgs", poolProxyCtorArgs);
-
-    //     // WQ proxy constructor args
-    //     bytes memory wqInitData = abi.encodeCall(WithdrawalQueue.initialize, (p.nodeOperator, p.nodeOperator));
-    //     bytes memory withdrawalQueueProxyCtorArgs = abi.encode(r.withdrawalQueueImpl, address(factoryView), wqInitData);
-    //     out = vm.serializeBytes("pool", "withdrawalQueueProxyCtorArgs", withdrawalQueueProxyCtorArgs);
-
-    //     // Pool implementation constructor args
-    //     bytes memory poolImplCtorArgs;
-    //     if (p.poolType == uint256(Factory.PoolType.NO_MINTING_NO_STRATEGY)) {
-    //         poolImplCtorArgs = abi.encode(r.dashboard, p.allowlistEnabled, r.withdrawalQueueProxy);
-    //     } else if (p.poolType == uint256(Factory.PoolType.MINTING_NO_STRATEGY)) {
-    //         poolImplCtorArgs = abi.encode(r.dashboard, r.stethAddr, p.allowlistEnabled, p.reserveRatioGapBP, r.withdrawalQueueProxy);
-    //     } else if (p.poolType == uint256(Factory.PoolType.LOOP_STRATEGY)) {
-    //         poolImplCtorArgs = abi.encode(r.dashboard, r.stethAddr, p.allowlistEnabled, r.strategy, p.reserveRatioGapBP, r.withdrawalQueueProxy);
-    //     } else {
-    //         // GGV
-    //         poolImplCtorArgs = abi.encode(r.dashboard, r.stethAddr, p.allowlistEnabled, r.strategy, p.reserveRatioGapBP, r.withdrawalQueueProxy);
-    //     }
-    //     out = vm.serializeBytes("pool", "poolImplCtorArgs", poolImplCtorArgs);
-
-    //     // WQ implementation constructor args
-    //     bytes memory withdrawalQueueImplCtorArgs = abi.encode(r.poolProxy, factoryView.LAZY_ORACLE(), p.maxFinalizationTime, p.minWithdrawalDelayTime);
-    //     out = vm.serializeBytes("pool", "withdrawalQueueImplCtorArgs", withdrawalQueueImplCtorArgs);
-
-    //     // Strategy constructor args (if any)
-    //     if (r.strategy != address(0)) {
-    //         address strategyProxyImpl = address(0);
-    //         (bool okSpi, bytes memory retSpi) = r.strategy.staticcall(abi.encodeWithSignature("STRATEGY_PROXY_IMPL()"));
-    //         if (okSpi && retSpi.length >= 32) {
-    //             strategyProxyImpl = abi.decode(retSpi, (address));
-    //         }
-    //         bytes memory strategyCtorArgs = abi.encode(strategyProxyImpl, r.poolProxy, r.stethAddr, r.wstethAddr, p.teller, p.boringQueue);
-    //         out = vm.serializeBytes("pool", "strategyCtorArgs", strategyCtorArgs);
-    //     }
-
-    //     vm.writeJson(out, outputJsonPath);
-    // }
-
-    function _readFactoryAddress(string memory path) internal view returns (address factory) {
-        string memory json = vm.readFile(path);
-        // The deployment artifact should contain { deployment: { factory: "0x..." } }
-        factory = vm.parseJsonAddress(json, "$.deployment.factory");
-        require(factory != address(0), "factory not found");
+        Factory.VaultConfig vaultConfig;
+        Factory.CommonPoolConfig commonPoolConfig;
+        Factory.AuxiliaryPoolConfig auxiliaryPoolConfig;
+        Factory.TimelockConfig timelockConfig;
+        address strategyFactory;
+        uint256 connectDepositWei;
     }
 
     function _readPoolParams(string memory path) internal view returns (PoolParams memory p) {
         string memory json = vm.readFile(path);
-        p.nodeOperator = vm.parseJsonAddress(json, "$.nodeOperator");
-        p.nodeOperatorManager = vm.parseJsonAddress(json, "$.nodeOperatorManager");
-        p.nodeOperatorFeeBP = vm.parseJsonUint(json, "$.nodeOperatorFeeBP");
-        p.confirmExpiry = vm.parseJsonUint(json, "$.confirmExpiry");
-        p.maxFinalizationTime = vm.parseJsonUint(json, "$.maxFinalizationTime");
-        p.minWithdrawalDelayTime = vm.parseJsonUint(json, "$.minWithdrawalDelayTime");
-        p.allowlistEnabled = vm.parseJsonBool(json, "$.allowlistEnabled");
-        p.value = vm.parseJsonUint(json, "$.connectDepositWei");
+        p.vaultConfig = Factory.VaultConfig({
+            nodeOperator: vm.parseJsonAddress(json, "$.vaultConfig.nodeOperator"),
+            nodeOperatorManager: vm.parseJsonAddress(json, "$.vaultConfig.nodeOperatorManager"),
+            nodeOperatorFeeBP: vm.parseJsonUint(json, "$.vaultConfig.nodeOperatorFeeBP"),
+            confirmExpiry: vm.parseJsonUint(json, "$.vaultConfig.confirmExpiry")
+        });
 
-        // Parse only fields relevant to the pool type
-        // Optional: explicit mintingEnabled in JSON, else derive later
-        try vm.parseJsonBool(json, "$.mintingEnabled") returns (bool me) {
-            p.mintingEnabled = me;
-        } catch {}
+        p.commonPoolConfig = Factory.CommonPoolConfig({
+            maxFinalizationTime: vm.parseJsonUint(json, "$.commonPoolConfig.maxFinalizationTime"),
+            minWithdrawalDelayTime: vm.parseJsonUint(json, "$.commonPoolConfig.minWithdrawalDelayTime"),
+            name: vm.parseJsonString(json, "$.commonPoolConfig.name"),
+            symbol: vm.parseJsonString(json, "$.commonPoolConfig.symbol")
+        });
 
-        // Reserve ratio gap (optional); if set or strategy present, Factory will treat as minting-enabled
-        try vm.parseJsonUint(json, "$.reserveRatioGapBP") returns (uint256 rr) {
-            p.reserveRatioGapBP = rr;
-        } catch {}
+        p.auxiliaryPoolConfig = Factory.AuxiliaryPoolConfig({
+            allowlistEnabled: vm.parseJsonBool(json, "$.auxiliaryPoolConfig.allowlistEnabled"),
+            mintingEnabled: vm.parseJsonBool(json, "$.auxiliaryPoolConfig.mintingEnabled"),
+            reserveRatioGapBP: vm.parseJsonUint(json, "$.auxiliaryPoolConfig.reserveRatioGapBP")
+        });
 
-        // Strategy-specific params (optional)
-        try vm.parseJsonAddress(json, "$.strategy.factory") returns (address sf) {
-            p.strategyFactory = sf;
-        } catch {}
+        p.timelockConfig = Factory.TimelockConfig({
+            minDelaySeconds: vm.parseJsonUint(json, "$.timelockConfig.minDelaySeconds"),
+            executor: vm.parseJsonAddress(json, "$.timelockConfig.executor")
+        });
 
-        // Optional legacy field
-        try vm.parseJsonAddress(json, "$.timelock.executor") returns (address ex) {
-            p.timelockExecutor = ex;
-        } catch {}
+        p.connectDepositWei = vm.parseJsonUint(json, "$.connectDepositWei");
 
-        try vm.parseJsonString(json, "$.token.name") returns (string memory tokenName) {
-            p.name = tokenName;
-        } catch {}
-
-        try vm.parseJsonString(json, "$.token.symbol") returns (string memory tokenSymbol) {
-            p.symbol = tokenSymbol;
-        } catch {}
+        try vm.parseJsonAddress(json, "$.strategyFactory") returns (address addr) {
+            p.strategyFactory = addr;
+        } catch {
+            // Leave p.strategyFactory as default (address(0))
+        }
     }
 
-    function run() external {
-        string memory factoryJsonPath = "deployments/pool-factory-latest.json";
-        string memory paramsJsonPath = vm.envString("POOL_PARAMS_JSON");
-
-        // string memory outputJsonPath = vm.envString("WRAPPER_DEPLOYED_JSON");
-        string memory outputJsonPath = string(
+    function _buildOutputPath() internal view returns (string memory) {
+        return string(
             abi.encodePacked(
                 "deployments/pool-", vm.toString(block.chainid), "-", vm.toString(block.timestamp), ".json"
             )
         );
+    }
 
-        require(bytes(paramsJsonPath).length != 0, "WRAPPER_PARAMS_JSON env var must be set and non-empty");
-        require(bytes(outputJsonPath).length != 0, "WRAPPER_DEPLOYED_JSON env var must be set and non-empty");
+    function _serializeVaultConfig(Factory.VaultConfig memory cfg) internal returns (string memory json) {
+        json = vm.serializeAddress("_vaultConfig", "nodeOperator", cfg.nodeOperator);
+        json = vm.serializeAddress("_vaultConfig", "nodeOperatorManager", cfg.nodeOperatorManager);
+        json = vm.serializeUint("_vaultConfig", "nodeOperatorFeeBP", cfg.nodeOperatorFeeBP);
+        json = vm.serializeUint("_vaultConfig", "confirmExpiry", cfg.confirmExpiry);
+    }
 
-        require(vm.isFile(factoryJsonPath), "deployments/pool-factory-latest.json file not found");
-        if (!vm.isFile(paramsJsonPath)) {
-            revert(string(abi.encodePacked("WRAPPER_PARAMS_JSON file does not exist at: ", paramsJsonPath)));
+    function _serializeCommonPoolConfig(Factory.CommonPoolConfig memory cfg) internal returns (string memory json) {
+        json = vm.serializeUint("_commonPoolConfig", "maxFinalizationTime", cfg.maxFinalizationTime);
+        json = vm.serializeUint("_commonPoolConfig", "minWithdrawalDelayTime", cfg.minWithdrawalDelayTime);
+        json = vm.serializeString("_commonPoolConfig", "name", cfg.name);
+        json = vm.serializeString("_commonPoolConfig", "symbol", cfg.symbol);
+    }
+
+    function _serializeAuxiliaryPoolConfig(Factory.AuxiliaryPoolConfig memory cfg)
+        internal
+        returns (string memory json)
+    {
+        json = vm.serializeBool("_auxiliaryPoolConfig", "allowlistEnabled", cfg.allowlistEnabled);
+        json = vm.serializeBool("_auxiliaryPoolConfig", "mintingEnabled", cfg.mintingEnabled);
+        json = vm.serializeUint("_auxiliaryPoolConfig", "reserveRatioGapBP", cfg.reserveRatioGapBP);
+    }
+
+    function _serializeTimelockConfig(Factory.TimelockConfig memory cfg) internal returns (string memory json) {
+        json = vm.serializeUint("_timelockConfig", "minDelaySeconds", cfg.minDelaySeconds);
+        json = vm.serializeAddress("_timelockConfig", "executor", cfg.executor);
+    }
+
+    function _serializeConfig(PoolParams memory p) internal returns (string memory json) {
+        string memory vaultJson = _serializeVaultConfig(p.vaultConfig);
+        string memory commonJson = _serializeCommonPoolConfig(p.commonPoolConfig);
+        string memory auxiliaryJson = _serializeAuxiliaryPoolConfig(p.auxiliaryPoolConfig);
+        string memory timelockJson = _serializeTimelockConfig(p.timelockConfig);
+
+        json = vm.serializeString("_deployConfig", "vaultConfig", vaultJson);
+        json = vm.serializeString("_deployConfig", "commonPoolConfig", commonJson);
+        json = vm.serializeString("_deployConfig", "auxiliaryPoolConfig", auxiliaryJson);
+        json = vm.serializeString("_deployConfig", "timelockConfig", timelockJson);
+        json = vm.serializeAddress("_deployConfig", "strategyFactory", p.strategyFactory);
+        json = vm.serializeUint("_deployConfig", "connectDepositWei", p.connectDepositWei);
+    }
+
+    function _serializeIntermediate(Factory.StvPoolIntermediate memory intermediate)
+        internal
+        returns (string memory json)
+    {
+        json = vm.serializeString("_intermediate", "poolType", vm.toString(intermediate.poolType));
+        json = vm.serializeAddress("_intermediate", "vault", intermediate.vault);
+        json = vm.serializeAddress("_intermediate", "dashboard", intermediate.dashboard);
+        json = vm.serializeAddress("_intermediate", "pool", intermediate.pool);
+        json = vm.serializeAddress("_intermediate", "withdrawalQueue", intermediate.withdrawalQueue);
+        json = vm.serializeAddress("_intermediate", "distributor", intermediate.distributor);
+        json = vm.serializeAddress("_intermediate", "timelock", intermediate.timelock);
+        json = vm.serializeAddress("_intermediate", "strategyFactory", intermediate.strategyFactory);
+    }
+
+    function _serializeDeployment(Factory.StvPoolDeployment memory deployment)
+        internal
+        returns (string memory json)
+    {
+        json = vm.serializeString("_deployment", "poolType", vm.toString(deployment.poolType));
+        json = vm.serializeAddress("_deployment", "vault", deployment.vault);
+        json = vm.serializeAddress("_deployment", "dashboard", deployment.dashboard);
+        json = vm.serializeAddress("_deployment", "pool", deployment.pool);
+        json = vm.serializeAddress("_deployment", "withdrawalQueue", deployment.withdrawalQueue);
+        json = vm.serializeAddress("_deployment", "distributor", deployment.distributor);
+        json = vm.serializeAddress("_deployment", "timelock", deployment.timelock);
+        json = vm.serializeAddress("_deployment", "strategy", deployment.strategy);
+    }
+
+    function _serializeCtorBytecode(
+        Factory factory,
+        Factory.StvPoolIntermediate memory intermediate,
+        Factory.VaultConfig memory vaultConfig,
+        Factory.AuxiliaryPoolConfig memory auxiliaryConfig
+    ) internal returns (string memory json) {
+        bytes memory poolCtorBytecode = abi.encodePacked(
+            type(OssifiableProxy).creationCode,
+            abi.encode(factory.DUMMY_IMPLEMENTATION(), address(factory), bytes(""))
+        );
+
+        bytes memory poolImplementationCtorBytecode;
+        if (intermediate.poolType == factory.STV_POOL_TYPE()) {
+            poolImplementationCtorBytecode = abi.encodePacked(
+                type(StvPool).creationCode,
+                abi.encode(
+                    intermediate.dashboard,
+                    auxiliaryConfig.allowlistEnabled,
+                    intermediate.withdrawalQueue,
+                    intermediate.distributor
+                )
+            );
+        } else {
+            poolImplementationCtorBytecode = abi.encodePacked(
+                type(StvStETHPool).creationCode,
+                abi.encode(
+                    intermediate.dashboard,
+                    auxiliaryConfig.allowlistEnabled,
+                    auxiliaryConfig.reserveRatioGapBP,
+                    intermediate.withdrawalQueue,
+                    intermediate.distributor,
+                    intermediate.poolType
+                )
+            );
         }
 
-        Factory factory = Factory(_readFactoryAddress(factoryJsonPath));
+        address withdrawalImpl = IOssifiableProxy(intermediate.withdrawalQueue).proxy__getImplementation();
+        bytes memory withdrawalInitData = abi.encodeCall(
+            WithdrawalQueue.initialize,
+            (vaultConfig.nodeOperatorManager, vaultConfig.nodeOperator)
+        );
+        bytes memory withdrawalCtorBytecode = abi.encodePacked(
+            type(OssifiableProxy).creationCode,
+            abi.encode(withdrawalImpl, intermediate.timelock, withdrawalInitData)
+        );
+
+        json = vm.serializeBytes("_ctorBytecode", "poolProxy", poolCtorBytecode);
+        json = vm.serializeBytes("_ctorBytecode", "poolImplementation", poolImplementationCtorBytecode);
+        json = vm.serializeBytes("_ctorBytecode", "withdrawalQueueProxy", withdrawalCtorBytecode);
+    }
+
+    function run() external {
+        string memory factoryAddress = vm.envString("FACTORY_ADDRESS");
+        string memory paramsJsonPath = vm.envString("POOL_PARAMS_JSON");
+
+        require(bytes(factoryAddress).length != 0, "FACTORY_ADDRESS env var must be set and non-empty");
+        require(bytes(paramsJsonPath).length != 0, "POOL_PARAMS_JSON env var must be set and non-empty");
+        if (!vm.isFile(paramsJsonPath)) {
+            revert(string(abi.encodePacked("POOL_PARAMS_JSON file does not exist at: ", paramsJsonPath)));
+        }
+
+        require(msg.sender.balance > 1 ether, "msg.sender balance must be above 1 ether");
+
+        string memory outputJsonPath = _buildOutputPath();
+
+        Factory factory = Factory(vm.parseAddress(factoryAddress));
         PoolParams memory p = _readPoolParams(paramsJsonPath);
 
-        require(bytes(p.name).length != 0, "token.name missing");
-        require(bytes(p.symbol).length != 0, "token.symbol missing");
-
-        // Check Lido total shares before broadcasting
-        // uint256 totalShares = IStETH(factory.STETH()).getTotalShares();
-        // console2.log("Lido getTotalShares:", totalShares);
-        // require(totalShares > 100000, "Lido totalShares must be > 100000");
+        require(bytes(p.commonPoolConfig.name).length != 0, "commonPoolConfig.name missing");
+        require(bytes(p.commonPoolConfig.symbol).length != 0, "commonPoolConfig.symbol missing");
+        require(p.connectDepositWei > 0, "connectDepositWei missing");
 
         vm.startBroadcast();
 
-        Factory.StrategyConfig memory strategyConfig = Factory.StrategyConfig({factory: p.strategyFactory});
-
-        Factory.StvPoolIntermediate memory intermediate = factory.createPoolStart{value: p.value}(
-            Factory.PoolFullConfig({
-                allowlistEnabled: p.allowlistEnabled,
-                mintingEnabled: p.mintingEnabled,
-                owner: p.nodeOperator,
-                nodeOperator: p.nodeOperator,
-                nodeOperatorManager: p.nodeOperatorManager,
-                nodeOperatorFeeBP: p.nodeOperatorFeeBP,
-                confirmExpiry: p.confirmExpiry,
-                maxFinalizationTime: p.maxFinalizationTime,
-                minWithdrawalDelayTime: p.minWithdrawalDelayTime,
-                reserveRatioGapBP: p.reserveRatioGapBP,
-                name: p.name,
-                symbol: p.symbol
-            }),
-            strategyConfig
+        Factory.StvPoolIntermediate memory intermediate = factory.createPoolStart{value: p.connectDepositWei}(
+            p.vaultConfig,
+            p.commonPoolConfig,
+            p.auxiliaryPoolConfig,
+            p.timelockConfig,
+            p.strategyFactory
         );
+        console2.log("Intermediate:");
+        console2.log("  vault:", intermediate.vault);
+        console2.log("  dashboard:", intermediate.dashboard);
+        console2.log("  pool:", intermediate.pool);
+        console2.log("  withdrawalQueue:", intermediate.withdrawalQueue);
+        console2.log("  distributor:", intermediate.distributor);
+        console2.log("  timelock:", intermediate.timelock);
 
-        Factory.StvPoolDeployment memory deployment = factory.createPoolFinish(intermediate, strategyConfig);
+        Factory.StvPoolDeployment memory deployment = factory.createPoolFinish(intermediate);
+
+        console2.log("Deploy config:");
+        console2.log("  name:", p.commonPoolConfig.name);
+        console2.log("  symbol:", p.commonPoolConfig.symbol);
+        console2.log("  allowlistEnabled:", p.auxiliaryPoolConfig.allowlistEnabled);
+        console2.log("  mintingEnabled:", p.auxiliaryPoolConfig.mintingEnabled);
+        console2.log("  owner:", p.vaultConfig.nodeOperator);
+        console2.log("  nodeOperator:", p.vaultConfig.nodeOperator);
+        console2.log("  nodeOperatorManager:", p.vaultConfig.nodeOperatorManager);
+        console2.log("  nodeOperatorFeeBP:", p.vaultConfig.nodeOperatorFeeBP);
+        console2.log("  confirmExpiry:", p.vaultConfig.confirmExpiry);
+        console2.log("  maxFinalizationTime:", p.commonPoolConfig.maxFinalizationTime);
+        console2.log("  minWithdrawalDelayTime:", p.commonPoolConfig.minWithdrawalDelayTime);
+        console2.log("  reserveRatioGapBP:", p.auxiliaryPoolConfig.reserveRatioGapBP);
+        console2.log("  strategyFactory:", p.strategyFactory);
+        console2.log("  connectDepositWei:", p.connectDepositWei);
 
         console2.log("Deployment Vault", deployment.vault);
         console2.log("Deployment Dashboard", deployment.dashboard);
@@ -209,5 +252,19 @@ contract DeployWrapper is Script {
         console2.log("Strategy", deployment.strategy);
 
         vm.stopBroadcast();
+
+        // Prepare JSON artifacts
+        string memory configJson = _serializeConfig(p);
+        string memory intermediateJson = _serializeIntermediate(intermediate);
+        string memory deploymentJson = _serializeDeployment(deployment);
+        string memory ctorJson = _serializeCtorBytecode(factory, intermediate, p.vaultConfig, p.auxiliaryPoolConfig);
+
+        string memory rootJson = vm.serializeString("_deploy", "config", configJson);
+        rootJson = vm.serializeString("_deploy", "intermediate", intermediateJson);
+        rootJson = vm.serializeString("_deploy", "deployment", deploymentJson);
+        rootJson = vm.serializeString("_deploy", "ctorBytecode", ctorJson);
+
+        vm.writeJson(rootJson, outputJsonPath);
+        console2.log("Deployment artifact saved to", outputJsonPath);
     }
 }

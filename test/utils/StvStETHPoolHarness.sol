@@ -27,6 +27,8 @@ contract StvStETHPoolHarness is StvPoolHarness {
             strategyKind: StrategyKind.NONE,
             ggvTeller: address(0),
             ggvBoringQueue: address(0),
+            timelockMinDelaySeconds: 0,
+            timelockExecutor: NODE_OPERATOR,
             name: "Test stETH Pool",
             symbol: "tSTETH"
         });

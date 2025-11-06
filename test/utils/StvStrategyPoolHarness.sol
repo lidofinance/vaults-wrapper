@@ -33,6 +33,8 @@ contract StvStrategyPoolHarness is StvStETHPoolHarness {
             strategyKind: StrategyKind.GGV,
             ggvTeller: _teller,
             ggvBoringQueue: _boringQueue,
+            timelockMinDelaySeconds: 0,
+            timelockExecutor: NODE_OPERATOR,
             name: "Integration Strategy Pool",
             symbol: "iSTRAT"
         });

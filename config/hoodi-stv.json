@@ -1,0 +1,25 @@
+{
+  "vaultConfig": {
+    "nodeOperator": "0xcc95b0Dbe1519AfaC58d954444839A80700380a2",
+    "nodeOperatorManager": "0xcc95b0Dbe1519AfaC58d954444839A80700380a2",
+    "nodeOperatorFeeBP": 10,
+    "confirmExpiry": 3600
+  },
+  "commonPoolConfig": {
+    "maxFinalizationTime": 2592000,
+    "minWithdrawalDelayTime": 180,
+    "name": "Staked ETH Pool",
+    "symbol": "STV"
+  },
+  "auxiliaryPoolConfig": {
+    "allowlistEnabled": false,
+    "mintingEnabled": false,
+    "reserveRatioGapBP": 0
+  },
+  "timelockConfig": {
+    "minDelaySeconds": 60,
+    "executor": "0xcc95b0Dbe1519AfaC58d954444839A80700380a2"
+  },
+  "strategyFactory": "0x0000000000000000000000000000000000000000",
+  "connectDepositWei": 1000000000000000000
+}

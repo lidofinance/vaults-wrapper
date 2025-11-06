@@ -66,6 +66,8 @@ contract StvPoolHarness is Test {
         StrategyKind strategyKind;
         address ggvTeller;
         address ggvBoringQueue;
+        uint256 timelockMinDelaySeconds;
+        address timelockExecutor;
         string name;
         string symbol;
     }
@@ -107,33 +109,32 @@ contract StvPoolHarness is Test {
             console.log("Using predeployed factory from FACTORY_ADDRESS", factoryFromEnv);
         } else {
             FactoryHelper helper = new FactoryHelper();
-
-            Factory.StrategyParameters memory strategyParams = Factory.StrategyParameters({
-                ggvTeller: config.ggvTeller,
-                ggvBoringOnChainQueue: config.ggvBoringQueue
-            });
-
-            Factory.TimelockConfig memory timelockConfig = Factory.TimelockConfig({
-                minDelaySeconds: 0,
-                executor: owner
-            });
-
-            factory = helper.deployMainFactory(address(core.locator()), strategyParams, timelockConfig);
+            factory = helper.deployMainFactory(address(core.locator()), config.ggvTeller, config.ggvBoringQueue);
         }
 
-        Factory.PoolFullConfig memory poolConfig = Factory.PoolFullConfig({
-            allowlistEnabled: config.allowlistEnabled,
-            mintingEnabled: config.mintingEnabled,
-            owner: owner,
+        Factory.VaultConfig memory vaultConfig = Factory.VaultConfig({
             nodeOperator: config.nodeOperator,
             nodeOperatorManager: config.nodeOperatorManager,
             nodeOperatorFeeBP: config.nodeOperatorFeeBP,
-            confirmExpiry: config.confirmExpiry,
+            confirmExpiry: config.confirmExpiry
+        });
+
+        Factory.CommonPoolConfig memory commonPoolConfig = Factory.CommonPoolConfig({
             maxFinalizationTime: config.maxFinalizationTime,
             minWithdrawalDelayTime: config.minWithdrawalDelayTime,
-            reserveRatioGapBP: config.reserveRatioGapBP,
             name: config.name,
             symbol: config.symbol
+        });
+
+        Factory.AuxiliaryPoolConfig memory auxiliaryConfig = Factory.AuxiliaryPoolConfig({
+            allowlistEnabled: config.allowlistEnabled,
+            mintingEnabled: config.mintingEnabled,
+            reserveRatioGapBP: config.reserveRatioGapBP
+        });
+
+        Factory.TimelockConfig memory timelockConfig = Factory.TimelockConfig({
+            minDelaySeconds: config.timelockMinDelaySeconds,
+            executor: config.timelockExecutor == address(0) ? owner : config.timelockExecutor
         });
 
         address strategyFactoryAddress = address(0);
@@ -143,12 +144,15 @@ contract StvPoolHarness is Test {
             strategyFactoryAddress = address(factory.GGV_STRATEGY_FACTORY());
         }
 
-        Factory.StrategyConfig memory strategyConfig = Factory.StrategyConfig({factory: strategyFactoryAddress});
-
         vm.startPrank(config.nodeOperator);
-        Factory.StvPoolIntermediate memory intermediate =
-            factory.createPoolStart{value: CONNECT_DEPOSIT}(poolConfig, strategyConfig);
-        Factory.StvPoolDeployment memory deployment = factory.createPoolFinish(intermediate, strategyConfig);
+        Factory.StvPoolIntermediate memory intermediate = factory.createPoolStart{value: CONNECT_DEPOSIT}(
+            vaultConfig,
+            commonPoolConfig,
+            auxiliaryConfig,
+            timelockConfig,
+            strategyFactoryAddress
+        );
+        Factory.StvPoolDeployment memory deployment = factory.createPoolFinish(intermediate);
         vm.stopPrank();
 
         IDashboard dashboard = IDashboard(payable(deployment.dashboard));
@@ -190,6 +194,8 @@ contract StvPoolHarness is Test {
             strategyKind: StrategyKind.NONE,
             ggvTeller: address(0),
             ggvBoringQueue: address(0),
+            timelockMinDelaySeconds: 0,
+            timelockExecutor: NODE_OPERATOR,
             name: "Test STV Pool",
             symbol: "tSTV"
         });

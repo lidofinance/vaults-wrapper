@@ -21,7 +21,7 @@ import {WithdrawalQueue} from "./WithdrawalQueue.sol";
 import {IDashboard} from "./interfaces/IDashboard.sol";
 import {IVaultFactory} from "./interfaces/IVaultFactory.sol";
 
-error InvalidConfiguration();
+error InvalidConfiguration(string reason);
 error InsufficientConnectDeposit(uint256 required, uint256 provided);
 
 contract Factory {
@@ -35,21 +35,71 @@ contract Factory {
         address timelockFactory;
     }
 
+    struct VaultConfig {
+        address nodeOperator;
+        address nodeOperatorManager;
+        uint256 nodeOperatorFeeBP;
+        uint256 confirmExpiry;
+    }
+
     struct TimelockConfig {
         uint256 minDelaySeconds;
         address executor;
+        // proposer is set to the node operator
     }
 
-    struct StrategyParameters {
-        address ggvTeller;
-        address ggvBoringOnChainQueue;
+    struct CommonPoolConfig {
+        uint256 maxFinalizationTime;
+        uint256 minWithdrawalDelayTime;
+        string name;
+        string symbol;
     }
 
+    struct StvStETHPoolConfig {
+        bool allowlistEnabled;
+        uint256 reserveRatioGapBP;
+    }
+
+    struct AuxiliaryPoolConfig {
+        bool allowlistEnabled;
+        bool mintingEnabled;
+        uint256 reserveRatioGapBP;
+    }
+
+    struct StvPoolIntermediate {
+        bytes32 poolType;
+        address vault;
+        address dashboard;
+        address pool;
+        address withdrawalQueue;
+        address distributor;
+        address timelock;
+        address strategyFactory;
+    }
+
+    struct StvPoolDeployment {
+        bytes32 poolType;
+        address vault;
+        address dashboard;
+        address pool;
+        address withdrawalQueue;
+        address distributor;
+        address timelock;
+        address strategy;
+    }
     enum PoolType {
         STV,
         STV_STETH,
         STRATEGY
     }
+
+    event PoolIntermediateCreated(
+        StvPoolIntermediate intermediate
+    );
+
+    event VaultPoolCreated(
+        address vault, address pool, address withdrawalQueue, address indexed strategyFactory, address strategy
+    );
 
     IVaultFactory public immutable VAULT_FACTORY;
     IVaultHub public immutable VAULT_HUB;
@@ -70,104 +120,15 @@ contract Factory {
     TimelockFactory public immutable TIMELOCK_FACTORY;
     address public immutable DUMMY_IMPLEMENTATION;
 
-    address public immutable GGV_TELLER;
-    address public immutable GGV_BORING_ON_CHAIN_QUEUE;
-
     bytes32 public immutable DEFAULT_ADMIN_ROLE = 0x00;
 
-    uint256 public immutable TIMELOCK_MIN_DELAY;
-    address public immutable TIMELOCK_EXECUTOR;
     uint256 public constant TOTAL_BASIS_POINTS = 100_00;
 
-    event VaultPoolCreated(
-        address indexed vault, address indexed pool, address indexed withdrawalQueue, address strategy
-    );
-
-    struct StvPoolConfig {
-        bool allowlistEnabled;
-        address owner;
-        address nodeOperator;
-        address nodeOperatorManager;
-        uint256 nodeOperatorFeeBP;
-        uint256 confirmExpiry;
-        uint256 maxFinalizationTime;
-        uint256 minWithdrawalDelayTime;
-        string name;
-        string symbol;
-    }
-
-    struct StvStETHPoolConfig {
-        bool allowlistEnabled;
-        address owner;
-        address nodeOperator;
-        address nodeOperatorManager;
-        uint256 nodeOperatorFeeBP;
-        uint256 confirmExpiry;
-        uint256 maxFinalizationTime;
-        uint256 minWithdrawalDelayTime;
-        uint256 reserveRatioGapBP;
-        string name;
-        string symbol;
-    }
-
-    struct GGVPoolConfig {
-        address owner;
-        address nodeOperator;
-        address nodeOperatorManager;
-        uint256 nodeOperatorFeeBP;
-        uint256 confirmExpiry;
-        uint256 maxFinalizationTime;
-        uint256 minWithdrawalDelayTime;
-        uint256 reserveRatioGapBP;
-        string name;
-        string symbol;
-    }
-
-    struct PoolFullConfig {
-        bool allowlistEnabled;
-        bool mintingEnabled;
-        address owner; // TODO: owner of what?
-        address nodeOperator;
-        address nodeOperatorManager;
-        uint256 nodeOperatorFeeBP;
-        uint256 confirmExpiry;
-        uint256 maxFinalizationTime;
-        uint256 minWithdrawalDelayTime;
-        uint256 reserveRatioGapBP;
-        string name;
-        string symbol;
-    }
-
-    struct StrategyConfig {
-        address factory;
-    }
-
-    struct StvPoolIntermediate {
-        bytes32 poolType;
-        address vault;
-        address dashboard;
-        address pool;
-        address withdrawalQueue;
-        address distributor;
-        address timelock;
-    }
-
-    struct StvPoolDeployment {
-        bytes32 poolType;
-        address vault;
-        address dashboard;
-        address pool;
-        address withdrawalQueue;
-        address distributor;
-        address timelock;
-        address strategy;
-    }
+    mapping(bytes32 => uint256) public intermediateState;
 
     constructor(
         address locatorAddress,
-        SubFactories memory subFactories,
-        TimelockConfig memory timelockConfig,
-        StrategyParameters memory strategyParameters
+        SubFactories memory subFactories
     ) {
         ILidoLocator locator = ILidoLocator(locatorAddress);
         VAULT_FACTORY = IVaultFactory(locator.vaultFactory());
@@ -184,123 +145,124 @@ contract Factory {
         GGV_STRATEGY_FACTORY = GGVStrategyFactory(subFactories.ggvStrategyFactory);
         TIMELOCK_FACTORY = TimelockFactory(subFactories.timelockFactory);
         DUMMY_IMPLEMENTATION = address(new DummyImplementation());
-
-        TIMELOCK_MIN_DELAY = timelockConfig.minDelaySeconds;
-        TIMELOCK_EXECUTOR = timelockConfig.executor;
-
-        if (strategyParameters.ggvTeller == address(0) || strategyParameters.ggvBoringOnChainQueue == address(0)) {
-            revert InvalidConfiguration();
-        }
-
-        GGV_TELLER = strategyParameters.ggvTeller;
-        GGV_BORING_ON_CHAIN_QUEUE = strategyParameters.ggvBoringOnChainQueue;
     }
 
-    function createPoolStvStart(StvPoolConfig memory _config)
+    function createPoolStvStart(
+        VaultConfig memory vaultConfig,
+        TimelockConfig memory timelockConfig,
+        CommonPoolConfig memory commonPoolConfig,
+        bool allowListEnabled
+    )
         external
         payable
         returns (StvPoolIntermediate memory intermediate)
     {
         intermediate = createPoolStart(
-            PoolFullConfig({
-                allowlistEnabled: _config.allowlistEnabled,
+            vaultConfig,
+            commonPoolConfig,
+            AuxiliaryPoolConfig({
+                allowlistEnabled: allowListEnabled,
                 mintingEnabled: false,
-                owner: _config.owner,
-                nodeOperator: _config.nodeOperator,
-                nodeOperatorManager: _config.nodeOperatorManager,
-                nodeOperatorFeeBP: _config.nodeOperatorFeeBP,
-                confirmExpiry: _config.confirmExpiry,
-                maxFinalizationTime: _config.maxFinalizationTime,
-                minWithdrawalDelayTime: _config.minWithdrawalDelayTime,
-                reserveRatioGapBP: 0,
-                name: _config.name,
-                symbol: _config.symbol
+                reserveRatioGapBP: 0
             }),
-            StrategyConfig({factory: address(0)})
+            timelockConfig,
+            address(0)
         );
     }
 
-    function createPoolStvStETHStart(StvStETHPoolConfig memory _config)
+    function createPoolStvStETHStart(
+        VaultConfig memory vaultConfig,
+        TimelockConfig memory timelockConfig,
+        CommonPoolConfig memory commonPoolConfig,
+        bool allowListEnabled,
+        uint256 reserveRatioGapBP
+    )
         external
         payable
         returns (StvPoolIntermediate memory intermediate)
     {
         intermediate = createPoolStart(
-            PoolFullConfig({
-                allowlistEnabled: _config.allowlistEnabled,
+            vaultConfig,
+            commonPoolConfig,
+            AuxiliaryPoolConfig({
+                allowlistEnabled: allowListEnabled,
                 mintingEnabled: true,
-                owner: _config.owner,
-                nodeOperator: _config.nodeOperator,
-                nodeOperatorManager: _config.nodeOperatorManager,
-                nodeOperatorFeeBP: _config.nodeOperatorFeeBP,
-                confirmExpiry: _config.confirmExpiry,
-                maxFinalizationTime: _config.maxFinalizationTime,
-                minWithdrawalDelayTime: _config.minWithdrawalDelayTime,
-                reserveRatioGapBP: _config.reserveRatioGapBP,
-                name: _config.name,
-                symbol: _config.symbol
+                reserveRatioGapBP: reserveRatioGapBP
             }),
-            StrategyConfig({factory: address(0)})
+            timelockConfig,
+            address(0)
         );
     }
 
-    function createPoolGGVStart(GGVPoolConfig memory _config)
+    function createPoolGGVStart(
+        VaultConfig memory vaultConfig,
+        TimelockConfig memory timelockConfig,
+        CommonPoolConfig memory commonPoolConfig,
+        uint256 reserveRatioGapBP
+    )
         external
         payable
         returns (StvPoolIntermediate memory intermediate)
     {
         intermediate = createPoolStart(
-            PoolFullConfig({
+            vaultConfig,
+            commonPoolConfig,
+            AuxiliaryPoolConfig({
                 allowlistEnabled: true,
                 mintingEnabled: true,
-                owner: _config.owner,
-                nodeOperator: _config.nodeOperator,
-                nodeOperatorManager: _config.nodeOperatorManager,
-                nodeOperatorFeeBP: _config.nodeOperatorFeeBP,
-                confirmExpiry: _config.confirmExpiry,
-                maxFinalizationTime: _config.maxFinalizationTime,
-                minWithdrawalDelayTime: _config.minWithdrawalDelayTime,
-                reserveRatioGapBP: _config.reserveRatioGapBP,
-                name: _config.name,
-                symbol: _config.symbol
+                reserveRatioGapBP: reserveRatioGapBP
             }),
-            StrategyConfig({factory: address(GGV_STRATEGY_FACTORY)})
+            timelockConfig,
+            address(GGV_STRATEGY_FACTORY)
         );
     }
 
-    function createPoolStart(PoolFullConfig memory config, StrategyConfig memory strategyConfig)
+    function createPoolStart(
+        VaultConfig memory vaultConfig,
+        CommonPoolConfig memory commonPoolConfig,
+        AuxiliaryPoolConfig memory auxiliaryConfig,
+        TimelockConfig memory timelockConfig,
+        address strategyFactory
+    )
         public
         payable
         returns (StvPoolIntermediate memory intermediate)
     {
-        if (msg.value != VAULT_HUB.CONNECT_DEPOSIT()) {
+        if (msg.value < VAULT_HUB.CONNECT_DEPOSIT()) {
             revert InsufficientConnectDeposit(VAULT_HUB.CONNECT_DEPOSIT(), msg.value);
         }
 
         bytes32 poolType = STV_POOL_TYPE;
-        if (strategyConfig.factory != address(0)) {
+        if (strategyFactory != address(0)) {
             poolType = STRATEGY_POOL_TYPE;
-            if (!config.allowlistEnabled) {
-                revert InvalidConfiguration();
+            if (!auxiliaryConfig.allowlistEnabled) {
+                revert InvalidConfiguration("allowlistEnabled must be true if strategy factory is set");
             }
-        } else if (config.mintingEnabled) {
+        } else if (auxiliaryConfig.mintingEnabled) {
             poolType = STV_STETH_POOL_TYPE;
         }
 
-        // TODO: check if reserveRatioGapBP is valid
-
-        if (bytes(config.name).length == 0 || bytes(config.symbol).length == 0) {
-            revert InvalidConfiguration();
+        // TODO: maybe check taking into account Vault's reserve ratio
+        if (auxiliaryConfig.reserveRatioGapBP >= TOTAL_BASIS_POINTS) {
+            revert InvalidConfiguration("reserveRatioGapBP must be less than TOTAL_BASIS_POINTS");
         }
 
-        address timelock = TIMELOCK_FACTORY.deploy(TIMELOCK_MIN_DELAY, config.nodeOperator, TIMELOCK_EXECUTOR);
+        if (bytes(commonPoolConfig.name).length == 0 || bytes(commonPoolConfig.symbol).length == 0) {
+            revert InvalidConfiguration("name and symbol must be set");
+        }
+
+        address timelock = TIMELOCK_FACTORY.deploy(
+            timelockConfig.minDelaySeconds,
+            vaultConfig.nodeOperator,
+            timelockConfig.executor
+        );
 
         (address vaultAddress, address dashboardAddress) = VAULT_FACTORY.createVaultWithDashboard{value: msg.value}(
             address(this), // TODO
-            config.nodeOperator,
-            config.nodeOperatorManager,
-            config.nodeOperatorFeeBP,
-            config.confirmExpiry,
+            vaultConfig.nodeOperator,
+            vaultConfig.nodeOperatorManager,
+            vaultConfig.nodeOperatorFeeBP,
+            vaultConfig.confirmExpiry,
             new IVaultFactory.RoleAssignment[](0)
         );
 
@@ -313,44 +275,54 @@ contract Factory {
             STETH,
             address(IDashboard(payable(dashboardAddress)).stakingVault()),
             LAZY_ORACLE,
-            config.maxFinalizationTime,
-            config.minWithdrawalDelayTime,
-            config.mintingEnabled
+            commonPoolConfig.maxFinalizationTime,
+            commonPoolConfig.minWithdrawalDelayTime,
+            auxiliaryConfig.mintingEnabled
         );
 
         address withdrawalQueueProxy = address(
             new OssifiableProxy(
                 wqImpl,
                 timelock,
-                abi.encodeCall(WithdrawalQueue.initialize, (config.owner, config.nodeOperator)) // (admin, finalizerRoleHolder))
+                abi.encodeCall(
+                    WithdrawalQueue.initialize,
+                    (vaultConfig.nodeOperatorManager, vaultConfig.nodeOperator) // (admin, finalizerRoleHolder)
+                )
             )
         );
 
-        address distributor = DISTRIBUTOR_FACTORY.deploy(config.nodeOperator, config.nodeOperatorManager);
+        address distributor = DISTRIBUTOR_FACTORY.deploy(
+            vaultConfig.nodeOperator,
+            vaultConfig.nodeOperatorManager
+        );
 
         address poolImpl = address(0);
         if (poolType == STV_POOL_TYPE) {
-            poolImpl =
-                STV_POOL_FACTORY.deploy(dashboardAddress, config.allowlistEnabled, withdrawalQueueProxy, distributor);
+            poolImpl = STV_POOL_FACTORY.deploy(
+                dashboardAddress,
+                auxiliaryConfig.allowlistEnabled,
+                withdrawalQueueProxy,
+                distributor
+            );
         } else if (poolType == STV_STETH_POOL_TYPE || poolType == STRATEGY_POOL_TYPE) {
             poolImpl = STV_STETH_POOL_FACTORY.deploy(
                 dashboardAddress,
-                config.allowlistEnabled,
-                config.reserveRatioGapBP,
+                auxiliaryConfig.allowlistEnabled,
+                auxiliaryConfig.reserveRatioGapBP,
                 withdrawalQueueProxy,
                 distributor,
                 poolType
             );
         }
 
-        OssifiableProxy(payable(poolProxy))
-            .proxy__upgradeToAndCall(
-                poolImpl, abi.encodeCall(StvPool.initialize, (address(this), config.name, config.symbol))
-            );
+        OssifiableProxy(payable(poolProxy)).proxy__upgradeToAndCall(
+            poolImpl,
+            abi.encodeCall(
+                StvPool.initialize,
+                (address(this), commonPoolConfig.name, commonPoolConfig.symbol)
+            )
+        );
         OssifiableProxy(payable(poolProxy)).proxy__changeAdmin(timelock);
-
-        // TODO
-        // emit VaultPoolCreated(vault, address(pool.), withdrawalQueueProxy, strategy);
 
         intermediate = StvPoolIntermediate({
             poolType: poolType,
@@ -359,14 +331,26 @@ contract Factory {
             pool: poolProxy,
             withdrawalQueue: withdrawalQueueProxy,
             distributor: distributor,
-            timelock: timelock
+            timelock: timelock,
+            strategyFactory: strategyFactory
         });
+
+        bytes32 deploymentHash = keccak256(abi.encodePacked(msg.sender, abi.encode(intermediate)));
+        intermediateState[deploymentHash] = 1;
+
+        emit PoolIntermediateCreated(intermediate);
     }
 
-    function createPoolFinish(StvPoolIntermediate memory intermediate, StrategyConfig memory strategyConfig)
+    function createPoolFinish(StvPoolIntermediate memory intermediate)
         external
         returns (StvPoolDeployment memory deployment)
     {
+        bytes32 deploymentHash = keccak256(abi.encodePacked(msg.sender, abi.encode(intermediate)));
+        if (intermediateState[deploymentHash] != 1) {
+            revert InvalidConfiguration("intermediate state not found");
+        }
+        delete intermediateState[deploymentHash];
+
         IDashboard dashboard = IDashboard(payable(intermediate.dashboard));
         StvPool pool = StvPool(payable(intermediate.pool));
         WithdrawalQueue withdrawalQueue = WithdrawalQueue(payable(intermediate.withdrawalQueue));
@@ -384,19 +368,9 @@ contract Factory {
         }
 
         address strategy = address(0);
-
-        if (strategyConfig.factory == address(GGV_STRATEGY_FACTORY)) {
-            strategy = IStrategyFactory(strategyConfig.factory)
-                .deploy(address(pool), STETH, WSTETH, GGV_TELLER, GGV_BORING_ON_CHAIN_QUEUE);
-        }
-
-        if (strategy != address(0)) {
-            pool.grantRole(pool.ALLOW_LIST_MANAGER_ROLE(), tempAdmin);
+        if (intermediate.strategyFactory != address(0)) {
+            strategy = IStrategyFactory(intermediate.strategyFactory).deploy(address(pool), STETH, WSTETH);
             pool.addToAllowList(strategy);
-            pool.revokeRole(pool.ALLOW_LIST_MANAGER_ROLE(), tempAdmin);
-
-            // NB: can be shortened to:
-            // pool.grantRole(pool.DEPOSIT_ROLE(), strategy); // effectively means
         }
 
         pool.grantRole(DEFAULT_ADMIN_ROLE, timelock);
@@ -415,6 +389,8 @@ contract Factory {
             timelock: intermediate.timelock,
             strategy: strategy
         });
+
+        emit VaultPoolCreated(deployment.vault, deployment.pool, deployment.withdrawalQueue, intermediate.strategyFactory, deployment.strategy);
 
         // TODO: LOSS_SOCIALIZER_ROLE
     }
