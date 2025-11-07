@@ -67,12 +67,7 @@ contract Factory {
     }
 
     struct StvPoolIntermediate {
-        bytes32 poolType;
-        address vault;
-        address dashboard;
         address pool;
-        address withdrawalQueue;
-        address distributor;
         address timelock;
         address strategyFactory;
     }
@@ -257,8 +252,10 @@ contract Factory {
             timelockConfig.executor
         );
 
-        (address vaultAddress, address dashboardAddress) = VAULT_FACTORY.createVaultWithDashboard{value: msg.value}(
-            address(this), // TODO
+        address tempAdmin = address(this);
+
+        (, address dashboardAddress) = VAULT_FACTORY.createVaultWithDashboard{value: msg.value}(
+            tempAdmin, // TODO
             vaultConfig.nodeOperator,
             vaultConfig.nodeOperatorManager,
             vaultConfig.nodeOperatorFeeBP,
@@ -266,7 +263,7 @@ contract Factory {
             new IVaultFactory.RoleAssignment[](0)
         );
 
-        address poolProxy = payable(address(new OssifiableProxy(DUMMY_IMPLEMENTATION, address(this), bytes(""))));
+        address poolProxy = payable(address(new OssifiableProxy(DUMMY_IMPLEMENTATION, tempAdmin, bytes(""))));
 
         address wqImpl = WITHDRAWAL_QUEUE_FACTORY.deploy(
             poolProxy,
@@ -319,18 +316,13 @@ contract Factory {
             poolImpl,
             abi.encodeCall(
                 StvPool.initialize,
-                (address(this), commonPoolConfig.name, commonPoolConfig.symbol)
+                (tempAdmin, commonPoolConfig.name, commonPoolConfig.symbol)
             )
         );
         OssifiableProxy(payable(poolProxy)).proxy__changeAdmin(timelock);
 
         intermediate = StvPoolIntermediate({
-            poolType: poolType,
-            vault: vaultAddress,
-            dashboard: dashboardAddress,
             pool: poolProxy,
-            withdrawalQueue: withdrawalQueueProxy,
-            distributor: distributor,
             timelock: timelock,
             strategyFactory: strategyFactory
         });
@@ -341,7 +333,7 @@ contract Factory {
         emit PoolIntermediateCreated(intermediate);
     }
 
-    function createPoolFinish(StvPoolIntermediate memory intermediate)
+    function createPoolFinish(StvPoolIntermediate calldata intermediate)
         external
         returns (StvPoolDeployment memory deployment)
     {
@@ -349,14 +341,14 @@ contract Factory {
         if (intermediateState[deploymentHash] != 1) {
             revert InvalidConfiguration("intermediate state not found");
         }
-        delete intermediateState[deploymentHash];
+        intermediateState[deploymentHash] = 2; // TODO: why setting 0 here fails?
 
-        IDashboard dashboard = IDashboard(payable(intermediate.dashboard));
         StvPool pool = StvPool(payable(intermediate.pool));
-        WithdrawalQueue withdrawalQueue = WithdrawalQueue(payable(intermediate.withdrawalQueue));
+        IDashboard dashboard = pool.DASHBOARD();
+        WithdrawalQueue withdrawalQueue = pool.WITHDRAWAL_QUEUE();
         address timelock = intermediate.timelock;
         address tempAdmin = address(this);
-        bytes32 poolType = intermediate.poolType;
+        bytes32 poolType = pool.poolType();
 
         dashboard.grantRole(dashboard.FUND_ROLE(), address(pool));
         dashboard.grantRole(dashboard.REBALANCE_ROLE(), address(pool));
@@ -381,11 +373,11 @@ contract Factory {
 
         deployment = StvPoolDeployment({
             poolType: poolType,
-            vault: intermediate.vault,
-            dashboard: intermediate.dashboard,
+            vault: address(pool.STAKING_VAULT()),
+            dashboard: address(dashboard),
             pool: intermediate.pool,
-            withdrawalQueue: intermediate.withdrawalQueue,
-            distributor: intermediate.distributor,
+            withdrawalQueue: address(withdrawalQueue),
+            distributor: address(pool.DISTRIBUTOR()),
             timelock: intermediate.timelock,
             strategy: strategy
         });

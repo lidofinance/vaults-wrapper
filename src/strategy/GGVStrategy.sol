@@ -54,8 +54,8 @@ contract GGVStrategy is Strategy {
     /// @param _params The parameters for the supply
     function supply(address _referral, bytes calldata _params) external payable {
         address callForwarder = _getOrCreateCallForwarder(msg.sender);
-        uint256 stethShares = POOL.calcStethSharesToMintForAssets(msg.value);
-        uint256 stv = POOL.depositETHAndMintStethShares{value: msg.value}(callForwarder, _referral, stethShares);
+        uint256 stethShares = POOL_.calcStethSharesToMintForAssets(msg.value);
+        uint256 stv = POOL_.depositETHAndMintStethShares{value: msg.value}(callForwarder, _referral, stethShares);
 
         uint256 stethAmount = STETH.getPooledEthByShares(stethShares);
 
@@ -228,7 +228,7 @@ contract GGVStrategy is Strategy {
     /// @return stethShares The amount of stETH shares to rebalance
     function proxyStethSharesToRebalance(address _user) external view returns (uint256 stethShares) {
         address callForwarder = getStrategyCallForwarderAddress(_user);
-        uint256 mintedStethShares = POOL.mintedStethSharesOf(callForwarder);
+        uint256 mintedStethShares = POOL_.mintedStethSharesOf(callForwarder);
 
         uint256 sharesAfterUnwrapping = proxyStethSharesOf(_user);
 
@@ -243,7 +243,7 @@ contract GGVStrategy is Strategy {
     /// @return stv The amount of stv that can be withdrawn
     function proxyUnlockedStvOf(address _user, uint256 _stethSharesToBurn) external view returns (uint256 stv) {
         address callForwarder = getStrategyCallForwarderAddress(_user);
-        stv = POOL.unlockedStvOf(callForwarder, _stethSharesToBurn);
+        stv = POOL_.unlockedStvOf(callForwarder, _stethSharesToBurn);
     }
 
     /// @notice Requests a withdrawal from the Withdrawal Queue
@@ -264,12 +264,12 @@ contract GGVStrategy is Strategy {
             .call(address(WSTETH), abi.encodeWithSelector(WSTETH.unwrap.selector, WSTETH.balanceOf(callForwarder)));
 
         IStrategyCallForwarder(callForwarder)
-            .call(address(POOL), abi.encodeWithSelector(StvStETHPool.burnStethShares.selector, _stethSharesToBurn));
+            .call(address(POOL_), abi.encodeWithSelector(StvStETHPool.burnStethShares.selector, _stethSharesToBurn));
 
         // request withdrawal from pool
         bytes memory withdrawalData = IStrategyCallForwarder(callForwarder)
             .call(
-                address(POOL.WITHDRAWAL_QUEUE()),
+                address(POOL_.WITHDRAWAL_QUEUE()),
                 abi.encodeWithSelector(
                     WithdrawalQueue.requestWithdrawal.selector, _receiver, _stvToWithdraw, _stethSharesToRebalance
                 )

@@ -118,7 +118,6 @@ contract FactoryIntegrationTest is StvPoolHarness {
         (Factory.StvPoolIntermediate memory intermediate, Factory.StvPoolDeployment memory deployment) =
             _deployThroughFactory(vaultConfig, commonPoolConfig, auxiliaryConfig, timelockConfig, strategyFactory);
 
-        assertEq(intermediate.poolType, factory.STV_POOL_TYPE(), "pool type should be STV");
         assertEq(deployment.strategy, address(0), "strategy should not be deployed");
 
         IDashboard dashboard = IDashboard(payable(deployment.dashboard));
@@ -147,7 +146,6 @@ contract FactoryIntegrationTest is StvPoolHarness {
         (Factory.StvPoolIntermediate memory intermediate, Factory.StvPoolDeployment memory deployment) =
             _deployThroughFactory(vaultConfig, commonPoolConfig, auxiliaryConfig, timelockConfig, strategyFactory);
 
-        assertEq(intermediate.poolType, factory.STV_STETH_POOL_TYPE(), "pool type should be STV_STETH");
 
         IDashboard dashboard = IDashboard(payable(deployment.dashboard));
 
@@ -167,7 +165,6 @@ contract FactoryIntegrationTest is StvPoolHarness {
         (Factory.StvPoolIntermediate memory intermediate, Factory.StvPoolDeployment memory deployment) =
             _deployThroughFactory(vaultConfig, commonPoolConfig, auxiliaryConfig, timelockConfig, strategyFactory);
 
-        assertEq(intermediate.poolType, factory.STRATEGY_POOL_TYPE(), "pool type should be STRATEGY");
         assertTrue(deployment.strategy != address(0), "strategy should be deployed");
 
         StvPool pool = StvPool(payable(deployment.pool));
@@ -270,7 +267,7 @@ contract FactoryIntegrationTest is StvPoolHarness {
 
         Vm.Log[] memory entries = vm.getRecordedLogs();
         bytes32 expectedTopic = keccak256(
-            "PoolIntermediateCreated((bytes32,address,address,address,address,address,address,address))"
+            "PoolIntermediateCreated((address,address,address))"
         );
 
         bool found;
@@ -280,12 +277,7 @@ contract FactoryIntegrationTest is StvPoolHarness {
 
             Factory.StvPoolIntermediate memory emitted =
                 abi.decode(entries[i].data, (Factory.StvPoolIntermediate));
-            assertEq(emitted.poolType, intermediate.poolType, "pool type should match");
-            assertEq(emitted.vault, intermediate.vault, "vault address should match");
-            assertEq(emitted.dashboard, intermediate.dashboard, "dashboard address should match");
             assertEq(emitted.pool, intermediate.pool, "pool address should match");
-            assertEq(emitted.withdrawalQueue, intermediate.withdrawalQueue, "withdrawal queue should match");
-            assertEq(emitted.distributor, intermediate.distributor, "distributor should match");
             assertEq(emitted.timelock, intermediate.timelock, "timelock should match");
             assertEq(emitted.strategyFactory, intermediate.strategyFactory, "strategy factory should match");
             found = true;
