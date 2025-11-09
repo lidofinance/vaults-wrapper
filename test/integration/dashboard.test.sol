@@ -3,14 +3,16 @@ pragma solidity >=0.8.25;
 
 import {ERC20Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
 import {IOperatorGrid} from "src/interfaces/IOperatorGrid.sol";
+import {IVaultHub} from "src/interfaces/IVaultHub.sol";
 import {OssifiableProxy} from "src/proxy/OssifiableProxy.sol";
 import {StvPoolHarness} from "test/utils/StvPoolHarness.sol";
+import {TimelockHarness} from "test/utils/TimelockHarness.sol";
 
 /**
  * @title DashboardTest
  * @notice Integration tests for Dashboard functionality
  */
-contract DashboardTest is StvPoolHarness {
+contract DashboardTest is StvPoolHarness, TimelockHarness {
     WrapperContext ctx;
 
     // Deployment parameters
@@ -19,40 +21,13 @@ contract DashboardTest is StvPoolHarness {
     address feeRecipient = NODE_OPERATOR;
 
     // Role holders
-    address timelockProposer = NODE_OPERATOR;
-    address timelockExecutor = NODE_OPERATOR;
     address nodeOperatorManager = NODE_OPERATOR;
-
-    // Timelock
-    bytes32 salt = keccak256("timelock.salt.for.test");
 
     function setUp() public {
         _initializeCore();
+
         ctx = _deployStvPool({enableAllowlist: false, nodeOperatorFeeBP: nodeOperatorFeeBP});
-    }
-
-    // Helpers for timelock operations
-
-    function _timelockSchedule(address target, bytes memory data) internal {
-        uint256 delay = ctx.timelock.getMinDelay();
-
-        vm.prank(timelockProposer);
-        ctx.timelock.schedule({target: target, value: 0, data: data, predecessor: bytes32(0), salt: salt, delay: delay});
-    }
-
-    function _timelockWarp() internal {
-        vm.warp(block.timestamp + ctx.timelock.getMinDelay());
-    }
-
-    function _timelockExecute(address target, bytes memory data) internal {
-        vm.prank(timelockExecutor);
-        ctx.timelock.execute({target: target, value: 0, payload: data, predecessor: bytes32(0), salt: salt});
-    }
-
-    function _timelockScheduleAndExecute(address target, bytes memory data) internal {
-        _timelockSchedule(target, data);
-        _timelockWarp();
-        _timelockExecute(target, data);
+        _setupTimelock(address(ctx.timelock), NODE_OPERATOR, NODE_OPERATOR);
     }
 
     // Timelock tests
@@ -311,6 +286,43 @@ contract DashboardTest is StvPoolHarness {
 
         // Update share limit
         ctx.dashboard.updateShareLimit(newShareLimit);
+    }
+
+    // Voluntary disconnect from VaultHub
+
+    function test_Dashboard_CanVoluntaryDisconnect() public {
+        IVaultHub vaultHub = core.vaultHub();
+
+        // Verify initial connection state
+        assertTrue(vaultHub.isVaultConnected(address(ctx.vault)));
+        assertFalse(vaultHub.isPendingDisconnect(address(ctx.vault)));
+
+        // Schedule and execute disconnect
+        _timelockSchedule(address(ctx.dashboard), abi.encodeWithSignature("voluntaryDisconnect()"));
+        _timelockWarp();
+        reportVaultValueChangeNoFees(ctx, 0); // voluntaryDisconnect() requires fresh oracle report
+        _timelockExecute(address(ctx.dashboard), abi.encodeWithSignature("voluntaryDisconnect()"));
+
+        // Verify disconnect is pending
+        assertTrue(vaultHub.isVaultConnected(address(ctx.vault)));
+        assertTrue(vaultHub.isPendingDisconnect(address(ctx.vault)));
+
+        // Apply oracle report to finalize disconnect
+        IVaultHub.VaultRecord memory vaultRecord = vaultHub.vaultRecord(address(ctx.vault));
+
+        vm.prank(address(core.lazyOracle()));
+        vaultHub.applyVaultReport({
+            _vault: address(ctx.vault),
+            _reportTimestamp: block.timestamp,
+            _reportTotalValue: vaultRecord.report.totalValue,
+            _reportInOutDelta: vaultRecord.report.inOutDelta,
+            _reportCumulativeLidoFees: vaultRecord.cumulativeLidoFees,
+            _reportLiabilityShares: vaultRecord.liabilityShares,
+            _reportMaxLiabilityShares: vaultRecord.maxLiabilityShares,
+            _reportSlashingReserve: 0
+        });
+
+        assertFalse(vaultHub.isVaultConnected(address(ctx.vault)));
     }
 }
 
