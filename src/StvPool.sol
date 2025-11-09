@@ -68,7 +68,7 @@ contract StvPool is Initializable, ERC20Upgradeable, AllowList {
 
     event VaultDisconnected(address indexed initiator);
     event ConnectDepositClaimed(address indexed recipient, uint256 amount);
-    event UnassignedLiabilityRebalanced(uint256 stethShares, uint256 ethAmount);
+    event UnassignedLiabilityRebalanced(uint256 stethShares, uint256 ethFunded);
 
     constructor(address _dashboard, bool _allowListEnabled, address _withdrawalQueue, address _distributor)
         AllowList(_allowListEnabled)
