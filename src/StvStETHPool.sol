@@ -488,25 +488,29 @@ contract StvStETHPool is StvPool {
         IVaultHub.VaultConnection memory connection = DASHBOARD.vaultConnection();
 
         uint256 maxReserveRatioBP = TOTAL_BASIS_POINTS - 1;
+        uint256 maxForcedRebalanceThresholdBP = maxReserveRatioBP - 1;
 
         /// Invariants from the OperatorGrid
         assert(connection.reserveRatioBP > 0);
         assert(connection.reserveRatioBP <= maxReserveRatioBP);
         assert(connection.forcedRebalanceThresholdBP > 0);
-        assert(connection.forcedRebalanceThresholdBP <= connection.reserveRatioBP);
+        assert(connection.forcedRebalanceThresholdBP < connection.reserveRatioBP);
 
         uint16 newReserveRatioBP = uint16(Math.min(connection.reserveRatioBP + RESERVE_RATIO_GAP_BP, maxReserveRatioBP));
-        uint16 newThresholdBP =
-            uint16(Math.min(connection.forcedRebalanceThresholdBP + RESERVE_RATIO_GAP_BP, maxReserveRatioBP));
+        uint16 newForcedRebalanceThresholdBP = uint16(
+            Math.min(connection.forcedRebalanceThresholdBP + RESERVE_RATIO_GAP_BP, maxForcedRebalanceThresholdBP)
+        );
 
         StvStETHPoolStorage storage $ = _getStvStETHPoolStorage();
 
-        if (newReserveRatioBP == $.reserveRatioBP && newThresholdBP == $.forcedRebalanceThresholdBP) return;
+        if (newReserveRatioBP == $.reserveRatioBP && newForcedRebalanceThresholdBP == $.forcedRebalanceThresholdBP) {
+            return;
+        }
 
         $.reserveRatioBP = newReserveRatioBP;
-        $.forcedRebalanceThresholdBP = newThresholdBP;
+        $.forcedRebalanceThresholdBP = newForcedRebalanceThresholdBP;
 
-        emit VaultParametersUpdated(newReserveRatioBP, newThresholdBP);
+        emit VaultParametersUpdated(newReserveRatioBP, newForcedRebalanceThresholdBP);
     }
 
     // =================================================================================
@@ -671,6 +675,7 @@ contract StvStETHPool is StvPool {
         returns (uint256 stvToBurn)
     {
         _checkNoUnassignedLiability();
+        _checkNoBadDebt();
 
         if (_stethShares == 0) revert ZeroArgument();
         if (_stethShares > mintedStethSharesOf(_account)) revert InsufficientMintedShares();

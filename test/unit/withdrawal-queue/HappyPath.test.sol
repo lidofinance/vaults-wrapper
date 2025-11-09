@@ -128,7 +128,7 @@ contract WithdrawalQueueHappyPathTest is Test, SetupWithdrawalQueue {
         // Request 2 & 3: Try to finalize both requests without waiting period - should fail
         vm.prank(finalizeRoleHolder);
         vm.expectRevert(WithdrawalQueue.NoRequestsToFinalize.selector);
-        withdrawalQueue.finalize(2);
+        withdrawalQueue.finalize(2, address(0));
 
         // Request 2 & 3: Finalize both requests after waiting period
         assertEq(pool.balanceOf(address(withdrawalQueue)), secondWithdrawStv + thirdWithdrawStv);

@@ -67,7 +67,7 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
             mintedStethShares,
             block.timestamp
         );
-        uint256 finalizedCount = withdrawalQueue.finalize(1);
+        uint256 finalizedCount = withdrawalQueue.finalize(1, address(0));
 
         // Verify finalization succeeded
         assertEq(finalizedCount, 1);
@@ -198,7 +198,7 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
         emit StvStETHPool.SocializedLoss(0, 0);
 
         vm.prank(finalizeRoleHolder);
-        withdrawalQueue.finalize(1);
+        withdrawalQueue.finalize(1, address(0));
 
         assertEq(withdrawalQueue.getClaimableEther(requestId), 0);
     }

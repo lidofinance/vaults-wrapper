@@ -5,7 +5,7 @@ import {SetupWithdrawalQueue} from "./SetupWithdrawalQueue.sol";
 import {Test} from "forge-std/Test.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
 
-contract FeeFinalizationTest is Test, SetupWithdrawalQueue {
+contract GasCostCoverageTest is Test, SetupWithdrawalQueue {
     function setUp() public override {
         super.setUp();
 
@@ -15,31 +15,31 @@ contract FeeFinalizationTest is Test, SetupWithdrawalQueue {
         pool.depositETH{value: 100_000 ether}(address(this), address(0));
     }
 
-    function _setWithdrawalFee(uint256 fee) internal {
+    function _setGasCostCoverage(uint256 coverage) internal {
         vm.prank(finalizeRoleHolder);
-        withdrawalQueue.setWithdrawalFee(fee);
+        withdrawalQueue.setFinalizationGasCostCoverage(coverage);
     }
 
-    function test_FinalizeFee_ZeroFeeDoesNotPayFinalizer() public {
+    function test_FinalizeGasCostCoverage_ZeroCoverageDoesNotPayFinalizer() public {
         uint256 initialBalance = finalizeRoleHolder.balance;
         _requestWithdrawalAndFinalize(10 ** STV_DECIMALS);
 
         assertEq(finalizeRoleHolder.balance, initialBalance);
     }
 
-    function test_FinalizeFee_PaysFinalizerWhenSet() public {
-        uint256 fee = 0.0005 ether;
+    function test_FinalizeGasCostCoverage_PaysFinalizerWhenSet() public {
+        uint256 coverage = 0.0005 ether;
         uint256 initialBalance = finalizeRoleHolder.balance;
 
-        _setWithdrawalFee(fee);
+        _setGasCostCoverage(coverage);
         _requestWithdrawalAndFinalize(10 ** STV_DECIMALS);
 
-        assertEq(finalizeRoleHolder.balance, initialBalance + fee);
+        assertEq(finalizeRoleHolder.balance, initialBalance + coverage);
     }
 
-    function test_FinalizeFee_ReducesClaimByFee() public {
-        uint256 fee = 0.0005 ether;
-        _setWithdrawalFee(fee);
+    function test_FinalizeGasCostCoverage_ReducesClaimByCoverage() public {
+        uint256 coverage = 0.0005 ether;
+        _setGasCostCoverage(coverage);
 
         uint256 stvToRequest = 10 ** STV_DECIMALS;
         uint256 requestId = withdrawalQueue.requestWithdrawal(address(this), stvToRequest, 0);
@@ -49,25 +49,25 @@ contract FeeFinalizationTest is Test, SetupWithdrawalQueue {
         uint256 balanceBefore = address(this).balance;
         uint256 claimed = withdrawalQueue.claimWithdrawal(address(this), requestId);
 
-        assertEq(claimed, expectedAssets - fee);
+        assertEq(claimed, expectedAssets - coverage);
         assertEq(address(this).balance, balanceBefore + claimed);
     }
 
-    function test_FinalizeFee_ReducesClaimableByFee() public {
-        uint256 fee = 0.0005 ether;
-        _setWithdrawalFee(fee);
+    function test_FinalizeGasCostCoverage_ReducesClaimableByCoverage() public {
+        uint256 coverage = 0.0005 ether;
+        _setGasCostCoverage(coverage);
 
         uint256 stvToRequest = 10 ** STV_DECIMALS;
         uint256 requestId = withdrawalQueue.requestWithdrawal(address(this), stvToRequest, 0);
         uint256 expectedAssets = pool.previewRedeem(stvToRequest);
         _finalizeRequests(1);
 
-        assertEq(withdrawalQueue.getClaimableEther(requestId), expectedAssets - fee);
+        assertEq(withdrawalQueue.getClaimableEther(requestId), expectedAssets - coverage);
     }
 
-    function test_FinalizeFee_RequestWithRebalance() public {
-        uint256 fee = 0.0005 ether;
-        _setWithdrawalFee(fee);
+    function test_FinalizeGasCostCoverage_RequestWithRebalance() public {
+        uint256 coverage = 0.0005 ether;
+        _setGasCostCoverage(coverage);
 
         uint256 mintedStethShares = 10 ** ASSETS_DECIMALS;
         uint256 stvToRequest = 2 * 10 ** STV_DECIMALS;
@@ -75,7 +75,7 @@ contract FeeFinalizationTest is Test, SetupWithdrawalQueue {
 
         uint256 totalAssets = pool.previewRedeem(stvToRequest);
         uint256 assetsToRebalance = pool.STETH().getPooledEthBySharesRoundUp(mintedStethShares);
-        uint256 expectedClaimable = totalAssets - assetsToRebalance - fee;
+        uint256 expectedClaimable = totalAssets - assetsToRebalance - coverage;
         assertGt(expectedClaimable, 0);
 
         uint256 requestId = withdrawalQueue.requestWithdrawal(address(this), stvToRequest, mintedStethShares);
@@ -84,25 +84,49 @@ contract FeeFinalizationTest is Test, SetupWithdrawalQueue {
         assertEq(withdrawalQueue.getClaimableEther(requestId), expectedClaimable);
     }
 
-    function test_FinalizeFee_FeeCapsToRemainingAssets() public {
-        uint256 fee = withdrawalQueue.MAX_WITHDRAWAL_FEE();
-        _setWithdrawalFee(fee);
+    function test_FinalizeGasCostCoverage_CoverageCapsToRemainingAssets() public {
+        uint256 coverage = withdrawalQueue.MAX_GAS_COST_COVERAGE();
+        uint256 minValue = withdrawalQueue.MIN_WITHDRAWAL_VALUE();
+        _setGasCostCoverage(coverage);
 
-        uint256 stvToRequest = (10 ** STV_DECIMALS / 1 ether) * fee;
+        uint256 stvToRequest = (10 ** STV_DECIMALS / 1 ether) * minValue;
         uint256 totalAssets = pool.previewRedeem(stvToRequest);
-        assertEq(totalAssets, fee);
+        assertEq(totalAssets, minValue);
 
         uint256 requestId = withdrawalQueue.requestWithdrawal(address(this), stvToRequest, 0);
-        dashboard.mock_simulateRewards(-int256(1 ether));
+        dashboard.mock_simulateRewards(-int256(pool.totalAssets() - 1 ether));
 
         uint256 finalizerBalanceBefore = finalizeRoleHolder.balance;
         _finalizeRequests(1);
         uint256 finalizerBalanceAfter = finalizeRoleHolder.balance;
 
         assertGt(finalizerBalanceAfter, finalizerBalanceBefore);
-        assertLt(finalizerBalanceAfter - finalizerBalanceBefore, fee);
+        assertLt(finalizerBalanceAfter - finalizerBalanceBefore, coverage);
 
         assertEq(withdrawalQueue.getClaimableEther(requestId), 0);
+    }
+
+    function test_FinalizeGasCostCoverage_DifferentGasCostRecipient() public {
+        uint256 coverage = 0.0005 ether;
+        _setGasCostCoverage(coverage);
+
+        address recipient = makeAddr("finalizerRecipient");
+        withdrawalQueue.requestWithdrawal(address(this), 10 ** STV_DECIMALS, 0);
+
+        uint256 finalizerBalanceBefore = finalizeRoleHolder.balance;
+        uint256 recipientBalanceBefore = recipient.balance;
+
+        _warpAndMockOracleReport();
+        vm.prank(finalizeRoleHolder);
+        uint256 finalizedRequests = withdrawalQueue.finalize(1, recipient);
+
+        assertEq(finalizedRequests, 1);
+
+        uint256 finalizerBalanceAfter = finalizeRoleHolder.balance;
+        uint256 recipientBalanceAfter = recipient.balance;
+
+        assertEq(finalizerBalanceAfter, finalizerBalanceBefore);
+        assertEq(recipientBalanceAfter - recipientBalanceBefore, coverage);
     }
 
     // Receive ETH for claiming tests

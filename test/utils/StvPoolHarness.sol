@@ -100,14 +100,22 @@ contract StvPoolHarness is Test {
         require(address(core) != address(0), "CoreHarness not initialized");
         address owner = config.owner == address(0) ? config.nodeOperator : config.owner;
 
-        FactoryHelper helper = new FactoryHelper();
+        Factory factory;
+        address factoryFromEnv = vm.envOr("FACTORY_ADDRESS", address(0));
 
-        Factory.StrategyParameters memory strategyParams =
-            Factory.StrategyParameters({ggvTeller: config.ggvTeller, ggvBoringOnChainQueue: config.ggvBoringQueue});
+        if (factoryFromEnv != address(0)) {
+            factory = Factory(factoryFromEnv);
+            console.log("Using predeployed factory from FACTORY_ADDRESS", factoryFromEnv);
+        } else {
+            FactoryHelper helper = new FactoryHelper();
 
-        Factory.TimelockConfig memory timelockConfig = Factory.TimelockConfig({minDelaySeconds: 0, executor: owner});
+            Factory.StrategyParameters memory strategyParams =
+                Factory.StrategyParameters({ggvTeller: config.ggvTeller, ggvBoringOnChainQueue: config.ggvBoringQueue});
 
-        Factory factory = helper.deployMainFactory(address(core.locator()), strategyParams, timelockConfig);
+            Factory.TimelockConfig memory timelockConfig = Factory.TimelockConfig({minDelaySeconds: 0, executor: owner});
+
+            factory = helper.deployMainFactory(address(core.locator()), strategyParams, timelockConfig);
+        }
 
         Factory.PoolFullConfig memory poolConfig = Factory.PoolFullConfig({
             allowlistEnabled: config.allowlistEnabled,
