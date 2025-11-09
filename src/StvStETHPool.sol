@@ -10,7 +10,8 @@ import {IWstETH} from "./interfaces/IWstETH.sol";
 
 /**
  * @title StvStETHPool
- * @notice Configuration B: Minting, no strategy - stv + maximum stETH minting for user
+ * @notice Extended STV pool with (w)stETH minting, liability management, and rebalancing capabilities
+ * @dev Allows users to mint (w)stETH against their deposits with configurable reserve ratios
  */
 contract StvStETHPool is StvPool {
     event StethSharesMinted(address indexed account, uint256 stethShares);
