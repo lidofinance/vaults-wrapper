@@ -257,7 +257,7 @@ contract StvStETHPool is StvPool {
         /// should not be returned to Staking Vault, but should be distributed among all participants
         /// in exchange for the withdrawn ETH.
         ///
-        /// Thus, in rare situations, Staking Vault may have two assets: ETH and stETH, which are
+        /// Thus, in rare situations, StvStETHPool may have two assets: ETH and stETH, which are
         /// distributed among all users in proportion to their shares.
         assets = _convertToAssets(balanceOf(_account));
     }
