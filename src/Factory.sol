@@ -90,7 +90,6 @@ contract Factory {
         address nodeOperatorManager;
         uint256 nodeOperatorFeeBP;
         uint256 confirmExpiry;
-        uint256 maxFinalizationTime;
         uint256 minWithdrawalDelayTime;
         string name;
         string symbol;
@@ -103,7 +102,6 @@ contract Factory {
         address nodeOperatorManager;
         uint256 nodeOperatorFeeBP;
         uint256 confirmExpiry;
-        uint256 maxFinalizationTime;
         uint256 minWithdrawalDelayTime;
         uint256 reserveRatioGapBP;
         string name;
@@ -116,7 +114,6 @@ contract Factory {
         address nodeOperatorManager;
         uint256 nodeOperatorFeeBP;
         uint256 confirmExpiry;
-        uint256 maxFinalizationTime;
         uint256 minWithdrawalDelayTime;
         uint256 reserveRatioGapBP;
         string name;
@@ -131,7 +128,6 @@ contract Factory {
         address nodeOperatorManager;
         uint256 nodeOperatorFeeBP;
         uint256 confirmExpiry;
-        uint256 maxFinalizationTime;
         uint256 minWithdrawalDelayTime;
         uint256 reserveRatioGapBP;
         string name;
@@ -210,7 +206,6 @@ contract Factory {
                 nodeOperatorManager: _config.nodeOperatorManager,
                 nodeOperatorFeeBP: _config.nodeOperatorFeeBP,
                 confirmExpiry: _config.confirmExpiry,
-                maxFinalizationTime: _config.maxFinalizationTime,
                 minWithdrawalDelayTime: _config.minWithdrawalDelayTime,
                 reserveRatioGapBP: 0,
                 name: _config.name,
@@ -234,7 +229,6 @@ contract Factory {
                 nodeOperatorManager: _config.nodeOperatorManager,
                 nodeOperatorFeeBP: _config.nodeOperatorFeeBP,
                 confirmExpiry: _config.confirmExpiry,
-                maxFinalizationTime: _config.maxFinalizationTime,
                 minWithdrawalDelayTime: _config.minWithdrawalDelayTime,
                 reserveRatioGapBP: _config.reserveRatioGapBP,
                 name: _config.name,
@@ -258,7 +252,6 @@ contract Factory {
                 nodeOperatorManager: _config.nodeOperatorManager,
                 nodeOperatorFeeBP: _config.nodeOperatorFeeBP,
                 confirmExpiry: _config.confirmExpiry,
-                maxFinalizationTime: _config.maxFinalizationTime,
                 minWithdrawalDelayTime: _config.minWithdrawalDelayTime,
                 reserveRatioGapBP: _config.reserveRatioGapBP,
                 name: _config.name,
@@ -313,7 +306,6 @@ contract Factory {
             STETH,
             address(IDashboard(payable(dashboardAddress)).stakingVault()),
             LAZY_ORACLE,
-            config.maxFinalizationTime,
             config.minWithdrawalDelayTime,
             config.mintingEnabled
         );

@@ -7,7 +7,6 @@
   "nodeOperatorManager": "0xcc95b0Dbe1519AfaC58d954444839A80700380a2",
   "nodeOperatorFeeBP": 10,
   "confirmExpiry": 3600,
-  "maxFinalizationTime": 2592000,
   "minWithdrawalDelayTime": 180,
   "allowlistEnabled": false,
   "connectDepositWei": 1000000000000000000,
