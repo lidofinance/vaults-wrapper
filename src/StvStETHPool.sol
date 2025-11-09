@@ -27,7 +27,6 @@ contract StvStETHPool is StvPool {
     error InsufficientStv();
     error ZeroArgument();
     error ArraysLengthMismatch(uint256 firstArrayLength, uint256 secondArrayLength);
-    error NothingToRebalance();
     error VaultReportStale();
     error UndercollateralizedAccount();
     error CollateralizedAccount();
@@ -578,8 +577,6 @@ contract StvStETHPool is StvPool {
      */
     function forceRebalance(address _account) public returns (uint256 stvBurned) {
         (uint256 stethShares, uint256 stv, bool isUndercollateralized) = previewForceRebalance(_account);
-
-        if (stethShares == 0) revert NothingToRebalance();
         if (isUndercollateralized) revert UndercollateralizedAccount();
 
         stvBurned = _rebalanceMintedStethShares(_account, stethShares, stv);
