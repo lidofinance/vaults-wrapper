@@ -653,7 +653,7 @@ contract StvStETHPool is StvPool {
 
         uint256 stvRequired = _convertToStv(stethToRebalance, Math.Rounding.Ceil);
 
-        stethShares = _getSharesByPooledEth(stethToRebalance); // TODO: round up, can it exceed liability?
+        stethShares = _getSharesByPooledEth(stethToRebalance);
         stv = Math.min(stvRequired, stvBalance);
         isUndercollateralized = isUndercollateralized || stvRequired > stvBalance;
     }
