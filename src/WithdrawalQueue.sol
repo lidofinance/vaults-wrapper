@@ -176,6 +176,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
     error RequestValueTooSmall(uint256 amount);
     error RequestAssetsTooLarge(uint256 amount);
     error GasCostCoverageTooLarge(uint256 amount);
+    error InvalidWithdrawalDelay();
     error InvalidRequestId(uint256 requestId);
     error InvalidRange(uint256 start, uint256 end);
     error RequestAlreadyClaimed(uint256 requestId);
@@ -199,7 +200,10 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
         uint256 _minWithdrawalDelayTimeInSeconds,
         bool _isRebalancingSupported
     ) {
+        if (_minWithdrawalDelayTimeInSeconds < 1 hours) revert InvalidWithdrawalDelay();
+
         IS_REBALANCING_SUPPORTED = _isRebalancingSupported;
+        MIN_WITHDRAWAL_DELAY_TIME_IN_SECONDS = _minWithdrawalDelayTimeInSeconds;
 
         POOL = IStvStETHPool(payable(_pool));
         DASHBOARD = IDashboard(payable(_dashboard));
@@ -207,8 +211,6 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
         STETH = IStETH(_steth);
         LAZY_ORACLE = ILazyOracle(_lazyOracle);
         STAKING_VAULT = IStakingVault(_vault);
-
-        MIN_WITHDRAWAL_DELAY_TIME_IN_SECONDS = _minWithdrawalDelayTimeInSeconds;
 
         _disableInitializers();
         _pause();
