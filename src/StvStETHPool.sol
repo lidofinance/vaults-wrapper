@@ -93,46 +93,34 @@ contract StvStETHPool is StvPool {
 
     /**
      * @notice Deposit native ETH and receive stv, minting a specific amount of stETH shares
-     * @param _recipient Address to receive stv and minted steth shares
      * @param _referral Address of the referral (if any)
      * @param _stethSharesToMint Optional amount of stETH shares to mint (18 decimals)
      * @return stv Amount of stv minted (27 decimals)
-     * @dev If the recipient is different from msg.sender, checks that enough stv is deposited to lock the requested stETH shares
      */
-    function depositETHAndMintStethShares(address _recipient, address _referral, uint256 _stethSharesToMint)
+    function depositETHAndMintStethShares(address _referral, uint256 _stethSharesToMint)
         external
         payable
         virtual
         returns (uint256 stv)
     {
-        stv = depositETH(_recipient, _referral);
-
-        if (_stethSharesToMint != 0) {
-            if (_recipient != msg.sender) _checkMinStvToLock(stv, _stethSharesToMint);
-            _mintStethShares(_recipient, _stethSharesToMint);
-        }
+        stv = depositETH(msg.sender, _referral);
+        if (_stethSharesToMint != 0) mintStethShares(_stethSharesToMint);
     }
 
     /**
      * @notice Deposit native ETH and receive stv, minting a specific amount of wstETH
-     * @param _recipient Address to receive stv and minted wstETH
      * @param _referral Address of the referral (if any)
      * @param _wstethToMint Optional amount of wstETH to mint (18 decimals)
      * @return stv Amount of stv minted (27 decimals)
-     * @dev If the recipient is different from msg.sender, checks that enough stv is deposited to lock the requested wstETH
      */
-    function depositETHAndMintWsteth(address _recipient, address _referral, uint256 _wstethToMint)
+    function depositETHAndMintWsteth(address _referral, uint256 _wstethToMint)
         external
         payable
         virtual
         returns (uint256 stv)
     {
-        stv = depositETH(_recipient, _referral);
-
-        if (_wstethToMint != 0) {
-            if (_recipient != msg.sender) _checkMinStvToLock(stv, _wstethToMint);
-            _mintWsteth(_recipient, _wstethToMint);
-        }
+        stv = depositETH(msg.sender, _referral);
+        if (_wstethToMint != 0) mintWsteth(_wstethToMint);
     }
 
     // =================================================================================
@@ -311,28 +299,20 @@ contract StvStETHPool is StvPool {
      * @dev Note that minted wstETH can be not enough to cover the full obligation in stETH shares because of rounding error
      * on WSTETH contract during unwrapping. The dust from rounding accumulates on the WSTETH contract during unwrapping
      */
-    function mintWsteth(uint256 _wsteth) external {
-        _mintWsteth(msg.sender, _wsteth);
-    }
-
-    function _mintWsteth(address _account, uint256 _wsteth) internal {
-        _checkRemainingMintingCapacityOf(_account, _wsteth);
-        _increaseMintedStethShares(_account, _wsteth);
-        DASHBOARD.mintWstETH(_account, _wsteth);
+    function mintWsteth(uint256 _wsteth) public {
+        _checkRemainingMintingCapacityOf(msg.sender, _wsteth);
+        _increaseMintedStethShares(msg.sender, _wsteth);
+        DASHBOARD.mintWstETH(msg.sender, _wsteth);
     }
 
     /**
      * @notice Mint stETH shares up to the user's minting capacity
      * @param _stethShares The amount of stETH shares to mint
      */
-    function mintStethShares(uint256 _stethShares) external {
-        _mintStethShares(msg.sender, _stethShares);
-    }
-
-    function _mintStethShares(address _account, uint256 _stethShares) internal {
-        _checkRemainingMintingCapacityOf(_account, _stethShares);
-        _increaseMintedStethShares(_account, _stethShares);
-        DASHBOARD.mintShares(_account, _stethShares);
+    function mintStethShares(uint256 _stethShares) public {
+        _checkRemainingMintingCapacityOf(msg.sender, _stethShares);
+        _increaseMintedStethShares(msg.sender, _stethShares);
+        DASHBOARD.mintShares(msg.sender, _stethShares);
     }
 
     /**
@@ -342,16 +322,12 @@ contract StvStETHPool is StvPool {
      * on WSTETH contract during unwrapping. The dust from rounding accumulates on the WSTETH contract during unwrapping
      */
     function burnWsteth(uint256 _wsteth) external {
-        _burnWsteth(msg.sender, _wsteth);
-    }
-
-    function _burnWsteth(address _account, uint256 _wsteth) internal {
         /// @dev Simulate conversions during unwrapping to account for possible reduction due to rounding errors
         uint256 unwrappedSteth = _getPooledEthByShares(_wsteth);
         uint256 unwrappedStethShares = _getSharesByPooledEth(unwrappedSteth);
-        _decreaseMintedStethShares(_account, unwrappedStethShares);
+        _decreaseMintedStethShares(msg.sender, unwrappedStethShares);
 
-        WSTETH.transferFrom(_account, address(this), _wsteth);
+        WSTETH.transferFrom(msg.sender, address(this), _wsteth);
         DASHBOARD.burnWstETH(_wsteth);
     }
 
@@ -360,12 +336,8 @@ contract StvStETHPool is StvPool {
      * @param _stethShares The amount of stETH shares to burn
      */
     function burnStethShares(uint256 _stethShares) external {
-        _burnStethShares(msg.sender, _stethShares);
-    }
-
-    function _burnStethShares(address _account, uint256 _stethShares) internal {
-        _decreaseMintedStethShares(_account, _stethShares);
-        STETH.transferSharesFrom(_account, address(this), _stethShares);
+        _decreaseMintedStethShares(msg.sender, _stethShares);
+        STETH.transferSharesFrom(msg.sender, address(this), _stethShares);
         DASHBOARD.burnShares(_stethShares);
     }
 
