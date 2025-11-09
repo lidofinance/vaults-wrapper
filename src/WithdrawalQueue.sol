@@ -273,13 +273,13 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
 
     /**
      * @notice Request multiple withdrawals for a user
-     * @param _recipient Address that will be able to claim the created request
+     * @param _claimer Address that will be able to claim the created request
      * @param _stvToWithdraw Array of amounts of stv to withdraw
      * @param _stethSharesToRebalance Array of amounts of stETH shares to rebalance if supported by the pool, array of 0 otherwise
      * @return requestIds the created withdrawal request ids
      */
     function requestWithdrawalBatch(
-        address _recipient,
+        address _claimer,
         uint256[] calldata _stvToWithdraw,
         uint256[] calldata _stethSharesToRebalance
     ) external returns (uint256[] memory requestIds) {
@@ -288,31 +288,31 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
 
         requestIds = new uint256[](_stvToWithdraw.length);
         for (uint256 i = 0; i < _stvToWithdraw.length; ++i) {
-            requestIds[i] = _requestWithdrawal(_recipient, _stvToWithdraw[i], _stethSharesToRebalance[i]);
+            requestIds[i] = _requestWithdrawal(_claimer, _stvToWithdraw[i], _stethSharesToRebalance[i]);
         }
     }
 
     /**
      * @notice Request a withdrawal for a user
-     * @param _recipient Address that will be able to claim the created request
+     * @param _claimer Address that will be able to claim the created request
      * @param _stvToWithdraw Amount of stv to withdraw
      * @param _stethSharesToRebalance Amount of steth shares to rebalance if supported by the pool, 0 otherwise
      * @return requestId The created withdrawal request id
      * @dev Transfers stv and steth shares from the requester to the pool
      */
-    function requestWithdrawal(address _recipient, uint256 _stvToWithdraw, uint256 _stethSharesToRebalance)
+    function requestWithdrawal(address _claimer, uint256 _stvToWithdraw, uint256 _stethSharesToRebalance)
         external
         returns (uint256 requestId)
     {
         _requireNotPaused();
-        requestId = _requestWithdrawal(_recipient, _stvToWithdraw, _stethSharesToRebalance);
+        requestId = _requestWithdrawal(_claimer, _stvToWithdraw, _stethSharesToRebalance);
     }
 
-    function _requestWithdrawal(address _recipient, uint256 _stvToWithdraw, uint256 _stethSharesToRebalance)
+    function _requestWithdrawal(address _claimer, uint256 _stvToWithdraw, uint256 _stethSharesToRebalance)
         internal
         returns (uint256 requestId)
     {
-        if (_recipient == address(0)) revert ZeroAddress();
+        if (_claimer == address(0)) revert ZeroAddress();
         if (_stethSharesToRebalance > 0 && !IS_REBALANCING_SUPPORTED) revert RebalancingIsNotSupported();
 
         uint256 assets = POOL.previewRedeem(_stvToWithdraw);
@@ -341,14 +341,14 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
             cumulativeStv: cumulativeStv,
             cumulativeStethShares: uint128(cumulativeStethShares),
             cumulativeAssets: uint128(cumulativeAssets),
-            owner: _recipient,
+            owner: _claimer,
             timestamp: uint40(block.timestamp),
             isClaimed: false
         });
 
-        assert($.requestsByOwner[_recipient].add(requestId));
+        assert($.requestsByOwner[_claimer].add(requestId));
 
-        emit WithdrawalRequested(requestId, _recipient, _stvToWithdraw, _stethSharesToRebalance, assets);
+        emit WithdrawalRequested(requestId, _claimer, _stvToWithdraw, _stethSharesToRebalance, assets);
     }
 
     function _transferForWithdrawalQueue(address _from, uint256 _stv, uint256 _stethShares) internal {
