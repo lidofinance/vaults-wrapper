@@ -72,7 +72,8 @@ interface IDashboard is IAccessControlEnumerable {
     function NODE_OPERATOR_MANAGER_ROLE() external view returns (bytes32);
     function NODE_OPERATOR_FEE_EXEMPT_ROLE() external view returns (bytes32);
     function NODE_OPERATOR_UNGUARANTEED_DEPOSIT_ROLE() external view returns (bytes32);
-    function NODE_OPERATOR_PROVE_UNKNOWN_VALIDATOR_ROLE() external view returns (uint256);
+    function NODE_OPERATOR_PROVE_UNKNOWN_VALIDATOR_ROLE() external view returns (bytes32);
+    function VAULT_CONFIGURATION_ROLE() external view returns (bytes32);
     function COLLECT_VAULT_ERC20_ROLE() external view returns (bytes32);
     function DEFAULT_ADMIN_ROLE() external view returns (bytes32);
     function MIN_CONFIRM_EXPIRY() external view returns (uint256);

@@ -2,6 +2,7 @@
 pragma solidity >=0.8.25;
 
 import {ERC20Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
+import {IOperatorGrid} from "src/interfaces/IOperatorGrid.sol";
 import {OssifiableProxy} from "src/proxy/OssifiableProxy.sol";
 import {StvPoolHarness} from "test/utils/StvPoolHarness.sol";
 
@@ -72,7 +73,6 @@ contract DashboardTest is StvPoolHarness {
         assertTrue(ctx.timelock.hasRole(executorRole, timelockExecutor));
     }
 
-    // TODO: grant NODE_OPERATOR_MANAGER_ROLE to Timelock
     // Methods required both DEFAULT_ADMIN_ROLE and NODE_OPERATOR_MANAGER_ROLE access:
     // - setFeeRate
     // - setConfirmExpiry
@@ -187,6 +187,9 @@ contract DashboardTest is StvPoolHarness {
     // Methods required a single-role access:
     // - addFeeExemption. Requires NODE_OPERATOR_FEE_EXEMPT_ROLE
     // - setFeeRecipient. Requires NODE_OPERATOR_MANAGER_ROLE
+    // - changeTier. Requires VAULT_CONFIGURATION_ROLE
+    // - syncTier. Requires VAULT_CONFIGURATION_ROLE
+    // - updateShareLimit. Requires VAULT_CONFIGURATION_ROLE
 
     function test_Dashboard_CanAddFeeExemption() public {
         // The role is not granted initially
@@ -208,6 +211,106 @@ contract DashboardTest is StvPoolHarness {
 
         vm.prank(nodeOperatorManager);
         ctx.dashboard.setFeeRecipient(newFeeRecipient);
+    }
+
+    function test_Dashboard_CanChangeTier() public {
+        // Register a new tier
+        IOperatorGrid operatorGrid = core.operatorGrid();
+        IOperatorGrid.TierParams memory tier = IOperatorGrid.TierParams({
+            shareLimit: 10 * 10 ** 18,
+            reserveRatioBP: 1000,
+            forcedRebalanceThresholdBP: 500,
+            infraFeeBP: 100,
+            liquidityFeeBP: 50,
+            reservationFeeBP: 25
+        });
+        IOperatorGrid.TierParams[] memory params = new IOperatorGrid.TierParams[](1);
+        params[0] = tier;
+
+        address registrator = operatorGrid.getRoleMember(operatorGrid.REGISTRY_ROLE(), 0);
+        uint256 tierId = operatorGrid.tiersCount();
+
+        vm.startPrank(registrator);
+        operatorGrid.registerGroup(NODE_OPERATOR, 100 * 10 ** 18);
+
+        vm.expectEmit(true, true, true, false);
+        emit IOperatorGrid.TierAdded(NODE_OPERATOR, tierId, 0, 0, 0, 0, 0, 0);
+
+        operatorGrid.registerTiers(NODE_OPERATOR, params);
+        vm.stopPrank();
+
+        // The role is not granted initially
+        bytes32 vaultConfigurationRole = ctx.dashboard.VAULT_CONFIGURATION_ROLE();
+        assertFalse(ctx.dashboard.hasRole(vaultConfigurationRole, address(this)));
+
+        // Grant the role to this contract
+        _timelockScheduleAndExecute(
+            address(ctx.dashboard),
+            abi.encodeWithSignature("grantRole(bytes32,address)", vaultConfigurationRole, address(this))
+        );
+        assertTrue(ctx.dashboard.hasRole(vaultConfigurationRole, address(this)));
+
+        // Change tier
+        ctx.dashboard.changeTier(tierId, 10 ** 18);
+    }
+
+    function test_Dashboard_CanSyncTier() public {
+        // Modify the current tier
+        IOperatorGrid operatorGrid = core.operatorGrid();
+        (, uint256 tierId,,,,,,) = operatorGrid.vaultTierInfo(address(ctx.vault));
+
+        uint256[] memory ids = new uint256[](1);
+        ids[0] = tierId;
+
+        IOperatorGrid.TierParams[] memory params = new IOperatorGrid.TierParams[](1);
+        IOperatorGrid.Tier memory tier = operatorGrid.tier(tierId);
+        params[0] = IOperatorGrid.TierParams({
+            shareLimit: tier.shareLimit,
+            reserveRatioBP: tier.reserveRatioBP,
+            forcedRebalanceThresholdBP: tier.forcedRebalanceThresholdBP,
+            infraFeeBP: tier.infraFeeBP + 1, // change infra fee
+            liquidityFeeBP: tier.liquidityFeeBP,
+            reservationFeeBP: tier.reservationFeeBP
+        });
+
+        address registrator = operatorGrid.getRoleMember(operatorGrid.REGISTRY_ROLE(), 0);
+        vm.prank(registrator);
+        operatorGrid.alterTiers(ids, params);
+
+        // The role is not granted initially
+        bytes32 vaultConfigurationRole = ctx.dashboard.VAULT_CONFIGURATION_ROLE();
+        assertFalse(ctx.dashboard.hasRole(vaultConfigurationRole, address(this)));
+
+        // Grant the role to this contract
+        _timelockScheduleAndExecute(
+            address(ctx.dashboard),
+            abi.encodeWithSignature("grantRole(bytes32,address)", vaultConfigurationRole, address(this))
+        );
+        assertTrue(ctx.dashboard.hasRole(vaultConfigurationRole, address(this)));
+
+        // Sync tier
+        ctx.dashboard.syncTier();
+    }
+
+    function test_Dashboard_CanUpdateShareLimit() public {
+        uint256 currentShareLimit = ctx.dashboard.vaultConnection().shareLimit;
+        assertGt(currentShareLimit, 10 ** 18);
+
+        uint256 newShareLimit = currentShareLimit - 10 ** 18;
+
+        // The role is not granted initially
+        bytes32 vaultConfigurationRole = ctx.dashboard.VAULT_CONFIGURATION_ROLE();
+        assertFalse(ctx.dashboard.hasRole(vaultConfigurationRole, address(this)));
+
+        // Grant the role to this contract
+        _timelockScheduleAndExecute(
+            address(ctx.dashboard),
+            abi.encodeWithSignature("grantRole(bytes32,address)", vaultConfigurationRole, address(this))
+        );
+        assertTrue(ctx.dashboard.hasRole(vaultConfigurationRole, address(this)));
+
+        // Update share limit
+        ctx.dashboard.updateShareLimit(newShareLimit);
     }
 }
 

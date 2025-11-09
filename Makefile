@@ -31,7 +31,7 @@ test-integration-dashboard:
 	FOUNDRY_PROFILE=test \
 	CORE_LOCATOR_ADDRESS="$$CORE_LOCATOR_ADDRESS" \
 	forge test \
-		test/integration/dashboard.test.sol \
+		"test/integration/dashboard*.test.sol" \
 		-$(VERBOSITY) \
 		--fork-url "$$RPC_URL"
 
