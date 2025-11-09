@@ -307,10 +307,8 @@ contract StvPool is Initializable, ERC20Upgradeable, AllowList {
      * @dev Checks if only unassigned liability will be rebalanced, not individual liability
      */
     function _checkOnlyUnassignedLiabilityRebalance(uint256 _stethShares) internal view {
-        uint256 unassignedLiabilityShares = totalUnassignedLiabilityShares();
-
         if (_stethShares == 0) revert NotEnoughToRebalance();
-        if (unassignedLiabilityShares < _stethShares) revert NotEnoughToRebalance();
+        if (totalUnassignedLiabilityShares() < _stethShares) revert NotEnoughToRebalance();
     }
 
     /**
