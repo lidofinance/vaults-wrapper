@@ -62,6 +62,7 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
             1,
             1,
             totalAssets - assetsToRebalance,
+            0,
             stvToRequest - stvToRebalance,
             stvToRebalance,
             mintedStethShares,
