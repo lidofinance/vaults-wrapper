@@ -454,8 +454,7 @@ contract StvStETHPool is StvPool {
      * @return stvToLock The min amount of stv to lock (27 decimals)
      */
     function calcStvToLockForStethShares(uint256 _stethShares) public view returns (uint256 stvToLock) {
-        uint256 assetsToLock = calcAssetsToLockForStethShares(_stethShares);
-        stvToLock = _convertToStv(assetsToLock, Math.Rounding.Ceil);
+        stvToLock = _convertToStv(calcAssetsToLockForStethShares(_stethShares), Math.Rounding.Ceil);
     }
 
     // =================================================================================
