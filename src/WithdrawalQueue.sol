@@ -23,10 +23,6 @@ import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet
 contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradeable {
     using EnumerableSet for EnumerableSet.UintSet;
 
-    /// @notice Max acceptable time for finalization of the withdrawal request
-    /// @dev This is a safeguard against excessively long withdrawal processes
-    uint256 public immutable MAX_ACCEPTABLE_WQ_FINALIZATION_TIME_IN_SECONDS;
-
     /// @notice Min delay between withdrawal request and finalization
     uint256 public immutable MIN_WITHDRAWAL_DELAY_TIME_IN_SECONDS;
 
@@ -199,7 +195,6 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
         address _steth,
         address _vault,
         address _lazyOracle,
-        uint256 _maxAcceptableWQFinalizationTimeInSeconds,
         uint256 _minWithdrawalDelayTimeInSeconds,
         bool _isRebalancingSupported
     ) {
@@ -212,7 +207,6 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
         LAZY_ORACLE = ILazyOracle(_lazyOracle);
         STAKING_VAULT = IStakingVault(_vault);
 
-        MAX_ACCEPTABLE_WQ_FINALIZATION_TIME_IN_SECONDS = _maxAcceptableWQFinalizationTimeInSeconds;
         MIN_WITHDRAWAL_DELAY_TIME_IN_SECONDS = _minWithdrawalDelayTimeInSeconds;
 
         _disableInitializers();

@@ -60,7 +60,6 @@ contract StvPoolHarness is Test {
         address nodeOperatorManager;
         uint256 nodeOperatorFeeBP;
         uint256 confirmExpiry;
-        uint256 maxFinalizationTime;
         uint256 minWithdrawalDelayTime;
         uint256 reserveRatioGapBP;
         StrategyKind strategyKind;
@@ -125,7 +124,6 @@ contract StvPoolHarness is Test {
             nodeOperatorManager: config.nodeOperatorManager,
             nodeOperatorFeeBP: config.nodeOperatorFeeBP,
             confirmExpiry: config.confirmExpiry,
-            maxFinalizationTime: config.maxFinalizationTime,
             minWithdrawalDelayTime: config.minWithdrawalDelayTime,
             reserveRatioGapBP: config.reserveRatioGapBP,
             name: config.name,
@@ -182,7 +180,6 @@ contract StvPoolHarness is Test {
             nodeOperatorManager: NODE_OPERATOR,
             nodeOperatorFeeBP: nodeOperatorFeeBP,
             confirmExpiry: CONFIRM_EXPIRY,
-            maxFinalizationTime: 30 days,
             minWithdrawalDelayTime: 1 days,
             reserveRatioGapBP: 0,
             strategyKind: StrategyKind.NONE,
