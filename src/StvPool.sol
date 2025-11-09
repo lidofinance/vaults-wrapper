@@ -443,29 +443,4 @@ contract StvPool is Initializable, ERC20Upgradeable, AllowList {
             emit ConnectDepositClaimed(_recipient, vaultBalance);
         }
     }
-
-    // =================================================================================
-    // EMERGENCY WITHDRAWAL FUNCTIONS
-    // =================================================================================
-
-    function triggerValidatorWithdrawals(
-        bytes calldata _pubkeys,
-        uint64[] calldata _amountsInGwei,
-        address _refundRecipient
-    ) external payable {
-        _checkOnlyRoleOrEmergencyExit(TRIGGER_VALIDATOR_WITHDRAWAL_ROLE);
-        DASHBOARD.triggerValidatorWithdrawals{value: msg.value}(_pubkeys, _amountsInGwei, _refundRecipient);
-    }
-
-    function requestValidatorExit(bytes calldata _pubkeys) external {
-        _checkOnlyRoleOrEmergencyExit(REQUEST_VALIDATOR_EXIT_ROLE);
-        DASHBOARD.requestValidatorExit(_pubkeys);
-    }
-
-    /// @notice Modifier to check role or Emergency Exit
-    function _checkOnlyRoleOrEmergencyExit(bytes32 _role) internal view {
-        if (!WITHDRAWAL_QUEUE.isEmergencyExitActivated()) {
-            _checkRole(_role, msg.sender);
-        }
-    }
 }

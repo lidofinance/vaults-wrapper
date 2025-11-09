@@ -356,25 +356,6 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
         assertEq(withdrawalQueue.getLastCheckpointIndex(), 1);
     }
 
-    // Emergency Exit
-
-    function test_Finalize_DuringEmergencyExit() public {
-        withdrawalQueue.requestWithdrawal(address(this), 10 ** STV_DECIMALS, 0);
-
-        // Set very old timestamp to make queue "stuck"
-        vm.warp(block.timestamp + withdrawalQueue.MAX_ACCEPTABLE_WQ_FINALIZATION_TIME_IN_SECONDS() + 1);
-
-        // Activate emergency exit
-        withdrawalQueue.activateEmergencyExit();
-        assertTrue(withdrawalQueue.isEmergencyExitActivated());
-
-        // Should be able to finalize without role restriction in emergency
-        vm.prank(userAlice); // Any user can call
-        uint256 finalizedCount = withdrawalQueue.finalize(1, address(0));
-
-        assertEq(finalizedCount, 1);
-    }
-
     // Rewards & penalties
 
     function test_Finalize_RewardsDoNotAffectFinalizationRate() public {

@@ -60,15 +60,4 @@ contract GasCostCoverageConfigTest is Test, SetupWithdrawalQueue {
         );
         withdrawalQueue.setFinalizationGasCostCoverage(0.0001 ether);
     }
-
-    function test_SetFinalizationGasCostCoverage_RevertInEmergencyExit() public {
-        withdrawalQueue.requestWithdrawal(address(this), 10 ** STV_DECIMALS, 0);
-
-        vm.warp(block.timestamp + withdrawalQueue.MAX_ACCEPTABLE_WQ_FINALIZATION_TIME_IN_SECONDS() + 1);
-        withdrawalQueue.activateEmergencyExit();
-
-        vm.prank(finalizeRoleHolder);
-        vm.expectRevert(WithdrawalQueue.CantBeSetInEmergencyExitMode.selector);
-        withdrawalQueue.setFinalizationGasCostCoverage(0.0001 ether);
-    }
 }
