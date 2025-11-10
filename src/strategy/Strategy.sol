@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >=0.8.25;
 
+import {
+    AccessControlEnumerableUpgradeable
+} from "@openzeppelin/contracts-upgradeable/access/extensions/AccessControlEnumerableUpgradeable.sol";
+import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {AccessControlEnumerableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/extensions/AccessControlEnumerableUpgradeable.sol";
-import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 
 import {StvStETHPool} from "src/StvStETHPool.sol";
 import {IStETH} from "src/interfaces/IStETH.sol";
@@ -32,7 +34,7 @@ abstract contract Strategy is AccessControlEnumerableUpgradeable, PausableUpgrad
         mapping(bytes32 salt => address proxy) userStrategyCallForwarder;
     }
 
-     // keccak256(abi.encode(uint256(keccak256("pool.storage.strategy")) - 1)) & ~bytes32(uint256(0xff))
+    // keccak256(abi.encode(uint256(keccak256("pool.storage.strategy")) - 1)) & ~bytes32(uint256(0xff))
     bytes32 private constant STRATEGY_STORAGE_LOCATION =
         0x6346332e2d1da714fee42202a043fbd0435f177ac79ca2dbaeb22f9bddd2c800;
 
