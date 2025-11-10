@@ -972,11 +972,11 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
 
     /**
      * @notice Return the number of unfinalized requests in the queue
-     * @return requestNumber Number of unfinalized requests
+     * @return requestsNumber Number of unfinalized requests
      */
-    function unfinalizedRequestNumber() external view returns (uint256 requestNumber) {
+    function unfinalizedRequestsNumber() external view returns (uint256 requestsNumber) {
         WithdrawalQueueStorage storage $ = _getWithdrawalQueueStorage();
-        requestNumber = $.lastRequestId - $.lastFinalizedRequestId;
+        requestsNumber = $.lastRequestId - $.lastFinalizedRequestId;
     }
 
     /**

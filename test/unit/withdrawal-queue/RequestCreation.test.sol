@@ -26,7 +26,7 @@ contract RequestCreationTest is Test, SetupWithdrawalQueue {
     function test_InitialState_NoRequests() public view {
         assertEq(withdrawalQueue.getLastRequestId(), 0);
         assertEq(withdrawalQueue.getLastFinalizedRequestId(), 0);
-        assertEq(withdrawalQueue.unfinalizedRequestNumber(), 0);
+        assertEq(withdrawalQueue.unfinalizedRequestsNumber(), 0);
         assertEq(withdrawalQueue.unfinalizedAssets(), 0);
         assertEq(withdrawalQueue.unfinalizedStv(), 0);
     }
@@ -50,7 +50,7 @@ contract RequestCreationTest is Test, SetupWithdrawalQueue {
 
         assertEq(requestId, 1);
         assertEq(withdrawalQueue.getLastRequestId(), 1);
-        assertEq(withdrawalQueue.unfinalizedRequestNumber(), 1);
+        assertEq(withdrawalQueue.unfinalizedRequestsNumber(), 1);
         assertEq(withdrawalQueue.unfinalizedStv(), stvToRequest);
 
         // Check request details

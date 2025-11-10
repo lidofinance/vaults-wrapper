@@ -17,7 +17,7 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
     function test_RebalanceFinalization_InitialState() public view {
         assertEq(withdrawalQueue.getLastRequestId(), 0);
         assertEq(withdrawalQueue.getLastFinalizedRequestId(), 0);
-        assertEq(withdrawalQueue.unfinalizedRequestNumber(), 0);
+        assertEq(withdrawalQueue.unfinalizedRequestsNumber(), 0);
         assertEq(withdrawalQueue.unfinalizedAssets(), 0);
         assertEq(withdrawalQueue.unfinalizedStv(), 0);
 
