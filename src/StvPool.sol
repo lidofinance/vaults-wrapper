@@ -47,8 +47,6 @@ contract StvPool is Initializable, ERC20Upgradeable, AllowList {
         address indexed sender, address indexed receiver, address indexed referral, uint256 assets, uint256 stv
     );
 
-    event VaultDisconnected(address indexed initiator);
-    event ConnectDepositClaimed(address indexed recipient, uint256 amount);
     event UnassignedLiabilityRebalanced(uint256 stethShares, uint256 ethFunded);
 
     constructor(address _dashboard, bool _allowListEnabled, address _withdrawalQueue, address _distributor)
@@ -376,48 +374,5 @@ contract StvPool is Initializable, ERC20Upgradeable, AllowList {
 
     function _checkOnlyWithdrawalQueue() internal view {
         if (address(WITHDRAWAL_QUEUE) != msg.sender) revert NotWithdrawalQueue();
-    }
-
-    // =================================================================================
-    // VAULT MANAGEMENT
-    // =================================================================================
-
-    /**
-     * @notice Initiates voluntary vault disconnection from VaultHub
-     * @dev Can only be called by admin. Vault must have no outstanding stETH liabilities.
-     */
-    function disconnectVault() external {
-        _checkRole(DEFAULT_ADMIN_ROLE, msg.sender);
-
-        // Start the disconnection process
-        // This requires: no liabilityShares, all obligations settled
-        DASHBOARD.voluntaryDisconnect();
-
-        // Mark vault as in disconnection process
-        // The actual disconnect completes during next oracle report
-        emit VaultDisconnected(msg.sender);
-    }
-
-    /**
-     * @notice Claims the connect deposit after vault has been disconnected
-     * @dev Can only be called by admin after successful disconnection
-     * @param _recipient Address to receive the connect deposit
-     */
-    function claimConnectDeposit(address _recipient) external {
-        _checkRole(DEFAULT_ADMIN_ROLE, msg.sender);
-
-        // Check if vault has been disconnected
-        if (address(STAKING_VAULT) == address(DASHBOARD.stakingVault())) {
-            revert("Vault not disconnected yet");
-        }
-
-        _getStvPoolStorage().vaultDisconnected = true;
-
-        // After disconnection, the connect deposit is available in the vault
-        uint256 vaultBalance = address(STAKING_VAULT).balance;
-        if (vaultBalance > 0) {
-            DASHBOARD.withdraw(_recipient, vaultBalance); // TODO: should revert since WITHDRAW_ROLE is granted to WQ
-            emit ConnectDepositClaimed(_recipient, vaultBalance);
-        }
     }
 }
