@@ -49,12 +49,16 @@ abstract contract SetupDistributor is Test {
         distributor.grantRole(managerRole, manager);
 
         // Fund distributor with tokens
-        token1.mint(address(distributor), 1_000_000 ether);
-        token2.mint(address(distributor), 1_000_000 ether);
-        token3.mint(address(distributor), 1_000_000 ether);
+        token1.mint(address(distributor), _tokens(1_000_000));
+        token2.mint(address(distributor), _tokens(1_000_000));
+        token3.mint(address(distributor), _tokens(1_000_000));
 
         // Deploy MerkleTree helper
         merkleTree = new MerkleTree();
+    }
+
+    function _tokens(uint256 amount) internal pure returns (uint256) {
+        return amount * 1e18;
     }
 
     // ==================== Merkle Tree Helpers ====================
