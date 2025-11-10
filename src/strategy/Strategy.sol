@@ -59,9 +59,11 @@ abstract contract Strategy is AccessControlEnumerableUpgradeable, PausableUpgrad
         return address(POOL_);
     }
 
-    /// @notice Initialize the contract storage explicitly
-    /// @param _admin Admin address that can change every role
-    /// @dev Reverts if `_admin` equals to `address(0)`
+    /**
+     * @notice Initialize the contract storage explicitly
+     * @param _admin Admin address that can change every role
+     * @dev Reverts if `_admin` equals to `address(0)`
+     */
     function initialize(address _admin) external initializer {
         if (_admin == address(0)) revert ZeroArgument("_admin");
 
@@ -96,10 +98,12 @@ abstract contract Strategy is AccessControlEnumerableUpgradeable, PausableUpgrad
     // RECOVERY
     // =================================================================================
 
-    /// @notice Recovers ERC20 tokens from the strategy
-    /// @param _token The token to recover
-    /// @param _recipient The recipient of the tokens
-    /// @param _amount The amount of tokens to recover
+    /**
+     * @notice Recovers ERC20 tokens from the strategy
+     * @param _token The token to recover
+     * @param _recipient The recipient of the tokens
+     * @param _amount The amount of tokens to recover
+     */
     function recoverERC20(address _token, address _recipient, uint256 _amount) external {
         if (_token == address(0)) revert ZeroArgument("_token");
         if (_recipient == address(0)) revert ZeroArgument("_recipient");
@@ -115,9 +119,11 @@ abstract contract Strategy is AccessControlEnumerableUpgradeable, PausableUpgrad
     // CALL FORWARDER
     // =================================================================================
 
-    /// @notice Returns the address of the strategy proxy for a given user
-    /// @param user The user for which to get the strategy call forwarder address
-    /// @return callForwarder The address of the strategy call forwarder
+    /**
+     * @notice Returns the address of the strategy proxy for a given user
+     * @param user The user for which to get the strategy call forwarder address
+     * @return callForwarder The address of the strategy call forwarder
+     */
     function getStrategyCallForwarderAddress(address user) public view returns (address callForwarder) {
         bytes32 salt = _generateSalt(user);
         callForwarder = Clones.predictDeterministicAddress(STRATEGY_CALL_FORWARDER_IMPL, salt);

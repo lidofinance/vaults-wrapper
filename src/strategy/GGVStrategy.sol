@@ -15,20 +15,6 @@ contract GGVStrategy is Strategy {
     ITellerWithMultiAssetSupport public immutable TELLER;
     IBoringOnChainQueue public immutable BORING_QUEUE;
 
-    // ==================== Events ====================
-
-    event GGVDeposited(
-        address indexed recipient, uint256 wstethAmount, uint256 ggvShares, address referralAddress, bytes data
-    );
-    event GGVWithdrawalRequested(address indexed recipient, bytes32 requestId, uint128 requestedGGV, bytes data);
-
-    // ==================== Errors ====================
-
-    error InvalidSender();
-    error InvalidStethAmount();
-    error NotImplemented();
-    error InvalidGGVAmount();
-
     struct GGVParamsSupply {
         uint16 minimumMint;
     }
@@ -37,6 +23,16 @@ contract GGVStrategy is Strategy {
         uint16 discount;
         uint24 secondsToDeadline;
     }
+
+    event GGVDeposited(
+        address indexed recipient, uint256 wstethAmount, uint256 ggvShares, address referralAddress, bytes data
+    );
+    event GGVWithdrawalRequested(address indexed recipient, bytes32 requestId, uint128 requestedGGV, bytes data);
+
+    error InvalidSender();
+    error InvalidStethAmount();
+    error NotImplemented();
+    error InvalidGGVAmount();
 
     constructor(
         address _strategyCallForwarderImplementation,
@@ -50,20 +46,20 @@ contract GGVStrategy is Strategy {
         BORING_QUEUE = IBoringOnChainQueue(_boringQueue);
     }
 
-    /// @notice Supplies wstETH to the strategy
-    /// @param _referral The referral address
-    /// @param _wstethToMint The amount of wstETH to mint
-    /// @param _params The parameters for the supply
+    /**
+     * @notice Supplies wstETH to the strategy
+     * @param _referral The referral address
+     * @param _wstethToMint The amount of wstETH to mint
+     * @param _params The parameters for the supply
+     */
     function supply(address _referral, uint256 _wstethToMint, bytes calldata _params) external payable {
         _requireNotPaused();
 
         address callForwarder = _getOrCreateCallForwarder(msg.sender);
         uint256 stv = POOL_.depositETH{value: msg.value}(callForwarder, _referral);
 
-        if (_wstethToMint != 0) {
-            IStrategyCallForwarder(callForwarder)
-                .call(address(POOL_), abi.encodeWithSelector(POOL_.mintWsteth.selector, _wstethToMint));
-        }
+        IStrategyCallForwarder(callForwarder)
+            .call(address(POOL_), abi.encodeWithSelector(POOL_.mintWsteth.selector, _wstethToMint));
 
         IStrategyCallForwarder(callForwarder)
             .call(address(WSTETH), abi.encodeWithSelector(WSTETH.approve.selector, TELLER.vault(), _wstethToMint));
@@ -85,19 +81,24 @@ contract GGVStrategy is Strategy {
         emit GGVDeposited(msg.sender, _wstethToMint, ggvShares, _referral, _params);
     }
 
-    /// @notice Requests a withdrawal of ggv shares from the strategy
-    /// @param _stethAmount The amount of stETH to withdraw
-    /// @return requestId The request id
+    /**
+     * @notice Requests a withdrawal of ggv shares from the strategy
+     * @param _stethAmount The amount of stETH to withdraw
+     * @param _params The parameters for the withdrawal
+     * @return requestId The request id
+     */
     function requestExitByStETH(uint256 _stethAmount, bytes calldata _params) external returns (bytes32 requestId) {
         uint256 stethSharesToBurn = STETH.getSharesByPooledEth(_stethAmount);
         requestId = requestExitByStethShares(stethSharesToBurn, _params);
     }
 
-    /// @notice Previews the amount of stETH shares that can be withdrawn by a given amount of GGV shares
-    /// @param _user The user to preview the amount of stETH shares for
-    /// @param _ggvShares The amount of GGV shares to preview the amount of stETH shares for
-    /// @param _params The parameters for the withdrawal
-    /// @return stethShares The amount of stETH shares that can be withdrawn
+    /**
+     * @notice Previews the amount of stETH shares that can be withdrawn by a given amount of GGV shares
+     * @param _user The user to preview the amount of stETH shares for
+     * @param _ggvShares The amount of GGV shares to preview the amount of stETH shares for
+     * @param _params The parameters for the withdrawal
+     * @return stethShares The amount of stETH shares that can be withdrawn
+     */
     function previewStethSharesByGGV(address _user, uint256 _ggvShares, bytes calldata _params)
         external
         view
@@ -118,10 +119,12 @@ contract GGVStrategy is Strategy {
         stethShares = Math.mulDiv(_ggvShares, totalStethSharesFromGgv, totalGGV);
     }
 
-    /// @notice Requests a withdrawal of ggv shares from the strategy
-    /// @param _stethSharesToBurn The amount of steth shares to burn
-    /// @param _params The parameters for the withdrawal
-    /// @return requestId The request id
+    /**
+     * @notice Requests a withdrawal of ggv shares from the strategy
+     * @param _stethSharesToBurn The amount of steth shares to burn
+     * @param _params The parameters for the withdrawal
+     * @return requestId The request id
+     */
     function requestExitByStethShares(uint256 _stethSharesToBurn, bytes calldata _params)
         public
         returns (bytes32 requestId)
@@ -166,8 +169,10 @@ contract GGVStrategy is Strategy {
         emit GGVWithdrawalRequested(msg.sender, requestId, requestedGGV, _params);
     }
 
-    /// @notice Cancels a withdrawal request
-    /// @param request The request to cancel
+    /**
+     * @notice Cancels a withdrawal request
+     * @param request The request to cancel
+     */
     function cancelGgvRequest(IBoringOnChainQueue.OnChainWithdraw memory request) external {
         address callForwarder = getStrategyCallForwarderAddress(msg.sender);
         if (callForwarder != request.user) revert InvalidSender();
@@ -176,12 +181,14 @@ contract GGVStrategy is Strategy {
             .call(address(BORING_QUEUE), abi.encodeWithSelector(BORING_QUEUE.cancelOnChainWithdraw.selector, request));
     }
 
-    /// @notice Replaces a withdrawal request
-    /// @param request The request to replace
-    /// @param discount The discount to use
-    /// @param secondsToDeadline The deadline to use
-    /// @return oldRequestId The old request id
-    /// @return newRequestId The new request id
+    /**
+     * @notice Replaces a withdrawal request
+     * @param request The request to replace
+     * @param discount The discount to use
+     * @param secondsToDeadline The deadline to use
+     * @return oldRequestId The old request id
+     * @return newRequestId The new request id
+     */
     function replaceGgvOnChainWithdraw(
         IBoringOnChainQueue.OnChainWithdraw memory request,
         uint16 discount,
@@ -200,7 +207,9 @@ contract GGVStrategy is Strategy {
         (oldRequestId, newRequestId) = abi.decode(data, (bytes32, bytes32));
     }
 
-    /// @notice Finalizes a withdrawal from the strategy
+    /**
+     * @notice Finalizes a withdrawal from the strategy
+     */
     function finalizeRequestExit(
         address,
         /*_receiver*/
@@ -216,9 +225,11 @@ contract GGVStrategy is Strategy {
         revert NotImplemented();
     }
 
-    /// @notice Returns the amount of stETH shares of a user
-    /// @param _user The user to get the stETH shares for
-    /// @return stethShares The amount of stETH shares
+    /**
+     * @notice Returns the amount of stETH shares of a user
+     * @param _user The user to get the stETH shares for
+     * @return stethShares The amount of stETH shares
+     */
     function proxyStethSharesOf(address _user) public view returns (uint256 stethShares) {
         address callForwarder = getStrategyCallForwarderAddress(_user);
 
@@ -231,9 +242,11 @@ contract GGVStrategy is Strategy {
         stethShares = sharesAfterUnwrapping + STETH.sharesOf(callForwarder);
     }
 
-    /// @notice Calculates the amount of stETH shares to rebalance
-    /// @param _user The user to calculate the amount of stETH shares to rebalance for
-    /// @return stethShares The amount of stETH shares to rebalance
+    /**
+     * @notice Calculates the amount of stETH shares to rebalance
+     * @param _user The user to calculate the amount of stETH shares to rebalance for
+     * @return stethShares The amount of stETH shares to rebalance
+     */
     function proxyStethSharesToRebalance(address _user) external view returns (uint256 stethShares) {
         address callForwarder = getStrategyCallForwarderAddress(_user);
         uint256 mintedStethShares = POOL_.mintedStethSharesOf(callForwarder);
@@ -245,21 +258,25 @@ contract GGVStrategy is Strategy {
         }
     }
 
-    /// @notice Calculates the amount of stv that can be withdrawn
-    /// @param _user The user to calculate the amount of stv to withdraw for
-    /// @param _stethSharesToBurn The amount of stETH shares to burn
-    /// @return stv The amount of stv that can be withdrawn
+    /**
+     * @notice Calculates the amount of stv that can be withdrawn
+     * @param _user The user to calculate the amount of stv to withdraw for
+     * @param _stethSharesToBurn The amount of stETH shares to burn
+     * @return stv The amount of stv that can be withdrawn
+     */
     function proxyUnlockedStvOf(address _user, uint256 _stethSharesToBurn) external view returns (uint256 stv) {
         address callForwarder = getStrategyCallForwarderAddress(_user);
         stv = POOL_.unlockedStvOf(callForwarder, _stethSharesToBurn);
     }
 
-    /// @notice Requests a withdrawal from the Withdrawal Queue
-    /// @param _stvToWithdraw The amount of stv to withdraw
-    /// @param _stethSharesToBurn The amount of stETH shares to burn
-    /// @param _stethSharesToRebalance The amount of stETH shares to rebalance
-    /// @param _receiver The address to receive the stv
-    /// @return requestId The Withdrawal Queue request ID
+    /**
+     * @notice Requests a withdrawal from the Withdrawal Queue
+     * @param _stvToWithdraw The amount of stv to withdraw
+     * @param _stethSharesToBurn The amount of stETH shares to burn
+     * @param _stethSharesToRebalance The amount of stETH shares to rebalance
+     * @param _receiver The address to receive the stv
+     * @return requestId The Withdrawal Queue request ID
+     */
     function requestWithdrawalFromPool(
         uint256 _stvToWithdraw,
         uint256 _stethSharesToBurn,
