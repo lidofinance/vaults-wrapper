@@ -26,8 +26,6 @@ contract GGVStrategy is Strategy {
 
     error InvalidSender();
     error InvalidStethAmount();
-    error AlreadyRequested();
-    error InvalidRequestId();
     error NotImplemented();
     error InvalidGGVAmount();
 
