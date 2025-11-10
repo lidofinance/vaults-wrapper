@@ -30,7 +30,7 @@ contract GGVMockTeller is ITellerWithMultiAssetSupport {
         _vault = GGVVaultMock(__vault);
         steth = IStETH(_steth);
         wsteth = IWstETH(_wsteth);
-        
+
         // eq to 10 ** vault.decimals()
         ONE_SHARE = 10 ** 18;
 
