@@ -314,7 +314,7 @@ contract Factory {
             new OssifiableProxy(
                 wqImpl,
                 timelock,
-                abi.encodeCall(WithdrawalQueue.initialize, (config.owner, config.nodeOperator)) // (admin, finalizerRoleHolder))
+                abi.encodeCall(WithdrawalQueue.initialize, (timelock, config.nodeOperator)) // (timelock, finalizerRoleHolder))
             )
         );
 

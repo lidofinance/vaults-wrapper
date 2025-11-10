@@ -63,8 +63,6 @@ contract DashboardRolesTest is StvStETHPoolHarness {
     // Should be assigned to the the Pool contract
     // - FUND_ROLE
     // - REBALANCE_ROLE
-    // - PAUSE_BEACON_CHAIN_DEPOSITS_ROLE
-    // - RESUME_BEACON_CHAIN_DEPOSITS_ROLE
 
     function test_DashboardRoles_FundRoleIsAssigned() public view {
         _assertRoleAssigned(ctxMintEnabled, "FUND_ROLE", address(ctxMintEnabled.pool));
@@ -74,16 +72,6 @@ contract DashboardRolesTest is StvStETHPoolHarness {
     function test_DashboardRoles_RebalanceRoleIsAssigned() public view {
         _assertRoleAssigned(ctxMintEnabled, "REBALANCE_ROLE", address(ctxMintEnabled.pool));
         _assertRoleAssigned(ctxMintDisabled, "REBALANCE_ROLE", address(ctxMintDisabled.pool));
-    }
-
-    function test_DashboardRoles_PauseBeaconChainDepositsRoleIsAssigned() public view {
-        _assertRoleAssigned(ctxMintEnabled, "PAUSE_BEACON_CHAIN_DEPOSITS_ROLE", address(ctxMintEnabled.pool));
-        _assertRoleAssigned(ctxMintDisabled, "PAUSE_BEACON_CHAIN_DEPOSITS_ROLE", address(ctxMintDisabled.pool));
-    }
-
-    function test_DashboardRoles_ResumeBeaconChainDepositsRoleIsAssigned() public view {
-        _assertRoleAssigned(ctxMintEnabled, "RESUME_BEACON_CHAIN_DEPOSITS_ROLE", address(ctxMintEnabled.pool));
-        _assertRoleAssigned(ctxMintDisabled, "RESUME_BEACON_CHAIN_DEPOSITS_ROLE", address(ctxMintDisabled.pool));
     }
 
     // Should be assigned to the Pool contract ONLY if minting is enabled
@@ -139,4 +127,6 @@ contract DashboardRolesTest is StvStETHPoolHarness {
     // - VAULT_CONFIGURATION_ROLE
     // - REQUEST_VALIDATOR_EXIT_ROLE
     // - TRIGGER_VALIDATOR_WITHDRAWAL_ROLE
+    // - PAUSE_BEACON_CHAIN_DEPOSITS_ROLE
+    // - RESUME_BEACON_CHAIN_DEPOSITS_ROLE
 }

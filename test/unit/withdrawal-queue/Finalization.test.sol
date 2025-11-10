@@ -2,10 +2,10 @@
 pragma solidity >=0.8.25;
 
 import {SetupWithdrawalQueue} from "./SetupWithdrawalQueue.sol";
-import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
 import {Test} from "forge-std/Test.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
+import {FeaturePausable} from "src/utils/FeaturePausable.sol";
 
 contract FinalizationTest is Test, SetupWithdrawalQueue {
     function setUp() public override {
@@ -29,7 +29,7 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
         assertEq(status.owner, address(this));
 
         // Move time forward to pass minimum delay
-        vm.warp(block.timestamp + MIN_WITHDRAWAL_DELAY_TIME + 1);
+        _warpAndMockOracleReport();
 
         // Finalize the request
         vm.prank(finalizeRoleHolder);
@@ -55,7 +55,7 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
         assertEq(withdrawalQueue.getLastFinalizedRequestId(), 0);
 
         // Move time forward
-        vm.warp(block.timestamp + MIN_WITHDRAWAL_DELAY_TIME + 1);
+        _warpAndMockOracleReport();
 
         // Finalize all requests
         vm.prank(finalizeRoleHolder);
@@ -80,7 +80,7 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
 
         assertEq(withdrawalQueue.getLastRequestId(), 3);
 
-        vm.warp(block.timestamp + MIN_WITHDRAWAL_DELAY_TIME + 1);
+        _warpAndMockOracleReport();
 
         vm.prank(finalizeRoleHolder);
         uint256 finalizedCount = withdrawalQueue.finalize(1, address(0));
@@ -127,7 +127,7 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
     function test_Finalize_RevertOnlyFinalizeRole() public {
         withdrawalQueue.requestWithdrawal(address(this), 10 ** STV_DECIMALS, 0);
 
-        vm.warp(block.timestamp + MIN_WITHDRAWAL_DELAY_TIME + 1);
+        _warpAndMockOracleReport();
 
         // Try to finalize without proper role
         vm.expectRevert(
@@ -139,25 +139,11 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
         withdrawalQueue.finalize(1, address(0));
     }
 
-    function test_Finalize_RevertWhenPaused() public {
-        withdrawalQueue.requestWithdrawal(address(this), 10 ** STV_DECIMALS, 0);
-
-        vm.warp(block.timestamp + MIN_WITHDRAWAL_DELAY_TIME + 1);
-
-        // Pause the contract
-        vm.prank(pauseRoleHolder);
-        withdrawalQueue.pause();
-
-        vm.prank(finalizeRoleHolder);
-        vm.expectRevert(abi.encodeWithSelector(PausableUpgradeable.EnforcedPause.selector));
-        withdrawalQueue.finalize(1, address(0));
-    }
-
     function test_Finalize_ReturnsZeroWhenWithdrawableInsufficient() public {
         uint256 stvToRequest = 10 ** STV_DECIMALS;
         withdrawalQueue.requestWithdrawal(address(this), stvToRequest, 0);
 
-        vm.warp(block.timestamp + MIN_WITHDRAWAL_DELAY_TIME + 1);
+        _warpAndMockOracleReport();
 
         address stakingVault = address(dashboard.STAKING_VAULT());
         uint256 vaultBalance = stakingVault.balance;
@@ -176,7 +162,7 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
         withdrawalQueue.requestWithdrawal(address(this), stvRequest1, 0);
         withdrawalQueue.requestWithdrawal(address(this), stvRequest2, 0);
 
-        vm.warp(block.timestamp + MIN_WITHDRAWAL_DELAY_TIME + 1);
+        _warpAndMockOracleReport();
 
         uint256 expectedEthFirst = pool.previewRedeem(stvRequest1);
         address stakingVault = address(dashboard.STAKING_VAULT());
@@ -199,7 +185,7 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
         pool.mintStethShares(mintedStethShares);
         withdrawalQueue.requestWithdrawal(address(this), stvToRequest, mintedStethShares);
 
-        vm.warp(block.timestamp + MIN_WITHDRAWAL_DELAY_TIME + 1);
+        _warpAndMockOracleReport();
 
         uint256 assetsPreview = pool.previewRedeem(stvToRequest);
         uint256 assetsToRebalance = pool.STETH().getPooledEthBySharesRoundUp(mintedStethShares);
@@ -221,7 +207,7 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
         pool.mintStethShares(mintedStethShares);
         withdrawalQueue.requestWithdrawal(address(this), stvToRequest, mintedStethShares);
 
-        vm.warp(block.timestamp + MIN_WITHDRAWAL_DELAY_TIME + 1);
+        _warpAndMockOracleReport();
 
         uint256 assetsPreview = pool.previewRedeem(stvToRequest);
         uint256 assetsToRebalance = pool.STETH().getPooledEthBySharesRoundUp(mintedStethShares);
@@ -244,7 +230,7 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
         pool.mintStethShares(mintedStethShares);
         uint256 requestId2 = withdrawalQueue.requestWithdrawal(address(this), stvToRequest, mintedStethShares);
 
-        vm.warp(block.timestamp + MIN_WITHDRAWAL_DELAY_TIME + 1);
+        _warpAndMockOracleReport();
 
         uint256 assetsRequired = pool.previewRedeem(stvToRequest);
         address stakingVault = address(dashboard.STAKING_VAULT());
@@ -259,12 +245,64 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
         assertFalse(withdrawalQueue.getWithdrawalStatus(requestId2).isFinalized);
     }
 
+    // Pause & resume request finalization
+
+    function test_Finalize_RevertWhenPaused() public {
+        bytes32 finalizeFeatureId = withdrawalQueue.FINALIZE_FEATURE();
+        vm.prank(finalizePauseRoleHolder);
+        withdrawalQueue.pauseFinalization();
+
+        withdrawalQueue.requestWithdrawal(address(this), 10 ** STV_DECIMALS, 0);
+
+        vm.prank(finalizeRoleHolder);
+        vm.expectRevert(abi.encodeWithSelector(FeaturePausable.FeaturePauseEnforced.selector, finalizeFeatureId));
+        withdrawalQueue.finalize(1, finalizeRoleHolder);
+    }
+
+    function test_PauseFinalization_RevertWhenCallerUnauthorized() public {
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IAccessControl.AccessControlUnauthorizedAccount.selector,
+                address(this),
+                withdrawalQueue.FINALIZE_PAUSE_ROLE()
+            )
+        );
+        withdrawalQueue.pauseFinalization();
+    }
+
+    function test_ResumeFinalization_RevertWhenCallerUnauthorized() public {
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IAccessControl.AccessControlUnauthorizedAccount.selector,
+                address(this),
+                withdrawalQueue.FINALIZE_RESUME_ROLE()
+            )
+        );
+        withdrawalQueue.resumeFinalization();
+    }
+
+    function test_Resume_AllowsFinalizationAfterPause() public {
+        vm.prank(finalizePauseRoleHolder);
+        withdrawalQueue.pauseFinalization();
+
+        vm.prank(finalizeResumeRoleHolder);
+        withdrawalQueue.resumeFinalization();
+
+        withdrawalQueue.requestWithdrawal(address(this), 10 ** STV_DECIMALS, 0);
+
+        _warpAndMockOracleReport();
+
+        vm.prank(finalizeRoleHolder);
+        uint256 finalized = withdrawalQueue.finalize(1, finalizeRoleHolder);
+        assertEq(finalized, 1);
+    }
+
     // Edge Cases
 
     function test_Finalize_ZeroMaxRequests() public {
         withdrawalQueue.requestWithdrawal(address(this), 10 ** STV_DECIMALS, 0);
 
-        vm.warp(block.timestamp + MIN_WITHDRAWAL_DELAY_TIME + 1);
+        _warpAndMockOracleReport();
 
         vm.prank(finalizeRoleHolder);
         vm.expectRevert(WithdrawalQueue.NoRequestsToFinalize.selector);
@@ -280,7 +318,7 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
     function test_Finalize_AlreadyFullyFinalized() public {
         withdrawalQueue.requestWithdrawal(address(this), 10 ** STV_DECIMALS, 0);
 
-        vm.warp(block.timestamp + MIN_WITHDRAWAL_DELAY_TIME + 1);
+        _warpAndMockOracleReport();
 
         // First finalization
         vm.prank(finalizeRoleHolder);
@@ -295,7 +333,7 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
     function test_Finalize_RevertWhenReportStale() public {
         withdrawalQueue.requestWithdrawal(address(this), 10 ** STV_DECIMALS, 0);
 
-        vm.warp(block.timestamp + MIN_WITHDRAWAL_DELAY_TIME + 1);
+        _warpAndMockOracleReport();
 
         dashboard.VAULT_HUB().mock_setReportFreshness(address(dashboard.STAKING_VAULT()), false);
 
@@ -347,7 +385,7 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
         // Verify no checkpoints initially
         assertEq(withdrawalQueue.getLastCheckpointIndex(), 0);
 
-        vm.warp(block.timestamp + MIN_WITHDRAWAL_DELAY_TIME + 1);
+        _warpAndMockOracleReport();
 
         vm.prank(finalizeRoleHolder);
         withdrawalQueue.finalize(1, address(0));
@@ -370,9 +408,7 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
         assertEq(totalAssetsAfter, totalAssetsBefore + 10 ether);
 
         // Finalize request
-        vm.warp(block.timestamp + MIN_WITHDRAWAL_DELAY_TIME + 1);
-        vm.prank(finalizeRoleHolder);
-        withdrawalQueue.finalize(1, address(0));
+        _finalizeRequests(1);
 
         // Check finalized request has correct ETH amount unaffected by rewards
         assertEq(withdrawalQueue.getClaimableEther(requestId), expectedEth);
@@ -392,9 +428,7 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
         uint256 expectedEth = pool.previewRedeem(stvToRequest);
 
         // Finalize request
-        vm.warp(block.timestamp + MIN_WITHDRAWAL_DELAY_TIME + 1);
-        vm.prank(finalizeRoleHolder);
-        withdrawalQueue.finalize(1, address(0));
+        _finalizeRequests(1);
 
         // Check finalized request has correct ETH amount unaffected by rewards
         assertEq(withdrawalQueue.getClaimableEther(requestId), expectedEth);

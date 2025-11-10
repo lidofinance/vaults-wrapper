@@ -31,10 +31,12 @@ contract InitialPauseTest is Test {
     }
 
     function test_InitialPause_ImplementationIsPaused() public view {
-        assertTrue(withdrawalQueueImpl.paused());
+        assertTrue(withdrawalQueueImpl.isFeaturePaused(withdrawalQueueImpl.WITHDRAWALS_FEATURE()));
+        assertTrue(withdrawalQueueImpl.isFeaturePaused(withdrawalQueueImpl.FINALIZE_FEATURE()));
     }
 
     function test_InitialPause_ProxyIsNotPaused() public view {
-        assertFalse(withdrawalQueueProxy.paused());
+        assertFalse(withdrawalQueueProxy.isFeaturePaused(withdrawalQueueProxy.WITHDRAWALS_FEATURE()));
+        assertFalse(withdrawalQueueProxy.isFeaturePaused(withdrawalQueueProxy.FINALIZE_FEATURE()));
     }
 }

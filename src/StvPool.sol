@@ -8,6 +8,7 @@ import {IDashboard} from "./interfaces/IDashboard.sol";
 import {IStETH} from "./interfaces/IStETH.sol";
 import {IStakingVault} from "./interfaces/IStakingVault.sol";
 import {IVaultHub} from "./interfaces/IVaultHub.sol";
+import {FeaturePausable} from "./utils/FeaturePausable.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {ERC20Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
@@ -17,7 +18,7 @@ import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
  * @notice ERC20 staking vault token pool that accepts ETH deposits and manages withdrawals through a queue
  * @dev Implements a tokenized staking pool where users deposit ETH and receive STV tokens representing their share
  */
-contract StvPool is Initializable, ERC20Upgradeable, AllowList {
+contract StvPool is Initializable, ERC20Upgradeable, AllowList, FeaturePausable {
     // Custom errors
     error ZeroDeposit();
     error InvalidReceiver();
@@ -25,6 +26,10 @@ contract StvPool is Initializable, ERC20Upgradeable, AllowList {
     error NotEnoughToRebalance();
     error UnassignedLiabilityOnVault();
     error VaultInBadDebt();
+
+    bytes32 public constant DEPOSITS_FEATURE = keccak256("DEPOSITS_FEATURE");
+    bytes32 public constant DEPOSITS_PAUSE_ROLE = keccak256("DEPOSITS_PAUSE_ROLE");
+    bytes32 public constant DEPOSITS_RESUME_ROLE = keccak256("DEPOSITS_RESUME_ROLE");
 
     uint256 public constant TOTAL_BASIS_POINTS = 100_00;
 
@@ -58,6 +63,9 @@ contract StvPool is Initializable, ERC20Upgradeable, AllowList {
 
         // Disable initializers since we only support proxy deployment
         _disableInitializers();
+
+        // Pause features in implementation
+        _pauseFeature(DEPOSITS_FEATURE);
     }
 
     function poolType() external view virtual returns (bytes32) {
@@ -205,6 +213,7 @@ contract StvPool is Initializable, ERC20Upgradeable, AllowList {
     function _deposit(address _recipient, address _referral) internal returns (uint256 stv) {
         if (msg.value == 0) revert ZeroDeposit();
         if (_recipient == address(0)) revert InvalidReceiver();
+        _checkFeatureNotPaused(DEPOSITS_FEATURE);
         _checkAllowList();
 
         stv = previewDeposit(msg.value);
@@ -371,5 +380,27 @@ contract StvPool is Initializable, ERC20Upgradeable, AllowList {
 
     function _checkOnlyWithdrawalQueue() internal view {
         if (address(WITHDRAWAL_QUEUE) != msg.sender) revert NotWithdrawalQueue();
+    }
+
+    // =================================================================================
+    // PAUSE / RESUME DEPOSITS
+    // =================================================================================
+
+    /**
+     * @notice Pause deposits
+     * @dev Can only be called by accounts with the DEPOSITS_PAUSE_ROLE
+     */
+    function pauseDeposits() external {
+        _checkRole(DEPOSITS_PAUSE_ROLE, msg.sender);
+        _pauseFeature(DEPOSITS_FEATURE);
+    }
+
+    /**
+     * @notice Resume deposits
+     * @dev Can only be called by accounts with the DEPOSITS_RESUME_ROLE
+     */
+    function resumeDeposits() external {
+        _checkRole(DEPOSITS_RESUME_ROLE, msg.sender);
+        _resumeFeature(DEPOSITS_FEATURE);
     }
 }
