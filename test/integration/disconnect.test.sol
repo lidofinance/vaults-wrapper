@@ -90,7 +90,7 @@ contract DisconnectTest is StvStETHPoolHarness, TimelockHarness {
         vm.warp(block.timestamp + 30 days);
 
         // Check there are requests to finalize
-        uint256 requestToFinalized = ctx.withdrawalQueue.unfinalizedRequestNumber();
+        uint256 requestToFinalized = ctx.withdrawalQueue.unfinalizedRequestsNumber();
         assertGt(requestToFinalized, 0);
 
         // Oracle report to update vault state
@@ -99,7 +99,7 @@ contract DisconnectTest is StvStETHPoolHarness, TimelockHarness {
         // Finalize all withdrawal requests
         vm.prank(finalizer);
         ctx.withdrawalQueue.finalize(requestToFinalized, address(0));
-        assertEq(ctx.withdrawalQueue.unfinalizedRequestNumber(), 0);
+        assertEq(ctx.withdrawalQueue.unfinalizedRequestsNumber(), 0);
         assertEq(ctx.withdrawalQueue.unfinalizedStv(), 0);
         assertEq(ctx.withdrawalQueue.unfinalizedAssets(), 0);
         assertEq(ctx.withdrawalQueue.unfinalizedStethShares(), 0);
@@ -111,7 +111,7 @@ contract DisconnectTest is StvStETHPoolHarness, TimelockHarness {
         // assertTrue(ctx.withdrawalQueue.paused());
 
         // Double check no requests are left to finalize
-        // uint256 unfinalizedRequests = ctx.withdrawalQueue.unfinalizedRequestNumber();
+        // uint256 unfinalizedRequests = ctx.withdrawalQueue.unfinalizedRequestsNumber();
         // assertEq(unfinalizedRequests, 0);
 
         // Users can not request new withdrawals
