@@ -1,9 +1,9 @@
 // src/interfaces/IWstETH.sol
 pragma solidity >=0.8.25;
 
+import {IStETH} from "./IStETH.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IERC20Permit} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Permit.sol";
-import {IStETH} from "./IStETH.sol";
 
 interface IWstETH is IERC20, IERC20Permit {
     /**

@@ -1,16 +1,15 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity >=0.8.25;
 
-import {Test} from "forge-std/Test.sol";
-import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
-import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 import {SetupWithdrawalQueue} from "./SetupWithdrawalQueue.sol";
+import {Test} from "forge-std/Test.sol";
+import {StvStETHPool} from "src/StvStETHPool.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
 
 contract FinalizationTest is Test, SetupWithdrawalQueue {
     function setUp() public override {
         super.setUp();
-        pool.depositETH{value: 100_000 ether}();
+        pool.depositETH{value: 100_000 ether}(address(this), address(0));
     }
 
     // Initial state
@@ -18,7 +17,7 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
     function test_RebalanceFinalization_InitialState() public view {
         assertEq(withdrawalQueue.getLastRequestId(), 0);
         assertEq(withdrawalQueue.getLastFinalizedRequestId(), 0);
-        assertEq(withdrawalQueue.unfinalizedRequestNumber(), 0);
+        assertEq(withdrawalQueue.unfinalizedRequestsNumber(), 0);
         assertEq(withdrawalQueue.unfinalizedAssets(), 0);
         assertEq(withdrawalQueue.unfinalizedStv(), 0);
 
@@ -32,7 +31,7 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
         uint256 mintedStethShares = 10 ** ASSETS_DECIMALS;
         uint256 stvToRequest = 2 * 10 ** STV_DECIMALS;
         pool.mintStethShares(mintedStethShares);
-        uint256 requestId = pool.requestWithdrawal(stvToRequest, 0, mintedStethShares, address(this));
+        uint256 requestId = withdrawalQueue.requestWithdrawal(address(this), stvToRequest, mintedStethShares);
 
         // Verify request was created
         assertEq(requestId, 1);
@@ -63,12 +62,13 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
             1,
             1,
             totalAssets - assetsToRebalance,
+            0,
             stvToRequest - stvToRebalance,
             stvToRebalance,
             mintedStethShares,
             block.timestamp
         );
-        uint256 finalizedCount = withdrawalQueue.finalize(1);
+        uint256 finalizedCount = withdrawalQueue.finalize(1, address(0));
 
         // Verify finalization succeeded
         assertEq(finalizedCount, 1);
@@ -92,11 +92,11 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
         pool.mintStethShares(5 * mintedStethShares);
         dashboard.mock_simulateRewards(1234566789);
 
-        pool.requestWithdrawal(stvToRequest, 0, mintedStethShares, address(this));
-        pool.requestWithdrawal(stvToRequest, 0, mintedStethShares, address(this));
-        pool.requestWithdrawal(stvToRequest, 0, mintedStethShares, address(this));
-        pool.requestWithdrawal(stvToRequest, 0, mintedStethShares, address(this));
-        pool.requestWithdrawal(stvToRequest, 0, mintedStethShares, address(this));
+        withdrawalQueue.requestWithdrawal(address(this), stvToRequest, mintedStethShares);
+        withdrawalQueue.requestWithdrawal(address(this), stvToRequest, mintedStethShares);
+        withdrawalQueue.requestWithdrawal(address(this), stvToRequest, mintedStethShares);
+        withdrawalQueue.requestWithdrawal(address(this), stvToRequest, mintedStethShares);
+        withdrawalQueue.requestWithdrawal(address(this), stvToRequest, mintedStethShares);
 
         // Finalize all requests
         _finalizeRequests(5);
@@ -110,14 +110,14 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
 
     function test_RebalanceFinalization_SmallPenaltiesDoNotAffectUnrelatedUsers() public {
         vm.prank(userAlice);
-        pool.depositETH{value: 10 ether}();
+        pool.depositETH{value: 10 ether}(address(this), address(0));
 
         uint256 mintedStethShares = 10 ** ASSETS_DECIMALS;
         uint256 stvToRequest = 2 * 10 ** STV_DECIMALS;
         pool.mintStethShares(mintedStethShares);
 
         // Request withdrawal
-        pool.requestWithdrawal(stvToRequest, 0, mintedStethShares, address(this));
+        withdrawalQueue.requestWithdrawal(address(this), stvToRequest, mintedStethShares);
 
         // Simulate small penalties before finalization
         dashboard.mock_simulateRewards(-1 ether);
@@ -133,14 +133,14 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
 
     function test_RebalanceFinalization_HugePenaltiesSocialization() public {
         vm.prank(userAlice);
-        pool.depositETH{value: 10 ether}();
+        pool.depositETH{value: 10 ether}(userAlice, address(0));
 
         uint256 mintedStethShares = 10 ** ASSETS_DECIMALS;
         uint256 stvToRequest = 2 * 10 ** STV_DECIMALS;
         pool.mintStethShares(mintedStethShares);
 
         // Request withdrawal
-        uint256 requestId = pool.requestWithdrawal(stvToRequest, 0, mintedStethShares, address(this));
+        uint256 requestId = withdrawalQueue.requestWithdrawal(address(this), stvToRequest, mintedStethShares);
 
         // Simulate huge penalties before finalization
         // which result in the request exceeding the reserve ratio
@@ -167,7 +167,7 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
         pool.mintStethShares(mintedStethShares);
 
         // Request withdrawal
-        pool.requestWithdrawal(stvToRequest, 0, mintedStethShares, address(this));
+        withdrawalQueue.requestWithdrawal(address(this), stvToRequest, mintedStethShares);
 
         // Simulate vault rebalance before finalization
         assertEq(pool.totalExceedingMintedStethShares(), 0);
@@ -180,5 +180,27 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
         // Make sure that exceeding minted shares are used in rebalance
         assertEq(pool.totalMintedStethShares(), 0);
         assertEq(pool.totalExceedingMintedStethShares(), 0);
+    }
+
+    function test_RebalanceFinalization_SocializedLossEmitsEvent() public {
+        uint256 mintedStethShares = 10 ** ASSETS_DECIMALS;
+        uint256 stvToRequest = 2 * 10 ** STV_DECIMALS;
+
+        pool.mintStethShares(mintedStethShares);
+        uint256 requestId = withdrawalQueue.requestWithdrawal(address(this), stvToRequest, mintedStethShares);
+
+        // Apply large penalty so position becomes undercollateralized
+        dashboard.mock_simulateRewards(-90_000 ether);
+        assertGt(steth.getPooledEthBySharesRoundUp(mintedStethShares), pool.previewRedeem(stvToRequest));
+
+        _warpAndMockOracleReport();
+
+        vm.expectEmit(true, true, true, false, address(pool));
+        emit StvStETHPool.SocializedLoss(0, 0);
+
+        vm.prank(finalizeRoleHolder);
+        withdrawalQueue.finalize(1, address(0));
+
+        assertEq(withdrawalQueue.getClaimableEther(requestId), 0);
     }
 }

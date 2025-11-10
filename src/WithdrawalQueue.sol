@@ -1,27 +1,29 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >=0.8.25;
 
-import {AccessControlEnumerableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/extensions/AccessControlEnumerableUpgradeable.sol";
-import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
-import {ERC1967Utils} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Utils.sol";
-import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
-import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {IDashboard} from "./interfaces/IDashboard.sol";
-import {IVaultHub} from "./interfaces/IVaultHub.sol";
 import {ILazyOracle} from "./interfaces/ILazyOracle.sol";
-import {IWrapper} from "./interfaces/IWrapper.sol";
 import {IStETH} from "./interfaces/IStETH.sol";
 import {IStakingVault} from "./interfaces/IStakingVault.sol";
+import {IStvStETHPool} from "./interfaces/IStvStETHPool.sol";
+import {IVaultHub} from "./interfaces/IVaultHub.sol";
+import {
+    AccessControlEnumerableUpgradeable
+} from "@openzeppelin/contracts-upgradeable/access/extensions/AccessControlEnumerableUpgradeable.sol";
+import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 
-/// @title Withdrawal Queue V3 for Staking Vault Wrapper
-/// @notice Handles withdrawal requests for stvToken holders
+/**
+ * @title WithdrawalQueue
+ * @notice Manages withdrawal requests from the STV Pool with queuing, finalization, and claiming
+ * @dev Handles the complete lifecycle of withdrawal requests including optional stETH rebalancing,
+ * and discount mechanisms
+ */
 contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradeable {
     using EnumerableSet for EnumerableSet.UintSet;
 
-    /// @notice max time for finalization of the withdrawal request
-    uint256 public immutable MAX_ACCEPTABLE_WQ_FINALIZATION_TIME_IN_SECONDS;
-
-    /// @notice min delay between withdrawal request and finalization
+    /// @notice Min delay between withdrawal request and finalization
     uint256 public immutable MIN_WITHDRAWAL_DELAY_TIME_IN_SECONDS;
 
     // ACL
@@ -29,63 +31,86 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
     bytes32 public constant RESUME_ROLE = keccak256("RESUME_ROLE");
     bytes32 public constant FINALIZE_ROLE = keccak256("FINALIZE_ROLE");
 
-    /// @notice precision base for stv and steth share rates
+    /// @notice Precision base for stv and steth share rates
     uint256 public constant E27_PRECISION_BASE = 1e27;
     uint256 public constant E36_PRECISION_BASE = 1e36;
 
-    /// @notice minimal amount of assets that is possible to withdraw
-    /// @dev should be big enough to prevent DoS attacks by placing many small requests
-    uint256 public constant MIN_WITHDRAWAL_AMOUNT = 1 * 10 ** 14; // 0.0001 ETH
-    uint256 public constant MAX_WITHDRAWAL_AMOUNT = 10_000 * 10 ** 18; // 10,000 ETH
+    /// @notice Maximum gas cost coverage that can be applied for a single request
+    /// @dev High enough to cover gas costs for finalization tx
+    /// @dev Low enough to prevent abuse by excessive gas cost coverage
+    ///
+    /// Request finalization tx for 1 request consumes ~200k gas
+    /// Request finalization tx for 10 requests (in batch) consumes ~300k gas
+    /// Thus, setting max coverage to 0.0005 ether should be sufficient to cover finalization gas costs:
+    /// - when gas price is up to 2.5 gwei for tx with a single request (0.0005 eth / 200k gas = 2.5 gwei per gas)
+    /// - when gas price is up to 16.6 gwei for batched tx of 10 requests (10 * 0.0005 eth / 300k gas = 16.6 gwei per gas)
+    uint256 public constant MAX_GAS_COST_COVERAGE = 0.0005 ether;
 
-    /// @dev return value for the `_findCheckpointHint` method in case of no result
+    /// @notice Minimal value (assets - stETH to rebalance) that is possible to request
+    /// @dev Prevents placing many small requests
+    uint256 public constant MIN_WITHDRAWAL_VALUE = 0.001 ether;
+
+    /// @notice Maximum amount of assets that is possible to withdraw in a single request
+    /// @dev Prevents accumulating too much funds per single request fulfillment in the future
+    /// @dev To withdraw larger amounts, it's recommended to split it to several requests
+    uint256 public constant MAX_WITHDRAWAL_ASSETS = 10_000 ether;
+
+    /// @dev Return value for the `findCheckpointHint` method in case of no result
     uint256 internal constant NOT_FOUND = 0;
 
-    IWrapper public immutable WRAPPER;
+    /// @notice Flag indicating whether the pool supports rebalancing of steth shares
+    bool public immutable IS_REBALANCING_SUPPORTED;
+
+    IStvStETHPool public immutable POOL;
     IVaultHub public immutable VAULT_HUB;
     IDashboard public immutable DASHBOARD;
     IStETH public immutable STETH;
     ILazyOracle public immutable LAZY_ORACLE;
     IStakingVault public immutable STAKING_VAULT;
 
-    /// @notice structure representing a request for withdrawal
+    /// @notice Structure representing a request for withdrawal
     struct WithdrawalRequest {
-        /// @notice sum of all stv locked for withdrawal including this request
+        /// @notice Sum of all stv locked for withdrawal including this request
         uint256 cumulativeStv;
-        /// @notice sum of all steth shares to rebalance including this request
+        /// @notice Sum of all steth shares to rebalance including this request
         uint128 cumulativeStethShares;
-        /// @notice sum of all assets submitted for withdrawals including this request
+        /// @notice Sum of all assets submitted for withdrawals including this request
         uint128 cumulativeAssets;
-        /// @notice address that can claim the request
+        /// @notice Address that can claim this request
         address owner;
-        /// @notice block.timestamp when the request was created
+        /// @notice Timestamp of when the request was created, in seconds
         uint40 timestamp;
-        /// @notice flag if the request was claimed
-        bool claimed;
+        /// @notice True, if request is claimed. Request is claimable if (isFinalized && !isClaimed)
+        bool isClaimed;
     }
 
-    /// @notice structure to store stv rates for finalized requests
+    /// @notice Structure to store stv rates for finalized requests
     struct Checkpoint {
+        /// @notice First requestId that was finalized with these rates
         uint256 fromRequestId;
+        /// @notice Stv rate at the moment of finalization (1e27 precision)
         uint256 stvRate;
-        uint256 stethShareRate;
+        /// @notice Steth share rate at the moment of finalization (1e18 precision)
+        uint128 stethShareRate;
+        /// @notice Gas cost coverage for the requests in this checkpoint
+        uint64 gasCostCoverage;
     }
 
-    /// @notice output format struct for `getWithdrawalStatus()` / `getWithdrawalsStatus()` methods
+    /// @notice Output format struct for view methods `getWithdrawalStatus()` and `getWithdrawalStatusBatch()`
     struct WithdrawalRequestStatus {
-        /// @notice amount of stv locked for this request
+        /// @notice Amount of stv locked for this request
         uint256 amountOfStv;
-        /// @notice amount of steth shares to rebalance for this request
+        /// @notice Amount of steth shares to rebalance for this request
         uint256 amountOfStethShares;
-        /// @notice asset amount that was locked for this request
+        /// @notice Asset amount that was locked for this request
         uint256 amountOfAssets;
-        /// @notice address that can claim this request
+        /// @notice Address that can claim this request
         address owner;
-        /// @notice timestamp of when the request was created, in seconds
+        /// @notice Timestamp of when the request was created, in seconds
         uint256 timestamp;
-        /// @notice true, if request is finalized
+        /// @notice True, if request is finalized
         bool isFinalized;
-        /// @notice true, if request is claimed. Request is claimable if (isFinalized && !isClaimed)
+        /// @notice True, if request is claimed. Request is claimable if (isFinalized && !isClaimed)
         bool isClaimed;
     }
 
@@ -102,21 +127,21 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
         mapping(uint256 => Checkpoint) checkpoints;
         // ### 4th slot
         /// @dev last index in request queue
-        uint96 lastRequestId;
+        uint128 lastRequestId;
         /// @dev last index of finalized request in the queue
-        uint96 lastFinalizedRequestId;
-        /// @dev timestamp of emergency exit activation
-        uint40 emergencyExitActivationTimestamp;
+        uint128 lastFinalizedRequestId;
         // ### 5th slot
         /// @dev last index in checkpoints array
         uint96 lastCheckpointIndex;
         /// @dev amount of ETH locked on contract for further claiming
         uint96 totalLockedAssets;
+        /// @dev request finalization gas cost coverage in wei
+        uint64 gasCostCoverage;
     }
 
     // keccak256(abi.encode(uint256(keccak256("pool.storage.WithdrawalQueue")) - 1)) & ~bytes32(uint256(0xff))
     bytes32 private constant WithdrawalQueueStorageLocation =
-        0xff0bcb2d6a043ff95a84af574799a6cec022695552f02c53d70e4e5aa1e06100;
+        0x11fba3ff43ee43ae28e3c08029ee00ea5862db2aba88444d8c290c62bd802000;
 
     function _getWithdrawalQueueStorage() private pure returns (WithdrawalQueueStorage storage $) {
         assembly {
@@ -124,7 +149,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
         }
     }
 
-    event Initialized(address indexed admin);
+    event Initialized(address indexed admin, address indexed finalizer);
     event WithdrawalRequested(
         uint256 indexed requestId,
         address indexed owner,
@@ -136,25 +161,22 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
         uint256 indexed from,
         uint256 indexed to,
         uint256 ethLocked,
+        uint256 ethForGasCoverage,
         uint256 stvBurned,
         uint256 stvRebalanced,
         uint256 stethSharesRebalanced,
         uint256 timestamp
     );
     event WithdrawalClaimed(
-        uint256 indexed requestId,
-        address indexed owner,
-        address indexed receiver,
-        uint256 amountOfETH
+        uint256 indexed requestId, address indexed owner, address indexed recipient, uint256 amountOfETH
     );
-
-    event EmergencyExitActivated(uint256 timestamp);
-    event ImplementationUpgraded(address newImplementation);
+    event GasCostCoverageSet(uint256 newCoverage);
 
     error ZeroAddress();
-    error OnlyStvStrategyPoolan();
-    error RequestAmountTooSmall(uint256 amount);
-    error RequestAmountTooLarge(uint256 amount);
+    error RequestValueTooSmall(uint256 amount);
+    error RequestAssetsTooLarge(uint256 amount);
+    error GasCostCoverageTooLarge(uint256 amount);
+    error InvalidWithdrawalDelay();
     error InvalidRequestId(uint256 requestId);
     error InvalidRange(uint256 start, uint256 end);
     error RequestAlreadyClaimed(uint256 requestId);
@@ -164,9 +186,9 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
     error VaultReportStale();
     error CantSendValueRecipientMayHaveReverted();
     error InvalidHint(uint256 hint);
-    error InvalidEmergencyExitActivation();
     error NoRequestsToFinalize();
     error NotOwner(address _requestor, address _owner);
+    error RebalancingIsNotSupported();
 
     constructor(
         address _pool,
@@ -175,35 +197,39 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
         address _steth,
         address _vault,
         address _lazyOracle,
-        uint256 _maxAcceptableWQFinalizationTimeInSeconds,
-        uint256 _minWithdrawalDelayTimeInSeconds
+        uint256 _minWithdrawalDelayTimeInSeconds,
+        bool _isRebalancingSupported
     ) {
-        WRAPPER = IWrapper(payable(_pool));
+        if (_minWithdrawalDelayTimeInSeconds < 1 hours) revert InvalidWithdrawalDelay();
+
+        IS_REBALANCING_SUPPORTED = _isRebalancingSupported;
+        MIN_WITHDRAWAL_DELAY_TIME_IN_SECONDS = _minWithdrawalDelayTimeInSeconds;
+
+        POOL = IStvStETHPool(payable(_pool));
         DASHBOARD = IDashboard(payable(_dashboard));
         VAULT_HUB = IVaultHub(_vaultHub);
         STETH = IStETH(_steth);
         LAZY_ORACLE = ILazyOracle(_lazyOracle);
         STAKING_VAULT = IStakingVault(_vault);
 
-        MAX_ACCEPTABLE_WQ_FINALIZATION_TIME_IN_SECONDS = _maxAcceptableWQFinalizationTimeInSeconds;
-        MIN_WITHDRAWAL_DELAY_TIME_IN_SECONDS = _minWithdrawalDelayTimeInSeconds;
-
         _disableInitializers();
         _pause();
     }
 
-    /// @notice Initialize the contract storage explicitly.
-    /// @param _admin admin address that can change every role.
-    /// @dev Reverts if `_admin` equals to `address(0)`
-    /// @dev NB! It's initialized in paused state by default and should be resumed explicitly to start
-    function initialize(address _admin, address _finalizeRoleHolder) external initializer {
+    /**
+     * @notice Initialize the contract storage explicitly
+     * @param _admin Admin address that can change every role
+     * @param _finalizer Address that will be granted FINALIZE_ROLE
+     * @dev Reverts if `_admin` equals to `address(0)`
+     */
+    function initialize(address _admin, address _finalizer) external initializer {
         if (_admin == address(0)) revert ZeroAddress();
 
         __AccessControlEnumerable_init();
         __Pausable_init();
 
         _grantRole(DEFAULT_ADMIN_ROLE, _admin);
-        _grantRole(FINALIZE_ROLE, _finalizeRoleHolder);
+        _grantRole(FINALIZE_ROLE, _finalizer);
 
         _getWithdrawalQueueStorage().requests[0] = WithdrawalRequest({
             cumulativeStv: 0,
@@ -211,10 +237,10 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
             cumulativeAssets: 0,
             owner: address(0),
             timestamp: uint40(block.timestamp),
-            claimed: true
+            isClaimed: true
         });
 
-        emit Initialized(_admin);
+        emit Initialized(_admin, _finalizer);
     }
 
     // =================================================================================
@@ -232,7 +258,6 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
 
     /**
      * @notice Resume withdrawal requests placement and finalization
-     * @dev Contract is deployed in paused state and should be resumed explicitly
      */
     function resume() external {
         _checkRole(RESUME_ROLE, msg.sender);
@@ -244,63 +269,58 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
     // =================================================================================
 
     /**
-     * @notice Request multiple withdrawals for a user
-     * @param _stvToWithdraw array of amounts of stv to withdraw
-     * @param _stethSharesToRebalance array of amounts of stETH shares to rebalance
-     * @param _owner address that will be able to claim the created request
+     * @notice Request multiple withdrawals from the Pool
+     * @param _owner Address that will be able to claim the created request
+     * @param _stvToWithdraw Array of amounts of stv to withdraw
+     * @param _stethSharesToRebalance Array of amounts of stETH shares to rebalance if supported by the pool, array of 0 otherwise
      * @return requestIds the created withdrawal request ids
-     * @dev Can be called only by the Wrapper contract
      */
-    function requestWithdrawals(
+    function requestWithdrawalBatch(
+        address _owner,
         uint256[] calldata _stvToWithdraw,
-        uint256[] calldata _stethSharesToRebalance,
-        address _owner
+        uint256[] calldata _stethSharesToRebalance
     ) external returns (uint256[] memory requestIds) {
-        _checkResumedOrEmergencyExit();
-        _checkOnlyWrapper();
-
-        if (_stvToWithdraw.length != _stethSharesToRebalance.length) {
-            revert ArraysLengthMismatch(_stvToWithdraw.length, _stethSharesToRebalance.length);
-        }
+        _requireNotPaused();
+        _checkArrayLength(_stvToWithdraw.length, _stethSharesToRebalance.length);
 
         requestIds = new uint256[](_stvToWithdraw.length);
-
         for (uint256 i = 0; i < _stvToWithdraw.length; ++i) {
-            requestIds[i] = _requestWithdrawal(_stvToWithdraw[i], _stethSharesToRebalance[i], _owner);
+            requestIds[i] = _requestWithdrawal(_owner, _stvToWithdraw[i], _stethSharesToRebalance[i]);
         }
     }
 
     /**
-     * @notice Request a withdrawal for a user
-     * @param _stvToWithdraw amount of stv to withdraw
-     * @param _stethSharesToRebalance amount of steth shares to rebalance
-     * @param _owner address that will be able to claim the created request
-     * @return requestId the created withdrawal request id
-     * @dev Can be called only by the Wrapper contract
+     * @notice Request a withdrawal from the Pool
+     * @param _owner Address that will be able to claim the created request
+     * @param _stvToWithdraw Amount of stv to withdraw
+     * @param _stethSharesToRebalance Amount of steth shares to rebalance if supported by the pool, 0 otherwise
+     * @return requestId The created withdrawal request id
+     * @dev Transfers stv and liability shares from the requester to the withdrawal queue
      */
-    function requestWithdrawal(
-        uint256 _stvToWithdraw,
-        uint256 _stethSharesToRebalance,
-        address _owner
-    ) public returns (uint256 requestId) {
-        _checkResumedOrEmergencyExit();
-        _checkOnlyWrapper();
-
-        requestId = _requestWithdrawal(_stvToWithdraw, _stethSharesToRebalance, _owner);
+    function requestWithdrawal(address _owner, uint256 _stvToWithdraw, uint256 _stethSharesToRebalance)
+        external
+        returns (uint256 requestId)
+    {
+        _requireNotPaused();
+        requestId = _requestWithdrawal(_owner, _stvToWithdraw, _stethSharesToRebalance);
     }
 
-    function _requestWithdrawal(
-        uint256 _stvToWithdraw,
-        uint256 _stethSharesToRebalance,
-        address _owner
-    ) internal returns (uint256 requestId) {
-        _checkResumedOrEmergencyExit();
-        _checkOnlyWrapper();
+    function _requestWithdrawal(address _owner, uint256 _stvToWithdraw, uint256 _stethSharesToRebalance)
+        internal
+        returns (uint256 requestId)
+    {
+        if (_owner == address(0)) revert ZeroAddress();
+        if (_stethSharesToRebalance > 0 && !IS_REBALANCING_SUPPORTED) revert RebalancingIsNotSupported();
 
-        uint256 assets = WRAPPER.previewRedeem(_stvToWithdraw);
+        uint256 assets = POOL.previewRedeem(_stvToWithdraw);
+        uint256 value = _stethSharesToRebalance > 0
+            ? Math.saturatingSub(assets, _getPooledEthBySharesRoundUp(_stethSharesToRebalance))
+            : assets;
 
-        if (assets < MIN_WITHDRAWAL_AMOUNT) revert RequestAmountTooSmall(assets);
-        if (assets > MAX_WITHDRAWAL_AMOUNT) revert RequestAmountTooLarge(assets);
+        if (value < MIN_WITHDRAWAL_VALUE) revert RequestValueTooSmall(value);
+        if (assets > MAX_WITHDRAWAL_ASSETS) revert RequestAssetsTooLarge(assets);
+
+        _transferForWithdrawalQueue(msg.sender, _stvToWithdraw, _stethSharesToRebalance);
 
         WithdrawalQueueStorage storage $ = _getWithdrawalQueueStorage();
 
@@ -320,12 +340,56 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
             cumulativeAssets: uint128(cumulativeAssets),
             owner: _owner,
             timestamp: uint40(block.timestamp),
-            claimed: false
+            isClaimed: false
         });
 
         assert($.requestsByOwner[_owner].add(requestId));
 
         emit WithdrawalRequested(requestId, _owner, _stvToWithdraw, _stethSharesToRebalance, assets);
+    }
+
+    function _transferForWithdrawalQueue(address _from, uint256 _stv, uint256 _stethShares) internal {
+        if (_stethShares == 0) {
+            POOL.transferFromForWithdrawalQueue(_from, _stv);
+        } else {
+            POOL.transferFromWithLiabilityForWithdrawalQueue(_from, _stv, _stethShares);
+        }
+    }
+
+    function _getPooledEthBySharesRoundUp(uint256 _stethShares) internal view returns (uint256 ethAmount) {
+        ethAmount = STETH.getPooledEthBySharesRoundUp(_stethShares);
+    }
+
+    // =================================================================================
+    // GAS COST COVERAGE
+    // =================================================================================
+
+    /**
+     * @notice Set the gas cost coverage that applies to each request during finalization
+     * @param _coverage The gas cost coverage per request in wei
+     * @dev Reverts if `_coverage` is greater than `MAX_GAS_COST_COVERAGE`
+     * @dev 0 by default. Increasing coverage discourages malicious actors from creating
+     * excessive requests while compensating finalizers for gas expenses
+     */
+    function setFinalizationGasCostCoverage(uint256 _coverage) external {
+        _checkRole(FINALIZE_ROLE, msg.sender);
+
+        _setFinalizationGasCostCoverage(_coverage);
+    }
+
+    function _setFinalizationGasCostCoverage(uint256 _coverage) internal {
+        if (_coverage > MAX_GAS_COST_COVERAGE) revert GasCostCoverageTooLarge(_coverage);
+
+        _getWithdrawalQueueStorage().gasCostCoverage = uint64(_coverage);
+        emit GasCostCoverageSet(_coverage);
+    }
+
+    /**
+     * @notice Get the current gas cost coverage that applies to each request during finalization
+     * @return coverage The gas cost coverage per request in wei
+     */
+    function getFinalizationGasCostCoverage() external view returns (uint256 coverage) {
+        coverage = _getWithdrawalQueueStorage().gasCostCoverage;
     }
 
     // =================================================================================
@@ -339,16 +403,17 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
 
     /**
      * @notice Finalize withdrawal requests
-     * @param _maxRequests the maximum number of requests to finalize
-     * @return finalizedRequests the number of requests that were finalized
-     * @dev MIN_WITHDRAWAL_AMOUNT is used to prevent DoS attacks by placing many small requests
+     * @param _maxRequests The maximum number of requests to finalize
+     * @param _gasCostCoverageRecipient The address to receive gas cost coverage
+     * @return finalizedRequests The number of requests that were finalized
+     * @dev Reverts if there are no requests to finalize
      */
-    function finalize(uint256 _maxRequests) external returns (uint256 finalizedRequests) {
-        if (!isEmergencyExitActivated()) {
-            _requireNotPaused();
-            _checkRole(FINALIZE_ROLE, msg.sender);
-        }
-
+    function finalize(uint256 _maxRequests, address _gasCostCoverageRecipient)
+        external
+        returns (uint256 finalizedRequests)
+    {
+        _requireNotPaused();
+        _checkRole(FINALIZE_ROLE, msg.sender);
         _checkFreshReport();
 
         WithdrawalQueueStorage storage $ = _getWithdrawalQueueStorage();
@@ -357,69 +422,89 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
         uint256 firstRequestIdToFinalize = lastFinalizedRequestId + 1;
         uint256 lastRequestIdToFinalize = Math.min(lastFinalizedRequestId + _maxRequests, $.lastRequestId);
 
-        // TODO: think about should it be an early return or revert
         if (firstRequestIdToFinalize > lastRequestIdToFinalize) revert NoRequestsToFinalize();
 
+        // Collect necessary data for finalization
         uint256 currentStvRate = calculateCurrentStvRate();
         uint256 currentStethShareRate = calculateCurrentStethShareRate();
         uint256 withdrawableValue = DASHBOARD.withdrawableValue();
         uint256 availableBalance = STAKING_VAULT.availableBalance();
-        uint256 exceedingSteth = WRAPPER.totalExceedingMintedSteth();
+        uint256 exceedingSteth = _getExceedingMintedSteth();
         uint256 latestReportTimestamp = LAZY_ORACLE.latestReportTimestamp();
 
         uint256 totalStvToBurn;
         uint256 totalStethShares;
         uint256 totalEthToClaim;
+        uint256 totalGasCoverage;
         uint256 maxStvToRebalance;
 
-        // Finalize all requests in the range
+        Checkpoint memory checkpoint = Checkpoint({
+            fromRequestId: firstRequestIdToFinalize,
+            stvRate: currentStvRate,
+            stethShareRate: uint128(currentStethShareRate),
+            gasCostCoverage: $.gasCostCoverage
+        });
+
+        // Finalize requests one by one until conditions are met
         for (uint256 i = firstRequestIdToFinalize; i <= lastRequestIdToFinalize; ++i) {
-            WithdrawalRequest memory request = $.requests[i];
+            WithdrawalRequest memory currRequest = $.requests[i];
             WithdrawalRequest memory prevRequest = $.requests[i - 1];
-            (uint256 stv, uint256 ethToClaim, uint256 stethSharesToRebalance, uint256 stethToRebalance) = _calcStats(
-                prevRequest,
-                request,
-                currentStvRate,
-                currentStethShareRate
-            );
 
-            uint256 stvToRebalance = Math.mulDiv(
-                stethToRebalance,
-                E36_PRECISION_BASE,
-                currentStvRate,
-                Math.Rounding.Ceil
-            );
+            // Calculate amounts for the request
+            // - stv: amount of stv requested to withdraw
+            // - ethToClaim: amount of ETH that can be claimed for this request, excluding rebalancing and fees
+            // - stethSharesToRebalance: amount of steth shares to rebalance for this request
+            // - stethToRebalance: amount of steth corresponding to stethSharesToRebalance at the current rate
+            // - gasCostCoverage: amount of ETH that should be subtracted as gas cost coverage for this request
+            (
+                uint256 stv,
+                uint256 ethToClaim,
+                uint256 stethSharesToRebalance,
+                uint256 stethToRebalance,
+                uint256 gasCostCoverage
+            ) = _calcRequestAmounts(prevRequest, currRequest, checkpoint);
 
-            // Cap stvToRebalance to stv in the request, the rest will be socialized to users
-            if (stvToRebalance > stv) {
-                stvToRebalance = stv;
-            }
-
+            // Handle rebalancing if applicable
             uint256 ethToRebalance;
+            uint256 stvToRebalance;
 
-            // Exceeding stETH (if any) are used to cover rebalancing need without withdrawing ETH from the vault
-            if (exceedingSteth > stethToRebalance) {
-                exceedingSteth -= stethToRebalance;
-            } else {
-                exceedingSteth = 0;
-                ethToRebalance = stethToRebalance - exceedingSteth;
+            if (stethToRebalance > 0) {
+                // Determine how much stv should be burned in exchange for the steth shares
+                stvToRebalance = Math.mulDiv(stethToRebalance, E36_PRECISION_BASE, currentStvRate, Math.Rounding.Ceil);
+
+                // Cap stvToRebalance to requested stv. The rest (if any) will be socialized to users
+                // When creating a request, user transfers stv and liability to the withdrawal queue with the necessary reserve
+                // However, while waiting for finalization in the withdrawal queue, the position may become undercollateralized
+                // In this case, the loss is shared among all participants
+                if (stvToRebalance > stv) stvToRebalance = stv;
+
+                // Exceeding minted stETH (if any) are used to cover rebalancing need without withdrawing ETH from the vault
+                // Thus, Exceeding minted stETH aims to be reduced to 0
+                if (exceedingSteth > stethToRebalance) {
+                    exceedingSteth -= stethToRebalance;
+                } else {
+                    exceedingSteth = 0;
+                    ethToRebalance = stethToRebalance - exceedingSteth;
+                }
             }
 
             if (
-                // stop if insufficient ETH to cover this request
-                // stop if not enough time has passed since the request was created
-                // stop if the request was created after the latest report was published, at least one oracle report is required
-                ethToClaim > withdrawableValue ||
-                ethToClaim + ethToRebalance > availableBalance ||
-                request.timestamp + MIN_WITHDRAWAL_DELAY_TIME_IN_SECONDS > block.timestamp ||
-                request.timestamp > latestReportTimestamp
+                // Stop if insufficient withdrawable ETH to cover claimable ETH for this request
+                // Stop if insufficient available ETH to cover claimable and rebalancable ETH for this request
+                // Stop if not enough time has passed since the request was created
+                // Stop if the request was created after the latest report was published, at least one oracle report is required
+                (ethToClaim + gasCostCoverage) > withdrawableValue
+                    || (ethToClaim + ethToRebalance + gasCostCoverage) > availableBalance
+                    || currRequest.timestamp + MIN_WITHDRAWAL_DELAY_TIME_IN_SECONDS > block.timestamp
+                    || currRequest.timestamp > latestReportTimestamp
             ) {
                 break;
             }
 
-            withdrawableValue -= ethToClaim;
-            availableBalance -= (ethToClaim + ethToRebalance);
+            withdrawableValue -= (ethToClaim + gasCostCoverage);
+            availableBalance -= (ethToClaim + gasCostCoverage + ethToRebalance);
             totalEthToClaim += ethToClaim;
+            totalGasCoverage += gasCostCoverage;
             totalStvToBurn += (stv - stvToRebalance);
             totalStethShares += stethSharesToRebalance;
             maxStvToRebalance += stvToRebalance;
@@ -431,48 +516,59 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
         // 1. Withdraw ETH from the vault to cover finalized requests and burn associated stv
         // Eth to claim or stv to burn could be 0 if all requests are going to be rebalanced
         // Rebalance cannot be done first because it will withdraw eth without unlocking it
-        if (totalEthToClaim > 0) DASHBOARD.withdraw(address(this), totalEthToClaim);
-        if (totalStvToBurn > 0) WRAPPER.burnStvForWithdrawalQueue(totalStvToBurn);
+        if (totalEthToClaim + totalGasCoverage > 0) {
+            DASHBOARD.withdraw(address(this), totalEthToClaim + totalGasCoverage);
+        }
+        if (totalStvToBurn > 0) POOL.burnStvForWithdrawalQueue(totalStvToBurn);
 
         // 2. Rebalance steth shares by burning corresponding amount stv. Or socialize the losses if not enough stv
         // At this point stv rate may change because of the operation above
         // So it may burn less stv than maxStvToRebalance because of new stv rate
         uint256 totalStvRebalanced;
         if (totalStethShares > 0) {
+            assert(IS_REBALANCING_SUPPORTED);
+
             // Stv burning is limited at this point by maxStvToRebalance calculated above
             // to make sure that only stv of finalized requests is used for rebalancing
-            totalStvRebalanced = WRAPPER.rebalanceMintedStethShares(totalStethShares, maxStvToRebalance);
+            totalStvRebalanced = POOL.rebalanceMintedStethShares(totalStethShares, maxStvToRebalance);
         }
 
         // 3. Burn any remaining stv that was not used for rebalancing
         // The rebalancing may burn less stv than maxStvToRebalance because of:
         //   - the changed stv rate after the first step
         //   - accumulated rounding errors in maxStvToRebalance
-        // It's guaranteed that maxStvToRebalance >= totalStvRebalanced
+        //
+        // It's guaranteed by POOL.rebalanceMintedStethShares() that maxStvToRebalance >= totalStvRebalanced
         uint256 remainingStvForRebalance = maxStvToRebalance - totalStvRebalanced;
         if (remainingStvForRebalance > 0) {
-            WRAPPER.burnStvForWithdrawalQueue(remainingStvForRebalance);
+            POOL.burnStvForWithdrawalQueue(remainingStvForRebalance);
             totalStvToBurn += remainingStvForRebalance;
         }
 
         lastFinalizedRequestId = lastFinalizedRequestId + finalizedRequests;
 
-        // Create checkpoint with stvRate and stethShareRate
+        // Store checkpoint with current stvRate, stethShareRate and gasCostCoverage
         uint256 lastCheckpointIndex = $.lastCheckpointIndex + 1;
-        $.checkpoints[lastCheckpointIndex] = Checkpoint({
-            fromRequestId: firstRequestIdToFinalize,
-            stvRate: currentStvRate,
-            stethShareRate: currentStethShareRate
-        });
-
+        $.checkpoints[lastCheckpointIndex] = checkpoint;
         $.lastCheckpointIndex = uint96(lastCheckpointIndex);
+
         $.lastFinalizedRequestId = uint96(lastFinalizedRequestId);
         $.totalLockedAssets += uint96(totalEthToClaim);
+
+        // Send gas coverage to the caller
+        if (totalGasCoverage > 0) {
+            // Set gas cost coverage recipient to msg.sender if not specified
+            if (_gasCostCoverageRecipient == address(0)) _gasCostCoverageRecipient = msg.sender;
+
+            (bool success,) = _gasCostCoverageRecipient.call{value: totalGasCoverage}("");
+            if (!success) revert CantSendValueRecipientMayHaveReverted();
+        }
 
         emit WithdrawalsFinalized(
             firstRequestIdToFinalize,
             lastFinalizedRequestId,
             totalEthToClaim,
+            totalGasCoverage,
             totalStvToBurn,
             totalStvRebalanced,
             totalStethShares,
@@ -480,13 +576,25 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
         );
     }
 
+    function _getExceedingMintedSteth() internal view returns (uint256 exceedingMintedSteth) {
+        if (IS_REBALANCING_SUPPORTED) {
+            exceedingMintedSteth = POOL.totalExceedingMintedSteth();
+        } else {
+            exceedingMintedSteth = 0;
+        }
+    }
+
+    // =================================================================================
+    // STV & STETH RATES
+    // =================================================================================
+
     /**
      * @notice Calculate current stv rate of the vault
      * @return stvRate Current stv rate of the vault (1e27 precision)
      */
     function calculateCurrentStvRate() public view returns (uint256 stvRate) {
-        uint256 totalStv = WRAPPER.totalSupply(); // e27 precision
-        uint256 totalAssets = WRAPPER.totalAssets(); // e18 precision
+        uint256 totalStv = POOL.totalSupply(); // 1e27 precision
+        uint256 totalAssets = POOL.totalAssets(); // 1e18 precision
 
         if (totalStv == 0) return E27_PRECISION_BASE;
         stvRate = (totalAssets * E36_PRECISION_BASE) / totalStv;
@@ -497,7 +605,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
      * @return stethShareRate Current stETH share rate (1e27 precision)
      */
     function calculateCurrentStethShareRate() public view returns (uint256 stethShareRate) {
-        stethShareRate = STETH.getPooledEthBySharesRoundUp(E27_PRECISION_BASE);
+        stethShareRate = _getPooledEthBySharesRoundUp(E27_PRECISION_BASE);
     }
 
     // =================================================================================
@@ -505,59 +613,43 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
     // =================================================================================
 
     /**
-     * @notice Claim one `_requestId` request once finalized sending locked ether to the owner
-     * @param _requestId request id to claim
-     * @param _requestor address of the request owner, should be equal to msg.sender on Wrapper side
-     * @param _recipient address where claimed ether will be sent to
-     * @dev use unbounded loop to find a hint, which can lead to OOG
-     * @dev
-     *  Reverts if requestId or hint are not valid
-     *  Reverts if request is not finalized or already claimed
-     *  Reverts if msg sender is not an owner of request
+     * @notice Claim a batch of withdrawal requests once finalized sending locked ether to the recipient
+     * @param _recipient Address where claimed ether will be sent to
+     * @param _requestIds Array of request ids to claim
+     * @param _hints Checkpoint hints. can be found with `findCheckpointHintBatch(_requestIds, 1, getLastCheckpointIndex())`
+     * @return claimedAmounts Array of claimed amounts for each request
      */
-    function claimWithdrawal(
-        uint256 _requestId,
-        address _requestor,
-        address _recipient
-    ) external returns (uint256 claimedEth) {
-        _checkOnlyWrapper();
-        uint256 checkpoint = _findCheckpointHint(_requestId, 1, getLastCheckpointIndex());
-        claimedEth = _claim(_requestId, checkpoint, _requestor, _recipient);
+    function claimWithdrawalBatch(address _recipient, uint256[] calldata _requestIds, uint256[] calldata _hints)
+        external
+        returns (uint256[] memory claimedAmounts)
+    {
+        _checkArrayLength(_requestIds.length, _hints.length);
+
+        claimedAmounts = new uint256[](_requestIds.length);
+        for (uint256 i = 0; i < _requestIds.length; ++i) {
+            claimedAmounts[i] = _claim(msg.sender, _recipient, _requestIds[i], _hints[i]);
+        }
     }
 
     /**
-     * @notice Claim a batch of withdrawal requests
-     * @param _requestIds array of request ids to claim
-     * @param _hints checkpoint hints. can be found with `findCheckpointHints(_requestIds, 1, getLastCheckpointIndex())`
-     * @param _requestor address of the request owner, should be equal to msg.sender on Wrapper side
-     * @param _recipient address where claimed ether will be sent to
-     * @return claimedAmounts array of claimed amounts for each request
+     * @notice Claim one `_requestId` request once finalized sending locked ether to the recipient
+     * @param _recipient Address where claimed ether will be sent to
+     * @param _requestId Request id to claim
+     * @dev
+     *  Reverts if requestId is not valid
+     *  Reverts if request is not finalized or already claimed
+     *  Reverts if msg sender is not an owner of request
      */
-    function claimWithdrawals(
-        uint256[] calldata _requestIds,
-        uint256[] calldata _hints,
-        address _requestor,
-        address _recipient
-    ) external returns (uint256[] memory claimedAmounts) {
-        _checkOnlyWrapper();
-
-        if (_requestIds.length != _hints.length) {
-            revert ArraysLengthMismatch(_requestIds.length, _hints.length);
-        }
-
-        claimedAmounts = new uint256[](_requestIds.length);
-
-        for (uint256 i = 0; i < _requestIds.length; ++i) {
-            claimedAmounts[i] = _claim(_requestIds[i], _hints[i], _requestor, _recipient);
-        }
+    function claimWithdrawal(address _recipient, uint256 _requestId) external returns (uint256 claimedEth) {
+        uint256 checkpoint = findCheckpointHint(_requestId, 1, getLastCheckpointIndex());
+        claimedEth = _claim(msg.sender, _recipient, _requestId, checkpoint);
     }
 
-    function _claim(
-        uint256 _requestId,
-        uint256 _hint,
-        address _requestor,
-        address _recipient
-    ) internal returns (uint256) {
+    function _claim(address _requestor, address _recipient, uint256 _requestId, uint256 _hint)
+        internal
+        returns (uint256 ethWithDiscount)
+    {
+        if (_recipient == address(0)) revert ZeroAddress();
         if (_requestId == 0) revert InvalidRequestId(_requestId);
 
         WithdrawalQueueStorage storage $ = _getWithdrawalQueueStorage();
@@ -565,112 +657,20 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
 
         WithdrawalRequest storage request = $.requests[_requestId];
 
-        if (request.claimed) revert RequestAlreadyClaimed(_requestId);
+        if (request.isClaimed) revert RequestAlreadyClaimed(_requestId);
         if (request.owner != _requestor) revert NotOwner(_requestor, request.owner);
 
-        request.claimed = true;
+        request.isClaimed = true;
         assert($.requestsByOwner[request.owner].remove(_requestId));
 
-        uint256 ethWithDiscount = _calculateClaimableEther(request, _requestId, _hint);
-        // because of the rounding issue
-        // some dust (1-2 wei per request) will be accumulated upon claiming
+        ethWithDiscount = _calcClaimableEther(request, _requestId, _hint);
+        // Because of the rounding issue some dust could be accumulated upon claiming on the contract
         $.totalLockedAssets -= uint96(ethWithDiscount);
 
-        (bool success, ) = _recipient.call{value: ethWithDiscount}("");
+        (bool success,) = _recipient.call{value: ethWithDiscount}("");
         if (!success) revert CantSendValueRecipientMayHaveReverted();
 
         emit WithdrawalClaimed(_requestId, _requestor, _recipient, ethWithDiscount);
-
-        return ethWithDiscount;
-    }
-
-    /**
-     * @notice Calculate claimable ether for a request
-     * @param _requestId request id
-     * @param _hint checkpoint hint
-     * @return claimableEth amount of claimable ether
-     */
-    function _getClaimableEther(uint256 _requestId, uint256 _hint) internal view returns (uint256 claimableEth) {
-        WithdrawalQueueStorage storage $ = _getWithdrawalQueueStorage();
-        if (_requestId == 0 || _requestId > $.lastRequestId) return 0;
-        if (_requestId > $.lastFinalizedRequestId) return 0;
-
-        WithdrawalRequest storage request = $.requests[_requestId];
-        if (request.claimed) return 0;
-
-        claimableEth = _calculateClaimableEther(request, _requestId, _hint);
-    }
-
-    /**
-     * @notice Calculate claimable ether for a request using checkpoint
-     * @param _request the withdrawal request
-     * @param _requestId request id
-     * @param _hint checkpoint hint
-     * @return claimableEth amount of claimable ether
-     */
-    function _calculateClaimableEther(
-        WithdrawalRequest storage _request,
-        uint256 _requestId,
-        uint256 _hint
-    ) internal view returns (uint256 claimableEth) {
-        if (_hint == 0) revert InvalidHint(_hint);
-
-        WithdrawalQueueStorage storage $ = _getWithdrawalQueueStorage();
-
-        uint256 lastCheckpointIndex_ = $.lastCheckpointIndex;
-        if (_hint > lastCheckpointIndex_) revert InvalidHint(_hint);
-
-        Checkpoint memory checkpoint = $.checkpoints[_hint];
-        // Reverts if requestId is not in range [checkpoint[hint], checkpoint[hint+1])
-        // ______(>______
-        //    ^  hint
-        if (_requestId < checkpoint.fromRequestId) revert InvalidHint(_hint);
-        if (_hint < lastCheckpointIndex_) {
-            // ______(>______(>________
-            //       hint    hint+1  ^
-            Checkpoint memory nextCheckpoint = $.checkpoints[_hint + 1];
-            if (nextCheckpoint.fromRequestId <= _requestId) revert InvalidHint(_hint);
-        }
-
-        WithdrawalRequest memory prevRequest = $.requests[_requestId - 1];
-        (, claimableEth, , ) = _calcStats(prevRequest, _request, checkpoint.stvRate, checkpoint.stethShareRate);
-    }
-
-    /**
-     * @dev Calculate request stats (stv, assetsToClaim, stethSharesToRebalance and assetsToRebalance) for the request
-     */
-    function _calcStats(
-        WithdrawalRequest memory _prevRequest,
-        WithdrawalRequest memory _request,
-        uint256 finalizationStvRate,
-        uint256 stethShareRate
-    )
-        internal
-        pure
-        returns (uint256 stv, uint256 assetsToClaim, uint256 stethSharesToRebalance, uint256 assetsToRebalance)
-    {
-        stv = _request.cumulativeStv - _prevRequest.cumulativeStv;
-        stethSharesToRebalance = _request.cumulativeStethShares - _prevRequest.cumulativeStethShares;
-        assetsToClaim = _request.cumulativeAssets - _prevRequest.cumulativeAssets;
-
-        uint256 requestStvRate = (assetsToClaim * E36_PRECISION_BASE) / stv;
-
-        // Apply discount if the request stv rate is above the finalization stv rate
-        if (requestStvRate > finalizationStvRate) {
-            assetsToClaim = Math.mulDiv(stv, finalizationStvRate, E36_PRECISION_BASE, Math.Rounding.Floor);
-        }
-
-        if (stethSharesToRebalance > 0) {
-            assetsToRebalance = Math.mulDiv(
-                stethSharesToRebalance,
-                stethShareRate,
-                E27_PRECISION_BASE,
-                Math.Rounding.Ceil
-            );
-
-            // Decrease assets to claim by the amount of assets to rebalance
-            assetsToClaim = Math.saturatingSub(assetsToClaim, assetsToRebalance);
-        }
     }
 
     // =================================================================================
@@ -682,37 +682,36 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
      *  in the range  `[_firstIndex, _lastIndex]`.
      *  NB! Array of request ids should be sorted
      *  NB! `_firstIndex` should be greater than 0, because checkpoint list is 1-based array
-     *  Usage: findCheckpointHints(_requestIds, 1, getLastCheckpointIndex())
-     * @param _requestIds ids of the requests sorted in the ascending order to get hints for
-     * @param _firstIndex left boundary of the search range. Should be greater than 0
-     * @param _lastIndex right boundary of the search range. Should be less than or equal to getLastCheckpointIndex()
-     * @return hintIds array of hints used to find required checkpoint for the request
+     *  Usage: findCheckpointHintBatch(_requestIds, 1, getLastCheckpointIndex())
+     * @param _requestIds Ids of the requests sorted in the ascending order to get hints for
+     * @param _firstIndex Left boundary of the search range. Should be greater than 0
+     * @param _lastIndex Right boundary of the search range. Should be less than or equal to getLastCheckpointIndex()
+     * @return hintIds Array of hints used to find required checkpoint for the request
      */
-    function findCheckpointHints(
-        uint256[] calldata _requestIds,
-        uint256 _firstIndex,
-        uint256 _lastIndex
-    ) external view returns (uint256[] memory hintIds) {
+    function findCheckpointHintBatch(uint256[] calldata _requestIds, uint256 _firstIndex, uint256 _lastIndex)
+        external
+        view
+        returns (uint256[] memory hintIds)
+    {
         hintIds = new uint256[](_requestIds.length);
         uint256 prevRequestId = 0;
         for (uint256 i = 0; i < _requestIds.length; ++i) {
             if (_requestIds[i] < prevRequestId) revert RequestIdsNotSorted();
-            hintIds[i] = _findCheckpointHint(_requestIds[i], _firstIndex, _lastIndex);
+            hintIds[i] = findCheckpointHint(_requestIds[i], _firstIndex, _lastIndex);
             _firstIndex = hintIds[i];
             prevRequestId = _requestIds[i];
         }
     }
 
     /**
-     * @dev View function to find a checkpoint hint to use in `claimWithdrawal()` and `getClaimableEther()`
-     *  Search will be performed in the range of `[_firstIndex, _lastIndex]`
-     *
-     * @param _requestId request id to search the checkpoint for
-     * @param _start index of the left boundary of the search range, should be greater than 0
-     * @param _end index of the right boundary of the search range, should be less than or equal to `getLastCheckpointIndex()`
+     * @notice View function to find a checkpoint hint to use in `claimWithdrawalBatch()` and `getClaimableEther()`
+     * Search will be performed in the range of `[_firstIndex, _lastIndex]`
+     * @param _requestId Request id to search the checkpoint for
+     * @param _start Index of the left boundary of the search range, should be greater than 0
+     * @param _end Index of the right boundary of the search range, should be less than or equal to `getLastCheckpointIndex()`
      * @return hint for later use in other methods or 0 if hint not found in the range
      */
-    function _findCheckpointHint(uint256 _requestId, uint256 _start, uint256 _end) internal view returns (uint256) {
+    function findCheckpointHint(uint256 _requestId, uint256 _start, uint256 _end) public view returns (uint256) {
         WithdrawalQueueStorage storage $ = _getWithdrawalQueueStorage();
         if (_requestId == 0 || _requestId > $.lastRequestId) revert InvalidRequestId(_requestId);
 
@@ -750,61 +749,75 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
         return min;
     }
 
+    /**
+     * @notice Returns the last checkpoint index
+     * @return index Last checkpoint index
+     */
+    function getLastCheckpointIndex() public view returns (uint256 index) {
+        index = _getWithdrawalQueueStorage().lastCheckpointIndex;
+    }
+
+    // =================================================================================
+    // REQUESTS BY OWNER
+    // =================================================================================
+
+    /**
+     * @notice Returns all withdrawal requests that belong to the `_owner` address
+     * @param _owner Address to get requests for
+     * @return requestIds Array of request ids
+     *
+     * WARNING: This operation will copy the entire storage to memory, which can be quite expensive. This is designed
+     * to mostly be used by view accessors that are queried without any gas fees. Developers should keep in mind that
+     * this function has an unbounded cost, and using it as part of a state-changing function may render the function
+     * uncallable if the set grows to a point where copying to memory consumes too much gas to fit in a block.
+     */
+    function withdrawalRequestsOf(address _owner) external view returns (uint256[] memory requestIds) {
+        requestIds = _getWithdrawalQueueStorage().requestsByOwner[_owner].values();
+    }
+
+    /**
+     * @notice Returns withdrawal requests in range that belong to the `_owner` address
+     * @param _owner Address to get requests for
+     * @param _start Start index
+     * @param _end End index
+     * @return requestIds Array of request ids
+     *
+     * WARNING: This operation will copy the entire storage to memory, which can be quite expensive. This is designed
+     * to mostly be used by view accessors that are queried without any gas fees. Developers should keep in mind that
+     * this function has an unbounded cost, and using it as part of a state-changing function may render the function
+     * uncallable if the set grows to a point where copying to memory consumes too much gas to fit in a block.
+     */
+    function withdrawalRequestsInRangeOf(address _owner, uint256 _start, uint256 _end)
+        external
+        view
+        returns (uint256[] memory requestIds)
+    {
+        requestIds = _getWithdrawalQueueStorage().requestsByOwner[_owner].values(_start, _end);
+    }
+
+    /**
+     * @notice Returns the length of the withdrawal requests that belong to the `_owner` address
+     * @param _owner Address to get requests for
+     * @return length Length of the requests array
+     */
+    function withdrawalRequestsLengthOf(address _owner) external view returns (uint256 length) {
+        length = _getWithdrawalQueueStorage().requestsByOwner[_owner].length();
+    }
+
     // =================================================================================
     // REQUEST STATUS
     // =================================================================================
 
     /**
-     * @notice Returns all withdrawal requests that belong to the `_owner` address
-     * @param _owner address to get requests for
-     * @return requestIds array of request ids
-     *
-     * WARNING: This operation will copy the entire storage to memory, which can be quite expensive. This is designed
-     * to mostly be used by view accessors that are queried without any gas fees. Developers should keep in mind that
-     * this function has an unbounded cost, and using it as part of a state-changing function may render the function
-     * uncallable if the set grows to a point where copying to memory consumes too much gas to fit in a block.
-     */
-    function getWithdrawalRequests(address _owner) external view returns (uint256[] memory requestIds) {
-        return _getWithdrawalQueueStorage().requestsByOwner[_owner].values();
-    }
-
-    /**
-     * @notice Returns all withdrawal requests that belong to the `_owner` address
-     * @param _owner address to get requests for
-     * @param _start start index
-     * @param _end end index
-     * @return requestIds array of request ids
-     *
-     * WARNING: This operation will copy the entire storage to memory, which can be quite expensive. This is designed
-     * to mostly be used by view accessors that are queried without any gas fees. Developers should keep in mind that
-     * this function has an unbounded cost, and using it as part of a state-changing function may render the function
-     * uncallable if the set grows to a point where copying to memory consumes too much gas to fit in a block.
-     */
-    function getWithdrawalRequests(
-        address _owner,
-        uint256 _start,
-        uint256 _end
-    ) external view returns (uint256[] memory requestIds) {
-        requestIds = _getWithdrawalQueueStorage().requestsByOwner[_owner].values(_start, _end);
-    }
-
-    /**
-     * @notice Returns the length of the withdrawal requests that belong to the `_owner` address.
-     * @param _owner address to get requests for
-     * @return length length of the requests array
-     */
-    function getWithdrawalRequestsLength(address _owner) external view returns (uint256 length) {
-        length = _getWithdrawalQueueStorage().requestsByOwner[_owner].length();
-    }
-
-    /**
      * @notice Returns status for requests with provided ids
-     * @param _requestIds array of withdrawal request ids
-     * @return statuses array of withdrawal request statuses
+     * @param _requestIds Array of withdrawal request ids
+     * @return statuses Array of withdrawal request statuses
      */
-    function getWithdrawalsStatus(
-        uint256[] calldata _requestIds
-    ) external view returns (WithdrawalRequestStatus[] memory statuses) {
+    function getWithdrawalStatusBatch(uint256[] calldata _requestIds)
+        external
+        view
+        returns (WithdrawalRequestStatus[] memory statuses)
+    {
         statuses = new WithdrawalRequestStatus[](_requestIds.length);
         for (uint256 i = 0; i < _requestIds.length; ++i) {
             statuses[i] = _getStatus(_requestIds[i]);
@@ -813,49 +826,13 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
 
     /**
      * @notice Returns status for a single request
-     * @param _requestId request id
-     * @return status withdrawal request status
+     * @param _requestId Request id to get status for
+     * @return status Withdrawal request status
      */
     function getWithdrawalStatus(uint256 _requestId) external view returns (WithdrawalRequestStatus memory status) {
         status = _getStatus(_requestId);
     }
 
-    /**
-     * @notice Returns the claimable ether for a request
-     * @param _requestId request id to get claimable ether for
-     * @return claimableEth claimable ether
-     */
-    function getClaimableEther(uint256 _requestId) external view returns (uint256 claimableEth) {
-        uint256 checkpoint = _findCheckpointHint(_requestId, 1, getLastCheckpointIndex());
-        claimableEth = _getClaimableEther(_requestId, checkpoint);
-    }
-
-    /**
-     * @notice Returns amount of ether available for claim for each provided request id
-     * @param _requestIds array of request ids to get claimable ether for
-     * @param _hints checkpoint hints. can be found with `findCheckpointHints(_requestIds, 1, getLastCheckpointIndex())`
-     * @return claimableEthValues amount of claimable ether for each request, amount is equal to 0 if request
-     *  is not finalized or already claimed
-     */
-    function getClaimableEther(
-        uint256[] calldata _requestIds,
-        uint256[] calldata _hints
-    ) external view returns (uint256[] memory claimableEthValues) {
-        if (_requestIds.length != _hints.length) {
-            revert ArraysLengthMismatch(_requestIds.length, _hints.length);
-        }
-
-        claimableEthValues = new uint256[](_requestIds.length);
-        for (uint256 i = 0; i < _requestIds.length; ++i) {
-            claimableEthValues[i] = _getClaimableEther(_requestIds[i], _hints[i]);
-        }
-    }
-
-    /**
-     * @notice Get status for a single request
-     * @param _requestId request id
-     * @return requestStatus withdrawal request status
-     */
     function _getStatus(uint256 _requestId) internal view returns (WithdrawalRequestStatus memory requestStatus) {
         WithdrawalQueueStorage storage $ = _getWithdrawalQueueStorage();
         if (_requestId == 0 || _requestId > $.lastRequestId) revert InvalidRequestId(_requestId);
@@ -870,36 +847,141 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
             owner: request.owner,
             timestamp: request.timestamp,
             isFinalized: _requestId <= $.lastFinalizedRequestId,
-            isClaimed: request.claimed
+            isClaimed: request.isClaimed
         });
     }
 
     // =================================================================================
-    // QUEUE STATS
+    // CLAIMABLE ETHER
+    // =================================================================================
+
+    /**
+     * @notice Returns amount of ether available for claim for each provided request id
+     * @param _requestIds Array of request ids to get claimable ether for
+     * @param _hints Checkpoint hints. Can be found with `findCheckpointHintBatch(_requestIds, 1, getLastCheckpointIndex())`
+     * @return claimableEthValues Amount of claimable ether for each request, amount is equal to 0 if request
+     * is not finalized or already claimed
+     */
+    function getClaimableEtherBatch(uint256[] calldata _requestIds, uint256[] calldata _hints)
+        external
+        view
+        returns (uint256[] memory claimableEthValues)
+    {
+        _checkArrayLength(_requestIds.length, _hints.length);
+
+        claimableEthValues = new uint256[](_requestIds.length);
+        for (uint256 i = 0; i < _requestIds.length; ++i) {
+            claimableEthValues[i] = _getClaimableEther(_requestIds[i], _hints[i]);
+        }
+    }
+
+    /**
+     * @notice Returns the claimable ether for a request
+     * @param _requestId Request id to get claimable ether for
+     * @return claimableEth Amount of claimable ether, amount is equal to 0 if request is not finalized or already claimed
+     */
+    function getClaimableEther(uint256 _requestId) external view returns (uint256 claimableEth) {
+        uint256 checkpoint = findCheckpointHint(_requestId, 1, getLastCheckpointIndex());
+        claimableEth = _getClaimableEther(_requestId, checkpoint);
+    }
+
+    function _getClaimableEther(uint256 _requestId, uint256 _hint) internal view returns (uint256 claimableEth) {
+        WithdrawalQueueStorage storage $ = _getWithdrawalQueueStorage();
+        if (_requestId == 0 || _requestId > $.lastRequestId) return 0;
+        if (_requestId > $.lastFinalizedRequestId) return 0;
+
+        WithdrawalRequest storage request = $.requests[_requestId];
+        if (request.isClaimed) return 0;
+
+        claimableEth = _calcClaimableEther(request, _requestId, _hint);
+    }
+
+    function _calcClaimableEther(WithdrawalRequest storage _request, uint256 _requestId, uint256 _hint)
+        internal
+        view
+        returns (uint256 claimableEth)
+    {
+        if (_hint == 0) revert InvalidHint(_hint);
+
+        WithdrawalQueueStorage storage $ = _getWithdrawalQueueStorage();
+
+        uint256 lastCheckpointIndex_ = $.lastCheckpointIndex;
+        if (_hint > lastCheckpointIndex_) revert InvalidHint(_hint);
+
+        Checkpoint memory checkpoint = $.checkpoints[_hint];
+        // Reverts if requestId is not in range [checkpoint[hint], checkpoint[hint+1])
+        // ______(>______
+        //    ^  hint
+        if (_requestId < checkpoint.fromRequestId) revert InvalidHint(_hint);
+        if (_hint < lastCheckpointIndex_) {
+            // ______(>______(>________
+            //       hint    hint+1  ^
+            Checkpoint memory nextCheckpoint = $.checkpoints[_hint + 1];
+            if (nextCheckpoint.fromRequestId <= _requestId) revert InvalidHint(_hint);
+        }
+
+        WithdrawalRequest memory prevRequest = $.requests[_requestId - 1];
+        (, claimableEth,,,) = _calcRequestAmounts(prevRequest, _request, checkpoint);
+    }
+
+    function _calcRequestAmounts(
+        WithdrawalRequest memory _prevRequest,
+        WithdrawalRequest memory _request,
+        Checkpoint memory checkpoint
+    )
+        internal
+        pure
+        returns (
+            uint256 stv,
+            uint256 assetsToClaim,
+            uint256 stethSharesToRebalance,
+            uint256 assetsToRebalance,
+            uint256 gasCostCoverage
+        )
+    {
+        stv = _request.cumulativeStv - _prevRequest.cumulativeStv;
+        stethSharesToRebalance = _request.cumulativeStethShares - _prevRequest.cumulativeStethShares;
+        assetsToClaim = _request.cumulativeAssets - _prevRequest.cumulativeAssets;
+
+        // Calculate stv rate at the time of request creation
+        uint256 requestStvRate = (assetsToClaim * E36_PRECISION_BASE) / stv;
+
+        // Apply discount if the request stv rate is above the finalization stv rate
+        if (requestStvRate > checkpoint.stvRate) {
+            assetsToClaim = Math.mulDiv(stv, checkpoint.stvRate, E36_PRECISION_BASE, Math.Rounding.Floor);
+        }
+
+        if (stethSharesToRebalance > 0) {
+            assetsToRebalance =
+                Math.mulDiv(stethSharesToRebalance, checkpoint.stethShareRate, E27_PRECISION_BASE, Math.Rounding.Ceil);
+
+            // Decrease assets to claim by the amount of assets to rebalance
+            assetsToClaim = Math.saturatingSub(assetsToClaim, assetsToRebalance);
+        }
+
+        // Apply request finalization gas cost coverage
+        if (checkpoint.gasCostCoverage > 0) {
+            gasCostCoverage = Math.min(assetsToClaim, checkpoint.gasCostCoverage);
+            assetsToClaim -= gasCostCoverage;
+        }
+    }
+
+    // =================================================================================
+    // UNFINALIZED
     // =================================================================================
 
     /**
      * @notice Return the number of unfinalized requests in the queue
-     * @return requestNumber number of unfinalized requests
+     * @return requestsNumber Number of unfinalized requests
      */
-    function unfinalizedRequestNumber() external view returns (uint256 requestNumber) {
+    function unfinalizedRequestsNumber() external view returns (uint256 requestsNumber) {
         WithdrawalQueueStorage storage $ = _getWithdrawalQueueStorage();
-        requestNumber = $.lastRequestId - $.lastFinalizedRequestId;
-    }
-
-    /**
-     * @notice Returns the amount of assets in the queue yet to be finalized
-     * @dev NOTE: This returns the nominal amount. Actual ETH needed may be less due to discounts
-     * @return assets amount of assets yet to be finalized
-     */
-    function unfinalizedAssets() external view returns (uint256 assets) {
-        WithdrawalQueueStorage storage $ = _getWithdrawalQueueStorage();
-        assets = $.requests[$.lastRequestId].cumulativeAssets - $.requests[$.lastFinalizedRequestId].cumulativeAssets;
+        requestsNumber = $.lastRequestId - $.lastFinalizedRequestId;
     }
 
     /**
      * @notice Returns the amount of stv in the queue yet to be finalized
-     * @return stv amount of stv yet to be finalized
+     * @return stv Amount of stv yet to be finalized
      */
     function unfinalizedStv() external view returns (uint256 stv) {
         WithdrawalQueueStorage storage $ = _getWithdrawalQueueStorage();
@@ -907,8 +989,32 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
     }
 
     /**
+     * @notice Returns the amount of stethShares in the queue yet to be rebalanced
+     * @return stethShares Amount of stethShares yet to be rebalanced
+     */
+    function unfinalizedStethShares() external view returns (uint256 stethShares) {
+        WithdrawalQueueStorage storage $ = _getWithdrawalQueueStorage();
+        stethShares = $.requests[$.lastRequestId].cumulativeStethShares
+            - $.requests[$.lastFinalizedRequestId].cumulativeStethShares;
+    }
+
+    /**
+     * @notice Returns the amount of assets in the queue yet to be finalized
+     * @dev NOTE: This returns the nominal amount. Actual ETH needed may be less due to discounts
+     * @return assets Amount of assets yet to be finalized
+     */
+    function unfinalizedAssets() external view returns (uint256 assets) {
+        WithdrawalQueueStorage storage $ = _getWithdrawalQueueStorage();
+        assets = $.requests[$.lastRequestId].cumulativeAssets - $.requests[$.lastFinalizedRequestId].cumulativeAssets;
+    }
+
+    // =================================================================================
+    // REQUEST IDS
+    // =================================================================================
+
+    /**
      * @notice Returns the last request id
-     * @return requestId last request id
+     * @return requestId Last request id
      */
     function getLastRequestId() public view returns (uint256 requestId) {
         requestId = _getWithdrawalQueueStorage().lastRequestId;
@@ -916,72 +1022,18 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
 
     /**
      * @notice Returns the last finalized request id
-     * @return requestId last finalized request id
+     * @return requestId Last finalized request id
      */
     function getLastFinalizedRequestId() public view returns (uint256 requestId) {
         requestId = _getWithdrawalQueueStorage().lastFinalizedRequestId;
-    }
-
-    /**
-     * @notice Returns the last checkpoint index
-     * @return index last checkpoint index
-     */
-    function getLastCheckpointIndex() public view returns (uint256 index) {
-        index = _getWithdrawalQueueStorage().lastCheckpointIndex;
-    }
-
-    // =================================================================================
-    // EMERGENCY EXIT
-    // =================================================================================
-
-    /**
-     * @notice Returns true if Emergency Exit is activated
-     * @return isActivate true if Emergency Exit is activated
-     */
-    function isEmergencyExitActivated() public view returns (bool isActivate) {
-        isActivate = _getWithdrawalQueueStorage().emergencyExitActivationTimestamp > 0;
-    }
-
-    /**
-     * @notice Returns true if requests have not been finalized for a long time
-     * @return isStuck true if Withdrawal Queue is stuck
-     */
-    function isWithdrawalQueueStuck() public view returns (bool isStuck) {
-        WithdrawalQueueStorage storage $ = _getWithdrawalQueueStorage();
-        if ($.lastFinalizedRequestId >= $.lastRequestId) return false;
-
-        uint256 firstPendingRequest = $.lastFinalizedRequestId + 1;
-        uint256 firstPendingRequestTimestamp = $.requests[firstPendingRequest].timestamp;
-        uint256 maxAcceptableTime = firstPendingRequestTimestamp + MAX_ACCEPTABLE_WQ_FINALIZATION_TIME_IN_SECONDS;
-
-        isStuck = maxAcceptableTime < block.timestamp;
-    }
-
-    /**
-     * @notice Permissionless method to activate Emergency Exit
-     * @dev Can only be called if Withdrawal Queue is stuck
-     */
-    function activateEmergencyExit() external {
-        WithdrawalQueueStorage storage $ = _getWithdrawalQueueStorage();
-        if ($.emergencyExitActivationTimestamp > 0 || !isWithdrawalQueueStuck()) {
-            revert InvalidEmergencyExitActivation();
-        }
-
-        $.emergencyExitActivationTimestamp = uint40(block.timestamp);
-
-        emit EmergencyExitActivated($.emergencyExitActivationTimestamp);
     }
 
     // =================================================================================
     // CHECKS
     // =================================================================================
 
-    function _checkOnlyWrapper() internal view {
-        if (msg.sender != address(WRAPPER)) revert OnlyStvStrategyPoolan();
-    }
-
-    function _checkResumedOrEmergencyExit() internal view {
-        if (!isEmergencyExitActivated()) _requireNotPaused();
+    function _checkArrayLength(uint256 firstArrayLength, uint256 secondArrayLength) internal pure {
+        if (firstArrayLength != secondArrayLength) revert ArraysLengthMismatch(firstArrayLength, secondArrayLength);
     }
 
     function _checkFreshReport() internal view {

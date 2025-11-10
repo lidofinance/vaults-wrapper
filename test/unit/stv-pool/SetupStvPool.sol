@@ -1,15 +1,17 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity >=0.8.25;
 
-import {Test} from "forge-std/Test.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
+import {Test} from "forge-std/Test.sol";
 import {StvPool} from "src/StvPool.sol";
 import {MockDashboard, MockDashboardFactory} from "test/mocks/MockDashboard.sol";
 import {MockStETH} from "test/mocks/MockStETH.sol";
+import {MockVaultHub} from "test/mocks/MockVaultHub.sol";
 
 abstract contract SetupStvPool is Test {
     StvPool public pool;
     MockDashboard public dashboard;
+    MockVaultHub public vaultHub;
     MockStETH public steth;
 
     address public owner;
@@ -31,12 +33,18 @@ abstract contract SetupStvPool is Test {
         // Deploy mocks
         dashboard = new MockDashboardFactory().createMockDashboard(owner);
         steth = dashboard.STETH();
+        vaultHub = dashboard.VAULT_HUB();
 
         // Fund the dashboard with 1 ETH
         dashboard.fund{value: initialDeposit}();
 
         // Deploy the pool
-        StvPool poolImpl = new StvPool(address(dashboard), false, address(0), address(0)); // withdrawalQueue and distributor
+        StvPool poolImpl = new StvPool({
+            _dashboard: address(dashboard),
+            _allowListEnabled: false,
+            _withdrawalQueue: address(0),
+            _distributor: address(0)
+        });
         ERC1967Proxy poolProxy = new ERC1967Proxy(address(poolImpl), "");
 
         pool = StvPool(payable(poolProxy));

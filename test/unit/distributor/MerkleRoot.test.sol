@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >=0.8.25;
 
-import {Test} from "forge-std/Test.sol";
 import {SetupDistributor} from "./SetupDistributor.sol";
-import {Distributor} from "src/Distributor.sol";
 import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
+import {Test} from "forge-std/Test.sol";
+import {Distributor} from "src/Distributor.sol";
 
 contract MerkleRootTest is Test, SetupDistributor {
     function setUp() public override {
@@ -21,11 +21,7 @@ contract MerkleRootTest is Test, SetupDistributor {
 
         vm.prank(userAlice);
         vm.expectRevert(
-            abi.encodeWithSelector(
-                IAccessControl.AccessControlUnauthorizedAccount.selector,
-                userAlice,
-                managerRole
-            )
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, userAlice, managerRole)
         );
         distributor.setMerkleRoot(newRoot, newCid);
     }
@@ -92,7 +88,7 @@ contract MerkleRootTest is Test, SetupDistributor {
         bytes32 oldRoot = distributor.root();
         string memory oldCid = distributor.cid();
         uint256 oldBlock = distributor.lastProcessedBlock();
-        
+
         bytes32 newRoot = keccak256("testRoot");
         string memory newCid = "QmTestCID";
 
@@ -103,16 +99,16 @@ contract MerkleRootTest is Test, SetupDistributor {
         distributor.setMerkleRoot(newRoot, newCid);
     }
 
-    function test_SetMerkleRoot_OwnerCanSetRoot() public {
+    function test_SetMerkleRoot_OwnerCanSetRootAfterGrant() public {
         bytes32 newRoot = keccak256("testRoot");
         string memory newCid = "QmTestCID";
 
-        vm.prank(owner);
+        vm.startPrank(owner);
+        distributor.grantRole(distributor.MANAGER_ROLE(), owner);
         distributor.setMerkleRoot(newRoot, newCid);
+        vm.stopPrank();
 
         assertEq(distributor.root(), newRoot);
     }
 }
-
-
 

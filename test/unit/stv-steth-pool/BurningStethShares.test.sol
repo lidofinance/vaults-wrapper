@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity >=0.8.25;
 
-import {Test, console} from "forge-std/Test.sol";
 import {SetupStvStETHPool} from "./SetupStvStETHPool.sol";
+import {Test} from "forge-std/Test.sol";
 import {StvStETHPool} from "src/StvStETHPool.sol";
 
 contract BurningStethSharesTest is Test, SetupStvStETHPool {
@@ -12,12 +12,8 @@ contract BurningStethSharesTest is Test, SetupStvStETHPool {
     function setUp() public override {
         super.setUp();
         // Deposit ETH and mint stETH shares for testing burn functionality
-        pool.depositETH{value: ethToDeposit}();
+        pool.depositETH{value: ethToDeposit}(address(this), address(0));
         pool.mintStethShares(stethSharesToMint);
-
-        // Mint stETH to the test contract so it can burn shares
-        vm.deal(address(this), 100 ether);
-        steth.submit{value: 10 ether}(address(this));
 
         // Approve pool to spend stETH shares for burning
         steth.approve(address(pool), type(uint256).max);
@@ -89,12 +85,12 @@ contract BurningStethSharesTest is Test, SetupStvStETHPool {
     }
 
     function test_BurnStethShares_IncreasesAvailableCapacity() public {
-        uint256 capacityBefore = pool.mintingCapacitySharesOf(address(this));
+        uint256 capacityBefore = pool.remainingMintingCapacitySharesOf(address(this), 0);
         uint256 sharesToBurn = stethSharesToMint / 2;
 
         pool.burnStethShares(sharesToBurn);
 
-        uint256 capacityAfter = pool.mintingCapacitySharesOf(address(this));
+        uint256 capacityAfter = pool.remainingMintingCapacitySharesOf(address(this), 0);
         assertEq(capacityAfter, capacityBefore + sharesToBurn);
     }
 
@@ -163,14 +159,12 @@ contract BurningStethSharesTest is Test, SetupStvStETHPool {
         vm.startPrank(userAlice);
         pool.depositETH{value: ethToDeposit}(userAlice, address(0));
         pool.mintStethShares(stethSharesToMint);
-        steth.submit{value: 10 ether}(address(userAlice));
         steth.approve(address(pool), type(uint256).max);
         vm.stopPrank();
 
         vm.startPrank(userBob);
         pool.depositETH{value: ethToDeposit}(userBob, address(0));
         pool.mintStethShares(stethSharesToMint);
-        steth.submit{value: 10 ether}(address(userBob));
         steth.approve(address(pool), type(uint256).max);
         vm.stopPrank();
 
@@ -195,7 +189,6 @@ contract BurningStethSharesTest is Test, SetupStvStETHPool {
         vm.startPrank(userAlice);
         pool.depositETH{value: ethToDeposit}(userAlice, address(0));
         pool.mintStethShares(stethSharesToMint);
-        steth.submit{value: 10 ether}(address(userAlice));
         steth.approve(address(pool), type(uint256).max);
         vm.stopPrank();
 
@@ -212,7 +205,7 @@ contract BurningStethSharesTest is Test, SetupStvStETHPool {
 
     function test_BurnStethShares_RestoresFullCapacity() public {
         // Use up all capacity
-        uint256 additionalMint = pool.mintingCapacitySharesOf(address(this));
+        uint256 additionalMint = pool.remainingMintingCapacitySharesOf(address(this), 0);
         pool.mintStethShares(additionalMint);
 
         // Burn all shares
@@ -220,20 +213,20 @@ contract BurningStethSharesTest is Test, SetupStvStETHPool {
         pool.burnStethShares(totalMinted);
 
         // Capacity should be fully restored
-        uint256 capacityAfterBurn = pool.mintingCapacitySharesOf(address(this));
+        uint256 capacityAfterBurn = pool.remainingMintingCapacitySharesOf(address(this), 0);
         assertEq(capacityAfterBurn, totalMinted);
     }
 
     function test_BurnStethShares_PartialCapacityRestore() public {
-        uint256 additionalMint = pool.mintingCapacitySharesOf(address(this));
+        uint256 additionalMint = pool.remainingMintingCapacitySharesOf(address(this), 0);
         pool.mintStethShares(additionalMint);
 
-        uint256 capacityBefore = pool.mintingCapacitySharesOf(address(this));
+        uint256 capacityBefore = pool.remainingMintingCapacitySharesOf(address(this), 0);
         uint256 sharesToBurn = additionalMint / 2;
 
         pool.burnStethShares(sharesToBurn);
 
-        uint256 capacityAfter = pool.mintingCapacitySharesOf(address(this));
+        uint256 capacityAfter = pool.remainingMintingCapacitySharesOf(address(this), 0);
         assertEq(capacityAfter, capacityBefore + sharesToBurn);
     }
 
@@ -253,11 +246,11 @@ contract BurningStethSharesTest is Test, SetupStvStETHPool {
         dashboard.mock_simulateRewards(int256(1 ether));
 
         uint256 sharesToBurn = stethSharesToMint / 2;
-        uint256 capacityBefore = pool.mintingCapacitySharesOf(address(this));
+        uint256 capacityBefore = pool.remainingMintingCapacitySharesOf(address(this), 0);
 
         pool.burnStethShares(sharesToBurn);
 
-        uint256 capacityAfter = pool.mintingCapacitySharesOf(address(this));
+        uint256 capacityAfter = pool.remainingMintingCapacitySharesOf(address(this), 0);
         assertGe(capacityAfter, capacityBefore + sharesToBurn); // Should be at least as high due to rewards
     }
 

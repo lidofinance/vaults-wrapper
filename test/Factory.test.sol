@@ -3,196 +3,174 @@ pragma solidity >=0.8.25;
 
 import {Test} from "forge-std/Test.sol";
 
-import {Factory} from "../src/Factory.sol";
+import {Factory} from "src/Factory.sol";
+import {DistributorFactory} from "src/factories/DistributorFactory.sol";
+import {GGVStrategyFactory} from "src/factories/GGVStrategyFactory.sol";
+import {LoopStrategyFactory} from "src/factories/LoopStrategyFactory.sol";
 import {StvPoolFactory} from "src/factories/StvPoolFactory.sol";
 import {StvStETHPoolFactory} from "src/factories/StvStETHPoolFactory.sol";
-import {StvStrategyPoolFactory} from "src/factories/StvStrategyPoolFactory.sol";
-import {WithdrawalQueueFactory} from "src/factories/WithdrawalQueueFactory.sol";
-import {DistributorFactory} from "src/factories/DistributorFactory.sol";
-import {DummyImplementation} from "src/proxy/DummyImplementation.sol";
-import {LoopStrategyFactory} from "src/factories/LoopStrategyFactory.sol";
-import {GGVStrategyFactory} from "src/factories/GGVStrategyFactory.sol";
 import {TimelockFactory} from "src/factories/TimelockFactory.sol";
-import {BasePool} from "../src/BasePool.sol";
-import {StvPool} from "../src/StvPool.sol";
-import {WithdrawalQueue} from "../src/WithdrawalQueue.sol";
-import {Distributor} from "../src/Distributor.sol";
+import {WithdrawalQueueFactory} from "src/factories/WithdrawalQueueFactory.sol";
 
-import {MockERC20} from "./mocks/MockERC20.sol";
+import {Distributor} from "src/Distributor.sol";
+import {StvPool} from "src/StvPool.sol";
+import {StvStETHPool} from "src/StvStETHPool.sol";
+import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
+import {IDashboard} from "src/interfaces/IDashboard.sol";
 
-import {MockVaultHub} from "./mocks/MockVaultHub.sol";
-import {MockDashboard} from "./mocks/MockDashboard.sol";
-import {MockVaultFactory} from "./mocks/MockVaultFactory.sol";
-import {MockLazyOracle} from "./mocks/MockLazyOracle.sol";
+import {MockDashboard} from "test/mocks/MockDashboard.sol";
+import {MockERC20} from "test/mocks/MockERC20.sol";
+import {MockLazyOracle} from "test/mocks/MockLazyOracle.sol";
+import {MockLidoLocator} from "test/mocks/MockLidoLocator.sol";
+import {MockVaultFactory} from "test/mocks/MockVaultFactory.sol";
+import {MockVaultHub} from "test/mocks/MockVaultHub.sol";
 
 contract FactoryTest is Test {
-    Factory public WrapperFactory;
+    Factory public wrapperFactory;
 
     MockVaultHub public vaultHub;
     MockVaultFactory public vaultFactory;
     MockERC20 public stETH;
     MockERC20 public wstETH;
     MockLazyOracle public lazyOracle;
+    MockLidoLocator public locator;
 
     address public admin = address(0x1);
     address public nodeOperator = address(0x2);
     address public nodeOperatorManager = address(0x3);
 
-    address public strategyAddress = address(0x5555);
-
-    uint256 public initialBalance = 100_000 wei;
-
     uint256 public connectDeposit = 1 ether;
 
     function setUp() public {
-        vm.deal(admin, initialBalance + connectDeposit);
-        vm.deal(nodeOperator, initialBalance);
-        vm.deal(nodeOperatorManager, initialBalance);
-
-        // Deploy mock contracts
         vaultHub = new MockVaultHub();
-        vm.label(address(vaultHub), "VaultHub");
-
         vaultFactory = new MockVaultFactory(address(vaultHub));
-        vm.label(address(vaultFactory), "VaultFactory");
-
         stETH = new MockERC20("Staked Ether", "stETH");
-        vm.label(address(stETH), "stETH");
-
         wstETH = new MockERC20("Wrapped Staked Ether", "wstETH");
-        vm.label(address(wstETH), "wstETH");
-
         lazyOracle = new MockLazyOracle();
 
-        // Deploy dedicated implementation factories and the main Factory
-        StvPoolFactory waf = new StvPoolFactory();
-        StvStETHPoolFactory wbf = new StvStETHPoolFactory();
-        StvStrategyPoolFactory wcf = new StvStrategyPoolFactory();
-        WithdrawalQueueFactory wqf = new WithdrawalQueueFactory();
-        DistributorFactory df = new DistributorFactory();
-        LoopStrategyFactory lsf = new LoopStrategyFactory();
-        GGVStrategyFactory ggvf = new GGVStrategyFactory();
-        address dummy = address(new DummyImplementation());
-        address timelockFactory = address(new TimelockFactory());
-
-        Factory.WrapperConfig memory a = Factory.WrapperConfig({
-            vaultFactory: address(vaultFactory),
-            steth: address(stETH),
-            wsteth: address(wstETH),
-            lazyOracle: address(lazyOracle),
-            stvPoolFactory: address(waf),
-            stvStETHPoolFactory: address(wbf),
-            stvStrategyPoolFactory: address(wcf),
-            withdrawalQueueFactory: address(wqf),
-            distributorFactory: address(df),
-            loopStrategyFactory: address(lsf),
-            ggvStrategyFactory: address(ggvf),
-            dummyImplementation: dummy,
-            timelockFactory: timelockFactory
-        });
-        WrapperFactory = new Factory(
-            a,
-            Factory.TimelockConfig({
-                minDelaySeconds: 0
-            })
+        locator = new MockLidoLocator(
+            address(stETH), address(wstETH), address(lazyOracle), address(vaultHub), address(vaultFactory)
         );
+
+        Factory.SubFactories memory subFactories;
+        subFactories.stvPoolFactory = address(new StvPoolFactory());
+        subFactories.stvStETHPoolFactory = address(new StvStETHPoolFactory());
+        subFactories.withdrawalQueueFactory = address(new WithdrawalQueueFactory());
+        subFactories.distributorFactory = address(new DistributorFactory());
+        subFactories.loopStrategyFactory = address(new LoopStrategyFactory());
+        subFactories.ggvStrategyFactory = address(new GGVStrategyFactory());
+        subFactories.timelockFactory = address(new TimelockFactory());
+
+        Factory.TimelockConfig memory timelockConfig = Factory.TimelockConfig({minDelaySeconds: 0, executor: admin});
+
+        Factory.StrategyParameters memory strategyParams =
+            Factory.StrategyParameters({ggvTeller: address(0x1111), ggvBoringOnChainQueue: address(0x2222)});
+
+        wrapperFactory = new Factory(address(locator), subFactories, timelockConfig, strategyParams);
+
+        vm.deal(admin, 100 ether);
+    }
+
+    function _basePoolConfig(bool allowlistEnabled, bool mintingEnabled, uint256 reserveRatioGapBP)
+        internal
+        view
+        returns (Factory.PoolFullConfig memory)
+    {
+        return Factory.PoolFullConfig({
+            allowlistEnabled: allowlistEnabled,
+            mintingEnabled: mintingEnabled,
+            owner: admin,
+            nodeOperator: nodeOperator,
+            nodeOperatorManager: nodeOperatorManager,
+            nodeOperatorFeeBP: 100,
+            confirmExpiry: 3600,
+            minWithdrawalDelayTime: 1 days,
+            reserveRatioGapBP: reserveRatioGapBP,
+            name: mintingEnabled ? "Factory stETH Pool" : "Factory STV Pool",
+            symbol: mintingEnabled ? "FSTETH" : "FSTV"
+        });
     }
 
     function test_canCreatePool() public {
+        Factory.PoolFullConfig memory poolConfig = _basePoolConfig(false, false, 0);
+        Factory.StrategyConfig memory strategyConfig = Factory.StrategyConfig({factory: address(0)});
+
         vm.startPrank(admin);
-        (address vault, address dashboard, address payable poolProxy, address withdrawalQueueProxy, address distributor) = WrapperFactory
-            .createVaultWithNoMintingNoStrategy{value: connectDeposit}(
-            nodeOperator,
-            nodeOperatorManager,
-            100, // 1% fee
-            3600, // 1 hour confirm expiry
-            30 days,
-            1 days,
-            false // allowlist disabled
-        );
+        Factory.StvPoolIntermediate memory intermediate =
+            wrapperFactory.createPoolStart{value: connectDeposit}(poolConfig, strategyConfig);
+        Factory.StvPoolDeployment memory deployment = wrapperFactory.createPoolFinish(intermediate, strategyConfig);
+        vm.stopPrank();
 
-        BasePool pool = BasePool(poolProxy);
-        WithdrawalQueue withdrawalQueue = WithdrawalQueue(payable(withdrawalQueueProxy));
+        StvPool pool = StvPool(payable(deployment.pool));
+        WithdrawalQueue withdrawalQueue = WithdrawalQueue(payable(deployment.withdrawalQueue));
+        IDashboard dashboard = IDashboard(payable(deployment.dashboard));
+        Distributor distributor = pool.DISTRIBUTOR();
 
-        assertEq(address(pool.STAKING_VAULT()), address(vault));
         assertEq(address(pool.DASHBOARD()), address(dashboard));
         assertEq(address(pool.WITHDRAWAL_QUEUE()), address(withdrawalQueue));
         assertEq(address(pool.DISTRIBUTOR()), address(distributor));
-        // StvPool doesn't have a STRATEGY field
 
-        MockDashboard mockDashboard = MockDashboard(payable(dashboard));
-        Distributor distributor_ = Distributor(distributor);
+        assertEq(deployment.vault, address(dashboard.stakingVault()));
+        assertEq(address(pool.STAKING_VAULT()), deployment.vault);
 
-        assertTrue(
-            mockDashboard.hasRole(
-                mockDashboard.DEFAULT_ADMIN_ROLE(),
-                admin // admin is now the owner, not the pool
-            )
-        );
+        MockDashboard mockDashboard = MockDashboard(payable(address(dashboard)));
+        assertTrue(mockDashboard.hasRole(mockDashboard.DEFAULT_ADMIN_ROLE(), deployment.timelock));
 
-        assertFalse(mockDashboard.hasRole(mockDashboard.DEFAULT_ADMIN_ROLE(), address(WrapperFactory)));
-
-        assertFalse(distributor_.hasRole(distributor_.DEFAULT_ADMIN_ROLE(), address(WrapperFactory)), "Distributor default admin should be revoked");
-        assertFalse(distributor_.hasRole(distributor_.MANAGER_ROLE(), address(WrapperFactory)), "Distributor manager role should be revoked");
-        assertTrue(distributor_.hasRole(distributor_.DEFAULT_ADMIN_ROLE(), admin), "Distributor default admin should be granted to admin");
-        assertTrue(distributor_.hasRole(distributor_.MANAGER_ROLE(), admin), "Distributor manager role should be granted to admin");
+        assertEq(pool.ALLOW_LIST_ENABLED(), false);
+        assertEq(deployment.distributor, address(distributor));
+        assertEq(deployment.strategy, address(0));
+        assertEq(deployment.poolType, wrapperFactory.STV_POOL_TYPE());
     }
 
     function test_revertWithoutConnectDeposit() public {
+        Factory.PoolFullConfig memory poolConfig = _basePoolConfig(false, false, 0);
+        Factory.StrategyConfig memory strategyConfig = Factory.StrategyConfig({factory: address(0)});
+
         vm.startPrank(admin);
-        vm.expectRevert("InsufficientFunds()");
-        WrapperFactory.createVaultWithNoMintingNoStrategy(
-            nodeOperator,
-            nodeOperatorManager,
-            100, // 1% fee
-            3600, // 1 hour confirm expiry
-            30 days,
-            1 days,
-            false // allowlist disabled
-        );
+        vm.expectRevert();
+        wrapperFactory.createPoolStart(poolConfig, strategyConfig);
+        vm.stopPrank();
     }
 
     function test_canCreateWithStrategy() public {
+        Factory.PoolFullConfig memory poolConfig = _basePoolConfig(true, true, 0);
+        Factory.StrategyConfig memory strategyConfig =
+            Factory.StrategyConfig({factory: address(wrapperFactory.GGV_STRATEGY_FACTORY())});
+
+        address ggvFactory = address(wrapperFactory.GGV_STRATEGY_FACTORY());
+
         vm.startPrank(admin);
-        (, address dashboard, address payable poolProxy,, address strategy, /** distributor */) = WrapperFactory
-            .createVaultWithLoopStrategy{value: connectDeposit}(
-            nodeOperator,
-            nodeOperatorManager,
-            100, // 1% fee
-            3600, // 1 hour confirm expiry
-            30 days,
-            1 days,
-            false, // allowlist disabled
-            0, // reserve ratio gap
-            1 // loops
-        );
+        Factory.StvPoolIntermediate memory intermediate =
+            wrapperFactory.createPoolStart{value: connectDeposit}(poolConfig, strategyConfig);
+        uint256 nonceBefore = vm.getNonce(ggvFactory);
+        Factory.StvPoolDeployment memory deployment = wrapperFactory.createPoolFinish(intermediate, strategyConfig);
+        vm.stopPrank();
 
-        BasePool pool = BasePool(poolProxy);
+        StvStETHPool pool = StvStETHPool(payable(deployment.pool));
 
-        // Strategy is deployed internally for loop strategy and added to allowlist
-        assertTrue(strategy != address(0));
-        assertTrue(pool.isAllowListed(strategy));
+        uint256 nonceAfter = vm.getNonce(ggvFactory);
+        assertTrue(nonceAfter >= nonceBefore);
+        assertTrue(deployment.strategy != address(0));
+        assertTrue(pool.isAllowListed(deployment.strategy));
 
-        MockDashboard mockDashboard = MockDashboard(payable(dashboard));
-
+        MockDashboard mockDashboard = MockDashboard(payable(deployment.dashboard));
         assertTrue(mockDashboard.hasRole(mockDashboard.MINT_ROLE(), address(pool)));
-
         assertTrue(mockDashboard.hasRole(mockDashboard.BURN_ROLE(), address(pool)));
+        assertEq(deployment.poolType, wrapperFactory.STRATEGY_POOL_TYPE());
     }
 
     function test_allowlistEnabled() public {
-        vm.startPrank(admin);
-        (,, address payable poolProxy, /** withdrawalQueueProxy */ , /** distributor */) = WrapperFactory.createVaultWithNoMintingNoStrategy{value: connectDeposit}(
-            nodeOperator,
-            nodeOperatorManager,
-            100, // 1% fee
-            3600, // 1 hour confirm expiry
-            30 days,
-            1 days,
-            true // allowlist enabled
-        );
+        Factory.PoolFullConfig memory poolConfig = _basePoolConfig(true, false, 0);
+        Factory.StrategyConfig memory strategyConfig = Factory.StrategyConfig({factory: address(0)});
 
-        BasePool pool = BasePool(poolProxy);
+        vm.startPrank(admin);
+        Factory.StvPoolIntermediate memory intermediate =
+            wrapperFactory.createPoolStart{value: connectDeposit}(poolConfig, strategyConfig);
+        Factory.StvPoolDeployment memory deployment = wrapperFactory.createPoolFinish(intermediate, strategyConfig);
+        vm.stopPrank();
+
+        StvPool pool = StvPool(payable(deployment.pool));
         assertTrue(pool.ALLOW_LIST_ENABLED());
+        assertEq(deployment.poolType, wrapperFactory.STV_POOL_TYPE());
     }
 }

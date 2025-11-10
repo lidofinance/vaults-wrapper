@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >=0.8.25;
 
-import {Test} from "forge-std/Test.sol";
 import {SetupWithdrawalQueue} from "./SetupWithdrawalQueue.sol";
+import {Test} from "forge-std/Test.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
 
 contract ClaimingTest is Test, SetupWithdrawalQueue {
@@ -10,7 +10,7 @@ contract ClaimingTest is Test, SetupWithdrawalQueue {
         super.setUp();
 
         // Deposit initial ETH to pool for withdrawals
-        pool.depositETH{value: 100_000 ether}();
+        pool.depositETH{value: 100_000 ether}(address(this), address(0));
     }
 
     // Basic Claiming
@@ -29,7 +29,7 @@ contract ClaimingTest is Test, SetupWithdrawalQueue {
         assertTrue(claimableAmount > 0);
 
         // Claim the withdrawal
-        pool.claimWithdrawal(requestId, address(this));
+        withdrawalQueue.claimWithdrawal(address(this), requestId);
 
         // Verify claim succeeded
         assertTrue(withdrawalQueue.getWithdrawalStatus(requestId).isClaimed);
@@ -45,7 +45,7 @@ contract ClaimingTest is Test, SetupWithdrawalQueue {
         uint256 initialRecipientBalance = userAlice.balance;
         uint256 claimableAmount = withdrawalQueue.getClaimableEther(requestId);
 
-        pool.claimWithdrawal(requestId, userAlice);
+        withdrawalQueue.claimWithdrawal(userAlice, requestId);
 
         // Verify ETH went to recipient
         assertEq(userAlice.balance, initialRecipientBalance + claimableAmount);
@@ -64,26 +64,26 @@ contract ClaimingTest is Test, SetupWithdrawalQueue {
         requestIds[1] = requestId2;
         requestIds[2] = requestId3;
 
-        uint256[] memory hints = withdrawalQueue.findCheckpointHints(
-            requestIds,
-            1,
-            withdrawalQueue.getLastCheckpointIndex()
-        );
+        uint256[] memory hints =
+            withdrawalQueue.findCheckpointHintBatch(requestIds, 1, withdrawalQueue.getLastCheckpointIndex());
 
         // Record initial balance and claimable amounts
         uint256 initialBalance = address(this).balance;
         uint256 totalClaimable = 0;
+        uint256[] memory expected = new uint256[](requestIds.length);
         for (uint256 i = 0; i < requestIds.length; i++) {
-            totalClaimable += withdrawalQueue.getClaimableEther(requestIds[i]);
+            expected[i] = withdrawalQueue.getClaimableEther(requestIds[i]);
+            totalClaimable += expected[i];
         }
 
         // Batch claim
-        pool.claimWithdrawals(requestIds, hints, address(this));
+        uint256[] memory claimed = withdrawalQueue.claimWithdrawalBatch(address(this), requestIds, hints);
 
-        // Verify all claims
+        // Verify all claims and returned amounts
         for (uint256 i = 0; i < requestIds.length; i++) {
             assertTrue(withdrawalQueue.getWithdrawalStatus(requestIds[i]).isClaimed);
             assertEq(withdrawalQueue.getClaimableEther(requestIds[i]), 0);
+            assertEq(claimed[i], expected[i]);
         }
         assertEq(address(this).balance, initialBalance + totalClaimable);
     }
@@ -98,15 +98,15 @@ contract ClaimingTest is Test, SetupWithdrawalQueue {
         uint256[] memory hints = new uint256[](0);
 
         vm.expectRevert(abi.encodeWithSelector(WithdrawalQueue.ArraysLengthMismatch.selector, 1, 0));
-        pool.claimWithdrawals(requestIds, hints, address(this));
+        withdrawalQueue.claimWithdrawalBatch(address(this), requestIds, hints);
     }
 
     function test_ClaimWithdrawal_RevertNotFinalized() public {
-        uint256 requestId = pool.requestWithdrawal(10 ** STV_DECIMALS);
+        uint256 requestId = withdrawalQueue.requestWithdrawal(address(this), 10 ** STV_DECIMALS, 0);
 
         // Try to claim before finalization
         vm.expectRevert(abi.encodeWithSelector(WithdrawalQueue.RequestNotFoundOrNotFinalized.selector, requestId));
-        pool.claimWithdrawal(requestId, address(this));
+        withdrawalQueue.claimWithdrawal(address(this), requestId);
     }
 
     function test_ClaimWithdrawal_RevertAlreadyClaimed() public {
@@ -114,11 +114,11 @@ contract ClaimingTest is Test, SetupWithdrawalQueue {
         uint256 requestId = _requestWithdrawalAndFinalize(10 ** STV_DECIMALS);
 
         // Claim once
-        pool.claimWithdrawal(requestId, address(this));
+        withdrawalQueue.claimWithdrawal(address(this), requestId);
 
         // Try to claim again
         vm.expectRevert(abi.encodeWithSelector(WithdrawalQueue.RequestAlreadyClaimed.selector, requestId));
-        pool.claimWithdrawal(requestId, address(this));
+        withdrawalQueue.claimWithdrawal(address(this), requestId);
     }
 
     function test_ClaimWithdrawal_RevertWrongOwner() public {
@@ -128,12 +128,12 @@ contract ClaimingTest is Test, SetupWithdrawalQueue {
         // Try to claim from different address
         vm.prank(userAlice);
         vm.expectRevert(abi.encodeWithSelector(WithdrawalQueue.NotOwner.selector, userAlice, address(this)));
-        pool.claimWithdrawal(requestId, userAlice);
+        withdrawalQueue.claimWithdrawal(userAlice, requestId);
     }
 
     function test_ClaimWithdrawal_RevertInvalidRequestId() public {
         vm.expectRevert(abi.encodeWithSelector(WithdrawalQueue.InvalidRequestId.selector, 999));
-        pool.claimWithdrawal(999, address(this));
+        withdrawalQueue.claimWithdrawal(address(this), 999);
     }
 
     function test_ClaimWithdrawal_RevertRecipientReverts() public {
@@ -141,49 +141,38 @@ contract ClaimingTest is Test, SetupWithdrawalQueue {
         RevertingReceiver revertingRecipient = new RevertingReceiver();
 
         vm.expectRevert(WithdrawalQueue.CantSendValueRecipientMayHaveReverted.selector);
-        pool.claimWithdrawal(requestId, address(revertingRecipient));
-    }
-
-    function test_ClaimWithdrawal_RevertIfNotPool() public {
-        // Create and finalize a request
-        uint256 requestId = _requestWithdrawalAndFinalize(10 ** STV_DECIMALS);
-
-        vm.expectRevert(abi.encodeWithSelector(WithdrawalQueue.OnlyStvStrategyPoolan.selector));
-        withdrawalQueue.claimWithdrawal(requestId, userAlice, userAlice);
+        withdrawalQueue.claimWithdrawal(address(revertingRecipient), requestId);
     }
 
     // Edge Cases
 
-    function test_ClaimWithdrawal_DefaultsRecipientToMsgSender() public {
+    function test_ClaimWithdrawal_RevertsIfReceiverIsZeroAddress() public {
         uint256 requestId = _requestWithdrawalAndFinalize(10 ** STV_DECIMALS);
-        uint256 initialBalance = address(this).balance;
-        uint256 claimableAmount = withdrawalQueue.getClaimableEther(requestId);
 
-        pool.claimWithdrawal(requestId, address(0));
-
-        assertEq(address(this).balance, initialBalance + claimableAmount);
+        vm.expectRevert(abi.encodeWithSelector(WithdrawalQueue.ZeroAddress.selector));
+        withdrawalQueue.claimWithdrawal(address(0), requestId);
     }
 
     function test_ClaimWithdrawal_PartiallyFinalizedQueue() public {
         // Create 3 requests but finalize only 2
-        uint256 requestId1 = pool.requestWithdrawal(10 ** STV_DECIMALS);
-        uint256 requestId2 = pool.requestWithdrawal(10 ** STV_DECIMALS);
-        uint256 requestId3 = pool.requestWithdrawal(10 ** STV_DECIMALS);
+        uint256 requestId1 = withdrawalQueue.requestWithdrawal(address(this), 10 ** STV_DECIMALS, 0);
+        uint256 requestId2 = withdrawalQueue.requestWithdrawal(address(this), 10 ** STV_DECIMALS, 0);
+        uint256 requestId3 = withdrawalQueue.requestWithdrawal(address(this), 10 ** STV_DECIMALS, 0);
 
         _finalizeRequests(2); // Only finalize first 2
 
         // Can claim first 2
-        pool.claimWithdrawal(requestId1, address(this));
-        pool.claimWithdrawal(requestId2, address(this));
+        withdrawalQueue.claimWithdrawal(address(this), requestId1);
+        withdrawalQueue.claimWithdrawal(address(this), requestId2);
 
         // Cannot claim the third
         vm.expectRevert(abi.encodeWithSelector(WithdrawalQueue.RequestNotFoundOrNotFinalized.selector, requestId3));
-        pool.claimWithdrawal(requestId3, address(this));
+        withdrawalQueue.claimWithdrawal(address(this), requestId3);
     }
 
     function test_ClaimWithdrawal_ClaimableEtherCalculation() public {
         uint256 requestedStv = 10 ** STV_DECIMALS;
-        uint256 requestId = pool.requestWithdrawal(requestedStv);
+        uint256 requestId = withdrawalQueue.requestWithdrawal(address(this), requestedStv, 0);
 
         // Before finalization - should be 0
         assertEq(withdrawalQueue.getClaimableEther(requestId), 0);
@@ -195,7 +184,7 @@ contract ClaimingTest is Test, SetupWithdrawalQueue {
         assertEq(claimableAmount, pool.previewRedeem(requestedStv));
 
         // After claiming - should be 0 again
-        pool.claimWithdrawal(requestId, address(this));
+        withdrawalQueue.claimWithdrawal(address(this), requestId);
         assertEq(withdrawalQueue.getClaimableEther(requestId), 0);
     }
 
@@ -204,11 +193,8 @@ contract ClaimingTest is Test, SetupWithdrawalQueue {
         requestIds[0] = _requestWithdrawalAndFinalize(10 ** STV_DECIMALS);
         requestIds[1] = _requestWithdrawalAndFinalize(10 ** STV_DECIMALS);
 
-        uint256[] memory hints = withdrawalQueue.findCheckpointHints(
-            requestIds,
-            1,
-            withdrawalQueue.getLastCheckpointIndex()
-        );
+        uint256[] memory hints =
+            withdrawalQueue.findCheckpointHintBatch(requestIds, 1, withdrawalQueue.getLastCheckpointIndex());
 
         uint256 initialBalance = address(this).balance;
         uint256 totalClaimable;
@@ -216,7 +202,7 @@ contract ClaimingTest is Test, SetupWithdrawalQueue {
             totalClaimable += withdrawalQueue.getClaimableEther(requestIds[i]);
         }
 
-        pool.claimWithdrawals(requestIds, hints, address(0));
+        withdrawalQueue.claimWithdrawalBatch(address(this), requestIds, hints);
 
         assertEq(address(this).balance, initialBalance + totalClaimable);
     }
@@ -229,7 +215,7 @@ contract ClaimingTest is Test, SetupWithdrawalQueue {
         uint256[] memory hints = new uint256[](1);
 
         vm.expectRevert(abi.encodeWithSelector(WithdrawalQueue.InvalidHint.selector, 0));
-        pool.claimWithdrawals(requestIds, hints, address(this));
+        withdrawalQueue.claimWithdrawalBatch(address(this), requestIds, hints);
     }
 
     function test_ClaimWithdrawals_RevertWithOutOfRangeHint() public {
@@ -241,7 +227,33 @@ contract ClaimingTest is Test, SetupWithdrawalQueue {
         hints[0] = withdrawalQueue.getLastCheckpointIndex() + 1;
 
         vm.expectRevert(abi.encodeWithSelector(WithdrawalQueue.InvalidHint.selector, hints[0]));
-        pool.claimWithdrawals(requestIds, hints, address(this));
+        withdrawalQueue.claimWithdrawalBatch(address(this), requestIds, hints);
+    }
+
+    function test_ClaimWithdrawals_RevertWithPreviousCheckpointHint() public {
+        uint256 requestId1 = _requestWithdrawalAndFinalize(10 ** STV_DECIMALS);
+        uint256 requestId2 = _requestWithdrawalAndFinalize(10 ** STV_DECIMALS);
+
+        uint256[] memory requestIds = new uint256[](2);
+        requestIds[0] = requestId1;
+        requestIds[1] = requestId2;
+
+        uint256[] memory correctHints =
+            withdrawalQueue.findCheckpointHintBatch(requestIds, 1, withdrawalQueue.getLastCheckpointIndex());
+        assertEq(correctHints[0], 1);
+        assertEq(correctHints[1], 2);
+
+        uint256[] memory wrongHints = new uint256[](2);
+        wrongHints[0] = correctHints[0];
+        wrongHints[1] = correctHints[0];
+
+        vm.expectRevert(abi.encodeWithSelector(WithdrawalQueue.InvalidHint.selector, wrongHints[1]));
+        withdrawalQueue.claimWithdrawalBatch(address(this), requestIds, wrongHints);
+    }
+
+    function test_GetClaimableEther_ReturnsZeroForUnknownRequest() public {
+        vm.expectRevert(abi.encodeWithSelector(WithdrawalQueue.InvalidRequestId.selector, 999));
+        withdrawalQueue.getClaimableEther(999);
     }
 
     function test_GetClaimableEtherBatch_RevertArraysLengthMismatch() public {
@@ -252,7 +264,7 @@ contract ClaimingTest is Test, SetupWithdrawalQueue {
         uint256[] memory hints = new uint256[](0);
 
         vm.expectRevert(abi.encodeWithSelector(WithdrawalQueue.ArraysLengthMismatch.selector, 1, 0));
-        withdrawalQueue.getClaimableEther(requestIds, hints);
+        withdrawalQueue.getClaimableEtherBatch(requestIds, hints);
     }
 
     // Receive ETH for claiming tests

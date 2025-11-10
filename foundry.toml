@@ -13,7 +13,7 @@ via_ir = true # although it's slower it helps with stack too deep errors in test
 dynamic_test_linking = true # to improve compilation speed
 
 optimizer = true
-optimizer_runs = 200
+optimizer_runs = 1
 
 # Remappings
 remappings = [
@@ -24,3 +24,24 @@ remappings = [
 ]
 
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options
+
+[fmt]
+# Commonly used, readable defaults
+line_length = 120
+tab_width = 4
+bracket_spacing = false
+int_types = "long"            # prefer uint256/int256 over uint/int
+quote_style = "double"
+sort_imports = true
+multiline_func_header = "attributes_first"
+number_underscore = "preserve"
+wrap_comments = false
+single_line_statement_blocks = "preserve"
+
+ignore = [
+    "lib/**",
+    "out/**",
+    "lido-core/**",
+    "test/**",
+    "script/**",
+]

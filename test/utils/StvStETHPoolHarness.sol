@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity >=0.8.25;
 
-import {StvPoolHarness} from "test/utils/StvPoolHarness.sol";
 import {StvStETHPool} from "src/StvStETHPool.sol";
-import {Factory} from "src/Factory.sol";
+import {StvPoolHarness} from "test/utils/StvPoolHarness.sol";
 
 /**
  * @title StvStETHPoolHarness
@@ -15,17 +14,20 @@ contract StvStETHPoolHarness is StvPoolHarness {
         returns (WrapperContext memory)
     {
         DeploymentConfig memory config = DeploymentConfig({
-            configuration: Factory.WrapperType.MINTING_NO_STRATEGY,
-            enableAllowlist: enableAllowlist,
-            reserveRatioGapBP: reserveRatioGapBP,
+            allowlistEnabled: enableAllowlist,
+            mintingEnabled: true,
+            owner: NODE_OPERATOR,
             nodeOperator: NODE_OPERATOR,
             nodeOperatorManager: NODE_OPERATOR,
             nodeOperatorFeeBP: nodeOperatorFeeBP,
             confirmExpiry: CONFIRM_EXPIRY,
-            maxFinalizationTime: 30 days,
             minWithdrawalDelayTime: 1 days,
-            teller: address(0),
-            boringQueue: address(0)
+            reserveRatioGapBP: reserveRatioGapBP,
+            strategyKind: StrategyKind.NONE,
+            ggvTeller: address(0),
+            ggvBoringQueue: address(0),
+            name: "Test stETH Pool",
+            symbol: "tSTETH"
         });
 
         WrapperContext memory context = _deployWrapperSystem(config);
@@ -56,7 +58,7 @@ contract StvStETHPoolHarness is StvPoolHarness {
             // Check none can mint beyond mintable capacity
             for (uint256 i = 0; i < holders.length; i++) {
                 address holder = holders[i];
-                uint256 mintableStShares = stvStETHPool(_ctx).mintingCapacitySharesOf(holder);
+                uint256 mintableStShares = stvStETHPool(_ctx).remainingMintingCapacitySharesOf(holder, 0);
 
                 vm.startPrank(holder);
                 vm.expectRevert(StvStETHPool.InsufficientMintingCapacity.selector);
@@ -73,10 +75,10 @@ contract StvStETHPoolHarness is StvPoolHarness {
 
     /**
      * @notice Calculate max mintable stETH shares for a given ETH amount
-     * @dev Uses WRAPPER_RR_BP from StvStETHPool which includes the pool gap
+     * @dev Uses reserveRatioBP from StvStETHPool which includes the pool gap
      */
     function _calcMaxMintableStShares(WrapperContext memory ctx, uint256 _eth) public view returns (uint256) {
-        uint256 wrapperRrBp = stvStETHPool(ctx).WRAPPER_RR_BP();
+        uint256 wrapperRrBp = stvStETHPool(ctx).reserveRatioBP();
         return steth.getSharesByPooledEth(_eth * (TOTAL_BASIS_POINTS - wrapperRrBp) / TOTAL_BASIS_POINTS);
     }
 }

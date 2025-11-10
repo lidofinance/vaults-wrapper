@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >=0.8.25;
 
-import {Test} from "forge-std/Test.sol";
 import {SetupDistributor} from "./SetupDistributor.sol";
-import {Distributor} from "src/Distributor.sol";
 import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
+import {Test} from "forge-std/Test.sol";
+import {Distributor} from "src/Distributor.sol";
 
 contract TokenManagementTest is Test, SetupDistributor {
     function setUp() public override {
@@ -14,16 +14,11 @@ contract TokenManagementTest is Test, SetupDistributor {
     // ==================== Error Cases ====================
 
     function test_AddToken_RevertsIfNotManager() public {
-
         bytes32 managerRole = distributor.MANAGER_ROLE();
 
         vm.prank(userAlice);
         vm.expectRevert(
-            abi.encodeWithSelector(
-                IAccessControl.AccessControlUnauthorizedAccount.selector,
-                userAlice,
-                managerRole
-            )
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, userAlice, managerRole)
         );
         distributor.addToken(address(token1));
     }
@@ -88,16 +83,15 @@ contract TokenManagementTest is Test, SetupDistributor {
         assertTrue(hasToken3);
     }
 
-    function test_AddToken_OwnerCanAddToken() public {
-        // Owner also has MANAGER_ROLE
-        vm.prank(owner);
+    function test_AddToken_OwnerCanAddTokenAfterGrant() public {
+        vm.startPrank(owner);
+        distributor.grantRole(distributor.MANAGER_ROLE(), owner);
         distributor.addToken(address(token1));
+        vm.stopPrank();
 
         address[] memory tokens = distributor.getTokens();
         assertEq(tokens.length, 1);
         assertEq(tokens[0], address(token1));
     }
 }
-
-
 

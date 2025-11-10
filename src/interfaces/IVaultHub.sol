@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity >= 0.5.0;
+pragma solidity >=0.5.0;
 
 import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
 
@@ -142,60 +142,32 @@ interface IVaultHub is IAccessControl {
         uint256 _reportSlashingReserve
     ) external;
 
-
     function latestReport(address _vault) external view returns (Report memory);
 
-    function socializeBadDebt(
-        address _vaultDonor,
-        address _vaultAcceptor,
-        uint256 _badDebtShares
-    ) external;
+    function socializeBadDebt(address _vaultDonor, address _vaultAcceptor, uint256 _badDebtShares) external;
 
     function internalizeBadDebt(address _vault) external;
 
     function rebalance(address _vault, uint256 _shares) external;
     function pauseBeaconChainDeposits(address _vault) external;
     function resumeBeaconChainDeposits(address _vault) external;
-    function forceValidatorExit(
-        address _vault,
-        bytes calldata _pubkeys,
-        address _refundRecipient
-    ) external payable;
+    function forceValidatorExit(address _vault, bytes calldata _pubkeys, address _refundRecipient) external payable;
     function forceRebalance(address _vault) external;
     function settleLidoFees(address _vault) external;
-    function proveUnknownValidatorToPDG(
-        address _vault,
-        bytes calldata _witness
-    ) external;
-    function collectERC20FromVault(
-        address _vault,
-        address _token,
-        address _recipient,
-        uint256 _amount
-    ) external;
+    function proveUnknownValidatorToPDG(address _vault, bytes calldata _witness) external;
+    function collectERC20FromVault(address _vault, address _token, address _recipient, uint256 _amount) external;
 
     // -----------------------------
     //           EVENTS
     // -----------------------------
 
     event VaultConnected(
-        address indexed vault,
-        uint256 shareLimit,
-        uint16 reserveRatioBP,
-        uint16 forcedRebalanceThresholdBP
+        address indexed vault, uint256 shareLimit, uint16 reserveRatioBP, uint16 forcedRebalanceThresholdBP
     );
     event VaultConnectionUpdated(
-        address indexed vault,
-        uint256 shareLimit,
-        uint16 reserveRatioBP,
-        uint16 forcedRebalanceThresholdBP
+        address indexed vault, uint256 shareLimit, uint16 reserveRatioBP, uint16 forcedRebalanceThresholdBP
     );
-    event VaultFeesUpdated(
-        address indexed vault,
-        uint16 infraFeeBP,
-        uint16 liquidityFeeBP,
-        uint16 reservationFeeBP
-    );
+    event VaultFeesUpdated(address indexed vault, uint16 infraFeeBP, uint16 liquidityFeeBP, uint16 reservationFeeBP);
     event VaultDisconnectInitiated(address indexed vault);
     event VaultDisconnectCompleted(address indexed vault);
     event VaultDisconnectAborted(address indexed vault, uint256 slashingReserve);
@@ -214,7 +186,9 @@ interface IVaultHub is IAccessControl {
     event VaultInOutDeltaUpdated(address indexed vault, int256 inOutDelta);
     event ForcedValidatorExitTriggered(address indexed vault, bytes pubkeys, address refundRecipient);
     event VaultOwnershipTransferred(address indexed vault, address indexed newOwner, address indexed oldOwner);
-    event LidoFeesSettled(address indexed vault, uint256 transferred, uint256 cumulativeLidoFees, uint256 settledLidoFees);
+    event LidoFeesSettled(
+        address indexed vault, uint256 transferred, uint256 cumulativeLidoFees, uint256 settledLidoFees
+    );
     event VaultRedemptionSharesUpdated(address indexed vault, uint256 redemptionShares);
     event BeaconChainDepositsPausedByOwner(address indexed vault);
     event BeaconChainDepositsResumedByOwner(address indexed vault);
