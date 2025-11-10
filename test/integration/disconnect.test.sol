@@ -86,7 +86,7 @@ contract DisconnectTest is StvStETHPoolHarness, TimelockHarness {
         ctx.dashboard.voluntaryDisconnect();
 
         // Users have time to exit from the pool
-        ctx.withdrawalQueue.requestWithdrawal(address(this), pool.balanceOf(address(this)) / 5, 0);
+        uint256 requestId = ctx.withdrawalQueue.requestWithdrawal(address(this), pool.balanceOf(address(this)) / 5, 0);
         vm.warp(block.timestamp + 30 days);
 
         // Check there are requests to finalize
@@ -205,6 +205,14 @@ contract DisconnectTest is StvStETHPoolHarness, TimelockHarness {
 
         assertFalse(vaultHub.isVaultConnected(address(ctx.vault)));
 
+        // Check that claims are possible after disconnect
+        uint256 balanceBefore = address(this).balance;
+        uint256 claimableEther = ctx.withdrawalQueue.getClaimableEther(requestId);
+        ctx.withdrawalQueue.claimWithdrawal(address(this), requestId);
+        uint256 balanceAfter = address(this).balance;
+        assertGt(claimableEther, 0);
+        assertEq(balanceAfter - balanceBefore, claimableEther);
+
         // Check the vault has non zero assets to withdraw
         uint256 availableBalance = ctx.vault.availableBalance();
         assertGt(availableBalance, 0);
@@ -213,4 +221,7 @@ contract DisconnectTest is StvStETHPoolHarness, TimelockHarness {
         // Withdraw assets from the vault
         // TODO: should it be withdrawal to Distributor contract?
     }
+
+    // Fallback to receive ETH
+    receive() external payable {}
 }
