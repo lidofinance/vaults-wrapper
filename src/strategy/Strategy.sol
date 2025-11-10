@@ -29,14 +29,14 @@ abstract contract Strategy is AccessControlEnumerableUpgradeable, PausableUpgrad
     bytes32 public constant PAUSE_ROLE = keccak256("PAUSE_ROLE");
     bytes32 public constant RESUME_ROLE = keccak256("RESUME_ROLE");
 
-    /// @custom:storage-location erc7201:pool.storage.strategy
+    /// @custom:storage-location erc7201:pool.storage.Strategy
     struct StrategyStorage {
         mapping(bytes32 salt => address proxy) userStrategyCallForwarder;
     }
 
-    // keccak256(abi.encode(uint256(keccak256("pool.storage.strategy")) - 1)) & ~bytes32(uint256(0xff))
+    // keccak256(abi.encode(uint256(keccak256("pool.storage.Strategy")) - 1)) & ~bytes32(uint256(0xff))
     bytes32 private constant STRATEGY_STORAGE_LOCATION =
-        0x6346332e2d1da714fee42202a043fbd0435f177ac79ca2dbaeb22f9bddd2c800;
+        0xf27e3064d83f3ff75b2b8f1a9f4dda06aee756464659bfe6d7aafc35d4d8a400;
 
     function _getStrategyStorage() internal pure returns (StrategyStorage storage $) {
         assembly {
