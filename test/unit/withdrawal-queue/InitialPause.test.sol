@@ -23,7 +23,6 @@ contract InitialPauseTest is Test {
             makeAddr("steth"),
             makeAddr("stakingVault"),
             makeAddr("lazyOracle"),
-            7 days,
             1 days,
             true
         );

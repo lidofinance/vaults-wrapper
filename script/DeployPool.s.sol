@@ -14,7 +14,6 @@ contract DeployWrapper is Script {
         address nodeOperatorManager;
         uint256 nodeOperatorFeeBP;
         uint256 confirmExpiry;
-        uint256 maxFinalizationTime;
         uint256 minWithdrawalDelayTime;
         bool allowlistEnabled;
         bool mintingEnabled; // required by Factory.StvPoolConfig
@@ -80,7 +79,7 @@ contract DeployWrapper is Script {
     //     out = vm.serializeBytes("pool", "poolImplCtorArgs", poolImplCtorArgs);
 
     //     // WQ implementation constructor args
-    //     bytes memory withdrawalQueueImplCtorArgs = abi.encode(r.poolProxy, factoryView.LAZY_ORACLE(), p.maxFinalizationTime, p.minWithdrawalDelayTime);
+    //     bytes memory withdrawalQueueImplCtorArgs = abi.encode(r.poolProxy, factoryView.LAZY_ORACLE(), p.minWithdrawalDelayTime);
     //     out = vm.serializeBytes("pool", "withdrawalQueueImplCtorArgs", withdrawalQueueImplCtorArgs);
 
     //     // Strategy constructor args (if any)
@@ -110,7 +109,6 @@ contract DeployWrapper is Script {
         p.nodeOperatorManager = vm.parseJsonAddress(json, "$.nodeOperatorManager");
         p.nodeOperatorFeeBP = vm.parseJsonUint(json, "$.nodeOperatorFeeBP");
         p.confirmExpiry = vm.parseJsonUint(json, "$.confirmExpiry");
-        p.maxFinalizationTime = vm.parseJsonUint(json, "$.maxFinalizationTime");
         p.minWithdrawalDelayTime = vm.parseJsonUint(json, "$.minWithdrawalDelayTime");
         p.allowlistEnabled = vm.parseJsonBool(json, "$.allowlistEnabled");
         p.value = vm.parseJsonUint(json, "$.connectDepositWei");
@@ -188,7 +186,6 @@ contract DeployWrapper is Script {
                 nodeOperatorManager: p.nodeOperatorManager,
                 nodeOperatorFeeBP: p.nodeOperatorFeeBP,
                 confirmExpiry: p.confirmExpiry,
-                maxFinalizationTime: p.maxFinalizationTime,
                 minWithdrawalDelayTime: p.minWithdrawalDelayTime,
                 reserveRatioGapBP: p.reserveRatioGapBP,
                 name: p.name,

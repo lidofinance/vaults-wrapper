@@ -25,7 +25,6 @@ abstract contract SetupWithdrawalQueue is Test {
     address public userAlice;
     address public userBob;
 
-    uint256 public constant MAX_ACCEPTABLE_WQ_FINALIZATION_TIME = 7 days;
     uint256 public constant MIN_WITHDRAWAL_DELAY_TIME = 1 days;
     uint256 public constant initialDeposit = 1 ether;
     uint256 public constant reserveRatioGapBP = 5_00; // 5%
@@ -71,7 +70,6 @@ abstract contract SetupWithdrawalQueue is Test {
             address(steth),
             address(dashboard.STAKING_VAULT()),
             address(lazyOracle),
-            MAX_ACCEPTABLE_WQ_FINALIZATION_TIME,
             MIN_WITHDRAWAL_DELAY_TIME,
             true
         );
