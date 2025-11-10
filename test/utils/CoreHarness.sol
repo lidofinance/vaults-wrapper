@@ -65,7 +65,12 @@ contract CoreHarness is Test {
     constructor() {
         vm.deal(address(this), 10000000 ether);
 
-        address locatorAddress = vm.parseAddress(vm.envString("CORE_LOCATOR_ADDRESS"));
+        string memory locatorAddressStr = vm.envString("CORE_LOCATOR_ADDRESS");
+        if (bytes(locatorAddressStr).length == 0) {
+            revert("CORE_LOCATOR_ADDRESS is not set");
+        }
+
+        address locatorAddress = vm.parseAddress(locatorAddressStr);
         console.log("Locator address:", locatorAddress);
 
         locator = ILidoLocator(locatorAddress);

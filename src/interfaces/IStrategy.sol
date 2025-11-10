@@ -6,6 +6,8 @@ interface IStrategy {
     event StrategyExitRequested(address indexed user, bytes32 requestId, uint256 stethSharesToBurn, bytes data);
     event StrategyExitFinalized(address indexed user, bytes32 requestId, uint256 stethShares);
 
+    function POOL() external view returns (address);
+
     /// @notice Supplies stETH to the strategy
     function supply(address _referral, bytes calldata _params) external payable;
 
