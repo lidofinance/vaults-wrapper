@@ -18,7 +18,7 @@ contract GGVStrategy is Strategy {
     // ==================== Events ====================
 
     event GGVDeposited(
-        address indexed recipient, uint256 stethAmount, uint256 ggvShares, address referralAddress, bytes data
+        address indexed recipient, uint256 wstethAmount, uint256 ggvShares, address referralAddress, bytes data
     );
     event GGVWithdrawalRequested(address indexed recipient, bytes32 requestId, uint128 requestedGGV, bytes data);
 
@@ -31,9 +31,12 @@ contract GGVStrategy is Strategy {
     error NotImplemented();
     error InvalidGGVAmount();
 
-    struct GGVParams {
-        uint16 discount;
+    struct GGVParamsSupply {
         uint16 minimumMint;
+    }
+
+    struct GGVParamsRequestExit {
+        uint16 discount;
         uint24 secondsToDeadline;
     }
 
@@ -49,35 +52,38 @@ contract GGVStrategy is Strategy {
         BORING_QUEUE = IBoringOnChainQueue(_boringQueue);
     }
 
-    /// @notice Supplies stETH to the strategy
+    /// @notice Supplies wstETH to the strategy
     /// @param _referral The referral address
+    /// @param _wstethToMint The amount of wstETH to mint
     /// @param _params The parameters for the supply
-    function supply(address _referral, bytes calldata _params) external payable {
+    function supply(address _referral, uint256 _wstethToMint, bytes calldata _params) external payable {
+        _requireNotPaused();
+
         address callForwarder = _getOrCreateCallForwarder(msg.sender);
-        uint256 stethShares = POOL.remainingMintingCapacitySharesOf(callForwarder, msg.value); // TODO: replace with argument
+
         uint256 stv = POOL.depositETH{value: msg.value}(callForwarder, _referral);
 
         IStrategyCallForwarder(callForwarder)
-            .call(address(POOL), abi.encodeWithSelector(POOL.mintStethShares.selector, stethShares));
-
-        uint256 stethAmount = STETH.getPooledEthByShares(stethShares);
+            .call(address(POOL), abi.encodeWithSelector(POOL.mintWsteth.selector, _wstethToMint));
 
         IStrategyCallForwarder(callForwarder)
-            .call(address(STETH), abi.encodeWithSelector(STETH.approve.selector, TELLER.vault(), stethAmount));
+            .call(address(WSTETH), abi.encodeWithSelector(WSTETH.approve.selector, TELLER.vault(), _wstethToMint));
 
-        GGVParams memory params = abi.decode(_params, (GGVParams));
+        GGVParamsSupply memory params = abi.decode(_params, (GGVParamsSupply));
 
         bytes memory data = IStrategyCallForwarder(callForwarder)
             .call(
                 address(TELLER),
                 abi.encodeWithSelector(
-                    TELLER.deposit.selector, address(STETH), stethAmount, params.minimumMint, _referral
+                    TELLER.deposit.selector, address(WSTETH), _wstethToMint, params.minimumMint, _referral
                 )
             );
         uint256 ggvShares = abi.decode(data, (uint256));
 
-        emit StrategySupplied(msg.sender, stv, stethShares, stethAmount, _params);
-        emit GGVDeposited(msg.sender, stethAmount, ggvShares, _referral, _params);
+        uint256 stethAmount = STETH.getPooledEthByShares(_wstethToMint);
+
+        emit StrategySupplied(msg.sender, stv, _wstethToMint, stethAmount, _params);
+        emit GGVDeposited(msg.sender, _wstethToMint, ggvShares, _referral, _params);
     }
 
     /// @notice Requests a withdrawal of ggv shares from the strategy
@@ -100,7 +106,7 @@ contract GGVStrategy is Strategy {
     {
         address callForwarder = getStrategyCallForwarderAddress(_user);
 
-        GGVParams memory params = abi.decode(_params, (GGVParams));
+        GGVParamsRequestExit memory params = abi.decode(_params, (GGVParamsRequestExit));
 
         IERC20 boringVault = IERC20(TELLER.vault());
         uint256 totalGGV = boringVault.balanceOf(callForwarder);
@@ -121,7 +127,7 @@ contract GGVStrategy is Strategy {
         public
         returns (bytes32 requestId)
     {
-        GGVParams memory params = abi.decode(_params, (GGVParams));
+        GGVParamsRequestExit memory params = abi.decode(_params, (GGVParamsRequestExit));
 
         address callForwarder = _getOrCreateCallForwarder(msg.sender);
         IERC20 boringVault = IERC20(TELLER.vault());
@@ -195,7 +201,7 @@ contract GGVStrategy is Strategy {
         (oldRequestId, newRequestId) = abi.decode(data, (bytes32, bytes32));
     }
 
-    /// @notice Finalizes a withdrawal of stETH from the strategy
+    /// @notice Finalizes a withdrawal from the strategy
     function finalizeRequestExit(
         address,
         /*_receiver*/
@@ -255,7 +261,7 @@ contract GGVStrategy is Strategy {
     /// @param _stethSharesToRebalance The amount of stETH shares to rebalance
     /// @param _receiver The address to receive the stv
     /// @return requestId The Withdrawal Queue request ID
-    function requestWithdrawal(
+    function requestWithdrawalFromPool(
         uint256 _stvToWithdraw,
         uint256 _stethSharesToBurn,
         uint256 _stethSharesToRebalance,

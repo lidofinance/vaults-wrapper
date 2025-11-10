@@ -148,7 +148,7 @@ contract GGVTest is StvStrategyPoolHarness {
         uint256 vaultProfit = depositAmount * vaultIncrease / 100; // 0.05 ether profit
 
         logUsers.push(TableUtils.User(USER1, "user1"));
-        logUsers.push(TableUtils.User(user1StrategyCallForwarder, "user1_call_forwarder"));
+        logUsers.push(TableUtils.User(user1StrategyCallForwarder, "user1_forwarder"));
         logUsers.push(TableUtils.User(address(pool), "pool"));
         logUsers.push(TableUtils.User(address(pool.WITHDRAWAL_QUEUE()), "wq"));
         logUsers.push(TableUtils.User(address(boringVault), "boringVault"));
@@ -158,7 +158,7 @@ contract GGVTest is StvStrategyPoolHarness {
         core.increaseBufferedEther(steth.totalSupply() * stethIncrease / 100);
         console.log("INITIAL share rate %s", steth.getPooledEthByShares(1e18));
 
-        // _log.printUsers("[SCENARIO] Initial State", logUsers, ggvDiscount);
+        _log.printUsers("[SCENARIO] Initial State", logUsers, ggvDiscount);
 
         // Check that user is not allowed to deposit directly
         vm.prank(USER1);
@@ -166,10 +166,13 @@ contract GGVTest is StvStrategyPoolHarness {
         pool.depositETH{value: depositAmount}(USER1, address(0));
 
         // 1. Initial Deposit
-        vm.prank(USER1);
-        ggvStrategy.supply{value: depositAmount}(address(0), abi.encode(GGVStrategy.GGVParams(0, 0, 0)));
 
-        // _log.printUsers("[SCENARIO] After Deposit (1 ETH)", logUsers, ggvDiscount);
+        uint256 wstethToMint = pool.remainingMintingCapacitySharesOf(USER1, depositAmount);
+
+        vm.prank(USER1);
+        ggvStrategy.supply{value: depositAmount}(address(0), wstethToMint, abi.encode(GGVStrategy.GGVParamsSupply(0)));
+
+        _log.printUsers("[SCENARIO] After Deposit (1 ETH)", logUsers, ggvDiscount);
 
         // 2. Simulate Rebases
         console.log("\n[SCENARIO] Simulating Rebases (Vault +5%, stETH +4%)");
@@ -189,8 +192,8 @@ contract GGVTest is StvStrategyPoolHarness {
 
         console.log("\n[SCENARIO] Requesting withdrawal based on new appreciated assets:", withdrawalStethAmount);
 
-        GGVStrategy.GGVParams memory params =
-            GGVStrategy.GGVParams({discount: uint16(ggvDiscount), minimumMint: 0, secondsToDeadline: type(uint24).max});
+        GGVStrategy.GGVParamsRequestExit memory params =
+            GGVStrategy.GGVParamsRequestExit({discount: uint16(ggvDiscount), secondsToDeadline: type(uint24).max});
 
         vm.prank(USER1);
         bytes32 requestId = ggvStrategy.requestExitByStETH(withdrawalStethAmount, abi.encode(params));
@@ -225,7 +228,7 @@ contract GGVTest is StvStrategyPoolHarness {
         uint256 _stvToWithdraw = ggvStrategy.proxyUnlockedStvOf(USER1, _stethSharesToRebalance + _stethSharesToBurn);
 
         vm.startPrank(USER1);
-        ggvStrategy.requestWithdrawal(_stvToWithdraw, _stethSharesToBurn, _stethSharesToRebalance, USER1);
+        ggvStrategy.requestWithdrawalFromPool(_stvToWithdraw, _stethSharesToBurn, _stethSharesToRebalance, USER1);
         vm.stopPrank();
 
         _log.printUsers("After User Finalizes Wrapper", logUsers, ggvDiscount);

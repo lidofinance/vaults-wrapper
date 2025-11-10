@@ -5,6 +5,7 @@ import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
 import {GGVVaultMock} from "./GGVVaultMock.sol";
 import {IStETH} from "src/interfaces/IStETH.sol";
+import {IWstETH} from "src/interfaces/IWstETH.sol";
 import {ITellerWithMultiAssetSupport} from "src/interfaces/ggv/ITellerWithMultiAssetSupport.sol";
 
 contract GGVMockTeller is ITellerWithMultiAssetSupport {
@@ -18,6 +19,7 @@ contract GGVMockTeller is ITellerWithMultiAssetSupport {
     GGVVaultMock public immutable _vault;
     uint256 internal immutable ONE_SHARE;
     IStETH public immutable steth;
+    IWstETH public immutable wsteth;
 
     mapping(ERC20 asset => Asset) public assets;
 
@@ -27,12 +29,13 @@ contract GGVMockTeller is ITellerWithMultiAssetSupport {
         owner = _owner;
         _vault = GGVVaultMock(__vault);
         steth = IStETH(_steth);
-
+        wsteth = IWstETH(_wsteth);
+        
         // eq to 10 ** vault.decimals()
         ONE_SHARE = 10 ** 18;
 
         _updateAssetData(ERC20(_steth), true, false, 0);
-        _updateAssetData(ERC20(_wsteth), false, true, 0);
+        _updateAssetData(ERC20(_wsteth), true, true, 0);
     }
 
     function deposit(ERC20 depositAsset, uint256 depositAmount, uint256 minimumMint, address referralAddress)
@@ -47,7 +50,14 @@ contract GGVMockTeller is ITellerWithMultiAssetSupport {
             revert("Deposit amount must be greater than 0");
         }
 
-        uint256 stethShares = steth.getSharesByPooledEth(depositAmount);
+        uint256 stethShares;
+        if (address(depositAsset) == address(steth)) {
+            stethShares = steth.getSharesByPooledEth(depositAmount);
+        } else if (address(depositAsset) == address(wsteth)) {
+            stethShares = depositAmount;
+        } else {
+            revert("Unsupported asset");
+        }
 
         // hardcode share calculation for only steth
         shares = _vault.getSharesByAssets(stethShares);
