@@ -30,9 +30,10 @@ contract Distributor is AccessControlEnumerable {
 
     // ==================== Events ====================
     event TokenAdded(address indexed token);
+    event TokenNotSupported(address token);
     event Claimed(address indexed recipient, address indexed token, uint256 amount);
     event MerkleRootUpdated(
-        bytes32 oldRoot, bytes32 newRoot, string oldCid, string newCid, uint256 oldBlock, uint256 newBlock
+        bytes32 oldRoot, bytes32 indexed newRoot, string oldCid, string newCid, uint256 oldBlock, uint256 newBlock
     );
 
     // ==================== Errors ====================
@@ -86,26 +87,26 @@ contract Distributor is AccessControlEnumerable {
     /// @notice Claims rewards.
     /// @param _recipient The address to claim rewards for.
     /// @param _token The address of the reward token.
-    /// @param _amount The overall claimable amount of token rewards.
+    /// @param _cumulativeAmount The overall claimable amount of token rewards.
     /// @param _proof The merkle proof that validates this claim.
     /// @return claimedAmount The amount of reward token claimed.
     /// @dev Anyone can claim rewards on behalf of an account.
-    function claim(address _recipient, address _token, uint256 _amount, bytes32[] calldata _proof)
+    function claim(address _recipient, address _token, uint256 _cumulativeAmount, bytes32[] calldata _proof)
         external
         returns (uint256 claimedAmount)
     {
         if (root == bytes32(0)) revert RootNotSet();
         if (
             !MerkleProof.verifyCalldata(
-                _proof, root, keccak256(bytes.concat(keccak256(abi.encode(_recipient, _token, _amount))))
+                _proof, root, keccak256(bytes.concat(keccak256(abi.encode(_recipient, _token, _cumulativeAmount))))
             )
         ) revert InvalidProof();
 
-        if (_amount <= claimed[_recipient][_token]) revert ClaimableTooLow();
+        if (_cumulativeAmount <= claimed[_recipient][_token]) revert ClaimableTooLow();
 
-        claimedAmount = _amount - claimed[_recipient][_token];
+        claimedAmount = _cumulativeAmount - claimed[_recipient][_token];
 
-        claimed[_recipient][_token] = _amount;
+        claimed[_recipient][_token] = _cumulativeAmount;
 
         IERC20(_token).safeTransfer(_recipient, claimedAmount);
 

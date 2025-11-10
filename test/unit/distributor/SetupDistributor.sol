@@ -24,7 +24,7 @@ abstract contract SetupDistributor is Test {
     event TokenAdded(address indexed token);
     event Claimed(address indexed recipient, address indexed token, uint256 amount);
     event MerkleRootUpdated(
-        bytes32 oldRoot, bytes32 newRoot, string oldCid, string newCid, uint256 oldBlock, uint256 newBlock
+        bytes32 oldRoot, bytes32 indexed newRoot, string oldCid, string newCid, uint256 oldBlock, uint256 newBlock
     );
 
     function setUp() public virtual {
