@@ -6,6 +6,7 @@ import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/Pau
 import {StvStETHPool} from "src/StvStETHPool.sol";
 import {IOperatorGrid} from "src/interfaces/IOperatorGrid.sol";
 import {IVaultHub} from "src/interfaces/IVaultHub.sol";
+import {IWstETH} from "src/interfaces/IWstETH.sol";
 import {OssifiableProxy} from "src/proxy/OssifiableProxy.sol";
 import {StvStETHPoolHarness} from "test/utils/StvStETHPoolHarness.sol";
 import {TimelockHarness} from "test/utils/TimelockHarness.sol";
@@ -205,6 +206,15 @@ contract DisconnectTest is StvStETHPoolHarness, TimelockHarness {
 
         assertFalse(vaultHub.isVaultConnected(address(ctx.vault)));
 
+        // Finalize disconnect by abandoning dashboard
+        assertEq(ctx.vault.owner(), address(core.vaultHub()));
+        vm.prank(address(ctx.timelock));
+        ctx.dashboard.abandonDashboard(disconnectManager);
+
+        vm.prank(disconnectManager);
+        ctx.vault.acceptOwnership();
+        assertEq(ctx.vault.owner(), disconnectManager);
+
         // Check that claims are possible after disconnect
         uint256 balanceBefore = address(this).balance;
         uint256 claimableEther = ctx.withdrawalQueue.getClaimableEther(requestId);
@@ -218,8 +228,23 @@ contract DisconnectTest is StvStETHPoolHarness, TimelockHarness {
         assertGt(availableBalance, 0);
         assertEq(address(ctx.vault).balance, availableBalance);
 
-        // Withdraw assets from the vault
-        // TODO: should it be withdrawal to Distributor contract?
+        // Withdraw assets from the vault to distributor contract
+        address distributor = address(pool.DISTRIBUTOR());
+
+        // Distributor has no eth support, so ETH should be converted to WETH or wstETH before
+        IWstETH wsteth = core.wsteth();
+        uint256 vaultWstethBalanceBefore = wsteth.balanceOf(address(ctx.vault));
+
+        vm.prank(disconnectManager);
+        ctx.vault.withdraw(address(wsteth), availableBalance);
+        uint256 vaultWstethBalanceAfter = wsteth.balanceOf(address(ctx.vault));
+        assertGt(vaultWstethBalanceAfter, vaultWstethBalanceBefore);
+
+        uint256 distributorWstethBalanceBefore = wsteth.balanceOf(distributor);
+        vm.prank(disconnectManager);
+        ctx.vault.collectERC20(address(wsteth), distributor, vaultWstethBalanceAfter);
+        uint256 distributorWstethBalanceAfter = wsteth.balanceOf(distributor);
+        assertGt(distributorWstethBalanceAfter, distributorWstethBalanceBefore);
     }
 
     // Fallback to receive ETH
