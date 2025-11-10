@@ -24,6 +24,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
     using EnumerableSet for EnumerableSet.UintSet;
 
     /// @notice Min delay between withdrawal request and finalization
+    /// @dev Contract enforces a minimum 1-hour delay to ensure the value is set within reasonable bounds
     uint256 public immutable MIN_WITHDRAWAL_DELAY_TIME_IN_SECONDS;
 
     // ACL
@@ -202,8 +203,8 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
     ) {
         if (_minWithdrawalDelayTimeInSeconds < 1 hours) revert InvalidWithdrawalDelay();
 
-        IS_REBALANCING_SUPPORTED = _isRebalancingSupported;
         MIN_WITHDRAWAL_DELAY_TIME_IN_SECONDS = _minWithdrawalDelayTimeInSeconds;
+        IS_REBALANCING_SUPPORTED = _isRebalancingSupported;
 
         POOL = IStvStETHPool(payable(_pool));
         DASHBOARD = IDashboard(payable(_dashboard));
