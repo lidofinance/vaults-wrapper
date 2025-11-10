@@ -10,7 +10,8 @@ import {IWstETH} from "./interfaces/IWstETH.sol";
 
 /**
  * @title StvStETHPool
- * @notice Configuration B: Minting, no strategy - stv + maximum stETH minting for user
+ * @notice Extended STV pool with (w)stETH minting, liability management, and rebalancing capabilities
+ * @dev Allows users to mint (w)stETH against their deposits with configurable reserve ratios
  */
 contract StvStETHPool is StvPool {
     event StethSharesMinted(address indexed account, uint256 stethShares);
@@ -27,7 +28,6 @@ contract StvStETHPool is StvPool {
     error InsufficientStv();
     error ZeroArgument();
     error ArraysLengthMismatch(uint256 firstArrayLength, uint256 secondArrayLength);
-    error NothingToRebalance();
     error VaultReportStale();
     error UndercollateralizedAccount();
     error CollateralizedAccount();
@@ -94,46 +94,34 @@ contract StvStETHPool is StvPool {
 
     /**
      * @notice Deposit native ETH and receive stv, minting a specific amount of stETH shares
-     * @param _recipient Address to receive stv and minted steth shares
      * @param _referral Address of the referral (if any)
      * @param _stethSharesToMint Optional amount of stETH shares to mint (18 decimals)
      * @return stv Amount of stv minted (27 decimals)
-     * @dev If the recipient is different from msg.sender, checks that enough stv is deposited to lock the requested stETH shares
      */
-    function depositETHAndMintStethShares(address _recipient, address _referral, uint256 _stethSharesToMint)
+    function depositETHAndMintStethShares(address _referral, uint256 _stethSharesToMint)
         external
         payable
         virtual
         returns (uint256 stv)
     {
-        stv = depositETH(_recipient, _referral);
-
-        if (_stethSharesToMint != 0) {
-            if (_recipient != msg.sender) _checkMinStvToLock(stv, _stethSharesToMint);
-            _mintStethShares(_recipient, _stethSharesToMint);
-        }
+        stv = depositETH(msg.sender, _referral);
+        if (_stethSharesToMint != 0) mintStethShares(_stethSharesToMint);
     }
 
     /**
      * @notice Deposit native ETH and receive stv, minting a specific amount of wstETH
-     * @param _recipient Address to receive stv and minted wstETH
      * @param _referral Address of the referral (if any)
      * @param _wstethToMint Optional amount of wstETH to mint (18 decimals)
      * @return stv Amount of stv minted (27 decimals)
-     * @dev If the recipient is different from msg.sender, checks that enough stv is deposited to lock the requested wstETH
      */
-    function depositETHAndMintWsteth(address _recipient, address _referral, uint256 _wstethToMint)
+    function depositETHAndMintWsteth(address _referral, uint256 _wstethToMint)
         external
         payable
         virtual
         returns (uint256 stv)
     {
-        stv = depositETH(_recipient, _referral);
-
-        if (_wstethToMint != 0) {
-            if (_recipient != msg.sender) _checkMinStvToLock(stv, _wstethToMint);
-            _mintWsteth(_recipient, _wstethToMint);
-        }
+        stv = depositETH(msg.sender, _referral);
+        if (_wstethToMint != 0) mintWsteth(_wstethToMint);
     }
 
     // =================================================================================
@@ -257,7 +245,7 @@ contract StvStETHPool is StvPool {
         /// should not be returned to Staking Vault, but should be distributed among all participants
         /// in exchange for the withdrawn ETH.
         ///
-        /// Thus, in rare situations, Staking Vault may have two assets: ETH and stETH, which are
+        /// Thus, in rare situations, StvStETHPool may have two assets: ETH and stETH, which are
         /// distributed among all users in proportion to their shares.
         assets = _convertToAssets(balanceOf(_account));
     }
@@ -312,28 +300,20 @@ contract StvStETHPool is StvPool {
      * @dev Note that minted wstETH can be not enough to cover the full obligation in stETH shares because of rounding error
      * on WSTETH contract during unwrapping. The dust from rounding accumulates on the WSTETH contract during unwrapping
      */
-    function mintWsteth(uint256 _wsteth) external {
-        _mintWsteth(msg.sender, _wsteth);
-    }
-
-    function _mintWsteth(address _account, uint256 _wsteth) internal {
-        _checkRemainingMintingCapacityOf(_account, _wsteth);
-        _increaseMintedStethShares(_account, _wsteth);
-        DASHBOARD.mintWstETH(_account, _wsteth);
+    function mintWsteth(uint256 _wsteth) public {
+        _checkRemainingMintingCapacityOf(msg.sender, _wsteth);
+        _increaseMintedStethShares(msg.sender, _wsteth);
+        DASHBOARD.mintWstETH(msg.sender, _wsteth);
     }
 
     /**
      * @notice Mint stETH shares up to the user's minting capacity
      * @param _stethShares The amount of stETH shares to mint
      */
-    function mintStethShares(uint256 _stethShares) external {
-        _mintStethShares(msg.sender, _stethShares);
-    }
-
-    function _mintStethShares(address _account, uint256 _stethShares) internal {
-        _checkRemainingMintingCapacityOf(_account, _stethShares);
-        _increaseMintedStethShares(_account, _stethShares);
-        DASHBOARD.mintShares(_account, _stethShares);
+    function mintStethShares(uint256 _stethShares) public {
+        _checkRemainingMintingCapacityOf(msg.sender, _stethShares);
+        _increaseMintedStethShares(msg.sender, _stethShares);
+        DASHBOARD.mintShares(msg.sender, _stethShares);
     }
 
     /**
@@ -343,16 +323,12 @@ contract StvStETHPool is StvPool {
      * on WSTETH contract during unwrapping. The dust from rounding accumulates on the WSTETH contract during unwrapping
      */
     function burnWsteth(uint256 _wsteth) external {
-        _burnWsteth(msg.sender, _wsteth);
-    }
-
-    function _burnWsteth(address _account, uint256 _wsteth) internal {
         /// @dev Simulate conversions during unwrapping to account for possible reduction due to rounding errors
         uint256 unwrappedSteth = _getPooledEthByShares(_wsteth);
         uint256 unwrappedStethShares = _getSharesByPooledEth(unwrappedSteth);
-        _decreaseMintedStethShares(_account, unwrappedStethShares);
+        _decreaseMintedStethShares(msg.sender, unwrappedStethShares);
 
-        WSTETH.transferFrom(_account, address(this), _wsteth);
+        WSTETH.transferFrom(msg.sender, address(this), _wsteth);
         DASHBOARD.burnWstETH(_wsteth);
     }
 
@@ -361,12 +337,8 @@ contract StvStETHPool is StvPool {
      * @param _stethShares The amount of stETH shares to burn
      */
     function burnStethShares(uint256 _stethShares) external {
-        _burnStethShares(msg.sender, _stethShares);
-    }
-
-    function _burnStethShares(address _account, uint256 _stethShares) internal {
-        _decreaseMintedStethShares(_account, _stethShares);
-        STETH.transferSharesFrom(_account, address(this), _stethShares);
+        _decreaseMintedStethShares(msg.sender, _stethShares);
+        STETH.transferSharesFrom(msg.sender, address(this), _stethShares);
         DASHBOARD.burnShares(_stethShares);
     }
 
@@ -454,8 +426,7 @@ contract StvStETHPool is StvPool {
      * @return stvToLock The min amount of stv to lock (27 decimals)
      */
     function calcStvToLockForStethShares(uint256 _stethShares) public view returns (uint256 stvToLock) {
-        uint256 assetsToLock = calcAssetsToLockForStethShares(_stethShares);
-        stvToLock = _convertToStv(assetsToLock, Math.Rounding.Ceil);
+        stvToLock = _convertToStv(calcAssetsToLockForStethShares(_stethShares), Math.Rounding.Ceil);
     }
 
     // =================================================================================
@@ -579,8 +550,6 @@ contract StvStETHPool is StvPool {
      */
     function forceRebalance(address _account) public returns (uint256 stvBurned) {
         (uint256 stethShares, uint256 stv, bool isUndercollateralized) = previewForceRebalance(_account);
-
-        if (stethShares == 0) revert NothingToRebalance();
         if (isUndercollateralized) revert UndercollateralizedAccount();
 
         stvBurned = _rebalanceMintedStethShares(_account, stethShares, stv);
@@ -653,7 +622,7 @@ contract StvStETHPool is StvPool {
 
         uint256 stvRequired = _convertToStv(stethToRebalance, Math.Rounding.Ceil);
 
-        stethShares = _getSharesByPooledEth(stethToRebalance); // TODO: round up, can it exceed liability?
+        stethShares = _getSharesByPooledEth(stethToRebalance);
         stv = Math.min(stvRequired, stvBalance);
         isUndercollateralized = isUndercollateralized || stvRequired > stvBalance;
     }

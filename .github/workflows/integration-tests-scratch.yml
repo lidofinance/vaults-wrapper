@@ -36,11 +36,5 @@ jobs:
         env:
           CORE_RPC_PORT: 9123
 
-      - name: Run integration tests for StvPool
-        run: make test-integration-a
-
-      - name: Run integration tests for StvStETHPool
-        run: make test-integration-b
-
-      - name: Run integration tests for GGV
-        run: make test-integration-ggv
+      - name: Run integration tests
+        run: make test-integration

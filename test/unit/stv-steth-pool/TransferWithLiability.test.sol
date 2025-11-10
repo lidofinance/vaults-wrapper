@@ -62,7 +62,7 @@ contract TransferWithLiabilityTest is Test, SetupStvStETHPool {
         pool.transferWithLiability(userAlice, stvBalance, mintedRecorded + 1);
     }
 
-    function test_TransferWithLiability_RevertsWhenZeroStvButHasShares() public {
+    function test_TransferWithLiability_RevertsWhenInsufficientStvButHasShares() public {
         uint256 sharesToTransfer = pool.remainingMintingCapacitySharesOf(address(this), 0) / 5;
         pool.mintStethShares(sharesToTransfer);
 

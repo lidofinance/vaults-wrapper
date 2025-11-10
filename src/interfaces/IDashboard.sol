@@ -29,17 +29,11 @@ interface IDashboard is IAccessControlEnumerable {
     event RoleMemberConfirmed(
         address indexed member, bytes32 indexed role, uint256 confirmTimestamp, uint256 expiryTimestamp, bytes data
     );
-    event NodeOperatorFeeSet(address indexed sender, uint256 oldNodeOperatorFeeRate, uint256 newNodeOperatorFeeRate);
-    event NodeOperatorFeeRecipientSet(
-        address indexed sender, address oldNodeOperatorFeeRecipient, address newNodeOperatorFeeRecipient
-    );
-    event NodeOperatorFeeDisbursed(
-        address indexed recipient,
-        uint256 amount,
-        IVaultHub.VaultConnection vaultConnection,
-        Report feePeriodStartReport,
-        Report feePeriodEndReport
-    );
+    event FeeRateSet(address indexed sender, uint256 oldFeeRate, uint256 newFeeRate);
+    event FeeRecipientSet(address indexed sender, address oldFeeRecipient, address newFeeRecipient);
+    event FeeDisbursed(address indexed sender, uint256 fee, address recipient);
+    event SettledGrowthSet(int256 oldSettledGrowth, int256 newSettledGrowth);
+    event CorrectionTimestampUpdated(uint256 timestamp);
 
     // ==================== Errors ====================
     error ExceedsWithdrawable(uint256 amount, uint256 withdrawableValue);
@@ -76,9 +70,11 @@ interface IDashboard is IAccessControlEnumerable {
     function VAULT_HUB() external view returns (address);
     function LIDO_LOCATOR() external view returns (address);
     function NODE_OPERATOR_MANAGER_ROLE() external view returns (bytes32);
-    function NODE_OPERATOR_REWARDS_ADJUST_ROLE() external view returns (bytes32);
-    function MANUAL_REWARDS_ADJUSTMENT_LIMIT() external view returns (uint256);
-    function RECOVER_ASSETS_ROLE() external view returns (bytes32);
+    function NODE_OPERATOR_FEE_EXEMPT_ROLE() external view returns (bytes32);
+    function NODE_OPERATOR_UNGUARANTEED_DEPOSIT_ROLE() external view returns (bytes32);
+    function NODE_OPERATOR_PROVE_UNKNOWN_VALIDATOR_ROLE() external view returns (bytes32);
+    function VAULT_CONFIGURATION_ROLE() external view returns (bytes32);
+    function COLLECT_VAULT_ERC20_ROLE() external view returns (bytes32);
     function DEFAULT_ADMIN_ROLE() external view returns (bytes32);
     function MIN_CONFIRM_EXPIRY() external view returns (uint256);
     function MAX_CONFIRM_EXPIRY() external view returns (uint256);
@@ -124,15 +120,18 @@ interface IDashboard is IAccessControlEnumerable {
     function healthShortfallShares() external view returns (uint256);
 
     // ==================== Node Operator Fee Functions ====================
-    function nodeOperatorFeeRate() external view returns (uint256);
-    function nodeOperatorFeeRecipient() external view returns (address);
+    function feeRecipient() external view returns (address);
+    function feeRate() external view returns (uint16);
+    function settledGrowth() external view returns (int128);
+    function latestCorrectionTimestamp() external view returns (uint64);
     function latestReport() external view returns (Report memory);
-    function nodeOperatorDisbursableFee() external view returns (uint256);
-    function disburseNodeOperatorFee() external;
-    function setNodeOperatorFeeRate(uint256 _newNodeOperatorFeeRate) external returns (bool);
-    function setNodeOperatorFeeRecipient(address _newNodeOperatorFeeRecipient) external;
-    function increaseRewardsAdjustment(uint256 _adjustmentIncrease) external;
-    function setRewardsAdjustment(uint256 _proposedAdjustment, uint256 _expectedAdjustment) external returns (bool);
+    function accruedFee() external view returns (uint256);
+    function disburseFee() external;
+    function disburseAbnormallyHighFee() external;
+    function setFeeRate(uint256 _newFeeRate) external returns (bool);
+    function correctSettledGrowth(int256 _newSettledGrowth, int256 _expectedSettledGrowth) external returns (bool);
+    function addFeeExemption(uint256 _exemptedAmount) external;
+    function setFeeRecipient(address _newFeeRecipient) external;
 
     // ==================== Confirmation Functions ====================
     function confirmingRoles() external pure returns (bytes32[] memory);
