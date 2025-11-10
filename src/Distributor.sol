@@ -30,7 +30,6 @@ contract Distributor is AccessControlEnumerable {
 
     // ==================== Events ====================
     event TokenAdded(address indexed token);
-    event TokenNotSupported(address token);
     event Claimed(address indexed recipient, address indexed token, uint256 amount);
     event MerkleRootUpdated(
         bytes32 oldRoot, bytes32 indexed newRoot, string oldCid, string newCid, uint256 oldBlock, uint256 newBlock
@@ -43,6 +42,7 @@ contract Distributor is AccessControlEnumerable {
     error RootNotSet();
     error TokenAlreadyAdded(address token);
     error ZeroAddress();
+    error TokenNotSupported(address token);
 
     /// @param _owner The address of the owner
     constructor(address _owner) {
@@ -84,6 +84,30 @@ contract Distributor is AccessControlEnumerable {
         lastProcessedBlock = block.number;
     }
 
+    /// @notice Preview the amount of tokens that can be claimed
+    /// @param _recipient The address to claim rewards for.
+    /// @param _token The address of the reward token.
+    /// @param _cumulativeAmount The overall claimable amount of token rewards.
+    /// @param _proof The merkle proof that validates this claim.
+    /// @return claimable The amount of tokens that can be claimed.
+    function previewClaim(address _recipient, address _token, uint256 _cumulativeAmount, bytes32[] calldata _proof) public view returns (uint256 claimable) {
+        if (root == bytes32(0)) revert RootNotSet();
+        if (!tokens.contains(_token)) revert TokenNotSupported(_token);
+
+        if (
+            !MerkleProof.verifyCalldata(
+                _proof, root, keccak256(bytes.concat(keccak256(abi.encode(_recipient, _token, _cumulativeAmount))))
+            )
+        ) revert InvalidProof();
+
+        uint256 alreadyClaimed = claimed[_recipient][_token];
+        if (_cumulativeAmount <= alreadyClaimed) revert ClaimableTooLow();
+
+        unchecked {
+            claimable = _cumulativeAmount - alreadyClaimed;
+        }
+    }
+
     /// @notice Claims rewards.
     /// @param _recipient The address to claim rewards for.
     /// @param _token The address of the reward token.
@@ -95,21 +119,10 @@ contract Distributor is AccessControlEnumerable {
         external
         returns (uint256 claimedAmount)
     {
-        if (root == bytes32(0)) revert RootNotSet();
-        if (
-            !MerkleProof.verifyCalldata(
-                _proof, root, keccak256(bytes.concat(keccak256(abi.encode(_recipient, _token, _cumulativeAmount))))
-            )
-        ) revert InvalidProof();
-
-        if (_cumulativeAmount <= claimed[_recipient][_token]) revert ClaimableTooLow();
-
-        claimedAmount = _cumulativeAmount - claimed[_recipient][_token];
-
+        claimedAmount = previewClaim(_recipient, _token, _cumulativeAmount, _proof);
         claimed[_recipient][_token] = _cumulativeAmount;
 
         IERC20(_token).safeTransfer(_recipient, claimedAmount);
-
         emit Claimed(_recipient, _token, claimedAmount);
     }
 }

@@ -9,6 +9,11 @@ import {MerkleTree} from "test/utils/MerkleTree.sol";
 contract ClaimingTest is Test, SetupDistributor {
     function setUp() public override {
         super.setUp();
+
+        vm.startPrank(manager);
+        distributor.addToken(address(token1));
+        distributor.addToken(address(token2));
+        vm.stopPrank();
     }
 
     // ==================== Error Cases ====================
@@ -259,5 +264,42 @@ contract ClaimingTest is Test, SetupDistributor {
         vm.prank(userAlice);
         distributor.claim(userAlice, address(token2), 200 ether, merkleTree.getProof(1));
         assertEq(token2.balanceOf(userAlice), 200 ether);
+    }
+
+    function test_PreviewClaim_ReturnsClaimableAmount() public {
+        // Setup: Add leaf for Alice, token1, 100 ether
+        uint256 claimAmount = 100 ether;
+        merkleTree.pushLeaf(_leafData(userAlice, address(token1), claimAmount));
+        bytes32 root = merkleTree.root();
+        bytes32[] memory proof = merkleTree.getProof(0);
+
+        vm.prank(manager);
+        distributor.setMerkleRoot(root, "QmPreviewTest");
+
+        // Preview before any claim; claimable should be 100 ether
+        uint256 preview = distributor.previewClaim(userAlice, address(token1), claimAmount, proof);
+        assertEq(preview, 100 ether);
+
+        // Claim the amount
+        vm.prank(userAlice);
+        distributor.claim(userAlice, address(token1), claimAmount, proof);
+
+        // Preview after claim; should revert with ClaimableTooLow
+        vm.expectRevert(Distributor.ClaimableTooLow.selector);
+        distributor.previewClaim(userAlice, address(token1), claimAmount, proof);
+
+        // Set root with higher cumulative amount
+        uint256 newClaimAmount = 150 ether;
+        MerkleTree newTree = new MerkleTree();
+        newTree.pushLeaf(_leafData(userAlice, address(token1), newClaimAmount));
+        bytes32 newRoot = newTree.root();
+        bytes32[] memory newProof = newTree.getProof(0);
+
+        vm.prank(manager);
+        distributor.setMerkleRoot(newRoot, "QmPreviewTest2");
+
+        // Preview claimable (should be 50 ether, since 100 already claimed)
+        uint256 preview2 = distributor.previewClaim(userAlice, address(token1), newClaimAmount, newProof);
+        assertEq(preview2, 50 ether);
     }
 }
