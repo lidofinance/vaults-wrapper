@@ -43,7 +43,6 @@ contract FactoryIntegrationTest is StvPoolHarness {
         });
 
         commonPoolConfig = Factory.CommonPoolConfig({
-            maxFinalizationTime: 30 days,
             minWithdrawalDelayTime: 1 days,
             name: name,
             symbol: symbol

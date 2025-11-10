@@ -31,7 +31,6 @@ contract DeployPool is Script {
         });
 
         p.commonPoolConfig = Factory.CommonPoolConfig({
-            maxFinalizationTime: vm.parseJsonUint(json, "$.commonPoolConfig.maxFinalizationTime"),
             minWithdrawalDelayTime: vm.parseJsonUint(json, "$.commonPoolConfig.minWithdrawalDelayTime"),
             name: vm.parseJsonString(json, "$.commonPoolConfig.name"),
             symbol: vm.parseJsonString(json, "$.commonPoolConfig.symbol")
@@ -73,7 +72,6 @@ contract DeployPool is Script {
     }
 
     function _serializeCommonPoolConfig(Factory.CommonPoolConfig memory cfg) internal returns (string memory json) {
-        json = vm.serializeUint("_commonPoolConfig", "maxFinalizationTime", cfg.maxFinalizationTime);
         json = vm.serializeUint("_commonPoolConfig", "minWithdrawalDelayTime", cfg.minWithdrawalDelayTime);
         json = vm.serializeString("_commonPoolConfig", "name", cfg.name);
         json = vm.serializeString("_commonPoolConfig", "symbol", cfg.symbol);
@@ -205,7 +203,6 @@ contract DeployPool is Script {
                 confirmExpiry: vm.parseJsonUint(json, "$.config.vaultConfig.confirmExpiry")
             }),
             commonPoolConfig: Factory.CommonPoolConfig({
-                maxFinalizationTime: vm.parseJsonUint(json, "$.config.commonPoolConfig.maxFinalizationTime"),
                 minWithdrawalDelayTime: vm.parseJsonUint(json, "$.config.commonPoolConfig.minWithdrawalDelayTime"),
                 name: vm.parseJsonString(json, "$.config.commonPoolConfig.name"),
                 symbol: vm.parseJsonString(json, "$.config.commonPoolConfig.symbol")
@@ -316,7 +313,6 @@ contract DeployPool is Script {
         console2.log("  nodeOperatorManager:", p.vaultConfig.nodeOperatorManager);
         console2.log("  nodeOperatorFeeBP:", p.vaultConfig.nodeOperatorFeeBP);
         console2.log("  confirmExpiry:", p.vaultConfig.confirmExpiry);
-        console2.log("  maxFinalizationTime:", p.commonPoolConfig.maxFinalizationTime);
         console2.log("  minWithdrawalDelayTime:", p.commonPoolConfig.minWithdrawalDelayTime);
         console2.log("  reserveRatioGapBP:", p.auxiliaryPoolConfig.reserveRatioGapBP);
         console2.log("  strategyFactory:", p.strategyFactory);

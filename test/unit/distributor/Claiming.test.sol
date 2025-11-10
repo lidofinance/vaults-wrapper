@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >=0.8.25;
 
-import {Test} from "forge-std/Test.sol";
 import {SetupDistributor} from "./SetupDistributor.sol";
+import {Test} from "forge-std/Test.sol";
 import {Distributor} from "src/Distributor.sol";
 import {MerkleTree} from "test/utils/MerkleTree.sol";
 
@@ -176,7 +176,6 @@ contract ClaimingTest is Test, SetupDistributor {
         merkleTree.pushLeaf(_leafData(userAlice, address(token1), 100 ether));
         merkleTree.pushLeaf(_leafData(userBob, address(token1), 200 ether));
         merkleTree.pushLeaf(_leafData(userCharlie, address(token2), 300 ether));
-
 
         bytes32 root = merkleTree.root();
 

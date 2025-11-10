@@ -6,7 +6,6 @@
     "confirmExpiry": 3600
   },
   "commonPoolConfig": {
-    "maxFinalizationTime": 2592000,
     "minWithdrawalDelayTime": 180,
     "name": "Staked ETH GGV Pool",
     "symbol": "STV"

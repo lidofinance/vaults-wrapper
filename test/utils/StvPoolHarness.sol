@@ -3,18 +3,18 @@ pragma solidity >=0.8.25;
 
 import {Test, console} from "forge-std/Test.sol";
 
-import {CoreHarness} from "test/utils/CoreHarness.sol";
-import {IDashboard} from "src/interfaces/IDashboard.sol";
-import {IVaultHub} from "src/interfaces/IVaultHub.sol";
-import {IStakingVault} from "src/interfaces/IStakingVault.sol";
-import {ILido} from "src/interfaces/ILido.sol";
-import {IWstETH} from "src/interfaces/IWstETH.sol";
-
+import {TimelockController} from "@openzeppelin/contracts/governance/TimelockController.sol";
+import {Distributor} from "src/Distributor.sol";
+import {Factory} from "src/Factory.sol";
 import {StvPool} from "src/StvPool.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
-import {Factory} from "src/Factory.sol";
+import {IDashboard} from "src/interfaces/IDashboard.sol";
+import {ILido} from "src/interfaces/ILido.sol";
+import {IStakingVault} from "src/interfaces/IStakingVault.sol";
+import {IVaultHub} from "src/interfaces/IVaultHub.sol";
+import {IWstETH} from "src/interfaces/IWstETH.sol";
+import {CoreHarness} from "test/utils/CoreHarness.sol";
 import {FactoryHelper} from "test/utils/FactoryHelper.sol";
-import {Distributor} from "src/Distributor.sol";
 
 /**
  * @title StvPoolHarness
@@ -60,7 +60,6 @@ contract StvPoolHarness is Test {
         address nodeOperatorManager;
         uint256 nodeOperatorFeeBP;
         uint256 confirmExpiry;
-        uint256 maxFinalizationTime;
         uint256 minWithdrawalDelayTime;
         uint256 reserveRatioGapBP;
         StrategyKind strategyKind;
@@ -79,6 +78,7 @@ contract StvPoolHarness is Test {
         IStakingVault vault;
         address strategy;
         Distributor distributor;
+        TimelockController timelock;
     }
 
     function _initializeCore() internal {
@@ -120,7 +120,6 @@ contract StvPoolHarness is Test {
         });
 
         Factory.CommonPoolConfig memory commonPoolConfig = Factory.CommonPoolConfig({
-            maxFinalizationTime: config.maxFinalizationTime,
             minWithdrawalDelayTime: config.minWithdrawalDelayTime,
             name: config.name,
             symbol: config.symbol
@@ -162,6 +161,7 @@ contract StvPoolHarness is Test {
         Distributor distributor = Distributor(deployment.distributor);
 
         address strategy_ = deployment.strategy;
+        TimelockController timelock = TimelockController(payable(deployment.timelock));
 
         // Apply initial vault report with current total value equal to connect deposit
         core.applyVaultReport(vault_, CONNECT_DEPOSIT, 0, 0, 0);
@@ -172,7 +172,8 @@ contract StvPoolHarness is Test {
             dashboard: dashboard,
             vault: IStakingVault(vault_),
             strategy: strategy_,
-            distributor: distributor
+            distributor: distributor,
+            timelock: timelock
         });
     }
 
@@ -188,7 +189,6 @@ contract StvPoolHarness is Test {
             nodeOperatorManager: NODE_OPERATOR,
             nodeOperatorFeeBP: nodeOperatorFeeBP,
             confirmExpiry: CONFIRM_EXPIRY,
-            maxFinalizationTime: 30 days,
             minWithdrawalDelayTime: 1 days,
             reserveRatioGapBP: 0,
             strategyKind: StrategyKind.NONE,

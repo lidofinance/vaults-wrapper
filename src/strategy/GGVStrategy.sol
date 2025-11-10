@@ -54,8 +54,11 @@ contract GGVStrategy is Strategy {
     /// @param _params The parameters for the supply
     function supply(address _referral, bytes calldata _params) external payable {
         address callForwarder = _getOrCreateCallForwarder(msg.sender);
-        uint256 stethShares = POOL_.calcStethSharesToMintForAssets(msg.value);
-        uint256 stv = POOL_.depositETHAndMintStethShares{value: msg.value}(callForwarder, _referral, stethShares);
+        uint256 stethShares = POOL_.remainingMintingCapacitySharesOf(callForwarder, msg.value); // TODO: replace with argument
+        uint256 stv = POOL_.depositETH{value: msg.value}(callForwarder, _referral);
+
+        IStrategyCallForwarder(callForwarder)
+            .call(address(POOL_), abi.encodeWithSelector(POOL_.mintStethShares.selector, stethShares));
 
         uint256 stethAmount = STETH.getPooledEthByShares(stethShares);
 

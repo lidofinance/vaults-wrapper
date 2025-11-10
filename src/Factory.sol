@@ -49,7 +49,6 @@ contract Factory {
     }
 
     struct CommonPoolConfig {
-        uint256 maxFinalizationTime;
         uint256 minWithdrawalDelayTime;
         string name;
         string symbol;
@@ -272,7 +271,6 @@ contract Factory {
             STETH,
             address(IDashboard(payable(dashboardAddress)).stakingVault()),
             LAZY_ORACLE,
-            commonPoolConfig.maxFinalizationTime,
             commonPoolConfig.minWithdrawalDelayTime,
             auxiliaryConfig.mintingEnabled
         );

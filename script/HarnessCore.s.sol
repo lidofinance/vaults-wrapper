@@ -168,14 +168,11 @@ contract HarnessCore is Script {
         return (true, abi.decode(ret, (address)));
     }
 
-    function _arr6(
-        string memory a,
-        string memory b,
-        string memory c,
-        string memory d,
-        string memory e,
-        string memory f
-    ) private pure returns (string[] memory r) {
+    function _arr6(string memory a, string memory b, string memory c, string memory d, string memory e, string memory f)
+        private
+        pure
+        returns (string[] memory r)
+    {
         r = new string[](6);
         r[0] = a;
         r[1] = b;

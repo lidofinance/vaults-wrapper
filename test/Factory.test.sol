@@ -93,7 +93,6 @@ contract FactoryTest is Test {
         });
 
         commonPoolConfig = Factory.CommonPoolConfig({
-            maxFinalizationTime: 30 days,
             minWithdrawalDelayTime: 1 days,
             name: name,
             symbol: symbol

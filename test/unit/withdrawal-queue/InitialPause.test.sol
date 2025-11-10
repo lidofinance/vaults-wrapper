@@ -1,0 +1,40 @@
+// SPDX-License-Identifier: UNLICENSED
+pragma solidity >=0.8.25;
+
+import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import {Test} from "forge-std/Test.sol";
+import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
+import {OssifiableProxy} from "src/proxy/OssifiableProxy.sol";
+
+contract InitialPauseTest is Test {
+    WithdrawalQueue internal withdrawalQueueProxy;
+    WithdrawalQueue internal withdrawalQueueImpl;
+    address internal owner;
+    address internal finalizeRoleHolder;
+
+    function setUp() public {
+        owner = makeAddr("owner");
+        finalizeRoleHolder = makeAddr("finalizeRoleHolder");
+
+        withdrawalQueueImpl = new WithdrawalQueue(
+            makeAddr("pool"),
+            makeAddr("dashboard"),
+            makeAddr("vaultHub"),
+            makeAddr("steth"),
+            makeAddr("stakingVault"),
+            makeAddr("lazyOracle"),
+            1 days,
+            true
+        );
+        OssifiableProxy proxy = new OssifiableProxy(address(withdrawalQueueImpl), owner, "");
+        withdrawalQueueProxy = WithdrawalQueue(payable(proxy));
+    }
+
+    function test_InitialPause_ImplementationIsPaused() public view {
+        assertTrue(withdrawalQueueImpl.paused());
+    }
+
+    function test_InitialPause_ProxyIsNotPaused() public view {
+        assertFalse(withdrawalQueueProxy.paused());
+    }
+}

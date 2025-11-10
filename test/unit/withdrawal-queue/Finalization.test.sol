@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity >=0.8.25;
 
-import {Test} from "forge-std/Test.sol";
-import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
-import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 import {SetupWithdrawalQueue} from "./SetupWithdrawalQueue.sol";
+import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
+import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
+import {Test} from "forge-std/Test.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
 
 contract FinalizationTest is Test, SetupWithdrawalQueue {
@@ -33,7 +33,7 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
 
         // Finalize the request
         vm.prank(finalizeRoleHolder);
-        uint256 finalizedCount = withdrawalQueue.finalize(1);
+        uint256 finalizedCount = withdrawalQueue.finalize(1, address(0));
 
         // Verify finalization succeeded
         assertEq(finalizedCount, 1);
@@ -59,7 +59,7 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
 
         // Finalize all requests
         vm.prank(finalizeRoleHolder);
-        uint256 finalizedCount = withdrawalQueue.finalize(10); // More than needed
+        uint256 finalizedCount = withdrawalQueue.finalize(10, address(0)); // More than needed
 
         // Verify all finalized
         assertEq(finalizedCount, 3);
@@ -83,13 +83,13 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
         vm.warp(block.timestamp + MIN_WITHDRAWAL_DELAY_TIME + 1);
 
         vm.prank(finalizeRoleHolder);
-        uint256 finalizedCount = withdrawalQueue.finalize(1);
+        uint256 finalizedCount = withdrawalQueue.finalize(1, address(0));
 
         assertEq(finalizedCount, 1);
         assertEq(withdrawalQueue.getLastFinalizedRequestId(), 1);
 
         vm.prank(finalizeRoleHolder);
-        uint256 remainingCount = withdrawalQueue.finalize(10);
+        uint256 remainingCount = withdrawalQueue.finalize(10, address(0));
         assertTrue(remainingCount > 0);
     }
 
@@ -104,7 +104,7 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
         // Should not finalize because min delay not passed
         vm.prank(finalizeRoleHolder);
         vm.expectRevert(WithdrawalQueue.NoRequestsToFinalize.selector);
-        withdrawalQueue.finalize(1);
+        withdrawalQueue.finalize(1, address(0));
     }
 
     function test_Finalize_RequestAfterReport() public {
@@ -121,7 +121,7 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
         // Should not finalize because request was created after last report
         vm.prank(finalizeRoleHolder);
         vm.expectRevert(WithdrawalQueue.NoRequestsToFinalize.selector);
-        withdrawalQueue.finalize(1);
+        withdrawalQueue.finalize(1, address(0));
     }
 
     function test_Finalize_RevertOnlyFinalizeRole() public {
@@ -132,13 +132,11 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
         // Try to finalize without proper role
         vm.expectRevert(
             abi.encodeWithSelector(
-                IAccessControl.AccessControlUnauthorizedAccount.selector,
-                userAlice,
-                withdrawalQueue.FINALIZE_ROLE()
+                IAccessControl.AccessControlUnauthorizedAccount.selector, userAlice, withdrawalQueue.FINALIZE_ROLE()
             )
         );
         vm.prank(userAlice);
-        withdrawalQueue.finalize(1);
+        withdrawalQueue.finalize(1, address(0));
     }
 
     function test_Finalize_RevertWhenPaused() public {
@@ -152,7 +150,7 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
 
         vm.prank(finalizeRoleHolder);
         vm.expectRevert(abi.encodeWithSelector(PausableUpgradeable.EnforcedPause.selector));
-        withdrawalQueue.finalize(1);
+        withdrawalQueue.finalize(1, address(0));
     }
 
     function test_Finalize_ReturnsZeroWhenWithdrawableInsufficient() public {
@@ -168,7 +166,7 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
         // Should not finalize because eth to withdraw is locked
         vm.prank(finalizeRoleHolder);
         vm.expectRevert(WithdrawalQueue.NoRequestsToFinalize.selector);
-        withdrawalQueue.finalize(1);
+        withdrawalQueue.finalize(1, address(0));
     }
 
     function test_Finalize_PartialDueToWithdrawableLimit() public {
@@ -186,7 +184,7 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
         dashboard.mock_setLocked(vaultBalance - expectedEthFirst);
 
         vm.prank(finalizeRoleHolder);
-        uint256 finalizedCount = withdrawalQueue.finalize(10);
+        uint256 finalizedCount = withdrawalQueue.finalize(10, address(0));
 
         assertEq(finalizedCount, 1);
         assertEq(withdrawalQueue.getLastFinalizedRequestId(), 1);
@@ -213,7 +211,7 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
         // Should not finalize because eth to withdraw is locked
         vm.prank(finalizeRoleHolder);
         vm.expectRevert(WithdrawalQueue.NoRequestsToFinalize.selector);
-        withdrawalQueue.finalize(1);
+        withdrawalQueue.finalize(1, address(0));
     }
 
     function test_Finalize_RebalanceWithBlockedButAvailableAssets() public {
@@ -233,7 +231,7 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
         dashboard.mock_setLocked(assetsToRebalance);
 
         vm.prank(finalizeRoleHolder);
-        assertEq(withdrawalQueue.finalize(1), 1);
+        assertEq(withdrawalQueue.finalize(1, address(0)), 1);
     }
 
     function test_Finalize_RebalancePartiallyDueToAvailableBalance() public {
@@ -254,7 +252,7 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
         dashboard.mock_setLocked(0);
 
         vm.prank(finalizeRoleHolder);
-        uint256 finalizedCount = withdrawalQueue.finalize(10);
+        uint256 finalizedCount = withdrawalQueue.finalize(10, address(0));
 
         assertEq(finalizedCount, 1);
         assertTrue(withdrawalQueue.getWithdrawalStatus(requestId1).isFinalized);
@@ -270,13 +268,13 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
 
         vm.prank(finalizeRoleHolder);
         vm.expectRevert(WithdrawalQueue.NoRequestsToFinalize.selector);
-        withdrawalQueue.finalize(0);
+        withdrawalQueue.finalize(0, address(0));
     }
 
     function test_Finalize_NoRequestsToFinalize() public {
         vm.prank(finalizeRoleHolder);
         vm.expectRevert(WithdrawalQueue.NoRequestsToFinalize.selector);
-        withdrawalQueue.finalize(1);
+        withdrawalQueue.finalize(1, address(0));
     }
 
     function test_Finalize_AlreadyFullyFinalized() public {
@@ -286,12 +284,12 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
 
         // First finalization
         vm.prank(finalizeRoleHolder);
-        withdrawalQueue.finalize(1);
+        withdrawalQueue.finalize(1, address(0));
 
         // Try to finalize again
         vm.prank(finalizeRoleHolder);
         vm.expectRevert(WithdrawalQueue.NoRequestsToFinalize.selector);
-        withdrawalQueue.finalize(1);
+        withdrawalQueue.finalize(1, address(0));
     }
 
     function test_Finalize_RevertWhenReportStale() public {
@@ -303,7 +301,42 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
 
         vm.prank(finalizeRoleHolder);
         vm.expectRevert(WithdrawalQueue.VaultReportStale.selector);
-        withdrawalQueue.finalize(1);
+        withdrawalQueue.finalize(1, address(0));
+    }
+
+    function test_Finalize_RevertWhenFinalizerCannotReceiveFee() public {
+        uint256 coverage = 0.0001 ether;
+        vm.prank(finalizeRoleHolder);
+        withdrawalQueue.setFinalizationGasCostCoverage(coverage);
+
+        RevertingFinalizer finalizer = new RevertingFinalizer(withdrawalQueue);
+        bytes32 finalizeRole = withdrawalQueue.FINALIZE_ROLE();
+
+        vm.prank(owner);
+        withdrawalQueue.grantRole(finalizeRole, address(finalizer));
+
+        uint256 requestId = withdrawalQueue.requestWithdrawal(address(this), 10 ** STV_DECIMALS, 0);
+        assertEq(requestId, 1);
+
+        _warpAndMockOracleReport();
+
+        vm.expectRevert(WithdrawalQueue.CantSendValueRecipientMayHaveReverted.selector);
+        finalizer.callFinalize(1);
+    }
+
+    function test_Finalize_RevertWhenWithdrawableInsufficientButAvailableEnough() public {
+        uint256 stvToRequest = 10 ** STV_DECIMALS;
+        uint256 expectedAssets = pool.previewRedeem(stvToRequest);
+        uint256 requestId = withdrawalQueue.requestWithdrawal(address(this), stvToRequest, 0);
+
+        assertEq(requestId, 1);
+
+        _warpAndMockOracleReport();
+        dashboard.mock_setLocked(pool.totalAssets() - expectedAssets + 1);
+
+        vm.prank(finalizeRoleHolder);
+        vm.expectRevert(WithdrawalQueue.NoRequestsToFinalize.selector);
+        withdrawalQueue.finalize(1, address(0));
     }
 
     // Checkpoint Tests
@@ -317,29 +350,10 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
         vm.warp(block.timestamp + MIN_WITHDRAWAL_DELAY_TIME + 1);
 
         vm.prank(finalizeRoleHolder);
-        withdrawalQueue.finalize(1);
+        withdrawalQueue.finalize(1, address(0));
 
         // Verify checkpoint was created
         assertEq(withdrawalQueue.getLastCheckpointIndex(), 1);
-    }
-
-    // Emergency Exit
-
-    function test_Finalize_DuringEmergencyExit() public {
-        withdrawalQueue.requestWithdrawal(address(this), 10 ** STV_DECIMALS, 0);
-
-        // Set very old timestamp to make queue "stuck"
-        vm.warp(block.timestamp + withdrawalQueue.MAX_ACCEPTABLE_WQ_FINALIZATION_TIME_IN_SECONDS() + 1);
-
-        // Activate emergency exit
-        withdrawalQueue.activateEmergencyExit();
-        assertTrue(withdrawalQueue.isEmergencyExitActivated());
-
-        // Should be able to finalize without role restriction in emergency
-        vm.prank(userAlice); // Any user can call
-        uint256 finalizedCount = withdrawalQueue.finalize(1);
-
-        assertEq(finalizedCount, 1);
     }
 
     // Rewards & penalties
@@ -358,7 +372,7 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
         // Finalize request
         vm.warp(block.timestamp + MIN_WITHDRAWAL_DELAY_TIME + 1);
         vm.prank(finalizeRoleHolder);
-        withdrawalQueue.finalize(1);
+        withdrawalQueue.finalize(1, address(0));
 
         // Check finalized request has correct ETH amount unaffected by rewards
         assertEq(withdrawalQueue.getClaimableEther(requestId), expectedEth);
@@ -380,9 +394,25 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
         // Finalize request
         vm.warp(block.timestamp + MIN_WITHDRAWAL_DELAY_TIME + 1);
         vm.prank(finalizeRoleHolder);
-        withdrawalQueue.finalize(1);
+        withdrawalQueue.finalize(1, address(0));
 
         // Check finalized request has correct ETH amount unaffected by rewards
         assertEq(withdrawalQueue.getClaimableEther(requestId), expectedEth);
+    }
+}
+
+contract RevertingFinalizer {
+    WithdrawalQueue public immutable withdrawalQueue;
+
+    constructor(WithdrawalQueue _withdrawalQueue) {
+        withdrawalQueue = _withdrawalQueue;
+    }
+
+    function callFinalize(uint256 maxRequests) external {
+        withdrawalQueue.finalize(maxRequests, address(0));
+    }
+
+    receive() external payable {
+        revert("cannot receive");
     }
 }

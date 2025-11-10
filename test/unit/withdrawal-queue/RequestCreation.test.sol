@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity >=0.8.25;
 
-import {Test} from "forge-std/Test.sol";
-import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 import {SetupWithdrawalQueue} from "./SetupWithdrawalQueue.sol";
+import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
+import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
+import {Test} from "forge-std/Test.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
 
 contract RequestCreationTest is Test, SetupWithdrawalQueue {
@@ -25,7 +26,7 @@ contract RequestCreationTest is Test, SetupWithdrawalQueue {
     function test_InitialState_NoRequests() public view {
         assertEq(withdrawalQueue.getLastRequestId(), 0);
         assertEq(withdrawalQueue.getLastFinalizedRequestId(), 0);
-        assertEq(withdrawalQueue.unfinalizedRequestNumber(), 0);
+        assertEq(withdrawalQueue.unfinalizedRequestsNumber(), 0);
         assertEq(withdrawalQueue.unfinalizedAssets(), 0);
         assertEq(withdrawalQueue.unfinalizedStv(), 0);
     }
@@ -49,7 +50,7 @@ contract RequestCreationTest is Test, SetupWithdrawalQueue {
 
         assertEq(requestId, 1);
         assertEq(withdrawalQueue.getLastRequestId(), 1);
-        assertEq(withdrawalQueue.unfinalizedRequestNumber(), 1);
+        assertEq(withdrawalQueue.unfinalizedRequestsNumber(), 1);
         assertEq(withdrawalQueue.unfinalizedStv(), stvToRequest);
 
         // Check request details
@@ -179,20 +180,29 @@ contract RequestCreationTest is Test, SetupWithdrawalQueue {
         withdrawalQueue.requestWithdrawalBatch(address(this), stvAmounts, stethShares);
     }
 
-    function test_RequestWithdrawal_RevertOnTooSmallAmount() public {
-        uint256 tinyStvAmount = pool.previewWithdraw(withdrawalQueue.MIN_WITHDRAWAL_AMOUNT()) - 1;
+    function test_RequestWithdrawal_RevertOnTooSmallValue() public {
+        uint256 tinyStvAmount = pool.previewWithdraw(withdrawalQueue.MIN_WITHDRAWAL_VALUE()) - 1;
         uint256 expectedAssets = pool.previewRedeem(tinyStvAmount);
 
-        vm.expectRevert(abi.encodeWithSelector(WithdrawalQueue.RequestAmountTooSmall.selector, expectedAssets));
+        vm.expectRevert(abi.encodeWithSelector(WithdrawalQueue.RequestValueTooSmall.selector, expectedAssets));
         withdrawalQueue.requestWithdrawal(address(this), tinyStvAmount, 0);
+    }
+
+    function test_RequestWithdrawal_RevertOnTooSmallValueWithRebalance() public {
+        uint256 minStvAmount = pool.previewWithdraw(withdrawalQueue.MIN_WITHDRAWAL_VALUE());
+        uint256 minMintedShares = 1;
+        uint256 expectedAssets = pool.previewRedeem(minStvAmount) - steth.getPooledEthBySharesRoundUp(minMintedShares);
+
+        vm.expectRevert(abi.encodeWithSelector(WithdrawalQueue.RequestValueTooSmall.selector, expectedAssets));
+        withdrawalQueue.requestWithdrawal(address(this), minStvAmount, minMintedShares);
     }
 
     function test_RequestWithdrawal_RevertOnTooLargeAmount() public {
         uint256 extraAssetsWei = 10 ** (STV_DECIMALS - ASSETS_DECIMALS);
-        uint256 hugeStvAmount = pool.previewWithdraw(withdrawalQueue.MAX_WITHDRAWAL_AMOUNT()) + extraAssetsWei;
+        uint256 hugeStvAmount = pool.previewWithdraw(withdrawalQueue.MAX_WITHDRAWAL_ASSETS()) + extraAssetsWei;
         uint256 expectedAssets = pool.previewRedeem(hugeStvAmount);
 
-        vm.expectRevert(abi.encodeWithSelector(WithdrawalQueue.RequestAmountTooLarge.selector, expectedAssets));
+        vm.expectRevert(abi.encodeWithSelector(WithdrawalQueue.RequestAssetsTooLarge.selector, expectedAssets));
         withdrawalQueue.requestWithdrawal(address(this), hugeStvAmount, 0);
     }
 
@@ -203,6 +213,35 @@ contract RequestCreationTest is Test, SetupWithdrawalQueue {
         vm.prank(address(this));
         vm.expectRevert(abi.encodeWithSelector(PausableUpgradeable.EnforcedPause.selector));
         withdrawalQueue.requestWithdrawal(address(this), 10 ** STV_DECIMALS, 0);
+    }
+
+    function test_Pause_RevertWhenCallerUnauthorized() public {
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IAccessControl.AccessControlUnauthorizedAccount.selector, address(this), withdrawalQueue.PAUSE_ROLE()
+            )
+        );
+        withdrawalQueue.pause();
+    }
+
+    function test_Resume_RevertWhenCallerUnauthorized() public {
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IAccessControl.AccessControlUnauthorizedAccount.selector, address(this), withdrawalQueue.RESUME_ROLE()
+            )
+        );
+        withdrawalQueue.resume();
+    }
+
+    function test_Resume_AllowsRequestsAfterPause() public {
+        vm.prank(pauseRoleHolder);
+        withdrawalQueue.pause();
+
+        vm.prank(resumeRoleHolder);
+        withdrawalQueue.resume();
+
+        uint256 requestId = withdrawalQueue.requestWithdrawal(address(this), 10 ** STV_DECIMALS, 0);
+        assertEq(requestId, 1);
     }
 
     // Edge cases
@@ -218,8 +257,8 @@ contract RequestCreationTest is Test, SetupWithdrawalQueue {
     }
 
     function test_RequestWithdrawal_ExactMinAmount() public {
-        // Calculate STV amount needed for MIN_WITHDRAWAL_AMOUNT
-        uint256 minAmount = withdrawalQueue.MIN_WITHDRAWAL_AMOUNT();
+        // Calculate STV amount needed for MAX_WITHDRAWAL_ASSETS
+        uint256 minAmount = withdrawalQueue.MAX_WITHDRAWAL_ASSETS();
         uint256 stvAmount = pool.previewWithdraw(minAmount);
 
         // This should succeed
@@ -228,8 +267,8 @@ contract RequestCreationTest is Test, SetupWithdrawalQueue {
     }
 
     function test_RequestWithdrawal_ExactMaxAmount() public {
-        // Calculate STV amount needed for MAX_WITHDRAWAL_AMOUNT
-        uint256 maxAmount = withdrawalQueue.MAX_WITHDRAWAL_AMOUNT();
+        // Calculate STV amount needed for MAX_WITHDRAWAL_ASSETS
+        uint256 maxAmount = withdrawalQueue.MAX_WITHDRAWAL_ASSETS();
         uint256 stvAmount = pool.previewWithdraw(maxAmount);
 
         // This should succeed
@@ -287,6 +326,20 @@ contract RequestCreationTest is Test, SetupWithdrawalQueue {
 
         assertEq(withdrawalQueue.unfinalizedStv(), 0);
         assertEq(withdrawalQueue.unfinalizedAssets(), 0);
+    }
+
+    function test_UnfinalizedStats_TrackStethShares() public {
+        uint256 stvAmount = 2 * 10 ** STV_DECIMALS;
+        uint256 mintedShares = 10 ** ASSETS_DECIMALS;
+
+        pool.mintStethShares(mintedShares);
+        withdrawalQueue.requestWithdrawal(address(this), stvAmount, mintedShares);
+
+        assertEq(withdrawalQueue.unfinalizedStethShares(), mintedShares);
+
+        _finalizeRequests(1);
+
+        assertEq(withdrawalQueue.unfinalizedStethShares(), 0);
     }
 
     // Receive function to accept ETH refunds

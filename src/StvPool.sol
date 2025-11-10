@@ -12,15 +12,19 @@ import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Ini
 import {ERC20Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
+/**
+ * @title StvPool
+ * @notice ERC20 staking vault token pool that accepts ETH deposits and manages withdrawals through a queue
+ * @dev Implements a tokenized staking pool where users deposit ETH and receive STV tokens representing their share
+ */
 contract StvPool is Initializable, ERC20Upgradeable, AllowList {
     // Custom errors
     error ZeroDeposit();
     error InvalidReceiver();
-    error ZeroStv();
     error NotWithdrawalQueue();
-    error InvalidRequestType();
     error NotEnoughToRebalance();
     error UnassignedLiabilityOnVault();
+    error VaultInBadDebt();
 
     bytes32 public constant REQUEST_VALIDATOR_EXIT_ROLE = keccak256("REQUEST_VALIDATOR_EXIT_ROLE");
     bytes32 public constant TRIGGER_VALIDATOR_WITHDRAWAL_ROLE = keccak256("TRIGGER_VALIDATOR_WITHDRAWAL_ROLE");
@@ -39,35 +43,11 @@ contract StvPool is Initializable, ERC20Upgradeable, AllowList {
     WithdrawalQueue public immutable WITHDRAWAL_QUEUE;
     Distributor public immutable DISTRIBUTOR;
 
-    /// @custom:storage-location erc7201:pool.storage.StvPool
-    struct StvPoolStorage {
-        bool vaultDisconnected;
-    }
-
-    // keccak256(abi.encode(uint256(keccak256("pool.storage.StvPool")) - 1)) & ~bytes32(uint256(0xff))
-    bytes32 private constant STV_POOL_STORAGE_LOCATION =
-        0x4ba3584e94e638ad48c84a51d04c6416f12f2677ae8479c14b06fa49535c7e00;
-
-    function _getStvPoolStorage() internal pure returns (StvPoolStorage storage $) {
-        assembly {
-            $.slot := STV_POOL_STORAGE_LOCATION
-        }
-    }
-
-    function vaultDisconnected() public view returns (bool) {
-        return _getStvPoolStorage().vaultDisconnected;
-    }
-
-    event VaultFunded(uint256 amount);
-    event ValidatorExitRequested(bytes pubkeys);
-    event ValidatorWithdrawalsTriggered(bytes pubkeys, uint64[] amountsInGwei);
     event Deposit(
         address indexed sender, address indexed receiver, address indexed referral, uint256 assets, uint256 stv
     );
 
-    event VaultDisconnected(address indexed initiator);
-    event ConnectDepositClaimed(address indexed recipient, uint256 amount);
-    event UnassignedLiabilityRebalanced(uint256 stethShares, uint256 ethAmount);
+    event UnassignedLiabilityRebalanced(uint256 stethShares, uint256 ethFunded);
 
     constructor(address _dashboard, bool _allowListEnabled, address _withdrawalQueue, address _distributor)
         AllowList(_allowListEnabled)
@@ -100,12 +80,11 @@ contract StvPool is Initializable, ERC20Upgradeable, AllowList {
 
         // Initial vault balance must include the connect deposit
         // Minting stv for it to have clear stv math
-        // The stv are withdrawable only upon vault disconnection
         uint256 initialVaultBalance = address(STAKING_VAULT).balance;
         uint256 connectDeposit = VAULT_HUB.CONNECT_DEPOSIT();
         assert(initialVaultBalance >= connectDeposit);
 
-        _mint(address(this), _convertToStv(connectDeposit, Math.Rounding.Floor));
+        _mint(address(this), _convertToStv(initialVaultBalance, Math.Rounding.Floor));
     }
 
     // =================================================================================
@@ -115,7 +94,6 @@ contract StvPool is Initializable, ERC20Upgradeable, AllowList {
     /**
      * @notice Total nominal assets managed by the pool
      * @return assets Total nominal assets (18 decimals)
-     * @dev Don't subtract CONNECT_DEPOSIT because we mint tokens for it
      */
     function totalNominalAssets() public view returns (uint256 assets) {
         assets = DASHBOARD.maxLockableValue();
@@ -301,10 +279,8 @@ contract StvPool is Initializable, ERC20Upgradeable, AllowList {
      * @dev Checks if only unassigned liability will be rebalanced, not individual liability
      */
     function _checkOnlyUnassignedLiabilityRebalance(uint256 _stethShares) internal view {
-        uint256 unassignedLiabilityShares = totalUnassignedLiabilityShares();
-
         if (_stethShares == 0) revert NotEnoughToRebalance();
-        if (unassignedLiabilityShares < _stethShares) revert NotEnoughToRebalance();
+        if (totalUnassignedLiabilityShares() < _stethShares) revert NotEnoughToRebalance();
     }
 
     /**
@@ -312,6 +288,14 @@ contract StvPool is Initializable, ERC20Upgradeable, AllowList {
      */
     function _checkNoUnassignedLiability() internal view {
         if (totalUnassignedLiabilityShares() > 0) revert UnassignedLiabilityOnVault();
+    }
+
+    /**
+     * @dev Checks if the vault is not in bad debt (value < liability)
+     */
+    function _checkNoBadDebt() internal view {
+        uint256 totalValueInStethShares = _getSharesByPooledEth(VAULT_HUB.totalValue(address(STAKING_VAULT)));
+        if (totalValueInStethShares < totalLiabilityShares()) revert VaultInBadDebt();
     }
 
     // =================================================================================
@@ -346,9 +330,13 @@ contract StvPool is Initializable, ERC20Upgradeable, AllowList {
      * @dev Overridden method from ERC20 to prevent updates if there are unassigned liability
      */
     function _update(address _from, address _to, uint256 _value) internal virtual override {
+        // Ensure vault is not in bad debt (value < liability) before any transfer
+        _checkNoBadDebt();
+
         // In rare scenarios, the vault could have liability shares that are not assigned to any pool users
         // In such cases, it prevents any transfers until the unassigned liability is rebalanced
         _checkNoUnassignedLiability();
+
         super._update(_from, _to, _value);
     }
 
@@ -374,6 +362,7 @@ contract StvPool is Initializable, ERC20Upgradeable, AllowList {
      */
     function burnStvForWithdrawalQueue(uint256 _stv) external {
         _checkOnlyWithdrawalQueue();
+        _checkNoBadDebt();
         _checkNoUnassignedLiability();
         _burnUnsafe(address(WITHDRAWAL_QUEUE), _stv);
     }
@@ -385,73 +374,5 @@ contract StvPool is Initializable, ERC20Upgradeable, AllowList {
 
     function _checkOnlyWithdrawalQueue() internal view {
         if (address(WITHDRAWAL_QUEUE) != msg.sender) revert NotWithdrawalQueue();
-    }
-
-    // =================================================================================
-    // VAULT MANAGEMENT
-    // =================================================================================
-
-    /**
-     * @notice Initiates voluntary vault disconnection from VaultHub
-     * @dev Can only be called by admin. Vault must have no outstanding stETH liabilities.
-     */
-    function disconnectVault() external {
-        _checkRole(DEFAULT_ADMIN_ROLE, msg.sender);
-
-        // Start the disconnection process
-        // This requires: no liabilityShares, all obligations settled
-        DASHBOARD.voluntaryDisconnect();
-
-        // Mark vault as in disconnection process
-        // The actual disconnect completes during next oracle report
-        emit VaultDisconnected(msg.sender);
-    }
-
-    /**
-     * @notice Claims the connect deposit after vault has been disconnected
-     * @dev Can only be called by admin after successful disconnection
-     * @param _recipient Address to receive the connect deposit
-     */
-    function claimConnectDeposit(address _recipient) external {
-        _checkRole(DEFAULT_ADMIN_ROLE, msg.sender);
-
-        // Check if vault has been disconnected
-        if (address(STAKING_VAULT) == address(DASHBOARD.stakingVault())) {
-            revert("Vault not disconnected yet");
-        }
-
-        _getStvPoolStorage().vaultDisconnected = true;
-
-        // After disconnection, the connect deposit is available in the vault
-        uint256 vaultBalance = address(STAKING_VAULT).balance;
-        if (vaultBalance > 0) {
-            DASHBOARD.withdraw(_recipient, vaultBalance);
-            emit ConnectDepositClaimed(_recipient, vaultBalance);
-        }
-    }
-
-    // =================================================================================
-    // EMERGENCY WITHDRAWAL FUNCTIONS
-    // =================================================================================
-
-    function triggerValidatorWithdrawals(
-        bytes calldata _pubkeys,
-        uint64[] calldata _amountsInGwei,
-        address _refundRecipient
-    ) external payable {
-        _checkOnlyRoleOrEmergencyExit(TRIGGER_VALIDATOR_WITHDRAWAL_ROLE);
-        DASHBOARD.triggerValidatorWithdrawals{value: msg.value}(_pubkeys, _amountsInGwei, _refundRecipient);
-    }
-
-    function requestValidatorExit(bytes calldata _pubkeys) external {
-        _checkOnlyRoleOrEmergencyExit(REQUEST_VALIDATOR_EXIT_ROLE);
-        DASHBOARD.requestValidatorExit(_pubkeys);
-    }
-
-    /// @notice Modifier to check role or Emergency Exit
-    function _checkOnlyRoleOrEmergencyExit(bytes32 _role) internal view {
-        if (!WITHDRAWAL_QUEUE.isEmergencyExitActivated()) {
-            _checkRole(_role, msg.sender);
-        }
     }
 }

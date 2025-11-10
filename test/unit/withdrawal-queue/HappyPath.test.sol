@@ -4,8 +4,8 @@ pragma solidity >=0.8.25;
 import {Test} from "forge-std/Test.sol";
 
 import {SetupWithdrawalQueue} from "./SetupWithdrawalQueue.sol";
-import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
 import {StvStETHPool} from "src/StvStETHPool.sol";
+import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
 
 contract WithdrawalQueueHappyPathTest is Test, SetupWithdrawalQueue {
     function setUp() public override {
@@ -36,9 +36,7 @@ contract WithdrawalQueueHappyPathTest is Test, SetupWithdrawalQueue {
         uint256 firstRequestId = withdrawalQueue.requestWithdrawal(address(this), firstWithdrawStv, 0);
 
         // Request 1: Check withdrawal status
-        WithdrawalQueue.WithdrawalRequestStatus memory firstStatus = withdrawalQueue.getWithdrawalStatus(
-            firstRequestId
-        );
+        WithdrawalQueue.WithdrawalRequestStatus memory firstStatus = withdrawalQueue.getWithdrawalStatus(firstRequestId);
         assertEq(firstStatus.amountOfStethShares, 0);
         assertEq(firstStatus.amountOfAssets, 2 ether); // initial deposit / 5
         assertEq(firstStatus.amountOfStv, firstWithdrawStv);
@@ -106,25 +104,19 @@ contract WithdrawalQueueHappyPathTest is Test, SetupWithdrawalQueue {
         assertEq(remainingStv, initialStv - firstWithdrawStv - secondWithdrawStv);
 
         // Request 2: Check withdrawal status
-        WithdrawalQueue.WithdrawalRequestStatus memory secondStatus = withdrawalQueue.getWithdrawalStatus(
-            secondRequestId
-        );
+        WithdrawalQueue.WithdrawalRequestStatus memory secondStatus =
+            withdrawalQueue.getWithdrawalStatus(secondRequestId);
         assertEq(secondStatus.amountOfStv, secondWithdrawStv);
         assertEq(secondStatus.owner, address(this));
 
         // Request 3: Request another withdrawal with rebalance
         uint256 thirdWithdrawStv = remainingStv;
         uint256 thirdSharesToRebalance = mintedSharesRemaining;
-        uint256 thirdRequestId = withdrawalQueue.requestWithdrawal(
-            address(this),
-            thirdWithdrawStv,
-            thirdSharesToRebalance
-        );
+        uint256 thirdRequestId =
+            withdrawalQueue.requestWithdrawal(address(this), thirdWithdrawStv, thirdSharesToRebalance);
 
         // Request 3: Check withdrawal status
-        WithdrawalQueue.WithdrawalRequestStatus memory thirdStatus = withdrawalQueue.getWithdrawalStatus(
-            thirdRequestId
-        );
+        WithdrawalQueue.WithdrawalRequestStatus memory thirdStatus = withdrawalQueue.getWithdrawalStatus(thirdRequestId);
         assertEq(thirdStatus.amountOfStv, thirdWithdrawStv);
         assertEq(thirdStatus.amountOfStethShares, thirdSharesToRebalance);
         assertEq(thirdStatus.owner, address(this));
@@ -136,7 +128,7 @@ contract WithdrawalQueueHappyPathTest is Test, SetupWithdrawalQueue {
         // Request 2 & 3: Try to finalize both requests without waiting period - should fail
         vm.prank(finalizeRoleHolder);
         vm.expectRevert(WithdrawalQueue.NoRequestsToFinalize.selector);
-        withdrawalQueue.finalize(2);
+        withdrawalQueue.finalize(2, address(0));
 
         // Request 2 & 3: Finalize both requests after waiting period
         assertEq(pool.balanceOf(address(withdrawalQueue)), secondWithdrawStv + thirdWithdrawStv);
@@ -195,7 +187,7 @@ contract WithdrawalQueueHappyPathTest is Test, SetupWithdrawalQueue {
         // Final check: Withdrawal Queue
         assertEq(withdrawalQueue.getLastRequestId(), 3);
         assertEq(withdrawalQueue.getLastFinalizedRequestId(), 3);
-        assertEq(withdrawalQueue.unfinalizedRequestNumber(), 0);
+        assertEq(withdrawalQueue.unfinalizedRequestsNumber(), 0);
 
         assertEq(pool.balanceOf(address(withdrawalQueue)), 0);
         assertEq(pool.mintedStethSharesOf(address(withdrawalQueue)), 0);
