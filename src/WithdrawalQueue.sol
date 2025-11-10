@@ -18,7 +18,7 @@ import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet
  * @title WithdrawalQueue
  * @notice Manages withdrawal requests from the STV Pool with queuing, finalization, and claiming
  * @dev Handles the complete lifecycle of withdrawal requests including optional stETH rebalancing,
- * and discount mechanisms when STV rate decreases
+ * and discount mechanisms
  */
 contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradeable {
     using EnumerableSet for EnumerableSet.UintSet;
