@@ -18,13 +18,13 @@ import {StvStETHPool} from "src/StvStETHPool.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
 import {IDashboard} from "src/interfaces/IDashboard.sol";
 
+import {DummyImplementation} from "src/proxy/DummyImplementation.sol";
 import {MockDashboard} from "test/mocks/MockDashboard.sol";
 import {MockERC20} from "test/mocks/MockERC20.sol";
 import {MockLazyOracle} from "test/mocks/MockLazyOracle.sol";
 import {MockLidoLocator} from "test/mocks/MockLidoLocator.sol";
 import {MockVaultFactory} from "test/mocks/MockVaultFactory.sol";
 import {MockVaultHub} from "test/mocks/MockVaultHub.sol";
-import {DummyImplementation} from "src/proxy/DummyImplementation.sol";
 
 contract FactoryTest is Test {
     Factory public wrapperFactory;
@@ -92,16 +92,10 @@ contract FactoryTest is Test {
             confirmExpiry: 3600
         });
 
-        commonPoolConfig = Factory.CommonPoolConfig({
-            minWithdrawalDelayTime: 1 days,
-            name: name,
-            symbol: symbol
-        });
+        commonPoolConfig = Factory.CommonPoolConfig({minWithdrawalDelayTime: 1 days, name: name, symbol: symbol});
 
         auxiliaryConfig = Factory.AuxiliaryPoolConfig({
-            allowlistEnabled: allowlistEnabled,
-            mintingEnabled: mintingEnabled,
-            reserveRatioGapBP: reserveRatioGapBP
+            allowlistEnabled: allowlistEnabled, mintingEnabled: mintingEnabled, reserveRatioGapBP: reserveRatioGapBP
         });
     }
 
@@ -121,11 +115,7 @@ contract FactoryTest is Test {
 
         vm.startPrank(admin);
         Factory.StvPoolIntermediate memory intermediate = wrapperFactory.createPoolStart{value: connectDeposit}(
-            vaultConfig,
-            commonPoolConfig,
-            auxiliaryConfig,
-            timelockConfig,
-            strategyFactory
+            vaultConfig, commonPoolConfig, auxiliaryConfig, timelockConfig, strategyFactory
         );
         Factory.StvPoolDeployment memory deployment = wrapperFactory.createPoolFinish(intermediate);
         vm.stopPrank();
@@ -163,13 +153,7 @@ contract FactoryTest is Test {
 
         vm.startPrank(admin);
         vm.expectRevert();
-        wrapperFactory.createPoolStart(
-            vaultConfig,
-            commonPoolConfig,
-            auxiliaryConfig,
-            timelockConfig,
-            strategyFactory
-        );
+        wrapperFactory.createPoolStart(vaultConfig, commonPoolConfig, auxiliaryConfig, timelockConfig, strategyFactory);
         vm.stopPrank();
     }
 
@@ -187,11 +171,7 @@ contract FactoryTest is Test {
 
         vm.startPrank(admin);
         Factory.StvPoolIntermediate memory intermediate = wrapperFactory.createPoolStart{value: connectDeposit}(
-            vaultConfig,
-            commonPoolConfig,
-            auxiliaryConfig,
-            timelockConfig,
-            strategyFactory
+            vaultConfig, commonPoolConfig, auxiliaryConfig, timelockConfig, strategyFactory
         );
         uint256 nonceBefore = vm.getNonce(ggvFactory);
         Factory.StvPoolDeployment memory deployment = wrapperFactory.createPoolFinish(intermediate);
@@ -222,11 +202,7 @@ contract FactoryTest is Test {
 
         vm.startPrank(admin);
         Factory.StvPoolIntermediate memory intermediate = wrapperFactory.createPoolStart{value: connectDeposit}(
-            vaultConfig,
-            commonPoolConfig,
-            auxiliaryConfig,
-            timelockConfig,
-            strategyFactory
+            vaultConfig, commonPoolConfig, auxiliaryConfig, timelockConfig, strategyFactory
         );
         Factory.StvPoolDeployment memory deployment = wrapperFactory.createPoolFinish(intermediate);
         vm.stopPrank();
@@ -249,11 +225,7 @@ contract FactoryTest is Test {
         vm.startPrank(admin);
         uint256 gasBefore = gasleft();
         Factory.StvPoolIntermediate memory intermediate = wrapperFactory.createPoolStart{value: connectDeposit}(
-            vaultConfig,
-            commonPoolConfig,
-            auxiliaryConfig,
-            timelockConfig,
-            strategyFactory
+            vaultConfig, commonPoolConfig, auxiliaryConfig, timelockConfig, strategyFactory
         );
         uint256 gasUsedStart = gasBefore - gasleft();
 
@@ -281,11 +253,7 @@ contract FactoryTest is Test {
         vm.startPrank(admin);
         uint256 gasBefore = gasleft();
         Factory.StvPoolIntermediate memory intermediate = wrapperFactory.createPoolStart{value: connectDeposit}(
-            vaultConfig,
-            commonPoolConfig,
-            auxiliaryConfig,
-            timelockConfig,
-            strategyFactory
+            vaultConfig, commonPoolConfig, auxiliaryConfig, timelockConfig, strategyFactory
         );
         uint256 gasUsedStart = gasBefore - gasleft();
 
@@ -313,11 +281,7 @@ contract FactoryTest is Test {
         vm.startPrank(admin);
         uint256 gasBefore = gasleft();
         Factory.StvPoolIntermediate memory intermediate = wrapperFactory.createPoolStart{value: connectDeposit}(
-            vaultConfig,
-            commonPoolConfig,
-            auxiliaryConfig,
-            timelockConfig,
-            strategyFactory
+            vaultConfig, commonPoolConfig, auxiliaryConfig, timelockConfig, strategyFactory
         );
         uint256 gasUsedStart = gasBefore - gasleft();
 

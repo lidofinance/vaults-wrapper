@@ -4,12 +4,12 @@ pragma solidity >=0.8.25;
 import "forge-std/Script.sol";
 import "forge-std/console2.sol";
 import {Factory} from "src/Factory.sol";
-import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
-import {IOssifiableProxy} from "src/interfaces/IOssifiableProxy.sol";
-import {OssifiableProxy} from "src/proxy/OssifiableProxy.sol";
 import {StvPool} from "src/StvPool.sol";
 import {StvStETHPool} from "src/StvStETHPool.sol";
+import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
+import {IOssifiableProxy} from "src/interfaces/IOssifiableProxy.sol";
 import {IStETH} from "src/interfaces/IStETH.sol";
+import {OssifiableProxy} from "src/proxy/OssifiableProxy.sol";
 
 contract DeployPool is Script {
     struct PoolParams {
@@ -114,10 +114,7 @@ contract DeployPool is Script {
         json = vm.serializeAddress("_intermediate", "strategyFactory", intermediate.strategyFactory);
     }
 
-    function _serializeDeployment(Factory.StvPoolDeployment memory deployment)
-        internal
-        returns (string memory json)
-    {
+    function _serializeDeployment(Factory.StvPoolDeployment memory deployment) internal returns (string memory json) {
         json = vm.serializeAddress("_deployment", "vault", deployment.vault);
         json = vm.serializeAddress("_deployment", "dashboard", deployment.dashboard);
         json = vm.serializeAddress("_deployment", "pool", deployment.pool);
@@ -140,20 +137,14 @@ contract DeployPool is Script {
         address distributor = address(pool.DISTRIBUTOR());
 
         bytes memory poolCtorBytecode = abi.encodePacked(
-            type(OssifiableProxy).creationCode,
-            abi.encode(factory.DUMMY_IMPLEMENTATION(), address(factory), bytes(""))
+            type(OssifiableProxy).creationCode, abi.encode(factory.DUMMY_IMPLEMENTATION(), address(factory), bytes(""))
         );
 
         bytes memory poolImplementationCtorBytecode;
         if (poolType == factory.STV_POOL_TYPE()) {
             poolImplementationCtorBytecode = abi.encodePacked(
                 type(StvPool).creationCode,
-                abi.encode(
-                    dashboard,
-                    auxiliaryConfig.allowlistEnabled,
-                    withdrawalQueue,
-                    distributor
-                )
+                abi.encode(dashboard, auxiliaryConfig.allowlistEnabled, withdrawalQueue, distributor)
             );
         } else {
             poolImplementationCtorBytecode = abi.encodePacked(
@@ -170,13 +161,10 @@ contract DeployPool is Script {
         }
 
         address withdrawalImpl = IOssifiableProxy(withdrawalQueue).proxy__getImplementation();
-        bytes memory withdrawalInitData = abi.encodeCall(
-            WithdrawalQueue.initialize,
-            (vaultConfig.nodeOperatorManager, vaultConfig.nodeOperator)
-        );
+        bytes memory withdrawalInitData =
+            abi.encodeCall(WithdrawalQueue.initialize, (vaultConfig.nodeOperatorManager, vaultConfig.nodeOperator));
         bytes memory withdrawalCtorBytecode = abi.encodePacked(
-            type(OssifiableProxy).creationCode,
-            abi.encode(withdrawalImpl, intermediate.timelock, withdrawalInitData)
+            type(OssifiableProxy).creationCode, abi.encode(withdrawalImpl, intermediate.timelock, withdrawalInitData)
         );
 
         json = vm.serializeBytes("_ctorBytecode", "poolProxy", poolCtorBytecode);
@@ -241,7 +229,10 @@ contract DeployPool is Script {
     }
 
     function _runStart(Factory factory, string memory intermediateJsonPath) internal {
-        require(!vm.isFile(intermediateJsonPath), string(abi.encodePacked("Intermediate JSON file already exists at: ", intermediateJsonPath)));
+        require(
+            !vm.isFile(intermediateJsonPath),
+            string(abi.encodePacked("Intermediate JSON file already exists at: ", intermediateJsonPath))
+        );
 
         string memory paramsJsonPath = vm.envString("POOL_PARAMS_JSON");
         require(bytes(paramsJsonPath).length != 0, "POOL_PARAMS_JSON env var must be set and non-empty");
@@ -260,11 +251,7 @@ contract DeployPool is Script {
         vm.startBroadcast();
 
         Factory.StvPoolIntermediate memory intermediate = factory.createPoolStart{value: p.connectDepositWei}(
-            p.vaultConfig,
-            p.commonPoolConfig,
-            p.auxiliaryPoolConfig,
-            p.timelockConfig,
-            p.strategyFactory
+            p.vaultConfig, p.commonPoolConfig, p.auxiliaryPoolConfig, p.timelockConfig, p.strategyFactory
         );
 
         vm.stopBroadcast();
@@ -341,5 +328,4 @@ contract DeployPool is Script {
         // vm.writeJson(rootJson, intermediateJsonPath);
         // console2.log("\nDeployment completed and saved to:", intermediateJsonPath);
     }
-
 }

@@ -9,7 +9,5 @@ interface IStrategyFactory {
     /// @param _steth Address of the stETH token
     /// @param _wsteth Address of the wstETH token
     /// @return impl The address of the newly deployed strategy contract
-    function deploy(address _pool, address _steth, address _wsteth)
-        external
-        returns (address impl);
+    function deploy(address _pool, address _steth, address _wsteth) external returns (address impl);
 }

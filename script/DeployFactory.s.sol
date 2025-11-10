@@ -11,6 +11,7 @@ import {StvPoolFactory} from "src/factories/StvPoolFactory.sol";
 import {StvStETHPoolFactory} from "src/factories/StvStETHPoolFactory.sol";
 import {TimelockFactory} from "src/factories/TimelockFactory.sol";
 import {WithdrawalQueueFactory} from "src/factories/WithdrawalQueueFactory.sol";
+
 contract DeployFactory is Script {
     // function _readCore(address locatorAddress) internal view returns (CoreRefs memory c) {
     //     ILidoLocator locator = ILidoLocator(locatorAddress);
@@ -110,5 +111,4 @@ contract DeployFactory is Script {
         console2.log("Output written to", outputJsonPath);
         console2.log("Also updated", "deployments/pool-factory-latest.json");
     }
-
 }
