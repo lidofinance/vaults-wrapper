@@ -12,6 +12,11 @@ import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Ini
 import {ERC20Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
+/**
+ * @title StvPool
+ * @notice ERC20 staking vault token pool that accepts ETH deposits and manages withdrawals through a queue
+ * @dev Implements a tokenized staking pool where users deposit ETH and receive STV tokens representing their share
+ */
 contract StvPool is Initializable, ERC20Upgradeable, AllowList {
     // Custom errors
     error ZeroDeposit();
@@ -68,7 +73,7 @@ contract StvPool is Initializable, ERC20Upgradeable, AllowList {
 
     event VaultDisconnected(address indexed initiator);
     event ConnectDepositClaimed(address indexed recipient, uint256 amount);
-    event UnassignedLiabilityRebalanced(uint256 stethShares, uint256 ethAmount);
+    event UnassignedLiabilityRebalanced(uint256 stethShares, uint256 ethFunded);
 
     constructor(address _dashboard, bool _allowListEnabled, address _withdrawalQueue, address _distributor)
         AllowList(_allowListEnabled)
@@ -302,10 +307,8 @@ contract StvPool is Initializable, ERC20Upgradeable, AllowList {
      * @dev Checks if only unassigned liability will be rebalanced, not individual liability
      */
     function _checkOnlyUnassignedLiabilityRebalance(uint256 _stethShares) internal view {
-        uint256 unassignedLiabilityShares = totalUnassignedLiabilityShares();
-
         if (_stethShares == 0) revert NotEnoughToRebalance();
-        if (unassignedLiabilityShares < _stethShares) revert NotEnoughToRebalance();
+        if (totalUnassignedLiabilityShares() < _stethShares) revert NotEnoughToRebalance();
     }
 
     /**

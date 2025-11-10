@@ -61,7 +61,7 @@ contract ForceRebalanceTest is Test, SetupStvStETHPool {
     function test_ForceRebalance_RevertWhenThresholdNotBreached() public {
         _mintMaxStethShares(userAlice);
 
-        vm.expectRevert(StvStETHPool.NothingToRebalance.selector);
+        vm.expectRevert(StvStETHPool.ZeroArgument.selector);
         pool.forceRebalance(userAlice);
     }
 
@@ -69,7 +69,7 @@ contract ForceRebalanceTest is Test, SetupStvStETHPool {
         _mintMaxStethShares(userAlice);
         _simulateLoss(_calcLossToBreachThreshold(userAlice) - 1);
 
-        vm.expectRevert(StvStETHPool.NothingToRebalance.selector);
+        vm.expectRevert(StvStETHPool.ZeroArgument.selector);
         pool.forceRebalance(userAlice);
     }
 
