@@ -4,6 +4,7 @@ pragma solidity >=0.8.25;
 import {Distributor} from "./Distributor.sol";
 import {StvPool} from "./StvPool.sol";
 import {WithdrawalQueue} from "./WithdrawalQueue.sol";
+import {Strategy} from "./strategy/Strategy.sol";
 import {DistributorFactory} from "./factories/DistributorFactory.sol";
 import {GGVStrategyFactory} from "./factories/GGVStrategyFactory.sol";
 import {LoopStrategyFactory} from "./factories/LoopStrategyFactory.sol";
@@ -311,10 +312,19 @@ contract Factory {
             dashboard.grantRole(dashboard.BURN_ROLE(), address(pool));
         }
 
-        address strategy = address(0);
+        address strategyProxy = address(0);
         if (intermediate.strategyFactory != address(0)) {
-            strategy = IStrategyFactory(intermediate.strategyFactory).deploy(address(pool), STETH, WSTETH);
-            pool.addToAllowList(strategy);
+            address strategyImpl = IStrategyFactory(intermediate.strategyFactory).deploy(address(pool), STETH, WSTETH);
+
+            strategyProxy = address(
+                new OssifiableProxy(
+                    strategyImpl,
+                    timelock,
+                    abi.encodeCall(Strategy.initialize, (timelock))
+                )
+            );
+
+            pool.addToAllowList(strategyProxy);
         }
 
         pool.grantRole(DEFAULT_ADMIN_ROLE, timelock);
@@ -331,7 +341,7 @@ contract Factory {
             withdrawalQueue: address(withdrawalQueue),
             distributor: address(pool.DISTRIBUTOR()),
             timelock: intermediate.timelock,
-            strategy: strategy
+            strategy: strategyProxy
         });
 
         emit VaultPoolCreated(
