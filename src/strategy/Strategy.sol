@@ -16,7 +16,7 @@ import {IStrategyCallForwarder} from "src/interfaces/IStrategyCallForwarder.sol"
 import {IWstETH} from "src/interfaces/IWstETH.sol";
 
 abstract contract Strategy is AccessControlEnumerableUpgradeable, PausableUpgradeable, IStrategy {
-    StvStETHPool public immutable POOL;
+    StvStETHPool public immutable POOL_;
     IStETH public immutable STETH;
     IWstETH public immutable WSTETH;
     address public immutable STRATEGY_CALL_FORWARDER_IMPL;
@@ -50,9 +50,13 @@ abstract contract Strategy is AccessControlEnumerableUpgradeable, PausableUpgrad
         STETH = IStETH(_stETH);
         WSTETH = IWstETH(_wstETH);
         STRATEGY_CALL_FORWARDER_IMPL = _strategyCallForwarderImpl;
-        POOL = StvStETHPool(payable(_pool));
+        POOL_ = StvStETHPool(payable(_pool));
 
         _disableInitializers();
+    }
+
+    function POOL() external view returns (address) {
+        return address(POOL_);
     }
 
     /// @notice Initialize the contract storage explicitly
@@ -131,9 +135,9 @@ abstract contract Strategy is AccessControlEnumerableUpgradeable, PausableUpgrad
         callForwarder = Clones.cloneDeterministic(STRATEGY_CALL_FORWARDER_IMPL, salt);
         IStrategyCallForwarder(callForwarder).initialize(address(this));
         IStrategyCallForwarder(callForwarder)
-            .call(address(STETH), abi.encodeWithSelector(STETH.approve.selector, address(POOL), type(uint256).max));
+            .call(address(STETH), abi.encodeWithSelector(STETH.approve.selector, address(POOL_), type(uint256).max));
         IStrategyCallForwarder(callForwarder)
-            .call(address(WSTETH), abi.encodeWithSelector(WSTETH.approve.selector, address(POOL), type(uint256).max));
+            .call(address(WSTETH), abi.encodeWithSelector(WSTETH.approve.selector, address(POOL_), type(uint256).max));
 
         $.userStrategyCallForwarder[salt] = callForwarder;
     }

@@ -6,11 +6,18 @@ import {GGVStrategy} from "src/strategy/GGVStrategy.sol";
 import {StrategyCallForwarder} from "src/strategy/StrategyCallForwarder.sol";
 
 contract GGVStrategyFactory is IStrategyFactory {
-    function deploy(address _pool, address _steth, address _wsteth, address _teller, address _boringQueue)
-        external
-        returns (address impl)
-    {
+    address public immutable TELLER;
+    address public immutable BORING_QUEUE;
+
+    constructor(address _teller, address _boringQueue) {
+        require(_teller.code.length > 0, "TELLER: not a contract");
+        require(_boringQueue.code.length > 0, "BORING_QUEUE: not a contract");
+        TELLER = _teller;
+        BORING_QUEUE = _boringQueue;
+    }
+
+    function deploy(address _pool, address _steth, address _wsteth) external returns (address impl) {
         address strategyCallForwarderImpl = address(new StrategyCallForwarder());
-        impl = address(new GGVStrategy(strategyCallForwarderImpl, _pool, _steth, _wsteth, _teller, _boringQueue));
+        impl = address(new GGVStrategy(strategyCallForwarderImpl, _pool, _steth, _wsteth, TELLER, BORING_QUEUE));
     }
 }
