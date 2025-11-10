@@ -12,6 +12,11 @@ import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Ini
 import {ERC20Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
+/**
+ * @title StvPool
+ * @notice ERC20 staking vault token pool that accepts ETH deposits and manages withdrawals through a queue
+ * @dev Implements a tokenized staking pool where users deposit ETH and receive STV tokens representing their share
+ */
 contract StvPool is Initializable, ERC20Upgradeable, AllowList {
     // Custom errors
     error ZeroDeposit();
@@ -41,7 +46,10 @@ contract StvPool is Initializable, ERC20Upgradeable, AllowList {
     event Deposit(
         address indexed sender, address indexed receiver, address indexed referral, uint256 assets, uint256 stv
     );
-    event UnassignedLiabilityRebalanced(uint256 stethShares, uint256 ethAmount);
+
+    event VaultDisconnected(address indexed initiator);
+    event ConnectDepositClaimed(address indexed recipient, uint256 amount);
+    event UnassignedLiabilityRebalanced(uint256 stethShares, uint256 ethFunded);
 
     constructor(address _dashboard, bool _allowListEnabled, address _withdrawalQueue, address _distributor)
         AllowList(_allowListEnabled)
@@ -273,10 +281,8 @@ contract StvPool is Initializable, ERC20Upgradeable, AllowList {
      * @dev Checks if only unassigned liability will be rebalanced, not individual liability
      */
     function _checkOnlyUnassignedLiabilityRebalance(uint256 _stethShares) internal view {
-        uint256 unassignedLiabilityShares = totalUnassignedLiabilityShares();
-
         if (_stethShares == 0) revert NotEnoughToRebalance();
-        if (unassignedLiabilityShares < _stethShares) revert NotEnoughToRebalance();
+        if (totalUnassignedLiabilityShares() < _stethShares) revert NotEnoughToRebalance();
     }
 
     /**
@@ -373,27 +379,45 @@ contract StvPool is Initializable, ERC20Upgradeable, AllowList {
     }
 
     // =================================================================================
-    // EMERGENCY WITHDRAWAL FUNCTIONS
+    // VAULT MANAGEMENT
     // =================================================================================
 
-    function triggerValidatorWithdrawals(
-        bytes calldata _pubkeys,
-        uint64[] calldata _amountsInGwei,
-        address _refundRecipient
-    ) external payable {
-        _checkOnlyRoleOrEmergencyExit(TRIGGER_VALIDATOR_WITHDRAWAL_ROLE);
-        DASHBOARD.triggerValidatorWithdrawals{value: msg.value}(_pubkeys, _amountsInGwei, _refundRecipient);
+    /**
+     * @notice Initiates voluntary vault disconnection from VaultHub
+     * @dev Can only be called by admin. Vault must have no outstanding stETH liabilities.
+     */
+    function disconnectVault() external {
+        _checkRole(DEFAULT_ADMIN_ROLE, msg.sender);
+
+        // Start the disconnection process
+        // This requires: no liabilityShares, all obligations settled
+        DASHBOARD.voluntaryDisconnect();
+
+        // Mark vault as in disconnection process
+        // The actual disconnect completes during next oracle report
+        emit VaultDisconnected(msg.sender);
     }
 
-    function requestValidatorExit(bytes calldata _pubkeys) external {
-        _checkOnlyRoleOrEmergencyExit(REQUEST_VALIDATOR_EXIT_ROLE);
-        DASHBOARD.requestValidatorExit(_pubkeys);
-    }
+    /**
+     * @notice Claims the connect deposit after vault has been disconnected
+     * @dev Can only be called by admin after successful disconnection
+     * @param _recipient Address to receive the connect deposit
+     */
+    function claimConnectDeposit(address _recipient) external {
+        _checkRole(DEFAULT_ADMIN_ROLE, msg.sender);
 
-    /// @notice Modifier to check role or Emergency Exit
-    function _checkOnlyRoleOrEmergencyExit(bytes32 _role) internal view {
-        if (!WITHDRAWAL_QUEUE.isEmergencyExitActivated()) {
-            _checkRole(_role, msg.sender);
+        // Check if vault has been disconnected
+        if (address(STAKING_VAULT) == address(DASHBOARD.stakingVault())) {
+            revert("Vault not disconnected yet");
+        }
+
+        _getStvPoolStorage().vaultDisconnected = true;
+
+        // After disconnection, the connect deposit is available in the vault
+        uint256 vaultBalance = address(STAKING_VAULT).balance;
+        if (vaultBalance > 0) {
+            DASHBOARD.withdraw(_recipient, vaultBalance); // TODO: should revert since WITHDRAW_ROLE is granted to WQ
+            emit ConnectDepositClaimed(_recipient, vaultBalance);
         }
     }
 }

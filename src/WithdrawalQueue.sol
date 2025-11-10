@@ -14,14 +14,14 @@ import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/Pau
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 
-/// @title Withdrawal Queue V3 for Staking Vault Pool
-/// @notice Handles withdrawal requests for stvToken holders
+/**
+ * @title WithdrawalQueue
+ * @notice Manages withdrawal requests from the STV Pool with queuing, finalization, and claiming
+ * @dev Handles the complete lifecycle of withdrawal requests including optional stETH rebalancing,
+ * and discount mechanisms
+ */
 contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradeable {
     using EnumerableSet for EnumerableSet.UintSet;
-
-    /// @notice Max acceptable time for finalization of the withdrawal request
-    /// @dev This is a safeguard against excessively long withdrawal processes
-    uint256 public immutable MAX_ACCEPTABLE_WQ_FINALIZATION_TIME_IN_SECONDS;
 
     /// @notice Min delay between withdrawal request and finalization
     uint256 public immutable MIN_WITHDRAWAL_DELAY_TIME_IN_SECONDS;
@@ -96,7 +96,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
         uint64 gasCostCoverage;
     }
 
-    /// @notice Output format struct for `getWithdrawalStatus()` / `getWithdrawalStatusBatch()` methods
+    /// @notice Output format struct for view methods `getWithdrawalStatus()` and `getWithdrawalStatusBatch()`
     struct WithdrawalRequestStatus {
         /// @notice Amount of stv locked for this request
         uint256 amountOfStv;
@@ -127,11 +127,9 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
         mapping(uint256 => Checkpoint) checkpoints;
         // ### 4th slot
         /// @dev last index in request queue
-        uint96 lastRequestId;
+        uint128 lastRequestId;
         /// @dev last index of finalized request in the queue
-        uint96 lastFinalizedRequestId;
-        /// @dev timestamp of emergency exit activation
-        uint40 emergencyExitActivationTimestamp;
+        uint128 lastFinalizedRequestId;
         // ### 5th slot
         /// @dev last index in checkpoints array
         uint96 lastCheckpointIndex;
@@ -163,21 +161,22 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
         uint256 indexed from,
         uint256 indexed to,
         uint256 ethLocked,
+        uint256 ethForGasCoverage,
         uint256 stvBurned,
         uint256 stvRebalanced,
         uint256 stethSharesRebalanced,
         uint256 timestamp
     );
     event WithdrawalClaimed(
-        uint256 indexed requestId, address indexed owner, address indexed receiver, uint256 amountOfETH
+        uint256 indexed requestId, address indexed owner, address indexed recipient, uint256 amountOfETH
     );
     event GasCostCoverageSet(uint256 newCoverage);
-    event EmergencyExitActivated(uint256 timestamp);
 
     error ZeroAddress();
     error RequestValueTooSmall(uint256 amount);
     error RequestAssetsTooLarge(uint256 amount);
     error GasCostCoverageTooLarge(uint256 amount);
+    error InvalidWithdrawalDelay();
     error InvalidRequestId(uint256 requestId);
     error InvalidRange(uint256 start, uint256 end);
     error RequestAlreadyClaimed(uint256 requestId);
@@ -187,8 +186,6 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
     error VaultReportStale();
     error CantSendValueRecipientMayHaveReverted();
     error InvalidHint(uint256 hint);
-    error InvalidEmergencyExitActivation();
-    error CantBeSetInEmergencyExitMode();
     error NoRequestsToFinalize();
     error NotOwner(address _requestor, address _owner);
     error RebalancingIsNotSupported();
@@ -200,11 +197,13 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
         address _steth,
         address _vault,
         address _lazyOracle,
-        uint256 _maxAcceptableWQFinalizationTimeInSeconds,
         uint256 _minWithdrawalDelayTimeInSeconds,
         bool _isRebalancingSupported
     ) {
+        if (_minWithdrawalDelayTimeInSeconds < 1 hours) revert InvalidWithdrawalDelay();
+
         IS_REBALANCING_SUPPORTED = _isRebalancingSupported;
+        MIN_WITHDRAWAL_DELAY_TIME_IN_SECONDS = _minWithdrawalDelayTimeInSeconds;
 
         POOL = IStvStETHPool(payable(_pool));
         DASHBOARD = IDashboard(payable(_dashboard));
@@ -212,9 +211,6 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
         STETH = IStETH(_steth);
         LAZY_ORACLE = ILazyOracle(_lazyOracle);
         STAKING_VAULT = IStakingVault(_vault);
-
-        MAX_ACCEPTABLE_WQ_FINALIZATION_TIME_IN_SECONDS = _maxAcceptableWQFinalizationTimeInSeconds;
-        MIN_WITHDRAWAL_DELAY_TIME_IN_SECONDS = _minWithdrawalDelayTimeInSeconds;
 
         _disableInitializers();
         _pause();
@@ -273,47 +269,47 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
     // =================================================================================
 
     /**
-     * @notice Request multiple withdrawals for a user
-     * @param _recipient Address that will be able to claim the created request
+     * @notice Request multiple withdrawals from the Pool
+     * @param _owner Address that will be able to claim the created request
      * @param _stvToWithdraw Array of amounts of stv to withdraw
      * @param _stethSharesToRebalance Array of amounts of stETH shares to rebalance if supported by the pool, array of 0 otherwise
      * @return requestIds the created withdrawal request ids
      */
     function requestWithdrawalBatch(
-        address _recipient,
+        address _owner,
         uint256[] calldata _stvToWithdraw,
         uint256[] calldata _stethSharesToRebalance
     ) external returns (uint256[] memory requestIds) {
-        _checkResumedOrEmergencyExit();
+        _requireNotPaused();
         _checkArrayLength(_stvToWithdraw.length, _stethSharesToRebalance.length);
 
         requestIds = new uint256[](_stvToWithdraw.length);
         for (uint256 i = 0; i < _stvToWithdraw.length; ++i) {
-            requestIds[i] = _requestWithdrawal(_recipient, _stvToWithdraw[i], _stethSharesToRebalance[i]);
+            requestIds[i] = _requestWithdrawal(_owner, _stvToWithdraw[i], _stethSharesToRebalance[i]);
         }
     }
 
     /**
-     * @notice Request a withdrawal for a user
-     * @param _recipient Address that will be able to claim the created request
+     * @notice Request a withdrawal from the Pool
+     * @param _owner Address that will be able to claim the created request
      * @param _stvToWithdraw Amount of stv to withdraw
      * @param _stethSharesToRebalance Amount of steth shares to rebalance if supported by the pool, 0 otherwise
      * @return requestId The created withdrawal request id
-     * @dev Transfers stv and steth shares from the requester to the pool
+     * @dev Transfers stv and liability shares from the requester to the withdrawal queue
      */
-    function requestWithdrawal(address _recipient, uint256 _stvToWithdraw, uint256 _stethSharesToRebalance)
+    function requestWithdrawal(address _owner, uint256 _stvToWithdraw, uint256 _stethSharesToRebalance)
         external
         returns (uint256 requestId)
     {
-        _checkResumedOrEmergencyExit();
-        requestId = _requestWithdrawal(_recipient, _stvToWithdraw, _stethSharesToRebalance);
+        _requireNotPaused();
+        requestId = _requestWithdrawal(_owner, _stvToWithdraw, _stethSharesToRebalance);
     }
 
-    function _requestWithdrawal(address _recipient, uint256 _stvToWithdraw, uint256 _stethSharesToRebalance)
+    function _requestWithdrawal(address _owner, uint256 _stvToWithdraw, uint256 _stethSharesToRebalance)
         internal
         returns (uint256 requestId)
     {
-        if (_recipient == address(0)) revert ZeroAddress();
+        if (_owner == address(0)) revert ZeroAddress();
         if (_stethSharesToRebalance > 0 && !IS_REBALANCING_SUPPORTED) revert RebalancingIsNotSupported();
 
         uint256 assets = POOL.previewRedeem(_stvToWithdraw);
@@ -342,14 +338,14 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
             cumulativeStv: cumulativeStv,
             cumulativeStethShares: uint128(cumulativeStethShares),
             cumulativeAssets: uint128(cumulativeAssets),
-            owner: _recipient,
+            owner: _owner,
             timestamp: uint40(block.timestamp),
             isClaimed: false
         });
 
-        assert($.requestsByOwner[_recipient].add(requestId));
+        assert($.requestsByOwner[_owner].add(requestId));
 
-        emit WithdrawalRequested(requestId, _recipient, _stvToWithdraw, _stethSharesToRebalance, assets);
+        emit WithdrawalRequested(requestId, _owner, _stvToWithdraw, _stethSharesToRebalance, assets);
     }
 
     function _transferForWithdrawalQueue(address _from, uint256 _stv, uint256 _stethShares) internal {
@@ -377,7 +373,6 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
      */
     function setFinalizationGasCostCoverage(uint256 _coverage) external {
         _checkRole(FINALIZE_ROLE, msg.sender);
-        if (isEmergencyExitActivated()) revert CantBeSetInEmergencyExitMode();
 
         _setFinalizationGasCostCoverage(_coverage);
     }
@@ -412,17 +407,13 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
      * @param _gasCostCoverageRecipient The address to receive gas cost coverage
      * @return finalizedRequests The number of requests that were finalized
      * @dev Reverts if there are no requests to finalize
-     * @dev In emergency exit mode, anyone can finalize without restrictions
      */
     function finalize(uint256 _maxRequests, address _gasCostCoverageRecipient)
         external
         returns (uint256 finalizedRequests)
     {
-        if (!isEmergencyExitActivated()) {
-            _requireNotPaused();
-            _checkRole(FINALIZE_ROLE, msg.sender);
-        }
-
+        _requireNotPaused();
+        _checkRole(FINALIZE_ROLE, msg.sender);
         _checkFreshReport();
 
         WithdrawalQueueStorage storage $ = _getWithdrawalQueueStorage();
@@ -577,6 +568,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
             firstRequestIdToFinalize,
             lastFinalizedRequestId,
             totalEthToClaim,
+            totalGasCoverage,
             totalStvToBurn,
             totalStvRebalanced,
             totalStethShares,
@@ -621,7 +613,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
     // =================================================================================
 
     /**
-     * @notice Claim a batch of withdrawal requests
+     * @notice Claim a batch of withdrawal requests once finalized sending locked ether to the recipient
      * @param _recipient Address where claimed ether will be sent to
      * @param _requestIds Array of request ids to claim
      * @param _hints Checkpoint hints. can be found with `findCheckpointHintBatch(_requestIds, 1, getLastCheckpointIndex())`
@@ -640,7 +632,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
     }
 
     /**
-     * @notice Claim one `_requestId` request once finalized sending locked ether to the owner
+     * @notice Claim one `_requestId` request once finalized sending locked ether to the recipient
      * @param _recipient Address where claimed ether will be sent to
      * @param _requestId Request id to claim
      * @dev
@@ -980,11 +972,11 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
 
     /**
      * @notice Return the number of unfinalized requests in the queue
-     * @return requestNumber Number of unfinalized requests
+     * @return requestsNumber Number of unfinalized requests
      */
-    function unfinalizedRequestNumber() external view returns (uint256 requestNumber) {
+    function unfinalizedRequestsNumber() external view returns (uint256 requestsNumber) {
         WithdrawalQueueStorage storage $ = _getWithdrawalQueueStorage();
-        requestNumber = $.lastRequestId - $.lastFinalizedRequestId;
+        requestsNumber = $.lastRequestId - $.lastFinalizedRequestId;
     }
 
     /**
@@ -1037,58 +1029,11 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
     }
 
     // =================================================================================
-    // EMERGENCY EXIT
-    // =================================================================================
-
-    /**
-     * @notice Returns true if Emergency Exit is activated
-     * @return isActivated True if Emergency Exit is activated
-     */
-    function isEmergencyExitActivated() public view returns (bool isActivated) {
-        isActivated = _getWithdrawalQueueStorage().emergencyExitActivationTimestamp > 0;
-    }
-
-    /**
-     * @notice Returns true if requests have not been finalized for a long time
-     * @return isStuck True if Withdrawal Queue is stuck
-     */
-    function isWithdrawalQueueStuck() public view returns (bool isStuck) {
-        WithdrawalQueueStorage storage $ = _getWithdrawalQueueStorage();
-        if ($.lastFinalizedRequestId >= $.lastRequestId) return false;
-
-        uint256 firstPendingRequest = $.lastFinalizedRequestId + 1;
-        uint256 firstPendingRequestTimestamp = $.requests[firstPendingRequest].timestamp;
-        uint256 maxAcceptableTime = firstPendingRequestTimestamp + MAX_ACCEPTABLE_WQ_FINALIZATION_TIME_IN_SECONDS;
-
-        isStuck = maxAcceptableTime < block.timestamp;
-    }
-
-    /**
-     * @notice Permissionless method to activate Emergency Exit
-     * @dev Can only be called if Withdrawal Queue is stuck
-     */
-    function activateEmergencyExit() external {
-        WithdrawalQueueStorage storage $ = _getWithdrawalQueueStorage();
-        if ($.emergencyExitActivationTimestamp > 0 || !isWithdrawalQueueStuck()) {
-            revert InvalidEmergencyExitActivation();
-        }
-
-        _setFinalizationGasCostCoverage(MAX_GAS_COST_COVERAGE);
-
-        $.emergencyExitActivationTimestamp = uint40(block.timestamp);
-        emit EmergencyExitActivated($.emergencyExitActivationTimestamp);
-    }
-
-    // =================================================================================
     // CHECKS
     // =================================================================================
 
     function _checkArrayLength(uint256 firstArrayLength, uint256 secondArrayLength) internal pure {
         if (firstArrayLength != secondArrayLength) revert ArraysLengthMismatch(firstArrayLength, secondArrayLength);
-    }
-
-    function _checkResumedOrEmergencyExit() internal view {
-        if (!isEmergencyExitActivated()) _requireNotPaused();
     }
 
     function _checkFreshReport() internal view {

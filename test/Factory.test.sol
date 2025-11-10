@@ -84,7 +84,6 @@ contract FactoryTest is Test {
             nodeOperatorManager: nodeOperatorManager,
             nodeOperatorFeeBP: 100,
             confirmExpiry: 3600,
-            maxFinalizationTime: 30 days,
             minWithdrawalDelayTime: 1 days,
             reserveRatioGapBP: reserveRatioGapBP,
             name: mintingEnabled ? "Factory stETH Pool" : "Factory STV Pool",

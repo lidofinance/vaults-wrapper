@@ -187,7 +187,7 @@ contract WithdrawalQueueHappyPathTest is Test, SetupWithdrawalQueue {
         // Final check: Withdrawal Queue
         assertEq(withdrawalQueue.getLastRequestId(), 3);
         assertEq(withdrawalQueue.getLastFinalizedRequestId(), 3);
-        assertEq(withdrawalQueue.unfinalizedRequestNumber(), 0);
+        assertEq(withdrawalQueue.unfinalizedRequestsNumber(), 0);
 
         assertEq(pool.balanceOf(address(withdrawalQueue)), 0);
         assertEq(pool.mintedStethSharesOf(address(withdrawalQueue)), 0);
