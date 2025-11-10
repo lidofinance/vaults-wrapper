@@ -63,8 +63,6 @@ contract DashboardRolesTest is StvStETHPoolHarness {
     // Should be assigned to the the Pool contract
     // - FUND_ROLE
     // - REBALANCE_ROLE
-    // - REQUEST_VALIDATOR_EXIT_ROLE
-    // - TRIGGER_VALIDATOR_WITHDRAWAL_ROLE
     // - PAUSE_BEACON_CHAIN_DEPOSITS_ROLE
     // - RESUME_BEACON_CHAIN_DEPOSITS_ROLE
 
@@ -76,16 +74,6 @@ contract DashboardRolesTest is StvStETHPoolHarness {
     function test_DashboardRoles_RebalanceRoleIsAssigned() public view {
         _assertRoleAssigned(ctxMintEnabled, "REBALANCE_ROLE", address(ctxMintEnabled.pool));
         _assertRoleAssigned(ctxMintDisabled, "REBALANCE_ROLE", address(ctxMintDisabled.pool));
-    }
-
-    function test_DashboardRoles_RequestValidatorExitRoleIsAssigned() public view {
-        _assertRoleAssigned(ctxMintEnabled, "REQUEST_VALIDATOR_EXIT_ROLE", address(ctxMintEnabled.pool));
-        _assertRoleAssigned(ctxMintDisabled, "REQUEST_VALIDATOR_EXIT_ROLE", address(ctxMintDisabled.pool));
-    }
-
-    function test_DashboardRoles_TriggerValidatorWithdrawalRoleIsAssigned() public view {
-        _assertRoleAssigned(ctxMintEnabled, "TRIGGER_VALIDATOR_WITHDRAWAL_ROLE", address(ctxMintEnabled.pool));
-        _assertRoleAssigned(ctxMintDisabled, "TRIGGER_VALIDATOR_WITHDRAWAL_ROLE", address(ctxMintDisabled.pool));
     }
 
     function test_DashboardRoles_PauseBeaconChainDepositsRoleIsAssigned() public view {
@@ -121,10 +109,10 @@ contract DashboardRolesTest is StvStETHPoolHarness {
     }
 
     // Should not be assigned to anyone
-    // - NODE_OPERATOR_UNGUARANTEED_DEPOSIT_ROLE
-    // - NODE_OPERATOR_PROVE_UNKNOWN_VALIDATOR_ROLE
-    // - NODE_OPERATOR_FEE_EXEMPT_ROLE
-    // - VOLUNTARY_DISCONNECT_ROLE
+    // - NODE_OPERATOR_UNGUARANTEED_DEPOSIT_ROLE - can be assigned from node operator manager
+    // - NODE_OPERATOR_PROVE_UNKNOWN_VALIDATOR_ROLE - can be assigned from node operator manager
+    // - NODE_OPERATOR_FEE_EXEMPT_ROLE - can be assigned from node operator manager
+    // - VOLUNTARY_DISCONNECT_ROLE - can be assigned from timelock
 
     function test_DashboardRoles_UnguaranteedRoleIsNotAssigned() public view {
         _assertRoleNotAssigned(ctxMintEnabled, "NODE_OPERATOR_UNGUARANTEED_DEPOSIT_ROLE");
@@ -149,4 +137,6 @@ contract DashboardRolesTest is StvStETHPoolHarness {
     // Can be assigned:
     // - COLLECT_VAULT_ERC20_ROLE
     // - VAULT_CONFIGURATION_ROLE
+    // - REQUEST_VALIDATOR_EXIT_ROLE
+    // - TRIGGER_VALIDATOR_WITHDRAWAL_ROLE
 }

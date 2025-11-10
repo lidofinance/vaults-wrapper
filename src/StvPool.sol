@@ -26,9 +26,6 @@ contract StvPool is Initializable, ERC20Upgradeable, AllowList {
     error UnassignedLiabilityOnVault();
     error VaultInBadDebt();
 
-    bytes32 public constant REQUEST_VALIDATOR_EXIT_ROLE = keccak256("REQUEST_VALIDATOR_EXIT_ROLE");
-    bytes32 public constant TRIGGER_VALIDATOR_WITHDRAWAL_ROLE = keccak256("TRIGGER_VALIDATOR_WITHDRAWAL_ROLE");
-
     uint256 public constant TOTAL_BASIS_POINTS = 100_00;
 
     uint256 private constant DECIMALS = 27;

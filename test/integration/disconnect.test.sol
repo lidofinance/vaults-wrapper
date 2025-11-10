@@ -139,22 +139,22 @@ contract DisconnectTest is StvStETHPoolHarness, TimelockHarness {
         bytes[] memory payloads = new bytes[](3);
 
         targets[0] = address(pool);
-        targets[1] = address(pool);
+        targets[1] = address(ctx.dashboard);
         targets[2] = address(ctx.dashboard);
 
-        bytes32 triggerValidatorRole = pool.TRIGGER_VALIDATOR_WITHDRAWAL_ROLE();
         bytes32 lossSocializerRole = pool.LOSS_SOCIALIZER_ROLE();
+        bytes32 triggerValidatorRole = ctx.dashboard.TRIGGER_VALIDATOR_WITHDRAWAL_ROLE();
         bytes32 rebalanceRole = ctx.dashboard.REBALANCE_ROLE();
 
-        payloads[0] = abi.encodeWithSignature("grantRole(bytes32,address)", triggerValidatorRole, disconnectManager);
         payloads[1] = abi.encodeWithSignature("grantRole(bytes32,address)", lossSocializerRole, disconnectManager);
+        payloads[0] = abi.encodeWithSignature("grantRole(bytes32,address)", triggerValidatorRole, disconnectManager);
         payloads[2] = abi.encodeWithSignature("grantRole(bytes32,address)", rebalanceRole, disconnectManager);
 
         _timelockScheduleAndExecuteBatch(targets, payloads);
 
         // Verify roles assigned
-        pool.hasRole(triggerValidatorRole, disconnectManager);
         pool.hasRole(lossSocializerRole, disconnectManager);
+        pool.hasRole(triggerValidatorRole, disconnectManager);
         ctx.dashboard.hasRole(rebalanceRole, disconnectManager);
 
         // TODO: assign TRIGGER_VALIDATOR_WITHDRAWAL_ROLE from Dashboard to Pool
