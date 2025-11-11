@@ -17,7 +17,7 @@ contract StvStETHPool is StvPool {
     event StethSharesMinted(address indexed account, uint256 stethShares);
     event StethSharesBurned(address indexed account, uint256 stethShares);
     event StethSharesRebalanced(address indexed account, uint256 stethShares, uint256 stvBurned);
-    event SocializedLoss(uint256 stv, uint256 assets);
+    event SocializedLoss(uint256 stv, uint256 assets, uint256 maxLossSocializationBP);
     event VaultParametersUpdated(uint256 newReserveRatioBP, uint256 newForcedRebalanceThresholdBP);
     event MaxLossSocializationUpdated(uint256 newMaxLossSocializationBP);
 
@@ -674,7 +674,11 @@ contract StvStETHPool is StvPool {
         if (stvToBurn > _maxStvToBurn) {
             _checkAllowedLossSocializationPortion(stvToBurn, _maxStvToBurn);
 
-            emit SocializedLoss(stvToBurn - _maxStvToBurn, ethToRebalance - _convertToAssets(_maxStvToBurn));
+            emit SocializedLoss(
+                stvToBurn - _maxStvToBurn,
+                ethToRebalance - _convertToAssets(_maxStvToBurn),
+                _getStvStETHPoolStorage().maxLossSocializationBP
+            );
             stvToBurn = _maxStvToBurn;
         }
 

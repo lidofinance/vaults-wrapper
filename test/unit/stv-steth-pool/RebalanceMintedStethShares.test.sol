@@ -139,7 +139,7 @@ contract RebalanceMintedStethSharesTest is Test, SetupStvStETHPool {
 
         // Only check that SocializedLoss event is emitted (without exact amounts)
         vm.expectEmit(false, false, false, false);
-        emit StvStETHPool.SocializedLoss(0, 0);
+        emit StvStETHPool.SocializedLoss(0, 0, 0);
 
         vm.prank(withdrawalQueue);
         pool.rebalanceMintedStethShares(sharesToMint, maxStvToBurn);
@@ -161,7 +161,7 @@ contract RebalanceMintedStethSharesTest is Test, SetupStvStETHPool {
 
         // Only check that SocializedLoss event is emitted (without exact amounts)
         vm.expectEmit(false, false, false, false);
-        emit StvStETHPool.SocializedLoss(0, 0);
+        emit StvStETHPool.SocializedLoss(0, 0, 0);
 
         vm.prank(withdrawalQueue);
         pool.rebalanceMintedStethShares(sharesToMint, maxStvToBurn);

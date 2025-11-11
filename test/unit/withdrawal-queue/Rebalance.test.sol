@@ -204,7 +204,7 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
         pool.setMaxLossSocializationBP(100_00); // 100%
 
         vm.expectEmit(true, true, true, false, address(pool));
-        emit StvStETHPool.SocializedLoss(0, 0);
+        emit StvStETHPool.SocializedLoss(0, 0, 0);
 
         vm.prank(finalizeRoleHolder);
         withdrawalQueue.finalize(1, address(0));
