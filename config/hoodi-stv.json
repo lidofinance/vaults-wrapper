@@ -6,7 +6,7 @@
     "confirmExpiry": 3600
   },
   "commonPoolConfig": {
-    "minWithdrawalDelayTime": 180,
+    "minWithdrawalDelayTime": 3600,
     "name": "Staked ETH Pool",
     "symbol": "STV"
   },

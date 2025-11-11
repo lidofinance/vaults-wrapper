@@ -6,7 +6,6 @@ import "forge-std/Script.sol";
 import {Factory} from "src/Factory.sol";
 import {DistributorFactory} from "src/factories/DistributorFactory.sol";
 import {GGVStrategyFactory} from "src/factories/GGVStrategyFactory.sol";
-import {LoopStrategyFactory} from "src/factories/LoopStrategyFactory.sol";
 import {StvPoolFactory} from "src/factories/StvPoolFactory.sol";
 import {StvStETHPoolFactory} from "src/factories/StvStETHPoolFactory.sol";
 import {TimelockFactory} from "src/factories/TimelockFactory.sol";
@@ -29,7 +28,6 @@ contract DeployFactory is Script {
         f.stvStETHPoolFactory = address(new StvStETHPoolFactory());
         f.withdrawalQueueFactory = address(new WithdrawalQueueFactory());
         f.distributorFactory = address(new DistributorFactory());
-        f.loopStrategyFactory = address(new LoopStrategyFactory());
         f.ggvStrategyFactory = address(new GGVStrategyFactory(ggvTeller, ggvBoringQueue));
         f.timelockFactory = address(new TimelockFactory());
     }
@@ -44,7 +42,6 @@ contract DeployFactory is Script {
         factoriesSection = vm.serializeAddress("factories", "stvStETHPoolFactory", subFactories.stvStETHPoolFactory);
         factoriesSection =
             vm.serializeAddress("factories", "withdrawalQueueFactory", subFactories.withdrawalQueueFactory);
-        factoriesSection = vm.serializeAddress("factories", "loopStrategyFactory", subFactories.loopStrategyFactory);
         factoriesSection = vm.serializeAddress("factories", "ggvStrategyFactory", subFactories.ggvStrategyFactory);
         factoriesSection = vm.serializeAddress("factories", "timelockFactory", subFactories.timelockFactory);
 

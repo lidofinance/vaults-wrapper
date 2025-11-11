@@ -105,7 +105,7 @@ contract DeployPool is Script {
         json = vm.serializeUint("_deployConfig", "connectDepositWei", p.connectDepositWei);
     }
 
-    function _serializeIntermediate(Factory.StvPoolIntermediate memory intermediate)
+    function _serializeIntermediate(Factory.PoolIntermediate memory intermediate)
         internal
         returns (string memory json)
     {
@@ -114,7 +114,7 @@ contract DeployPool is Script {
         json = vm.serializeAddress("_intermediate", "strategyFactory", intermediate.strategyFactory);
     }
 
-    function _serializeDeployment(Factory.StvPoolDeployment memory deployment) internal returns (string memory json) {
+    function _serializeDeployment(Factory.PoolDeployment memory deployment) internal returns (string memory json) {
         json = vm.serializeAddress("_deployment", "vault", deployment.vault);
         json = vm.serializeAddress("_deployment", "dashboard", deployment.dashboard);
         json = vm.serializeAddress("_deployment", "pool", deployment.pool);
@@ -126,7 +126,7 @@ contract DeployPool is Script {
 
     function _serializeCtorBytecode(
         Factory factory,
-        Factory.StvPoolIntermediate memory intermediate,
+        Factory.PoolIntermediate memory intermediate,
         Factory.VaultConfig memory vaultConfig,
         Factory.AuxiliaryPoolConfig memory auxiliaryConfig,
         bytes32 poolType
@@ -172,9 +172,9 @@ contract DeployPool is Script {
         json = vm.serializeBytes("_ctorBytecode", "withdrawalQueueProxy", withdrawalCtorBytecode);
     }
 
-    function _loadIntermediate(string memory path) internal view returns (Factory.StvPoolIntermediate memory) {
+    function _loadIntermediate(string memory path) internal view returns (Factory.PoolIntermediate memory) {
         string memory json = vm.readFile(path);
-        return Factory.StvPoolIntermediate({
+        return Factory.PoolIntermediate({
             pool: vm.parseJsonAddress(json, "$.intermediate.pool"),
             timelock: vm.parseJsonAddress(json, "$.intermediate.timelock"),
             strategyFactory: vm.parseJsonAddress(json, "$.intermediate.strategyFactory")
@@ -250,7 +250,7 @@ contract DeployPool is Script {
 
         vm.startBroadcast();
 
-        Factory.StvPoolIntermediate memory intermediate = factory.createPoolStart{value: p.connectDepositWei}(
+        Factory.PoolIntermediate memory intermediate = factory.createPoolStart{value: p.connectDepositWei}(
             p.vaultConfig, p.commonPoolConfig, p.auxiliaryPoolConfig, p.timelockConfig, p.strategyFactory
         );
 
@@ -278,7 +278,7 @@ contract DeployPool is Script {
             revert(string(abi.encodePacked("INTERMEDIATE_JSON file does not exist at: ", intermediateJsonPath)));
         }
 
-        Factory.StvPoolIntermediate memory intermediate = _loadIntermediate(intermediateJsonPath);
+        Factory.PoolIntermediate memory intermediate = _loadIntermediate(intermediateJsonPath);
         PoolParams memory p = _loadPoolParams(intermediateJsonPath);
 
         StvPool pool = StvPool(payable(intermediate.pool));

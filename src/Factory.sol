@@ -6,7 +6,6 @@ import {StvPool} from "./StvPool.sol";
 import {WithdrawalQueue} from "./WithdrawalQueue.sol";
 import {DistributorFactory} from "./factories/DistributorFactory.sol";
 import {GGVStrategyFactory} from "./factories/GGVStrategyFactory.sol";
-import {LoopStrategyFactory} from "./factories/LoopStrategyFactory.sol";
 import {StvPoolFactory} from "./factories/StvPoolFactory.sol";
 import {StvStETHPoolFactory} from "./factories/StvStETHPoolFactory.sol";
 import {TimelockFactory} from "./factories/TimelockFactory.sol";
@@ -30,7 +29,6 @@ contract Factory {
         address stvStETHPoolFactory;
         address withdrawalQueueFactory;
         address distributorFactory;
-        address loopStrategyFactory;
         address ggvStrategyFactory;
         address timelockFactory;
     }
@@ -65,13 +63,13 @@ contract Factory {
         uint256 reserveRatioGapBP;
     }
 
-    struct StvPoolIntermediate {
+    struct PoolIntermediate {
         address pool;
         address timelock;
         address strategyFactory;
     }
 
-    struct StvPoolDeployment {
+    struct PoolDeployment {
         bytes32 poolType;
         address vault;
         address dashboard;
@@ -81,13 +79,8 @@ contract Factory {
         address timelock;
         address strategy;
     }
-    enum PoolType {
-        STV,
-        STV_STETH,
-        STRATEGY
-    }
 
-    event PoolIntermediateCreated(StvPoolIntermediate intermediate);
+    event PoolCreationStarted(PoolIntermediate intermediate);
 
     event VaultPoolCreated(
         address vault, address pool, address withdrawalQueue, address indexed strategyFactory, address strategy
@@ -107,7 +100,6 @@ contract Factory {
     StvStETHPoolFactory public immutable STV_STETH_POOL_FACTORY;
     WithdrawalQueueFactory public immutable WITHDRAWAL_QUEUE_FACTORY;
     DistributorFactory public immutable DISTRIBUTOR_FACTORY;
-    LoopStrategyFactory public immutable LOOP_STRATEGY_FACTORY;
     GGVStrategyFactory public immutable GGV_STRATEGY_FACTORY;
     TimelockFactory public immutable TIMELOCK_FACTORY;
     address public immutable DUMMY_IMPLEMENTATION;
@@ -115,6 +107,10 @@ contract Factory {
     bytes32 public immutable DEFAULT_ADMIN_ROLE = 0x00;
 
     uint256 public constant TOTAL_BASIS_POINTS = 100_00;
+
+    uint256 public constant DEPLOY_START_FINISH_SPAN_SECONDS = 1 days;
+
+    uint256 public constant DEPLOY_COMPLETE = type(uint256).max;
 
     mapping(bytes32 => uint256) public intermediateState;
 
@@ -130,7 +126,6 @@ contract Factory {
         STV_STETH_POOL_FACTORY = StvStETHPoolFactory(subFactories.stvStETHPoolFactory);
         WITHDRAWAL_QUEUE_FACTORY = WithdrawalQueueFactory(subFactories.withdrawalQueueFactory);
         DISTRIBUTOR_FACTORY = DistributorFactory(subFactories.distributorFactory);
-        LOOP_STRATEGY_FACTORY = LoopStrategyFactory(subFactories.loopStrategyFactory);
         GGV_STRATEGY_FACTORY = GGVStrategyFactory(subFactories.ggvStrategyFactory);
         TIMELOCK_FACTORY = TimelockFactory(subFactories.timelockFactory);
         DUMMY_IMPLEMENTATION = address(new DummyImplementation());
@@ -141,7 +136,7 @@ contract Factory {
         TimelockConfig memory timelockConfig,
         CommonPoolConfig memory commonPoolConfig,
         bool allowListEnabled
-    ) external payable returns (StvPoolIntermediate memory intermediate) {
+    ) external payable returns (PoolIntermediate memory intermediate) {
         intermediate = createPoolStart(
             vaultConfig,
             commonPoolConfig,
@@ -157,7 +152,7 @@ contract Factory {
         CommonPoolConfig memory commonPoolConfig,
         bool allowListEnabled,
         uint256 reserveRatioGapBP
-    ) external payable returns (StvPoolIntermediate memory intermediate) {
+    ) external payable returns (PoolIntermediate memory intermediate) {
         intermediate = createPoolStart(
             vaultConfig,
             commonPoolConfig,
@@ -174,7 +169,7 @@ contract Factory {
         TimelockConfig memory timelockConfig,
         CommonPoolConfig memory commonPoolConfig,
         uint256 reserveRatioGapBP
-    ) external payable returns (StvPoolIntermediate memory intermediate) {
+    ) external payable returns (PoolIntermediate memory intermediate) {
         intermediate = createPoolStart(
             vaultConfig,
             commonPoolConfig,
@@ -190,7 +185,7 @@ contract Factory {
         AuxiliaryPoolConfig memory auxiliaryConfig,
         TimelockConfig memory timelockConfig,
         address strategyFactory
-    ) public payable returns (StvPoolIntermediate memory intermediate) {
+    ) public payable returns (PoolIntermediate memory intermediate) {
         if (msg.value < VAULT_HUB.CONNECT_DEPOSIT()) {
             revert InsufficientConnectDeposit(VAULT_HUB.CONNECT_DEPOSIT(), msg.value);
         }
@@ -277,23 +272,30 @@ contract Factory {
             );
         OssifiableProxy(payable(poolProxy)).proxy__changeAdmin(timelock);
 
-        intermediate = StvPoolIntermediate({pool: poolProxy, timelock: timelock, strategyFactory: strategyFactory});
+        intermediate = PoolIntermediate({pool: poolProxy, timelock: timelock, strategyFactory: strategyFactory});
 
-        bytes32 deploymentHash = keccak256(abi.encodePacked(msg.sender, abi.encode(intermediate)));
-        intermediateState[deploymentHash] = 1;
+        bytes32 deploymentHash = _hashIntermediate(intermediate, msg.sender);
+        uint256 finishDeadline = block.timestamp + DEPLOY_START_FINISH_SPAN_SECONDS;
+        intermediateState[deploymentHash] = finishDeadline;
 
-        emit PoolIntermediateCreated(intermediate);
+        emit PoolCreationStarted(intermediate);
     }
 
-    function createPoolFinish(StvPoolIntermediate calldata intermediate)
+    function createPoolFinish(PoolIntermediate calldata intermediate)
         external
-        returns (StvPoolDeployment memory deployment)
+        returns (PoolDeployment memory deployment)
     {
-        bytes32 deploymentHash = keccak256(abi.encodePacked(msg.sender, abi.encode(intermediate)));
-        if (intermediateState[deploymentHash] != 1) {
-            revert InvalidConfiguration("intermediate state not found");
+        bytes32 deploymentHash = _hashIntermediate(intermediate, msg.sender);
+        uint256 finishDeadline = intermediateState[deploymentHash];
+        if (finishDeadline == 0) {
+            revert InvalidConfiguration("deploy not started");
+        } else if (finishDeadline == DEPLOY_COMPLETE) {
+            revert InvalidConfiguration("deploy already finished");
         }
-        intermediateState[deploymentHash] = 2; // TODO: why setting 0 here fails?
+        if (block.timestamp > finishDeadline) {
+            revert InvalidConfiguration("deploy finish deadline passed");
+        }
+        intermediateState[deploymentHash] = DEPLOY_COMPLETE;
 
         StvPool pool = StvPool(payable(intermediate.pool));
         IDashboard dashboard = pool.DASHBOARD();
@@ -323,7 +325,7 @@ contract Factory {
         dashboard.grantRole(DEFAULT_ADMIN_ROLE, timelock);
         dashboard.revokeRole(DEFAULT_ADMIN_ROLE, tempAdmin);
 
-        deployment = StvPoolDeployment({
+        deployment = PoolDeployment({
             poolType: poolType,
             vault: address(pool.STAKING_VAULT()),
             dashboard: address(dashboard),
@@ -344,4 +346,9 @@ contract Factory {
 
         // TODO: LOSS_SOCIALIZER_ROLE
     }
+
+    function _hashIntermediate(PoolIntermediate memory intermediate, address sender) public pure returns (bytes32 result) {
+        result = keccak256(abi.encodePacked(sender, abi.encode(intermediate)));
+    }
+
 }

@@ -48,7 +48,6 @@ contract StvPoolHarness is Test {
     // Deployment configuration struct
     enum StrategyKind {
         NONE,
-        LOOP,
         GGV
     }
 
@@ -137,21 +136,20 @@ contract StvPoolHarness is Test {
         });
 
         address strategyFactoryAddress = address(0);
-        if (config.strategyKind == StrategyKind.LOOP) {
-            strategyFactoryAddress = address(factory.LOOP_STRATEGY_FACTORY());
-        } else if (config.strategyKind == StrategyKind.GGV) {
+        if (config.strategyKind == StrategyKind.GGV) {
             strategyFactoryAddress = address(factory.GGV_STRATEGY_FACTORY());
         }
+        // StrategyKind.NONE: strategyFactoryAddress remains address(0)
 
         vm.startPrank(config.nodeOperator);
-        Factory.StvPoolIntermediate memory intermediate = factory.createPoolStart{value: CONNECT_DEPOSIT}(
+        Factory.PoolIntermediate memory intermediate = factory.createPoolStart{value: CONNECT_DEPOSIT}(
             vaultConfig,
             commonPoolConfig,
             auxiliaryConfig,
             timelockConfig,
             strategyFactoryAddress
         );
-        Factory.StvPoolDeployment memory deployment = factory.createPoolFinish(intermediate);
+        Factory.PoolDeployment memory deployment = factory.createPoolFinish(intermediate);
         vm.stopPrank();
 
         IDashboard dashboard = IDashboard(payable(deployment.dashboard));
