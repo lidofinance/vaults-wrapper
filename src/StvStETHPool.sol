@@ -32,6 +32,10 @@ contract StvStETHPool is StvPool {
     error UndercollateralizedAccount();
     error CollateralizedAccount();
 
+    bytes32 public constant MINTING_FEATURE = keccak256("MINTING_FEATURE");
+    bytes32 public constant MINTING_PAUSE_ROLE = keccak256("MINTING_PAUSE_ROLE");
+    bytes32 public constant MINTING_RESUME_ROLE = keccak256("MINTING_RESUME_ROLE");
+
     bytes32 public constant LOSS_SOCIALIZER_ROLE = keccak256("LOSS_SOCIALIZER_ROLE");
 
     /// @notice The gap between the reserve ratio in Staking Vault and Pool (in basis points)
@@ -68,9 +72,11 @@ contract StvStETHPool is StvPool {
         bytes32 _poolType
     ) StvPool(_dashboard, _allowListEnabled, _withdrawalQueue, _distributor) {
         RESERVE_RATIO_GAP_BP = _reserveRatioGapBP;
+        POOL_TYPE = _poolType;
         WSTETH = IWstETH(DASHBOARD.WSTETH());
 
-        POOL_TYPE = _poolType;
+        // Pause features in implementation
+        _pauseFeature(MINTING_FEATURE);
     }
 
     function poolType() external view override returns (bytes32) {
@@ -301,7 +307,9 @@ contract StvStETHPool is StvPool {
      * on WSTETH contract during unwrapping. The dust from rounding accumulates on the WSTETH contract during unwrapping
      */
     function mintWsteth(uint256 _wsteth) public {
+        _checkFeatureNotPaused(MINTING_FEATURE);
         _checkRemainingMintingCapacityOf(msg.sender, _wsteth);
+
         _increaseMintedStethShares(msg.sender, _wsteth);
         DASHBOARD.mintWstETH(msg.sender, _wsteth);
     }
@@ -311,7 +319,9 @@ contract StvStETHPool is StvPool {
      * @param _stethShares The amount of stETH shares to mint
      */
     function mintStethShares(uint256 _stethShares) public {
+        _checkFeatureNotPaused(MINTING_FEATURE);
         _checkRemainingMintingCapacityOf(msg.sender, _stethShares);
+
         _increaseMintedStethShares(msg.sender, _stethShares);
         DASHBOARD.mintShares(msg.sender, _stethShares);
     }
@@ -453,7 +463,6 @@ contract StvStETHPool is StvPool {
      * @notice Sync reserve ratio and forced rebalance threshold from VaultHub
      * @dev Permissionless method to keep reserve ratio and forced rebalance threshold in sync with VaultHub
      * @dev Adds a gap defined by RESERVE_RATIO_GAP_BP to VaultHub's values
-     * @dev Reverts if the new reserve ratio or forced rebalance threshold is invalid (>= TOTAL_BASIS_POINTS)
      */
     function syncVaultParameters() public {
         IVaultHub.VaultConnection memory connection = DASHBOARD.vaultConnection();
@@ -726,5 +735,27 @@ contract StvStETHPool is StvPool {
         uint256 stvToLock = calcStvToLockForStethShares(mintedStethShares);
 
         if (balanceOf(_from) < stvToLock) revert InsufficientReservedBalance();
+    }
+
+    // =================================================================================
+    // PAUSE / RESUME MINTING
+    // =================================================================================
+
+    /**
+     * @notice Pause (w)stETH minting
+     * @dev Can only be called by accounts with the MINTING_PAUSE_ROLE
+     */
+    function pauseMinting() external {
+        _checkRole(MINTING_PAUSE_ROLE, msg.sender);
+        _pauseFeature(MINTING_FEATURE);
+    }
+
+    /**
+     * @notice Resume (w)stETH minting
+     * @dev Can only be called by accounts with the MINTING_RESUME_ROLE
+     */
+    function resumeMinting() external {
+        _checkRole(MINTING_RESUME_ROLE, msg.sender);
+        _resumeFeature(MINTING_FEATURE);
     }
 }

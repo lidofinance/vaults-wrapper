@@ -7,10 +7,10 @@ import {IStETH} from "./interfaces/IStETH.sol";
 import {IStakingVault} from "./interfaces/IStakingVault.sol";
 import {IStvStETHPool} from "./interfaces/IStvStETHPool.sol";
 import {IVaultHub} from "./interfaces/IVaultHub.sol";
+import {FeaturePausable} from "./utils/FeaturePausable.sol";
 import {
     AccessControlEnumerableUpgradeable
 } from "@openzeppelin/contracts-upgradeable/access/extensions/AccessControlEnumerableUpgradeable.sol";
-import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 
@@ -20,15 +20,21 @@ import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet
  * @dev Handles the complete lifecycle of withdrawal requests including optional stETH rebalancing,
  * and discount mechanisms
  */
-contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradeable {
+contract WithdrawalQueue is AccessControlEnumerableUpgradeable, FeaturePausable {
     using EnumerableSet for EnumerableSet.UintSet;
 
     /// @notice Min delay between withdrawal request and finalization
+    /// @dev Contract enforces a minimum 1-hour delay to ensure the value is set within reasonable bounds
     uint256 public immutable MIN_WITHDRAWAL_DELAY_TIME_IN_SECONDS;
 
     // ACL
-    bytes32 public constant PAUSE_ROLE = keccak256("PAUSE_ROLE");
-    bytes32 public constant RESUME_ROLE = keccak256("RESUME_ROLE");
+    bytes32 public constant WITHDRAWALS_FEATURE = keccak256("WITHDRAWALS_FEATURE");
+    bytes32 public constant WITHDRAWALS_PAUSE_ROLE = keccak256("WITHDRAWALS_PAUSE_ROLE");
+    bytes32 public constant WITHDRAWALS_RESUME_ROLE = keccak256("WITHDRAWALS_RESUME_ROLE");
+
+    bytes32 public constant FINALIZE_FEATURE = keccak256("FINALIZE_FEATURE");
+    bytes32 public constant FINALIZE_PAUSE_ROLE = keccak256("FINALIZE_PAUSE_ROLE");
+    bytes32 public constant FINALIZE_RESUME_ROLE = keccak256("FINALIZE_RESUME_ROLE");
     bytes32 public constant FINALIZE_ROLE = keccak256("FINALIZE_ROLE");
 
     /// @notice Precision base for stv and steth share rates
@@ -202,8 +208,8 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
     ) {
         if (_minWithdrawalDelayTimeInSeconds < 1 hours) revert InvalidWithdrawalDelay();
 
-        IS_REBALANCING_SUPPORTED = _isRebalancingSupported;
         MIN_WITHDRAWAL_DELAY_TIME_IN_SECONDS = _minWithdrawalDelayTimeInSeconds;
+        IS_REBALANCING_SUPPORTED = _isRebalancingSupported;
 
         POOL = IStvStETHPool(payable(_pool));
         DASHBOARD = IDashboard(payable(_dashboard));
@@ -213,7 +219,10 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
         STAKING_VAULT = IStakingVault(_vault);
 
         _disableInitializers();
-        _pause();
+
+        // Pause features in implementation
+        _pauseFeature(WITHDRAWALS_FEATURE);
+        _pauseFeature(FINALIZE_FEATURE);
     }
 
     /**
@@ -226,7 +235,6 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
         if (_admin == address(0)) revert ZeroAddress();
 
         __AccessControlEnumerable_init();
-        __Pausable_init();
 
         _grantRole(DEFAULT_ADMIN_ROLE, _admin);
         _grantRole(FINALIZE_ROLE, _finalizer);
@@ -248,20 +256,41 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
     // =================================================================================
 
     /**
-     * @notice Pause withdrawal requests placement and finalization
+     * @notice Pause withdrawal requests submission
+     * @dev Can only be called by accounts with the WITHDRAWALS_PAUSE_ROLE
      * @dev Does not affect claiming of already finalized requests
      */
-    function pause() external {
-        _checkRole(PAUSE_ROLE, msg.sender);
-        _pause();
+    function pauseWithdrawals() external {
+        _checkRole(WITHDRAWALS_PAUSE_ROLE, msg.sender);
+        _pauseFeature(WITHDRAWALS_FEATURE);
     }
 
     /**
-     * @notice Resume withdrawal requests placement and finalization
+     * @notice Resume withdrawal requests submission
+     * @dev Can only be called by accounts with the WITHDRAWALS_RESUME_ROLE
      */
-    function resume() external {
-        _checkRole(RESUME_ROLE, msg.sender);
-        _unpause();
+    function resumeWithdrawals() external {
+        _checkRole(WITHDRAWALS_RESUME_ROLE, msg.sender);
+        _resumeFeature(WITHDRAWALS_FEATURE);
+    }
+
+    /**
+     * @notice Pause withdrawals finalization
+     * @dev Can only be called by accounts with the FINALIZE_PAUSE_ROLE
+     * @dev Does not affect claiming of already finalized requests
+     */
+    function pauseFinalization() external {
+        _checkRole(FINALIZE_PAUSE_ROLE, msg.sender);
+        _pauseFeature(FINALIZE_FEATURE);
+    }
+
+    /**
+     * @notice Resume withdrawals finalization
+     * @dev Can only be called by accounts with the FINALIZE_RESUME_ROLE
+     */
+    function resumeFinalization() external {
+        _checkRole(FINALIZE_RESUME_ROLE, msg.sender);
+        _resumeFeature(FINALIZE_FEATURE);
     }
 
     // =================================================================================
@@ -280,7 +309,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
         uint256[] calldata _stvToWithdraw,
         uint256[] calldata _stethSharesToRebalance
     ) external returns (uint256[] memory requestIds) {
-        _requireNotPaused();
+        _checkFeatureNotPaused(WITHDRAWALS_FEATURE);
         _checkArrayLength(_stvToWithdraw.length, _stethSharesToRebalance.length);
 
         requestIds = new uint256[](_stvToWithdraw.length);
@@ -301,7 +330,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
         external
         returns (uint256 requestId)
     {
-        _requireNotPaused();
+        _checkFeatureNotPaused(WITHDRAWALS_FEATURE);
         requestId = _requestWithdrawal(_owner, _stvToWithdraw, _stethSharesToRebalance);
     }
 
@@ -412,7 +441,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
         external
         returns (uint256 finalizedRequests)
     {
-        _requireNotPaused();
+        _checkFeatureNotPaused(FINALIZE_FEATURE);
         _checkRole(FINALIZE_ROLE, msg.sender);
         _checkFreshReport();
 
@@ -516,8 +545,11 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, PausableUpgradea
         // 1. Withdraw ETH from the vault to cover finalized requests and burn associated stv
         // Eth to claim or stv to burn could be 0 if all requests are going to be rebalanced
         // Rebalance cannot be done first because it will withdraw eth without unlocking it
-        if (totalEthToClaim + totalGasCoverage > 0) {
-            DASHBOARD.withdraw(address(this), totalEthToClaim + totalGasCoverage);
+        uint256 totalEthToWithdraw = totalEthToClaim + totalGasCoverage;
+        if (totalEthToWithdraw > 0) {
+            uint256 balanceBefore = address(this).balance;
+            DASHBOARD.withdraw(address(this), totalEthToWithdraw);
+            assert(address(this).balance - balanceBefore == totalEthToWithdraw);
         }
         if (totalStvToBurn > 0) POOL.burnStvForWithdrawalQueue(totalStvToBurn);
 

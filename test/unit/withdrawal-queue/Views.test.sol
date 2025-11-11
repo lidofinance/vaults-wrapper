@@ -48,9 +48,7 @@ contract ViewsTest is Test, SetupWithdrawalQueue {
         assertFalse(statuses[1].isFinalized);
 
         lazyOracle.mock__updateLatestReportTimestamp(block.timestamp);
-        vm.warp(block.timestamp + MIN_WITHDRAWAL_DELAY_TIME + 1);
-        vm.prank(finalizeRoleHolder);
-        withdrawalQueue.finalize(1, address(0));
+        _finalizeRequests(1);
 
         WithdrawalQueue.WithdrawalRequestStatus memory statusSingle = withdrawalQueue.getWithdrawalStatus(requestId1);
         assertTrue(statusSingle.isFinalized);
@@ -91,9 +89,7 @@ contract ViewsTest is Test, SetupWithdrawalQueue {
         assertEq(withdrawalQueue.getClaimableEther(requestId), 0);
 
         lazyOracle.mock__updateLatestReportTimestamp(block.timestamp);
-        vm.warp(block.timestamp + MIN_WITHDRAWAL_DELAY_TIME + 1);
-        vm.prank(finalizeRoleHolder);
-        withdrawalQueue.finalize(1, address(0));
+        _finalizeRequests(1);
 
         uint256[] memory requestIds = new uint256[](1);
         requestIds[0] = requestId;

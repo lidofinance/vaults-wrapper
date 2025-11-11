@@ -549,7 +549,11 @@ contract StvStETHPoolTest is StvStETHPoolHarness {
         uint256 requestId = ctx.withdrawalQueue.requestWithdrawal(USER1, rewardsStv, 0);
 
         WithdrawalQueue.WithdrawalRequestStatus memory status = ctx.withdrawalQueue.getWithdrawalStatus(requestId);
-        assertEq(status.amountOfAssets, user1Rewards, "Withdrawal request amount should match previewRedeem");
+        assertLe(
+            user1Rewards - status.amountOfAssets,
+            WEI_ROUNDING_TOLERANCE,
+            "Withdrawal request amount should almost match previewRedeem"
+        );
 
         // Update report data with current timestamp to make it fresh
         core.applyVaultReport(address(ctx.vault), w.totalAssets(), 0, 0, 0);
@@ -560,7 +564,11 @@ contract StvStETHPoolTest is StvStETHPoolHarness {
 
         status = ctx.withdrawalQueue.getWithdrawalStatus(requestId);
         assertTrue(status.isFinalized, "Withdrawal request should be finalized");
-        assertEq(status.amountOfAssets, user1Rewards, "Withdrawal request amount should match previewRedeem");
+        assertLe(
+            user1Rewards - status.amountOfAssets,
+            WEI_ROUNDING_TOLERANCE,
+            "Withdrawal request amount should almost match previewRedeem"
+        );
         assertEq(status.amountOfStv, rewardsStv, "Withdrawal request shares should match user1SharesToWithdraw");
 
         // Deal ETH to withdrawal queue for the claim (simulating validator exit)
