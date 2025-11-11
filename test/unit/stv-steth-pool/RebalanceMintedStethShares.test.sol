@@ -21,6 +21,11 @@ contract RebalanceMintedStethSharesTest is Test, SetupStvStETHPool {
         pool.mintStethShares(_amount);
     }
 
+    function _previewStvToRebalance(uint256 _stethShares) internal view returns (uint256 stvToRebalance) {
+        uint256 ethToRebalance = steth.getPooledEthBySharesRoundUp(_stethShares);
+        stvToRebalance = pool.previewWithdraw(ethToRebalance);
+    }
+
     // Access control tests
 
     function test_RebalanceMintedStethShares_RevertOnCallFromStranger() public {
@@ -122,6 +127,10 @@ contract RebalanceMintedStethSharesTest is Test, SetupStvStETHPool {
     // Socialization scenarios
 
     function test_RebalanceMintedStethShares_SocializationWhenMaxStvExceeded() public {
+        // Enable loss socialization
+        vm.prank(owner);
+        pool.setMaxLossSocializationBP(100_00); // 100%
+
         uint256 sharesToMint = pool.remainingMintingCapacitySharesOf(withdrawalQueue, 0) / 4;
         _mintStethSharesToWQ(sharesToMint);
 
@@ -130,7 +139,7 @@ contract RebalanceMintedStethSharesTest is Test, SetupStvStETHPool {
 
         // Only check that SocializedLoss event is emitted (without exact amounts)
         vm.expectEmit(false, false, false, false);
-        emit StvStETHPool.SocializedLoss(0, 0);
+        emit StvStETHPool.SocializedLoss(0, 0, 0);
 
         vm.prank(withdrawalQueue);
         pool.rebalanceMintedStethShares(sharesToMint, maxStvToBurn);
@@ -146,9 +155,13 @@ contract RebalanceMintedStethSharesTest is Test, SetupStvStETHPool {
         uint256 maxStvToBurn = 0; // No burning allowed
         uint256 wqBalanceBefore = pool.balanceOf(withdrawalQueue);
 
+        // Enable socialization
+        vm.prank(owner);
+        pool.setMaxLossSocializationBP(100_00); // 100%
+
         // Only check that SocializedLoss event is emitted (without exact amounts)
         vm.expectEmit(false, false, false, false);
-        emit StvStETHPool.SocializedLoss(0, 0);
+        emit StvStETHPool.SocializedLoss(0, 0, 0);
 
         vm.prank(withdrawalQueue);
         pool.rebalanceMintedStethShares(sharesToMint, maxStvToBurn);
@@ -157,6 +170,80 @@ contract RebalanceMintedStethSharesTest is Test, SetupStvStETHPool {
         assertEq(pool.balanceOf(withdrawalQueue), wqBalanceBefore);
         // But shares should still be rebalanced
         assertEq(pool.mintedStethSharesOf(withdrawalQueue), 0);
+    }
+
+    function test_RebalanceMintedStethShares_AllowsFullSocializationAtHundredPercentLimit() public {
+        uint256 sharesToMint = pool.remainingMintingCapacitySharesOf(withdrawalQueue, 0) / 4;
+        _mintStethSharesToWQ(sharesToMint);
+
+        uint256 stvInWQBefore = pool.balanceOf(withdrawalQueue);
+
+        vm.prank(owner);
+        pool.setMaxLossSocializationBP(100_00);
+
+        vm.prank(withdrawalQueue);
+        pool.rebalanceMintedStethShares(sharesToMint, 0);
+
+        assertEq(pool.mintedStethSharesOf(withdrawalQueue), 0);
+        assertEq(pool.balanceOf(withdrawalQueue), stvInWQBefore);
+    }
+
+    function test_RebalanceMintedStethShares_PartialSocializationWithinLimit() public {
+        vm.prank(owner);
+        pool.setMaxLossSocializationBP(2_500); // 25%
+
+        uint256 sharesToMint = pool.remainingMintingCapacitySharesOf(withdrawalQueue, 0) / 4;
+        _mintStethSharesToWQ(sharesToMint);
+
+        uint256 stvRequired = _previewStvToRebalance(sharesToMint);
+        uint256 shortfall = stvRequired / 5; // 20%
+        assertGt(shortfall, 0);
+
+        vm.prank(withdrawalQueue);
+        pool.rebalanceMintedStethShares(sharesToMint, stvRequired - shortfall);
+
+        assertEq(pool.mintedStethSharesOf(withdrawalQueue), 0);
+    }
+
+    function test_RebalanceMintedStethShares_PartialSocializationAboveLimitReverts() public {
+        vm.prank(owner);
+        pool.setMaxLossSocializationBP(1_000); // 10%
+
+        uint256 sharesToMint = pool.remainingMintingCapacitySharesOf(withdrawalQueue, 0) / 4;
+        _mintStethSharesToWQ(sharesToMint);
+
+        uint256 stvRequired = _previewStvToRebalance(sharesToMint);
+        uint256 shortfall = stvRequired / 5; // 20%
+        assertGt(shortfall, 0);
+
+        vm.prank(withdrawalQueue);
+        vm.expectRevert(StvStETHPool.ExcessiveLossSocialization.selector);
+        pool.rebalanceMintedStethShares(sharesToMint, stvRequired - shortfall);
+    }
+
+    function test_RebalanceMintedStethShares_DefaultLimitAllowsWhenNoSocialization() public {
+        uint256 sharesToMint = pool.remainingMintingCapacitySharesOf(withdrawalQueue, 0) / 4;
+        _mintStethSharesToWQ(sharesToMint);
+
+        uint256 stvRequired = _previewStvToRebalance(sharesToMint);
+        assertGt(stvRequired, 0);
+
+        vm.prank(withdrawalQueue);
+        pool.rebalanceMintedStethShares(sharesToMint, stvRequired);
+
+        assertEq(pool.mintedStethSharesOf(withdrawalQueue), 0);
+    }
+
+    function test_RebalanceMintedStethShares_DefaultLimitRevertsWhenSocializationNeeded() public {
+        uint256 sharesToMint = pool.remainingMintingCapacitySharesOf(withdrawalQueue, 0) / 4;
+        _mintStethSharesToWQ(sharesToMint);
+
+        uint256 stvRequired = _previewStvToRebalance(sharesToMint);
+        assertGt(stvRequired, 1);
+
+        vm.prank(withdrawalQueue);
+        vm.expectRevert(StvStETHPool.ExcessiveLossSocialization.selector);
+        pool.rebalanceMintedStethShares(sharesToMint, stvRequired - 1);
     }
 
     // Partial rebalance scenarios
