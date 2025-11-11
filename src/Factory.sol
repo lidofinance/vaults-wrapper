@@ -4,7 +4,7 @@ pragma solidity >=0.8.25;
 import {Distributor} from "./Distributor.sol";
 import {StvPool} from "./StvPool.sol";
 import {WithdrawalQueue} from "./WithdrawalQueue.sol";
-import {Strategy} from "./strategy/Strategy.sol";
+import {IStrategy} from "./interfaces/IStrategy.sol";
 import {DistributorFactory} from "./factories/DistributorFactory.sol";
 import {GGVStrategyFactory} from "./factories/GGVStrategyFactory.sol";
 import {LoopStrategyFactory} from "./factories/LoopStrategyFactory.sol";
@@ -320,7 +320,7 @@ contract Factory {
                 new OssifiableProxy(
                     strategyImpl,
                     timelock,
-                    abi.encodeCall(Strategy.initialize, (timelock))
+                    abi.encodeCall(IStrategy.initialize, (timelock))
                 )
             );
 

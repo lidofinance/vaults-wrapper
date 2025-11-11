@@ -225,15 +225,18 @@ contract GGVTest is StvStrategyPoolHarness {
         // 5. User Finalizes Withdrawal (Wrapper side)
         console.log("\n[SCENARIO] Step 5. Finalize Wrapper withdrawal");
 
-        uint256 _stethSharesToBurn = ggvStrategy.proxyStethSharesOf(USER1);
-        uint256 _stethSharesToRebalance = ggvStrategy.proxyStethSharesToRebalance(USER1);
-        uint256 _stvToWithdraw = ggvStrategy.proxyUnlockedStvOf(USER1, _stethSharesToRebalance + _stethSharesToBurn);
+        // simulate the unwrapping of wstETH to stETH with rounding issue
+        uint256 wstethToBurn = ggvStrategy.wstethOf(USER1);
+        uint256 stETHAmount = ggvStrategy.STETH().getPooledEthByShares(wstethToBurn);
+        uint256 sharesAfterUnwrapping = ggvStrategy.STETH().getSharesByPooledEth(stETHAmount);
 
-        uint256 _wstethToBurn = ggvStrategy.wstethOf(USER1);
+        uint256 mintedStethShares = ggvStrategy.mintedStethSharesOf(USER1);
+        uint256 stethSharesToRebalance = mintedStethShares - sharesAfterUnwrapping;
+        uint256 stvToWithdraw = ggvStrategy.stvOf(USER1);
 
         vm.startPrank(USER1);
-        ggvStrategy.burnWsteth(_wstethToBurn);
-        ggvStrategy.requestWithdrawalFromPool(_stvToWithdraw, _stethSharesToRebalance, USER1);
+        ggvStrategy.burnWsteth(wstethToBurn);
+        ggvStrategy.requestWithdrawalFromPool(stvToWithdraw, stethSharesToRebalance, USER1);
         vm.stopPrank();
 
         _log.printUsers("After User Finalizes Wrapper", logUsers, ggvDiscount);
