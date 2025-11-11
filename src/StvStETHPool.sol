@@ -19,6 +19,7 @@ contract StvStETHPool is StvPool {
     event StethSharesRebalanced(address indexed account, uint256 stethShares, uint256 stvBurned);
     event SocializedLoss(uint256 stv, uint256 assets);
     event VaultParametersUpdated(uint256 newReserveRatioBP, uint256 newForcedRebalanceThresholdBP);
+    event MaxLossSocializationBPUpdated(uint256 newMaxSocializationBP);
 
     error InsufficientMintingCapacity();
     error InsufficientStethShares();
@@ -31,6 +32,9 @@ contract StvStETHPool is StvPool {
     error VaultReportStale();
     error UndercollateralizedAccount();
     error CollateralizedAccount();
+    error ExcessiveLossSocialization();
+    error SameValue();
+    error InvalidValue();
 
     bytes32 public constant MINTING_FEATURE = keccak256("MINTING_FEATURE");
     bytes32 public constant MINTING_PAUSE_ROLE = keccak256("MINTING_PAUSE_ROLE");
@@ -51,6 +55,7 @@ contract StvStETHPool is StvPool {
         uint256 totalMintedStethShares;
         uint16 reserveRatioBP;
         uint16 forcedRebalanceThresholdBP;
+        uint16 maxLossSocializationBP;
     }
 
     // keccak256(abi.encode(uint256(keccak256("pool.storage.StvStETHPool")) - 1)) & ~bytes32(uint256(0xff))
@@ -666,8 +671,9 @@ contract StvStETHPool is StvPool {
 
         if (remainingStethShares > 0) DASHBOARD.rebalanceVaultWithShares(remainingStethShares);
 
-        // TODO: Add sanity check for loss socialization
         if (stvToBurn > _maxStvToBurn) {
+            _checkAllowedLossSocializationPortion(stvToBurn, _maxStvToBurn);
+
             emit SocializedLoss(stvToBurn - _maxStvToBurn, ethToRebalance - _convertToAssets(_maxStvToBurn));
             stvToBurn = _maxStvToBurn;
         }
@@ -691,8 +697,58 @@ contract StvStETHPool is StvPool {
         isBreached = _assets < assetsThreshold;
     }
 
+    function _checkAllowedLossSocializationPortion(uint256 stvRequired, uint256 stvAvailable) internal view {
+        // It's guaranteed that stvRequired > stvAvailable here
+        uint256 portionToSocializeBP =
+            Math.mulDiv(stvRequired - stvAvailable, TOTAL_BASIS_POINTS, stvRequired, Math.Rounding.Ceil);
+
+        if (portionToSocializeBP > _getStvStETHPoolStorage().maxLossSocializationBP) {
+            revert ExcessiveLossSocialization();
+        }
+    }
+
     function _checkFreshReport() internal view {
         if (!VAULT_HUB.isReportFresh(address(STAKING_VAULT))) revert VaultReportStale();
+    }
+
+    // =================================================================================
+    // LOSS SOCIALIZATION LIMITER
+    // =================================================================================
+
+    // During rebalancing, it's possible that the stv available for burning is not sufficient to cover the entire liability.
+    // This may be due to a sharp drop in the stv price, which has resulted in an individual account or a request in Withdrawal Queue
+    // no longer being collateralized (assets < liability).
+    //
+    // The limiter on loss socialization is introduced to prevent excessive losses from being socialized to all pool participants.
+    // The limiter is defined as a maximum portion of the loss that can be socialized, expressed in basis points (BP).
+    //
+    // The default value is set to 0 BP, meaning that no loss socialization is allowed without explicit permission.
+
+    /**
+     * @notice Maximum allowed loss socialization in basis points
+     * @return maxSocializablePortionBP The maximum allowed portion of loss to be socialized in basis points
+     * @dev Used to limit the portion of loss that can be socialized to all pool participants during rebalance
+     */
+    function maxLossSocializationBP() external view returns (uint256 maxSocializablePortionBP) {
+        maxSocializablePortionBP = uint256(_getStvStETHPoolStorage().maxLossSocializationBP);
+    }
+
+    /**
+     * @notice Set the maximum allowed loss socialization in basis points
+     * @param _maxSocializablePortionBP The new maximum allowed loss socialization in basis points
+     * @dev Sets the maximum portion of loss that can be socialized to all pool participants during rebalance
+     * @dev Can only be called by accounts with the DEFAULT_ADMIN_ROLE
+     */
+    function setMaxLossSocializationBP(uint16 _maxSocializablePortionBP) external {
+        _checkRole(DEFAULT_ADMIN_ROLE, msg.sender);
+
+        if (_maxSocializablePortionBP > TOTAL_BASIS_POINTS) revert InvalidValue();
+
+        StvStETHPoolStorage storage $ = _getStvStETHPoolStorage();
+        if (_maxSocializablePortionBP == $.maxLossSocializationBP) revert SameValue();
+        $.maxLossSocializationBP = _maxSocializablePortionBP;
+
+        emit MaxLossSocializationBPUpdated(_maxSocializablePortionBP);
     }
 
     // =================================================================================

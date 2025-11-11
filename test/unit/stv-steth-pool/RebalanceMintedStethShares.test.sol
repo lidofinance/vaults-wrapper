@@ -122,6 +122,10 @@ contract RebalanceMintedStethSharesTest is Test, SetupStvStETHPool {
     // Socialization scenarios
 
     function test_RebalanceMintedStethShares_SocializationWhenMaxStvExceeded() public {
+        // Enable loss socialization
+        vm.prank(owner);
+        pool.setMaxLossSocializationBP(100_00); // 100%
+
         uint256 sharesToMint = pool.remainingMintingCapacitySharesOf(withdrawalQueue, 0) / 4;
         _mintStethSharesToWQ(sharesToMint);
 
@@ -145,6 +149,10 @@ contract RebalanceMintedStethSharesTest is Test, SetupStvStETHPool {
 
         uint256 maxStvToBurn = 0; // No burning allowed
         uint256 wqBalanceBefore = pool.balanceOf(withdrawalQueue);
+
+        // Enable socialization
+        vm.prank(owner);
+        pool.setMaxLossSocializationBP(100_00); // 100%
 
         // Only check that SocializedLoss event is emitted (without exact amounts)
         vm.expectEmit(false, false, false, false);
