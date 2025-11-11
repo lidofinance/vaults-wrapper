@@ -10,7 +10,7 @@ import {FeaturePausable} from "src/utils/FeaturePausable.sol";
 contract FinalizationTest is Test, SetupWithdrawalQueue {
     function setUp() public override {
         super.setUp();
-        pool.depositETH{value: 100_000 ether}(address(this), address(0));
+        pool.depositETH{value: 10_000 ether}(address(this), address(0));
     }
 
     // Basic Finalization
@@ -432,6 +432,41 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
 
         // Check finalized request has correct ETH amount unaffected by rewards
         assertEq(withdrawalQueue.getClaimableEther(requestId), expectedEth);
+    }
+
+    // Exceeding Minted StETH
+
+    function test_Finalize_MultipleRequestsWithExceedingSteth() public {
+        uint256 mintedStethShares = pool.totalMintingCapacitySharesOf(address(this)) / 3 * 3;
+        pool.mintStethShares(mintedStethShares);
+
+        // Initially no exceeding minted steth
+        assertEq(pool.totalExceedingMintedStethShares(), 0);
+
+        // Create multiple withdrawal requests with enough stv to cover liability
+        uint256 stvPerRequest = pool.balanceOf(address(this)) / 3;
+        withdrawalQueue.requestWithdrawal(address(this), stvPerRequest, mintedStethShares / 3);
+        withdrawalQueue.requestWithdrawal(address(this), stvPerRequest, mintedStethShares / 3);
+        withdrawalQueue.requestWithdrawal(address(this), stvPerRequest, mintedStethShares / 3);
+
+        assertEq(withdrawalQueue.getLastRequestId(), 3);
+
+        // Simulate vault rebalance to create exceeding minted steth
+        uint256 liabilityShares = dashboard.liabilityShares();
+        assertGt(liabilityShares, 0);
+        dashboard.rebalanceVaultWithShares(liabilityShares / 2);
+
+        // Exceeding minted steth should now be present
+        assertGt(pool.totalExceedingMintedStethShares(), 0);
+
+        // Finalize all requests
+        _finalizeRequests(3);
+
+        // Verify no unfinalized requests remain
+        assertEq(withdrawalQueue.unfinalizedRequestsNumber(), 0);
+
+        // Exceeding steth should be consumed during finalization
+        assertEq(pool.totalExceedingMintedStethShares(), 0);
     }
 }
 

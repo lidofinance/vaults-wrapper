@@ -512,8 +512,8 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, FeaturePausable 
                 if (exceedingSteth > stethToRebalance) {
                     exceedingSteth -= stethToRebalance;
                 } else {
-                    exceedingSteth = 0;
                     ethToRebalance = stethToRebalance - exceedingSteth;
+                    exceedingSteth = 0;
                 }
             }
 
