@@ -1,0 +1,8 @@
+{
+  "strategies": {
+    "ggv": {
+      "teller": "0x71A2d32343ae5DDeB0A9917358687D0Ed7Ce6Bf6",
+      "boringOnChainQueue": "0x501bF497fcB98e912F3c8CFfe871De4580B2Ca20"
+    }
+  }
+}
