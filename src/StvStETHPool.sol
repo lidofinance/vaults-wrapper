@@ -19,7 +19,7 @@ contract StvStETHPool is StvPool {
     event StethSharesRebalanced(address indexed account, uint256 stethShares, uint256 stvBurned);
     event SocializedLoss(uint256 stv, uint256 assets);
     event VaultParametersUpdated(uint256 newReserveRatioBP, uint256 newForcedRebalanceThresholdBP);
-    event MaxLossSocializationBPUpdated(uint256 newMaxSocializationBP);
+    event MaxLossSocializationUpdated(uint256 newMaxLossSocializationBP);
 
     error InsufficientMintingCapacity();
     error InsufficientStethShares();
@@ -748,7 +748,7 @@ contract StvStETHPool is StvPool {
         if (_maxSocializablePortionBP == $.maxLossSocializationBP) revert SameValue();
         $.maxLossSocializationBP = _maxSocializablePortionBP;
 
-        emit MaxLossSocializationBPUpdated(_maxSocializablePortionBP);
+        emit MaxLossSocializationUpdated(_maxSocializablePortionBP);
     }
 
     // =================================================================================
