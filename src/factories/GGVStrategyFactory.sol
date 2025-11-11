@@ -6,6 +6,7 @@ import {GGVStrategy} from "src/strategy/GGVStrategy.sol";
 import {StrategyCallForwarder} from "src/strategy/StrategyCallForwarder.sol";
 
 contract GGVStrategyFactory is IStrategyFactory {
+    bytes32 public immutable STRATEGY_ID = keccak256("strategy.ggv.v1");
     address public immutable TELLER;
     address public immutable BORING_QUEUE;
 
@@ -18,6 +19,6 @@ contract GGVStrategyFactory is IStrategyFactory {
 
     function deploy(address _pool, address _steth, address _wsteth) external returns (address impl) {
         address strategyCallForwarderImpl = address(new StrategyCallForwarder());
-        impl = address(new GGVStrategy(strategyCallForwarderImpl, _pool, _steth, _wsteth, TELLER, BORING_QUEUE));
+        impl = address(new GGVStrategy(STRATEGY_ID, strategyCallForwarderImpl, _pool, _steth, _wsteth, TELLER, BORING_QUEUE));
     }
 }

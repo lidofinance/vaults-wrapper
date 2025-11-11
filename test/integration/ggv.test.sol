@@ -22,6 +22,8 @@ import {GGVMockTeller} from "src/mock/ggv/GGVMockTeller.sol";
 import {GGVQueueMock} from "src/mock/ggv/GGVQueueMock.sol";
 import {GGVVaultMock} from "src/mock/ggv/GGVVaultMock.sol";
 
+import {console} from "forge-std/console.sol";
+
 interface IAuthority {
     function setUserRole(address user, uint8 role, bool enabled) external;
     function setRoleCapability(uint8 role, address code, bytes4 sig, bool enabled) external;
@@ -227,8 +229,11 @@ contract GGVTest is StvStrategyPoolHarness {
         uint256 _stethSharesToRebalance = ggvStrategy.proxyStethSharesToRebalance(USER1);
         uint256 _stvToWithdraw = ggvStrategy.proxyUnlockedStvOf(USER1, _stethSharesToRebalance + _stethSharesToBurn);
 
+        uint256 _wstethToBurn = ggvStrategy.wstethOf(USER1);
+
         vm.startPrank(USER1);
-        ggvStrategy.requestWithdrawalFromPool(_stvToWithdraw, _stethSharesToBurn, _stethSharesToRebalance, USER1);
+        ggvStrategy.burnWsteth(_wstethToBurn);
+        ggvStrategy.requestWithdrawalFromPool(_stvToWithdraw, _stethSharesToRebalance, USER1);
         vm.stopPrank();
 
         _log.printUsers("After User Finalizes Wrapper", logUsers, ggvDiscount);
