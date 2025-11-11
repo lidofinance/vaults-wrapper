@@ -196,9 +196,11 @@ contract DisconnectTest is StvStETHPoolHarness, TimelockHarness {
         uint64[] memory amountsInGwei = new uint64[](1);
         amountsInGwei[0] = 32 * 10 ** 9;
 
-        uint256 withdrawalFee = ctx.vault.calculateValidatorWithdrawalFee(1);
-        assertGt(withdrawalFee, 0, "Withdrawal fee should be greater than zero");
+        uint256 withdrawalFee = 10 gwei;
+        address twContract = 0x00000961Ef480Eb55e80D19ad83579A64c007002; // EL triggerable withdrawals (EIP-7002) contract
 
+        vm.mockCall(twContract, new bytes(0), abi.encode(uint256(withdrawalFee)));
+        vm.mockCall(twContract, bytes.concat(mockPubkey, bytes8(uint64(amountsInGwei[0]))), new bytes(0));
         vm.prank(trustedActor);
         ctx.dashboard.triggerValidatorWithdrawals{value: withdrawalFee}(mockPubkey, amountsInGwei, trustedActor);
 
