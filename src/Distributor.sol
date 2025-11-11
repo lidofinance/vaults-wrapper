@@ -85,7 +85,7 @@ contract Distributor is AccessControlEnumerable {
      */
     function setMerkleRoot(bytes32 _root, string calldata _cid) external {
         _checkRole(MANAGER_ROLE, msg.sender);
-        if (_root == root || keccak256(bytes(_cid)) == keccak256(bytes(cid))) revert AlreadyProcessed();
+        if (_root == root && keccak256(bytes(_cid)) == keccak256(bytes(cid))) revert AlreadyProcessed();
 
         emit MerkleRootUpdated(root, _root, cid, _cid, lastProcessedBlock, block.number);
 
