@@ -279,6 +279,10 @@ contract ForceRebalanceTest is Test, SetupStvStETHPool {
     }
 
     function test_SocializeLoss_BurnsAvailableStv() public {
+        // Enable loss socialization
+        vm.prank(owner);
+        pool.setMaxLossSocializationBP(100_00); // 100%
+
         _mintMaxStethShares(userAlice);
         uint256 balanceBefore = pool.balanceOf(userAlice);
         _simulateLoss(4 ether);
@@ -291,6 +295,10 @@ contract ForceRebalanceTest is Test, SetupStvStETHPool {
     }
 
     function test_SocializeLoss_ClearsAllMintedShares() public {
+        // Enable loss socialization
+        vm.prank(owner);
+        pool.setMaxLossSocializationBP(100_00); // 100%
+
         _mintMaxStethShares(userAlice);
         _simulateLoss(4 ether);
 
