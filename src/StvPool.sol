@@ -35,7 +35,6 @@ contract StvPool is Initializable, ERC20Upgradeable, AllowList, FeaturePausable 
 
     uint256 private constant DECIMALS = 27;
     uint256 private constant ASSET_DECIMALS = 18;
-    uint256 private constant EXTRA_DECIMALS_BASE = 10 ** (DECIMALS - ASSET_DECIMALS);
 
     IStETH public immutable STETH;
     IDashboard public immutable DASHBOARD;
@@ -88,8 +87,10 @@ contract StvPool is Initializable, ERC20Upgradeable, AllowList, FeaturePausable 
         uint256 initialVaultBalance = address(STAKING_VAULT).balance;
         uint256 connectDeposit = VAULT_HUB.CONNECT_DEPOSIT();
         assert(initialVaultBalance >= connectDeposit);
+        assert(totalSupply() == 0);
 
-        _mint(address(this), _convertToStv(initialVaultBalance, Math.Rounding.Floor));
+        uint256 stvToMint = initialVaultBalance * 10 ** (DECIMALS - ASSET_DECIMALS);
+        _mint(address(this), stvToMint);
     }
 
     // =================================================================================
@@ -137,27 +138,22 @@ contract StvPool is Initializable, ERC20Upgradeable, AllowList, FeaturePausable 
     // CONVERSION
     // =================================================================================
 
-    function _convertToStv(uint256 _assetsE18, Math.Rounding _rounding) internal view returns (uint256 stv) {
-        uint256 totalAssetsE18 = totalAssets();
-        uint256 totalSupplyE27 = totalSupply();
+    function _convertToStv(uint256 _assets, Math.Rounding _rounding) internal view returns (uint256 stv) {
+        uint256 totalAssets_ = totalAssets();
+        if (totalAssets_ == 0) return 0;
 
-        if (totalSupplyE27 == 0) return _assetsE18 * EXTRA_DECIMALS_BASE; // 1:1 for the first deposit
-        if (totalAssetsE18 == 0) return 0;
-
-        stv = Math.mulDiv(_assetsE18, totalSupplyE27, totalAssetsE18, _rounding);
+        stv = Math.mulDiv(_assets, totalSupply(), totalAssets_, _rounding);
     }
 
     function _convertToAssets(uint256 _stv) internal view returns (uint256 assets) {
         assets = _getAssetsShare(_stv, totalAssets());
     }
 
-    function _getAssetsShare(uint256 _stv, uint256 _assetsE18) internal view returns (uint256 assets) {
-        uint256 supplyE27 = totalSupply();
-        if (supplyE27 == 0) return 0;
+    function _getAssetsShare(uint256 _stv, uint256 _assets) internal view returns (uint256 assets) {
+        uint256 totalSupply_ = totalSupply();
+        if (totalSupply_ == 0) return 0;
 
-        // TODO: review this Math.Rounding.Ceil
-        uint256 assetsShare = Math.mulDiv(_stv * EXTRA_DECIMALS_BASE, _assetsE18, supplyE27, Math.Rounding.Ceil);
-        assets = assetsShare / EXTRA_DECIMALS_BASE;
+        assets = Math.mulDiv(_stv, _assets, totalSupply_, Math.Rounding.Floor);
     }
 
     // =================================================================================
