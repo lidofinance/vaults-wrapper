@@ -4,7 +4,6 @@ pragma solidity >=0.8.25;
 import {Distributor} from "./Distributor.sol";
 import {StvPool} from "./StvPool.sol";
 import {WithdrawalQueue} from "./WithdrawalQueue.sol";
-import {IStrategy} from "./interfaces/IStrategy.sol";
 import {DistributorFactory} from "./factories/DistributorFactory.sol";
 import {GGVStrategyFactory} from "./factories/GGVStrategyFactory.sol";
 import {LoopStrategyFactory} from "./factories/LoopStrategyFactory.sol";
@@ -13,6 +12,7 @@ import {StvStETHPoolFactory} from "./factories/StvStETHPoolFactory.sol";
 import {TimelockFactory} from "./factories/TimelockFactory.sol";
 import {WithdrawalQueueFactory} from "./factories/WithdrawalQueueFactory.sol";
 import {ILidoLocator} from "./interfaces/ILidoLocator.sol";
+import {IStrategy} from "./interfaces/IStrategy.sol";
 import {IStrategyFactory} from "./interfaces/IStrategyFactory.sol";
 import {IVaultHub} from "./interfaces/IVaultHub.sol";
 import {DummyImplementation} from "./proxy/DummyImplementation.sol";
@@ -316,13 +316,8 @@ contract Factory {
         if (intermediate.strategyFactory != address(0)) {
             address strategyImpl = IStrategyFactory(intermediate.strategyFactory).deploy(address(pool), STETH, WSTETH);
 
-            strategyProxy = address(
-                new OssifiableProxy(
-                    strategyImpl,
-                    timelock,
-                    abi.encodeCall(IStrategy.initialize, (timelock))
-                )
-            );
+            strategyProxy =
+                address(new OssifiableProxy(strategyImpl, timelock, abi.encodeCall(IStrategy.initialize, (timelock))));
 
             pool.addToAllowList(strategyProxy);
         }

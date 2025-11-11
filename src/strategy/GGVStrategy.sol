@@ -16,15 +16,14 @@ import {CallForwarder} from "src/strategy/libraries/CallForwarder.sol";
 import {FeaturePausable} from "src/utils/FeaturePausable.sol";
 
 import {IStETH} from "src/interfaces/IStETH.sol";
-import {IWstETH} from "src/interfaces/IWstETH.sol";
 import {IStrategy} from "src/interfaces/IStrategy.sol";
+import {IWstETH} from "src/interfaces/IWstETH.sol";
 
 contract GGVStrategy is IStrategy, AccessControlEnumerableUpgradeable, FeaturePausable, CallForwarder {
-    
     StvStETHPool private immutable POOL_;
     IStETH public immutable STETH;
     IWstETH public immutable WSTETH;
-    
+
     ITellerWithMultiAssetSupport public immutable TELLER;
     IBoringOnChainQueue public immutable BORING_QUEUE;
 
@@ -32,7 +31,6 @@ contract GGVStrategy is IStrategy, AccessControlEnumerableUpgradeable, FeaturePa
     bytes32 public constant SUPPLY_FEATURE = keccak256("SUPPLY_FEATURE");
     bytes32 public constant SUPPLY_PAUSE_ROLE = keccak256("SUPPLY_PAUSE_ROLE");
     bytes32 public constant SUPPLY_RESUME_ROLE = keccak256("SUPPLY_RESUME_ROLE");
-
 
     struct GGVParamsSupply {
         uint16 minimumMint;
@@ -63,7 +61,6 @@ contract GGVStrategy is IStrategy, AccessControlEnumerableUpgradeable, FeaturePa
         address _teller,
         address _boringQueue
     ) CallForwarder(_strategyId, _strategyCallForwarderImpl) {
-
         STETH = IStETH(_stETH);
         WSTETH = IWstETH(_wstETH);
         POOL_ = StvStETHPool(payable(_pool));
@@ -87,7 +84,6 @@ contract GGVStrategy is IStrategy, AccessControlEnumerableUpgradeable, FeaturePa
 
         _grantRole(DEFAULT_ADMIN_ROLE, _admin);
     }
-
 
     /**
      * @inheritdoc IStrategy
@@ -132,7 +128,7 @@ contract GGVStrategy is IStrategy, AccessControlEnumerableUpgradeable, FeaturePa
 
         address callForwarder = _getOrCreateCallForwarder(msg.sender);
         uint256 stv;
-        
+
         if (msg.value > 0) {
             POOL_.depositETH{value: msg.value}(callForwarder, _referral);
         }
@@ -337,7 +333,7 @@ contract GGVStrategy is IStrategy, AccessControlEnumerableUpgradeable, FeaturePa
         wsteth = WSTETH.balanceOf(callForwarder);
     }
 
-    /** 
+    /**
      * @inheritdoc IStrategy
      */
     function stvOf(address _user) external view returns (uint256 stv) {
@@ -356,11 +352,10 @@ contract GGVStrategy is IStrategy, AccessControlEnumerableUpgradeable, FeaturePa
      * @param _receiver The address to receive the stv
      * @return requestId The Withdrawal Queue request ID
      */
-    function requestWithdrawalFromPool(
-        uint256 _stvToWithdraw,
-        uint256 _stethSharesToRebalance,
-        address _receiver
-    ) external returns (uint256 requestId) {
+    function requestWithdrawalFromPool(uint256 _stvToWithdraw, uint256 _stethSharesToRebalance, address _receiver)
+        external
+        returns (uint256 requestId)
+    {
         address callForwarder = _getOrCreateCallForwarder(msg.sender);
 
         // request withdrawal from pool

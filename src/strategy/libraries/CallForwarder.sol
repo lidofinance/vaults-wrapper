@@ -6,7 +6,6 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IStrategyCallForwarder} from "src/interfaces/IStrategyCallForwarder.sol";
 
 abstract contract CallForwarder {
-
     error CallForwarderZeroArgument(string name);
 
     /// @dev WARNING: This ID is used to calculate user proxy addresses.
