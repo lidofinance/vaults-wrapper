@@ -46,11 +46,11 @@ abstract contract FeaturePausable {
 
     /**
      * @notice Check if a feature is paused
-     * @param featureId Feature identifier
+     * @param _featureId Feature identifier
      * @return isPaused True if paused
      */
-    function isFeaturePaused(bytes32 featureId) public view returns (bool isPaused) {
-        isPaused = _getFeaturePausableStorage()._isFeaturePaused[featureId];
+    function isFeaturePaused(bytes32 _featureId) public view returns (bool isPaused) {
+        isPaused = _getFeaturePausableStorage()._isFeaturePaused[_featureId];
     }
 
     // =================================================================================
@@ -59,18 +59,18 @@ abstract contract FeaturePausable {
 
     /**
      * @notice Revert if a feature is paused
-     * @param featureId Feature identifier
+     * @param _featureId Feature identifier
      */
-    function _checkFeatureNotPaused(bytes32 featureId) internal view {
-        if (isFeaturePaused(featureId)) revert FeaturePauseEnforced(featureId);
+    function _checkFeatureNotPaused(bytes32 _featureId) internal view {
+        if (isFeaturePaused(_featureId)) revert FeaturePauseEnforced(_featureId);
     }
 
     /**
      * @notice Revert if a feature is not paused
-     * @param featureId Feature identifier
+     * @param _featureId Feature identifier
      */
-    function _checkFeaturePaused(bytes32 featureId) internal view {
-        if (!isFeaturePaused(featureId)) revert FeaturePauseExpected(featureId);
+    function _checkFeaturePaused(bytes32 _featureId) internal view {
+        if (!isFeaturePaused(_featureId)) revert FeaturePauseExpected(_featureId);
     }
 
     // =================================================================================
@@ -79,21 +79,21 @@ abstract contract FeaturePausable {
 
     /**
      * @notice Pause a feature
-     * @param featureId Feature identifier
+     * @param _featureId Feature identifier
      */
-    function _pauseFeature(bytes32 featureId) internal {
-        _checkFeatureNotPaused(featureId);
-        _getFeaturePausableStorage()._isFeaturePaused[featureId] = true;
-        emit FeaturePaused(featureId, msg.sender);
+    function _pauseFeature(bytes32 _featureId) internal {
+        _checkFeatureNotPaused(_featureId);
+        _getFeaturePausableStorage()._isFeaturePaused[_featureId] = true;
+        emit FeaturePaused(_featureId, msg.sender);
     }
 
     /**
      * @notice Resume a feature
-     * @param featureId Feature identifier
+     * @param _featureId Feature identifier
      */
-    function _resumeFeature(bytes32 featureId) internal {
-        _checkFeaturePaused(featureId);
-        _getFeaturePausableStorage()._isFeaturePaused[featureId] = false;
-        emit FeatureUnpaused(featureId, msg.sender);
+    function _resumeFeature(bytes32 _featureId) internal {
+        _checkFeaturePaused(_featureId);
+        _getFeaturePausableStorage()._isFeaturePaused[_featureId] = false;
+        emit FeatureUnpaused(_featureId, msg.sender);
     }
 }
