@@ -247,7 +247,7 @@ contract Factory {
                 timelock,
                 abi.encodeCall(
                     WithdrawalQueue.initialize,
-                    (vaultConfig.nodeOperatorManager, vaultConfig.nodeOperator) // (admin, finalizerRoleHolder)
+                    (timelock, vaultConfig.nodeOperator) // (admin, finalizerRoleHolder)
                 )
             )
         );
