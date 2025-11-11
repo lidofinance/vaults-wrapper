@@ -545,8 +545,11 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, FeaturePausable 
         // 1. Withdraw ETH from the vault to cover finalized requests and burn associated stv
         // Eth to claim or stv to burn could be 0 if all requests are going to be rebalanced
         // Rebalance cannot be done first because it will withdraw eth without unlocking it
-        if (totalEthToClaim + totalGasCoverage > 0) {
-            DASHBOARD.withdraw(address(this), totalEthToClaim + totalGasCoverage);
+        uint256 totalEthToWithdraw = totalEthToClaim + totalGasCoverage;
+        if (totalEthToWithdraw > 0) {
+            uint256 balanceBefore = address(this).balance;
+            DASHBOARD.withdraw(address(this), totalEthToWithdraw);
+            assert(address(this).balance - balanceBefore == totalEthToWithdraw);
         }
         if (totalStvToBurn > 0) POOL.burnStvForWithdrawalQueue(totalStvToBurn);
 
