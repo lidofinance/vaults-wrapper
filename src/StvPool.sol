@@ -21,7 +21,7 @@ import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 contract StvPool is Initializable, ERC20Upgradeable, AllowList, FeaturePausable {
     // Custom errors
     error ZeroDeposit();
-    error InvalidReceiver();
+    error InvalidRecipient();
     error NotWithdrawalQueue();
     error NotEnoughToRebalance();
     error UnassignedLiabilityOnVault();
@@ -45,7 +45,7 @@ contract StvPool is Initializable, ERC20Upgradeable, AllowList, FeaturePausable 
     Distributor public immutable DISTRIBUTOR;
 
     event Deposit(
-        address indexed sender, address indexed receiver, address indexed referral, uint256 assets, uint256 stv
+        address indexed sender, address indexed recipient, address indexed referral, uint256 assets, uint256 stv
     );
 
     event UnassignedLiabilityRebalanced(uint256 stethShares, uint256 ethFunded);
@@ -208,7 +208,7 @@ contract StvPool is Initializable, ERC20Upgradeable, AllowList, FeaturePausable 
 
     function _deposit(address _recipient, address _referral) internal returns (uint256 stv) {
         if (msg.value == 0) revert ZeroDeposit();
-        if (_recipient == address(0)) revert InvalidReceiver();
+        if (_recipient == address(0)) revert InvalidRecipient();
         _checkFeatureNotPaused(DEPOSITS_FEATURE);
         _checkAllowList();
 
