@@ -12,7 +12,7 @@ import {IStrategyCallForwarder} from "src/interfaces/IStrategyCallForwarder.sol"
 import {IWstETH} from "src/interfaces/IWstETH.sol";
 
 abstract contract Strategy is IStrategy {
-    StvStETHPool public immutable POOL;
+    StvStETHPool internal immutable POOL_;
     IStETH public immutable STETH;
     IWstETH public immutable WSTETH;
     address public immutable STRATEGY_CALL_FORWARDER_IMPL;
@@ -29,7 +29,11 @@ abstract contract Strategy is IStrategy {
         STETH = IStETH(_stETH);
         WSTETH = IWstETH(_wstETH);
         STRATEGY_CALL_FORWARDER_IMPL = _strategyCallForwarderImpl;
-        POOL = StvStETHPool(payable(_pool));
+        POOL_ = StvStETHPool(payable(_pool));
+    }
+
+    function POOL() external view returns (address) {
+        return address(POOL_);
     }
 
     /// @notice Recovers ERC20 tokens from the strategy
@@ -65,7 +69,7 @@ abstract contract Strategy is IStrategy {
         callForwarder = Clones.cloneDeterministic(STRATEGY_CALL_FORWARDER_IMPL, salt);
         IStrategyCallForwarder(callForwarder).initialize(address(this));
         IStrategyCallForwarder(callForwarder)
-            .call(address(STETH), abi.encodeWithSelector(STETH.approve.selector, address(POOL), type(uint256).max));
+            .call(address(STETH), abi.encodeWithSelector(STETH.approve.selector, address(POOL_), type(uint256).max));
         userStrategyCallForwarder[salt] = callForwarder;
     }
 

@@ -28,6 +28,8 @@ docs/
 
 # Dotenv file
 .env
+.env.hoodi
+.env.mainnet
 
 # MacOS
 .DS_Store

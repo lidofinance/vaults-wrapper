@@ -18,6 +18,7 @@ import {StvStETHPool} from "src/StvStETHPool.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
 import {IDashboard} from "src/interfaces/IDashboard.sol";
 
+import {DummyImplementation} from "src/proxy/DummyImplementation.sol";
 import {MockDashboard} from "test/mocks/MockDashboard.sol";
 import {MockERC20} from "test/mocks/MockERC20.sol";
 import {MockLazyOracle} from "test/mocks/MockLazyOracle.sol";
@@ -40,6 +41,7 @@ contract FactoryTest is Test {
     address public nodeOperatorManager = address(0x3);
 
     uint256 public connectDeposit = 1 ether;
+    uint256 internal immutable fusakaTxGasLimit = 16_777_216;
 
     function setUp() public {
         vaultHub = new MockVaultHub();
@@ -58,47 +60,64 @@ contract FactoryTest is Test {
         subFactories.withdrawalQueueFactory = address(new WithdrawalQueueFactory());
         subFactories.distributorFactory = address(new DistributorFactory());
         subFactories.loopStrategyFactory = address(new LoopStrategyFactory());
-        subFactories.ggvStrategyFactory = address(new GGVStrategyFactory());
+        address dummyTeller = address(new DummyImplementation());
+        address dummyQueue = address(new DummyImplementation());
+        subFactories.ggvStrategyFactory = address(new GGVStrategyFactory(dummyTeller, dummyQueue));
         subFactories.timelockFactory = address(new TimelockFactory());
 
-        Factory.TimelockConfig memory timelockConfig = Factory.TimelockConfig({minDelaySeconds: 0, executor: admin});
-
-        Factory.StrategyParameters memory strategyParams =
-            Factory.StrategyParameters({ggvTeller: address(0x1111), ggvBoringOnChainQueue: address(0x2222)});
-
-        wrapperFactory = new Factory(address(locator), subFactories, timelockConfig, strategyParams);
+        wrapperFactory = new Factory(address(locator), subFactories);
 
         vm.deal(admin, 100 ether);
     }
 
-    function _basePoolConfig(bool allowlistEnabled, bool mintingEnabled, uint256 reserveRatioGapBP)
+    function _buildConfigs(
+        bool allowlistEnabled,
+        bool mintingEnabled,
+        uint256 reserveRatioGapBP,
+        string memory name,
+        string memory symbol
+    )
         internal
         view
-        returns (Factory.PoolFullConfig memory)
+        returns (
+            Factory.VaultConfig memory vaultConfig,
+            Factory.CommonPoolConfig memory commonPoolConfig,
+            Factory.AuxiliaryPoolConfig memory auxiliaryConfig
+        )
     {
-        return Factory.PoolFullConfig({
-            allowlistEnabled: allowlistEnabled,
-            mintingEnabled: mintingEnabled,
-            owner: admin,
+        vaultConfig = Factory.VaultConfig({
             nodeOperator: nodeOperator,
             nodeOperatorManager: nodeOperatorManager,
             nodeOperatorFeeBP: 100,
-            confirmExpiry: 3600,
-            minWithdrawalDelayTime: 1 days,
-            reserveRatioGapBP: reserveRatioGapBP,
-            name: mintingEnabled ? "Factory stETH Pool" : "Factory STV Pool",
-            symbol: mintingEnabled ? "FSTETH" : "FSTV"
+            confirmExpiry: 3600
+        });
+
+        commonPoolConfig = Factory.CommonPoolConfig({minWithdrawalDelayTime: 1 days, name: name, symbol: symbol});
+
+        auxiliaryConfig = Factory.AuxiliaryPoolConfig({
+            allowlistEnabled: allowlistEnabled, mintingEnabled: mintingEnabled, reserveRatioGapBP: reserveRatioGapBP
         });
     }
 
+    function _defaultTimelockConfig() internal view returns (Factory.TimelockConfig memory) {
+        return Factory.TimelockConfig({minDelaySeconds: 0, executor: admin});
+    }
+
     function test_canCreatePool() public {
-        Factory.PoolFullConfig memory poolConfig = _basePoolConfig(false, false, 0);
-        Factory.StrategyConfig memory strategyConfig = Factory.StrategyConfig({factory: address(0)});
+        (
+            Factory.VaultConfig memory vaultConfig,
+            Factory.CommonPoolConfig memory commonPoolConfig,
+            Factory.AuxiliaryPoolConfig memory auxiliaryConfig
+        ) = _buildConfigs(false, false, 0, "Factory STV Pool", "FSTV");
+
+        Factory.TimelockConfig memory timelockConfig = _defaultTimelockConfig();
+        address strategyFactory = address(0);
 
         vm.startPrank(admin);
-        Factory.StvPoolIntermediate memory intermediate =
-            wrapperFactory.createPoolStart{value: connectDeposit}(poolConfig, strategyConfig);
-        Factory.StvPoolDeployment memory deployment = wrapperFactory.createPoolFinish(intermediate, strategyConfig);
+        Factory.StvPoolIntermediate memory intermediate = wrapperFactory.createPoolStart{value: connectDeposit}(
+            vaultConfig, commonPoolConfig, auxiliaryConfig, timelockConfig, strategyFactory
+        );
+        Factory.StvPoolDeployment memory deployment = wrapperFactory.createPoolFinish(intermediate);
         vm.stopPrank();
 
         StvPool pool = StvPool(payable(deployment.pool));
@@ -123,27 +142,39 @@ contract FactoryTest is Test {
     }
 
     function test_revertWithoutConnectDeposit() public {
-        Factory.PoolFullConfig memory poolConfig = _basePoolConfig(false, false, 0);
-        Factory.StrategyConfig memory strategyConfig = Factory.StrategyConfig({factory: address(0)});
+        (
+            Factory.VaultConfig memory vaultConfig,
+            Factory.CommonPoolConfig memory commonPoolConfig,
+            Factory.AuxiliaryPoolConfig memory auxiliaryConfig
+        ) = _buildConfigs(false, false, 0, "Factory STV Pool", "FSTV");
+
+        Factory.TimelockConfig memory timelockConfig = _defaultTimelockConfig();
+        address strategyFactory = address(0);
 
         vm.startPrank(admin);
         vm.expectRevert();
-        wrapperFactory.createPoolStart(poolConfig, strategyConfig);
+        wrapperFactory.createPoolStart(vaultConfig, commonPoolConfig, auxiliaryConfig, timelockConfig, strategyFactory);
         vm.stopPrank();
     }
 
     function test_canCreateWithStrategy() public {
-        Factory.PoolFullConfig memory poolConfig = _basePoolConfig(true, true, 0);
-        Factory.StrategyConfig memory strategyConfig =
-            Factory.StrategyConfig({factory: address(wrapperFactory.GGV_STRATEGY_FACTORY())});
+        (
+            Factory.VaultConfig memory vaultConfig,
+            Factory.CommonPoolConfig memory commonPoolConfig,
+            Factory.AuxiliaryPoolConfig memory auxiliaryConfig
+        ) = _buildConfigs(true, true, 0, "Factory stETH Pool", "FSTETH");
+
+        Factory.TimelockConfig memory timelockConfig = _defaultTimelockConfig();
+        address strategyFactory = address(wrapperFactory.GGV_STRATEGY_FACTORY());
 
         address ggvFactory = address(wrapperFactory.GGV_STRATEGY_FACTORY());
 
         vm.startPrank(admin);
-        Factory.StvPoolIntermediate memory intermediate =
-            wrapperFactory.createPoolStart{value: connectDeposit}(poolConfig, strategyConfig);
+        Factory.StvPoolIntermediate memory intermediate = wrapperFactory.createPoolStart{value: connectDeposit}(
+            vaultConfig, commonPoolConfig, auxiliaryConfig, timelockConfig, strategyFactory
+        );
         uint256 nonceBefore = vm.getNonce(ggvFactory);
-        Factory.StvPoolDeployment memory deployment = wrapperFactory.createPoolFinish(intermediate, strategyConfig);
+        Factory.StvPoolDeployment memory deployment = wrapperFactory.createPoolFinish(intermediate);
         vm.stopPrank();
 
         StvStETHPool pool = StvStETHPool(payable(deployment.pool));
@@ -160,17 +191,108 @@ contract FactoryTest is Test {
     }
 
     function test_allowlistEnabled() public {
-        Factory.PoolFullConfig memory poolConfig = _basePoolConfig(true, false, 0);
-        Factory.StrategyConfig memory strategyConfig = Factory.StrategyConfig({factory: address(0)});
+        (
+            Factory.VaultConfig memory vaultConfig,
+            Factory.CommonPoolConfig memory commonPoolConfig,
+            Factory.AuxiliaryPoolConfig memory auxiliaryConfig
+        ) = _buildConfigs(true, false, 0, "Factory STV Pool", "FSTV");
+
+        Factory.TimelockConfig memory timelockConfig = _defaultTimelockConfig();
+        address strategyFactory = address(0);
 
         vm.startPrank(admin);
-        Factory.StvPoolIntermediate memory intermediate =
-            wrapperFactory.createPoolStart{value: connectDeposit}(poolConfig, strategyConfig);
-        Factory.StvPoolDeployment memory deployment = wrapperFactory.createPoolFinish(intermediate, strategyConfig);
+        Factory.StvPoolIntermediate memory intermediate = wrapperFactory.createPoolStart{value: connectDeposit}(
+            vaultConfig, commonPoolConfig, auxiliaryConfig, timelockConfig, strategyFactory
+        );
+        Factory.StvPoolDeployment memory deployment = wrapperFactory.createPoolFinish(intermediate);
         vm.stopPrank();
 
         StvPool pool = StvPool(payable(deployment.pool));
         assertTrue(pool.ALLOW_LIST_ENABLED());
         assertEq(deployment.poolType, wrapperFactory.STV_POOL_TYPE());
+    }
+
+    function test_createPoolStartGasConsumptionBelowFusakaLimit() public {
+        (
+            Factory.VaultConfig memory vaultConfig,
+            Factory.CommonPoolConfig memory commonPoolConfig,
+            Factory.AuxiliaryPoolConfig memory auxiliaryConfig
+        ) = _buildConfigs(false, false, 0, "Factory STV Pool", "FSTV");
+
+        Factory.TimelockConfig memory timelockConfig = _defaultTimelockConfig();
+        address strategyFactory = address(0);
+
+        vm.startPrank(admin);
+        uint256 gasBefore = gasleft();
+        Factory.StvPoolIntermediate memory intermediate = wrapperFactory.createPoolStart{value: connectDeposit}(
+            vaultConfig, commonPoolConfig, auxiliaryConfig, timelockConfig, strategyFactory
+        );
+        uint256 gasUsedStart = gasBefore - gasleft();
+
+        uint256 gasBeforeFinish = gasleft();
+        wrapperFactory.createPoolFinish(intermediate);
+        uint256 gasUsedFinish = gasBeforeFinish - gasleft();
+        vm.stopPrank();
+
+        emit log_named_uint("createPoolStart gas", gasUsedStart);
+        emit log_named_uint("createPoolFinish gas", gasUsedFinish);
+        assertLt(gasUsedStart, fusakaTxGasLimit, "createPoolStart gas exceeds Fusaka limit");
+        assertLt(gasUsedFinish, fusakaTxGasLimit, "createPoolFinish gas exceeds Fusaka limit");
+    }
+
+    function test_createPoolStartGasConsumptionBelowFusakaLimitForStvSteth() public {
+        (
+            Factory.VaultConfig memory vaultConfig,
+            Factory.CommonPoolConfig memory commonPoolConfig,
+            Factory.AuxiliaryPoolConfig memory auxiliaryConfig
+        ) = _buildConfigs(false, true, 0, "Factory stETH Pool", "FSTETH");
+
+        Factory.TimelockConfig memory timelockConfig = _defaultTimelockConfig();
+        address strategyFactory = address(0);
+
+        vm.startPrank(admin);
+        uint256 gasBefore = gasleft();
+        Factory.StvPoolIntermediate memory intermediate = wrapperFactory.createPoolStart{value: connectDeposit}(
+            vaultConfig, commonPoolConfig, auxiliaryConfig, timelockConfig, strategyFactory
+        );
+        uint256 gasUsedStart = gasBefore - gasleft();
+
+        uint256 gasBeforeFinish = gasleft();
+        wrapperFactory.createPoolFinish(intermediate);
+        uint256 gasUsedFinish = gasBeforeFinish - gasleft();
+        vm.stopPrank();
+
+        emit log_named_uint("createPoolStart stv steth gas", gasUsedStart);
+        emit log_named_uint("createPoolFinish stv steth gas", gasUsedFinish);
+        assertLt(gasUsedStart, fusakaTxGasLimit, "createPoolStart stv steth gas exceeds Fusaka limit");
+        assertLt(gasUsedFinish, fusakaTxGasLimit, "createPoolFinish stv steth gas exceeds Fusaka limit");
+    }
+
+    function test_createPoolStartGasConsumptionBelowFusakaLimitForStvGgv() public {
+        (
+            Factory.VaultConfig memory vaultConfig,
+            Factory.CommonPoolConfig memory commonPoolConfig,
+            Factory.AuxiliaryPoolConfig memory auxiliaryConfig
+        ) = _buildConfigs(true, true, 0, "Factory Strategy Pool", "FSP");
+
+        Factory.TimelockConfig memory timelockConfig = _defaultTimelockConfig();
+        address strategyFactory = address(wrapperFactory.GGV_STRATEGY_FACTORY());
+
+        vm.startPrank(admin);
+        uint256 gasBefore = gasleft();
+        Factory.StvPoolIntermediate memory intermediate = wrapperFactory.createPoolStart{value: connectDeposit}(
+            vaultConfig, commonPoolConfig, auxiliaryConfig, timelockConfig, strategyFactory
+        );
+        uint256 gasUsedStart = gasBefore - gasleft();
+
+        uint256 gasBeforeFinish = gasleft();
+        wrapperFactory.createPoolFinish(intermediate);
+        uint256 gasUsedFinish = gasBeforeFinish - gasleft();
+        vm.stopPrank();
+
+        emit log_named_uint("createPoolStart stv ggv gas", gasUsedStart);
+        emit log_named_uint("createPoolFinish stv ggv gas", gasUsedFinish);
+        assertLt(gasUsedStart, fusakaTxGasLimit, "createPoolStart stv ggv gas exceeds Fusaka limit");
+        assertLt(gasUsedFinish, fusakaTxGasLimit, "createPoolFinish stv ggv gas exceeds Fusaka limit");
     }
 }

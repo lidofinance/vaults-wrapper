@@ -56,9 +56,9 @@ The Factory orchestrates deployment of the entire pool system (Vault, Dashboard,
 
 - Reusing an existing deployment: export `FACTORY_ADDRESS` (alongside `CORE_LOCATOR_ADDRESS`) before running scripts or integration tests. When the variable is set, the harness logs `Using predeployed factory from FACTORY_ADDRESS ...` and skips deploying a fresh `Factory` instance.
 
-- Deploy `Factory` (either deploy the factories yourself or use `script/DeployWrapperFactory.s.sol`):
-  - `DeployWrapperFactory` now requires `CORE_LOCATOR_ADDRESS` and `FACTORY_PARAMS_JSON`; it derives all core addresses from the Locator.
-- Constructor shape for reference: `new Factory(locator, SubFactories{ ... }, TimelockConfig{ ... }, StrategyParameters{ ggvTeller, ggvBoringOnChainQueue })`
+- Deploy `Factory` (either deploy the factories yourself or use `script/DeployFactory.s.sol`):
+  - `DeployFactory` requires `CORE_LOCATOR_ADDRESS` and `FACTORY_PARAMS_JSON`; it derives all core addresses from the Locator and wires the `GGVStrategyFactory` inputs.
+- Constructor shape for reference: `new Factory(locator, SubFactories{ ... })`
 
 - Create a complete pool system using one of the specialized entrypoints (send `msg.value == VaultHub.CONNECT_DEPOSIT`):
   - `createVaultWithNoMintingNoStrategy(nodeOperator, nodeOperatorManager, nodeOperatorFeeBP, confirmExpiry, allowlistEnabled)`
