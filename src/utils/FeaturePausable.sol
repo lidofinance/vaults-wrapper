@@ -13,7 +13,7 @@ abstract contract FeaturePausable {
 
     /// @custom:storage-location erc7201:pool.storage.FeaturePausable
     struct FeaturePausableStorage {
-        mapping(bytes32 featureId => bool isPaused) _isFeaturePaused;
+        mapping(bytes32 featureId => bool isPaused) isFeaturePaused;
     }
 
     // keccak256(abi.encode(uint256(keccak256("pool.storage.FeaturePausable")) - 1)) & ~bytes32(uint256(0xff))
@@ -50,7 +50,7 @@ abstract contract FeaturePausable {
      * @return isPaused True if paused
      */
     function isFeaturePaused(bytes32 _featureId) public view returns (bool isPaused) {
-        isPaused = _getFeaturePausableStorage()._isFeaturePaused[_featureId];
+        isPaused = _getFeaturePausableStorage().isFeaturePaused[_featureId];
     }
 
     // =================================================================================
@@ -83,7 +83,7 @@ abstract contract FeaturePausable {
      */
     function _pauseFeature(bytes32 _featureId) internal {
         _checkFeatureNotPaused(_featureId);
-        _getFeaturePausableStorage()._isFeaturePaused[_featureId] = true;
+        _getFeaturePausableStorage().isFeaturePaused[_featureId] = true;
         emit FeaturePaused(_featureId, msg.sender);
     }
 
@@ -93,7 +93,7 @@ abstract contract FeaturePausable {
      */
     function _resumeFeature(bytes32 _featureId) internal {
         _checkFeaturePaused(_featureId);
-        _getFeaturePausableStorage()._isFeaturePaused[_featureId] = false;
+        _getFeaturePausableStorage().isFeaturePaused[_featureId] = false;
         emit FeatureUnpaused(_featureId, msg.sender);
     }
 }
