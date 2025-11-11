@@ -318,10 +318,10 @@ contract Factory {
         }
 
         pool.grantRole(DEFAULT_ADMIN_ROLE, timelock);
-        pool.renounceRole(DEFAULT_ADMIN_ROLE, tempAdmin);
+        pool.revokeRole(DEFAULT_ADMIN_ROLE, tempAdmin);
 
         dashboard.grantRole(DEFAULT_ADMIN_ROLE, timelock);
-        dashboard.renounceRole(DEFAULT_ADMIN_ROLE, tempAdmin);
+        dashboard.revokeRole(DEFAULT_ADMIN_ROLE, tempAdmin);
 
         deployment = StvPoolDeployment({
             poolType: poolType,
