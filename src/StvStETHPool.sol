@@ -463,7 +463,6 @@ contract StvStETHPool is StvPool {
      * @notice Sync reserve ratio and forced rebalance threshold from VaultHub
      * @dev Permissionless method to keep reserve ratio and forced rebalance threshold in sync with VaultHub
      * @dev Adds a gap defined by RESERVE_RATIO_GAP_BP to VaultHub's values
-     * @dev Reverts if the new reserve ratio or forced rebalance threshold is invalid (>= TOTAL_BASIS_POINTS)
      */
     function syncVaultParameters() public {
         IVaultHub.VaultConnection memory connection = DASHBOARD.vaultConnection();
