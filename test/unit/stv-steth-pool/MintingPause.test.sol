@@ -76,4 +76,20 @@ contract MintingPauseTest is Test, SetupStvStETHPool {
         pool.mintStethShares(10 ** 18);
         assertEq(pool.mintedStethSharesOf(address(this)), 10 ** 18);
     }
+
+    function test_DepositAndMintSteth_RevertWhenMintingPaused() public {
+        vm.prank(mintingPauseRoleHolder);
+        pool.pauseMinting();
+
+        vm.expectRevert(abi.encodeWithSelector(FeaturePausable.FeaturePauseEnforced.selector, mintingFeatureId));
+        pool.depositETHAndMintStethShares{value: 1 ether}(address(0), 10 ** 18);
+    }
+
+    function test_DepositAndMintWsteth_RevertWhenMintingPaused() public {
+        vm.prank(mintingPauseRoleHolder);
+        pool.pauseMinting();
+
+        vm.expectRevert(abi.encodeWithSelector(FeaturePausable.FeaturePauseEnforced.selector, mintingFeatureId));
+        pool.depositETHAndMintWsteth{value: 1 ether}(address(0), 10 ** 18);
+    }
 }
