@@ -88,7 +88,7 @@ contract Factory {
 
     event PoolCreationStarted(PoolIntermediate intermediate);
 
-    event VaultPoolCreated(
+    event PoolCreated(
         address vault, address pool, address withdrawalQueue, address indexed strategyFactory, address strategy
     );
 
@@ -369,7 +369,7 @@ contract Factory {
             strategy: strategy
         });
 
-        emit VaultPoolCreated(
+        emit PoolCreated(
             deployment.vault,
             deployment.pool,
             deployment.withdrawalQueue,
@@ -377,7 +377,8 @@ contract Factory {
             deployment.strategy
         );
 
-        // TODO: LOSS_SOCIALIZER_ROLE
+        // NB: The roles are not granted on purpose:
+        // - LOSS_SOCIALIZER_ROLE (timelock can grant it itself)
     }
 
     function _hashIntermediate(PoolIntermediate memory _intermediate, address _sender)
