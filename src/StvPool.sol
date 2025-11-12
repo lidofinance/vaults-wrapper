@@ -39,7 +39,7 @@ contract StvPool is Initializable, ERC20Upgradeable, AllowList, FeaturePausable 
     IStETH public immutable STETH;
     IDashboard public immutable DASHBOARD;
     IVaultHub public immutable VAULT_HUB;
-    IStakingVault public immutable STAKING_VAULT;
+    IStakingVault public immutable VAULT;
 
     WithdrawalQueue public immutable WITHDRAWAL_QUEUE;
     Distributor public immutable DISTRIBUTOR;
@@ -57,7 +57,7 @@ contract StvPool is Initializable, ERC20Upgradeable, AllowList, FeaturePausable 
     {
         DASHBOARD = IDashboard(payable(_dashboard));
         VAULT_HUB = IVaultHub(DASHBOARD.VAULT_HUB());
-        STAKING_VAULT = IStakingVault(DASHBOARD.stakingVault());
+        VAULT = IStakingVault(DASHBOARD.stakingVault());
         WITHDRAWAL_QUEUE = WithdrawalQueue(payable(_withdrawalQueue));
         STETH = IStETH(payable(DASHBOARD.STETH()));
         DISTRIBUTOR = Distributor(_distributor);
@@ -87,7 +87,7 @@ contract StvPool is Initializable, ERC20Upgradeable, AllowList, FeaturePausable 
 
         // Initial vault balance must include the connect deposit
         // Minting stv for it to have clear stv math
-        uint256 initialVaultBalance = address(STAKING_VAULT).balance;
+        uint256 initialVaultBalance = address(VAULT).balance;
         uint256 connectDeposit = VAULT_HUB.CONNECT_DEPOSIT();
         assert(initialVaultBalance >= connectDeposit);
         assert(totalSupply() == 0);
@@ -299,7 +299,7 @@ contract StvPool is Initializable, ERC20Upgradeable, AllowList, FeaturePausable 
      * @dev Checks if the vault is not in bad debt (value < liability)
      */
     function _checkNoBadDebt() internal view {
-        uint256 totalValueInStethShares = _getSharesByPooledEth(VAULT_HUB.totalValue(address(STAKING_VAULT)));
+        uint256 totalValueInStethShares = _getSharesByPooledEth(VAULT_HUB.totalValue(address(VAULT)));
         if (totalValueInStethShares < totalLiabilityShares()) revert VaultInBadDebt();
     }
 

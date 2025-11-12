@@ -72,7 +72,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, FeaturePausable 
     IDashboard public immutable DASHBOARD;
     IStETH public immutable STETH;
     ILazyOracle public immutable LAZY_ORACLE;
-    IStakingVault public immutable STAKING_VAULT;
+    IStakingVault public immutable VAULT;
 
     /// @notice Structure representing a request for withdrawal
     struct WithdrawalRequest {
@@ -216,7 +216,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, FeaturePausable 
         VAULT_HUB = IVaultHub(_vaultHub);
         STETH = IStETH(_steth);
         LAZY_ORACLE = ILazyOracle(_lazyOracle);
-        STAKING_VAULT = IStakingVault(_vault);
+        VAULT = IStakingVault(_vault);
 
         _disableInitializers();
 
@@ -457,7 +457,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, FeaturePausable 
         uint256 currentStvRate = calculateCurrentStvRate();
         uint256 currentStethShareRate = calculateCurrentStethShareRate();
         uint256 withdrawableValue = DASHBOARD.withdrawableValue();
-        uint256 availableBalance = STAKING_VAULT.availableBalance();
+        uint256 availableBalance = VAULT.availableBalance();
         uint256 exceedingSteth = _getExceedingMintedSteth();
         uint256 latestReportTimestamp = LAZY_ORACLE.latestReportTimestamp();
 
@@ -1069,6 +1069,6 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, FeaturePausable 
     }
 
     function _checkFreshReport() internal view {
-        if (!VAULT_HUB.isReportFresh(address(STAKING_VAULT))) revert VaultReportStale();
+        if (!VAULT_HUB.isReportFresh(address(VAULT))) revert VaultReportStale();
     }
 }

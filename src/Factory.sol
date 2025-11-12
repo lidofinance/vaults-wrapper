@@ -343,7 +343,7 @@ contract Factory {
 
         deployment = PoolDeployment({
             poolType: poolType,
-            vault: address(pool.STAKING_VAULT()),
+            vault: address(pool.VAULT()),
             dashboard: address(dashboard),
             pool: _intermediate.pool,
             withdrawalQueue: address(withdrawalQueue),

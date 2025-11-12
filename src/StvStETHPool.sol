@@ -75,7 +75,7 @@ contract StvStETHPool is StvPool {
         address _distributor,
         bytes32 _poolType
     ) StvPool(_dashboard, _allowListEnabled, _withdrawalQueue, _distributor, _poolType) {
-        uint256 vaultRR = VAULT_HUB.vaultConnection(address(STAKING_VAULT)).reserveRatioBP;
+        uint256 vaultRR = VAULT_HUB.vaultConnection(address(VAULT)).reserveRatioBP;
         if (_reserveRatioGapBP + vaultRR >= TOTAL_BASIS_POINTS) revert InvalidValue();
 
         RESERVE_RATIO_GAP_BP = _reserveRatioGapBP;
@@ -628,7 +628,7 @@ contract StvStETHPool is StvPool {
         ///
         /// First, the rebalancing will use exceeding minted steth, bringing the vault closer to minted steth == liability,
         /// then the rebalancing mechanism on the vault, which is limited by available balance in the staking vault
-        uint256 stethToRebalance = totalExceedingMintedSteth() + STAKING_VAULT.availableBalance();
+        uint256 stethToRebalance = totalExceedingMintedSteth() + VAULT.availableBalance();
         stethToRebalance = Math.min(targetStethToRebalance, stethToRebalance);
 
         uint256 stvRequired = _convertToStv(stethToRebalance, Math.Rounding.Ceil);
@@ -708,7 +708,7 @@ contract StvStETHPool is StvPool {
     }
 
     function _checkFreshReport() internal view {
-        if (!VAULT_HUB.isReportFresh(address(STAKING_VAULT))) revert VaultReportStale();
+        if (!VAULT_HUB.isReportFresh(address(VAULT))) revert VaultReportStale();
     }
 
     // =================================================================================

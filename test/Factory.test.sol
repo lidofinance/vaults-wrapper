@@ -129,7 +129,7 @@ contract FactoryTest is Test {
         assertEq(address(pool.DISTRIBUTOR()), address(distributor));
 
         assertEq(deployment.vault, address(dashboard.stakingVault()));
-        assertEq(address(pool.STAKING_VAULT()), deployment.vault);
+        assertEq(address(pool.VAULT()), deployment.vault);
 
         MockDashboard mockDashboard = MockDashboard(payable(address(dashboard)));
         assertTrue(mockDashboard.hasRole(mockDashboard.DEFAULT_ADMIN_ROLE(), deployment.timelock));

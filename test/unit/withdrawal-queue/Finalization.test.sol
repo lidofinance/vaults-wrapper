@@ -145,7 +145,7 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
 
         _warpAndMockOracleReport();
 
-        address stakingVault = address(dashboard.STAKING_VAULT());
+        address stakingVault = address(dashboard.VAULT());
         uint256 vaultBalance = stakingVault.balance;
         dashboard.mock_setLocked(vaultBalance);
 
@@ -165,7 +165,7 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
         _warpAndMockOracleReport();
 
         uint256 expectedEthFirst = pool.previewRedeem(stvRequest1);
-        address stakingVault = address(dashboard.STAKING_VAULT());
+        address stakingVault = address(dashboard.VAULT());
         uint256 vaultBalance = stakingVault.balance;
         dashboard.mock_setLocked(vaultBalance - expectedEthFirst);
 
@@ -190,7 +190,7 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
         uint256 assetsPreview = pool.previewRedeem(stvToRequest);
         uint256 assetsToRebalance = pool.STETH().getPooledEthBySharesRoundUp(mintedStethShares);
 
-        address stakingVault = address(dashboard.STAKING_VAULT());
+        address stakingVault = address(dashboard.VAULT());
         vm.deal(stakingVault, assetsPreview);
         dashboard.mock_setLocked(assetsToRebalance + 1); // block by 1 wei
 
@@ -212,7 +212,7 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
         uint256 assetsPreview = pool.previewRedeem(stvToRequest);
         uint256 assetsToRebalance = pool.STETH().getPooledEthBySharesRoundUp(mintedStethShares);
 
-        address stakingVault = address(dashboard.STAKING_VAULT());
+        address stakingVault = address(dashboard.VAULT());
         vm.deal(stakingVault, assetsPreview);
         dashboard.mock_setLocked(assetsToRebalance);
 
@@ -233,7 +233,7 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
         _warpAndMockOracleReport();
 
         uint256 assetsRequired = pool.previewRedeem(stvToRequest);
-        address stakingVault = address(dashboard.STAKING_VAULT());
+        address stakingVault = address(dashboard.VAULT());
         vm.deal(stakingVault, assetsRequired);
         dashboard.mock_setLocked(0);
 
@@ -335,7 +335,7 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
 
         _warpAndMockOracleReport();
 
-        dashboard.VAULT_HUB().mock_setReportFreshness(address(dashboard.STAKING_VAULT()), false);
+        dashboard.VAULT_HUB().mock_setReportFreshness(address(dashboard.VAULT()), false);
 
         vm.prank(finalizeRoleHolder);
         vm.expectRevert(WithdrawalQueue.VaultReportStale.selector);
