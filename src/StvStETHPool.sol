@@ -47,7 +47,6 @@ contract StvStETHPool is StvPool {
 
     IWstETH public immutable WSTETH;
 
-
     /// @custom:storage-location erc7201:pool.storage.StvStETHPool
     struct StvStETHPoolStorage {
         mapping(address => uint256) mintedStethShares;

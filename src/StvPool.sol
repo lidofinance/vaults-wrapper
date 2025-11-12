@@ -52,9 +52,13 @@ contract StvPool is Initializable, ERC20Upgradeable, AllowList, FeaturePausable 
 
     event UnassignedLiabilityRebalanced(uint256 stethShares, uint256 ethFunded);
 
-    constructor(address _dashboard, bool _allowListEnabled, address _withdrawalQueue, address _distributor, bytes32 _poolType)
-        AllowList(_allowListEnabled)
-    {
+    constructor(
+        address _dashboard,
+        bool _allowListEnabled,
+        address _withdrawalQueue,
+        address _distributor,
+        bytes32 _poolType
+    ) AllowList(_allowListEnabled) {
         DASHBOARD = IDashboard(payable(_dashboard));
         VAULT_HUB = IVaultHub(DASHBOARD.VAULT_HUB());
         VAULT = IStakingVault(DASHBOARD.stakingVault());

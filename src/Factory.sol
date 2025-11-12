@@ -10,8 +10,8 @@ import {StvPoolFactory} from "./factories/StvPoolFactory.sol";
 import {StvStETHPoolFactory} from "./factories/StvStETHPoolFactory.sol";
 import {TimelockFactory} from "./factories/TimelockFactory.sol";
 import {WithdrawalQueueFactory} from "./factories/WithdrawalQueueFactory.sol";
-import {ILidoLocator} from "./interfaces/core/ILidoLocator.sol";
 import {IStrategyFactory} from "./interfaces/IStrategyFactory.sol";
+import {ILidoLocator} from "./interfaces/core/ILidoLocator.sol";
 import {IVaultHub} from "./interfaces/core/IVaultHub.sol";
 import {DummyImplementation} from "./proxy/DummyImplementation.sol";
 import {OssifiableProxy} from "./proxy/OssifiableProxy.sol";
@@ -20,10 +20,7 @@ import {WithdrawalQueue} from "./WithdrawalQueue.sol";
 import {IDashboard} from "./interfaces/core/IDashboard.sol";
 import {IVaultFactory} from "./interfaces/core/IVaultFactory.sol";
 
-
-
 contract Factory {
-
     //
     // Structs
     //
@@ -238,8 +235,9 @@ contract Factory {
             revert InvalidConfiguration("name and symbol must be set");
         }
 
-        address timelock =
-            TIMELOCK_FACTORY.deploy(_timelockConfig.minDelaySeconds, _timelockConfig.proposer, _timelockConfig.executor);
+        address timelock = TIMELOCK_FACTORY.deploy(
+            _timelockConfig.minDelaySeconds, _timelockConfig.proposer, _timelockConfig.executor
+        );
 
         address tempAdmin = address(this);
 
@@ -349,8 +347,8 @@ contract Factory {
 
         address strategy = address(0);
         if (_intermediate.strategyFactory != address(0)) {
-            strategy =
-                IStrategyFactory(_intermediate.strategyFactory).deploy(address(pool), _intermediate.strategyDeployBytes);
+            strategy = IStrategyFactory(_intermediate.strategyFactory)
+                .deploy(address(pool), _intermediate.strategyDeployBytes);
             pool.addToAllowList(strategy);
         }
 
@@ -398,5 +396,4 @@ contract Factory {
         }
         return bytes32(uint256(bytes32(bstr)) | bstr.length);
     }
-
 }

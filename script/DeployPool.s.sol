@@ -140,7 +140,8 @@ contract DeployPool is Script {
         address distributor = address(pool.DISTRIBUTOR());
 
         bytes memory poolCtorBytecode = abi.encodePacked(
-            type(OssifiableProxy).creationCode, abi.encode(_factory.DUMMY_IMPLEMENTATION(), address(_factory), bytes(""))
+            type(OssifiableProxy).creationCode,
+            abi.encode(_factory.DUMMY_IMPLEMENTATION(), address(_factory), bytes(""))
         );
 
         bytes memory poolImplementationCtorBytecode;

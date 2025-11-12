@@ -55,7 +55,8 @@ contract DeployFactory is Script {
         returns (address teller, address boringQueue)
     {
         require(
-            vm.isFile(_paramsPath), string(abi.encodePacked("FACTORY_PARAMS_JSON file does not exist at: ", _paramsPath))
+            vm.isFile(_paramsPath),
+            string(abi.encodePacked("FACTORY_PARAMS_JSON file does not exist at: ", _paramsPath))
         );
         string memory json = vm.readFile(_paramsPath);
 

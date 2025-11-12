@@ -6,9 +6,9 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 import {StvStETHPool} from "src/StvStETHPool.sol";
-import {IStETH} from "src/interfaces/core/IStETH.sol";
 import {IStrategy} from "src/interfaces/IStrategy.sol";
 import {IStrategyCallForwarder} from "src/interfaces/IStrategyCallForwarder.sol";
+import {IStETH} from "src/interfaces/core/IStETH.sol";
 import {IWstETH} from "src/interfaces/core/IWstETH.sol";
 
 abstract contract Strategy is IStrategy {
