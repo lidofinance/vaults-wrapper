@@ -16,6 +16,7 @@ import {StvStETHPool} from "src/StvStETHPool.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
 import {IStrategy} from "src/interfaces/IStrategy.sol";
 import {GGVStrategy} from "src/strategy/GGVStrategy.sol";
+import {IStrategyCallForwarder} from "src/interfaces/IStrategyCallForwarder.sol";
 
 import {TableUtils} from "../utils/format/TableUtils.sol";
 import {AllowList} from "src/AllowList.sol";
@@ -94,10 +95,10 @@ contract GGVTest is StvStrategyPoolHarness {
         strategy = IStrategy(ctx.strategy);
         ggvStrategy = GGVStrategy(address(strategy));
 
-        user1StrategyCallForwarder = ggvStrategy.getStrategyCallForwarderAddress(USER1);
+        user1StrategyCallForwarder = address(ggvStrategy.getStrategyCallForwarderAddress(USER1));
         vm.label(user1StrategyCallForwarder, "User1StrategyCallForwarder");
 
-        user2StrategyCallForwarder = ggvStrategy.getStrategyCallForwarderAddress(USER2);
+        user2StrategyCallForwarder = address(ggvStrategy.getStrategyCallForwarderAddress(USER2));
         vm.label(user2StrategyCallForwarder, "User2StrategyCallForwarder");
 
         _log.init(address(pool), address(boringVault), address(steth), address(wsteth), address(boringOnChainQueue));
@@ -192,7 +193,7 @@ contract GGVTest is StvStrategyPoolHarness {
             GGVStrategy.GGVParamsRequestExit({discount: uint16(ggvDiscount), secondsToDeadline: type(uint24).max});
 
         vm.prank(USER1);
-        bytes32 requestId = ggvStrategy.requestExitByStETH(withdrawalStethAmount, abi.encode(params));
+        bytes32 requestId = ggvStrategy.requestExitByWsteth(withdrawalStethAmount, abi.encode(params));
         assertNotEq(requestId, 0);
 
         // Apply 1% increase to core (stETH share ratio)
@@ -238,7 +239,7 @@ contract GGVTest is StvStrategyPoolHarness {
 
         vm.startPrank(USER1);
         ggvStrategy.burnWsteth(wstethToBurn);
-        ggvStrategy.requestWithdrawalFromPool(stvToWithdraw, stethSharesToRebalance, USER1);
+        ggvStrategy.requestWithdrawalFromPool(USER1, stvToWithdraw, stethSharesToRebalance);
         vm.stopPrank();
 
         _log.printUsers("After User Finalizes Wrapper", logUsers, ggvDiscount);
@@ -280,8 +281,8 @@ contract GGVTest is StvStrategyPoolHarness {
         uint256 mintedSharesBefore = ggvStrategy.mintedStethSharesOf(USER1);
         assertEq(mintedSharesBefore, wstethToMint, "minted shares mismatch");
 
-        address callForwarder = ggvStrategy.getStrategyCallForwarderAddress(USER1);
-        uint256 totalGGVShares = boringVault.balanceOf(callForwarder);
+        IStrategyCallForwarder callForwarder = ggvStrategy.getStrategyCallForwarderAddress(USER1);
+        uint256 totalGGVShares = boringVault.balanceOf(address(callForwarder));
 
         // Simulate GGV rewards
         uint256 rebaseStethAmount = 0.1 ether;
@@ -318,7 +319,7 @@ contract GGVTest is StvStrategyPoolHarness {
         vm.startPrank(USER1);
         ggvStrategy.burnWsteth(mintedSharesBefore);
         uint256 leftoverWsteth = ggvStrategy.wstethOf(USER1);
-        ggvStrategy.requestWithdrawalFromPool(stvBalance, 0, USER1);
+        ggvStrategy.requestWithdrawalFromPool(USER1, stvBalance, 0);
         vm.stopPrank();
 
         assertGt(leftoverWsteth, 0, "surplus wstETH expected after covering liability");

@@ -41,9 +41,9 @@ contract GGVStrategy is IStrategy, AccessControlEnumerableUpgradeable, FeaturePa
     }
 
     event GGVDeposited(
-        address indexed recipient, uint256 wstethAmount, uint256 ggvShares, address referralAddress, bytes data
+        address indexed recipient, uint256 wstethAmount, uint256 ggvShares, address referralAddress, bytes paramsSupply
     );
-    event GGVWithdrawalRequested(address indexed recipient, bytes32 requestId, uint128 requestedGGV, bytes data);
+    event GGVWithdrawalRequested(address indexed recipient, bytes32 requestId, uint256 ggvShares, bytes paramsRequestExit);
 
     error ZeroArgument(string name);
     error InvalidSender();
@@ -93,18 +93,17 @@ contract GGVStrategy is IStrategy, AccessControlEnumerableUpgradeable, FeaturePa
     // =================================================================================
 
     /**
-     * @notice Pause withdrawal requests placement and finalization
-     * @dev Does not affect claiming of already finalized requests
+     * @notice Pause supply
      */
-    function pause() external {
+    function pauseSupply() external {
         _checkRole(SUPPLY_PAUSE_ROLE, msg.sender);
         _pauseFeature(SUPPLY_FEATURE);
     }
 
     /**
-     * @notice Resume withdrawal requests placement and finalization
+     * @notice Resume supply
      */
-    function resume() external {
+    function resumeSupply() external {
         _checkRole(SUPPLY_RESUME_ROLE, msg.sender);
         _resumeFeature(SUPPLY_FEATURE);
     }
@@ -114,28 +113,28 @@ contract GGVStrategy is IStrategy, AccessControlEnumerableUpgradeable, FeaturePa
     // =================================================================================
 
     /**
-     * @notice Supplies wstETH to the strategy
-     * @param _referral The referral address
-     * @param _wstethToMint The amount of wstETH to mint
-     * @param _params The parameters for the supply
+     * @inheritdoc IStrategy
      */
-    function supply(address _referral, uint256 _wstethToMint, bytes calldata _params) external payable {
+    function supply(address _referral, uint256 _wstethToMint, bytes calldata _params)
+        external
+        payable
+        returns (uint256 stv)
+    {
         _checkFeatureNotPaused(SUPPLY_FEATURE);
 
-        IStrategyCallForwarder callForwarder = IStrategyCallForwarder(_getOrCreateCallForwarder(msg.sender));
-        uint256 stv;
+        IStrategyCallForwarder callForwarder = _getOrCreateCallForwarder(msg.sender);
 
         if (msg.value > 0) {
-            POOL_.depositETH{value: msg.value}(address(callForwarder), _referral);
+            stv = POOL_.depositETH{value: msg.value}(address(callForwarder), _referral);
         }
 
-        callForwarder.call(address(WSTETH), abi.encodeWithSelector(WSTETH.approve.selector, address(POOL_), type(uint256).max));
         callForwarder.call(address(POOL_), abi.encodeWithSelector(POOL_.mintWsteth.selector, _wstethToMint));
         callForwarder.call(address(WSTETH), abi.encodeWithSelector(WSTETH.approve.selector, TELLER.vault(), _wstethToMint));
 
         GGVParamsSupply memory params = abi.decode(_params, (GGVParamsSupply));
 
-        bytes memory data = callForwarder.call(
+        bytes memory data = IStrategyCallForwarder(callForwarder)
+            .call(
                 address(TELLER),
                 abi.encodeWithSelector(
                     TELLER.deposit.selector, address(WSTETH), _wstethToMint, params.minimumMint, _referral
@@ -143,7 +142,7 @@ contract GGVStrategy is IStrategy, AccessControlEnumerableUpgradeable, FeaturePa
             );
         uint256 ggvShares = abi.decode(data, (uint256));
 
-        emit StrategySupplied(msg.sender, msg.value, stv, _wstethToMint, _params);
+        emit StrategySupplied(msg.sender, _referral, msg.value, stv, _wstethToMint, _params);
         emit GGVDeposited(msg.sender, _wstethToMint, ggvShares, _referral, _params);
     }
 
@@ -152,97 +151,63 @@ contract GGVStrategy is IStrategy, AccessControlEnumerableUpgradeable, FeaturePa
     // =================================================================================
 
     /**
-     * @notice Requests a withdrawal of ggv shares from the strategy
-     * @param _stethAmount The amount of stETH to withdraw
-     * @param _params The parameters for the withdrawal
-     * @return requestId The request id
-     */
-    function requestExitByStETH(uint256 _stethAmount, bytes calldata _params) external returns (bytes32 requestId) {
-        uint256 wstethToBurn = WSTETH.getWstETHByStETH(_stethAmount);
-        requestId = requestExitByWsteth(wstethToBurn, _params);
-    }
-
-    /**
      * @notice Previews the amount of wstETH that can be withdrawn by a given amount of GGV shares
-     * @param _user The user to preview the amount of wstETH for
      * @param _ggvShares The amount of GGV shares to preview the amount of wstETH for
      * @param _params The parameters for the withdrawal
      * @return wsteth The amount of wstETH that can be withdrawn
      */
-    function previewWstethByGGV(address _user, uint256 _ggvShares, bytes calldata _params)
-        external
-        view
-        returns (uint256 wsteth)
-    {
-        address callForwarder = getStrategyCallForwarderAddress(_user);
-
+    function previewWstethByGGV(uint256 _ggvShares, bytes calldata _params) public view returns (uint256 wsteth) {
+        // uint256 -> uint128 check
         GGVParamsRequestExit memory params = abi.decode(_params, (GGVParamsRequestExit));
-
-        IERC20 boringVault = IERC20(TELLER.vault());
-        uint256 totalGGV = boringVault.balanceOf(callForwarder);
-
-        if (totalGGV == 0) return 0;
-        if (_ggvShares > totalGGV) revert InvalidGGVAmount();
-
-        uint256 totalWstethFromGgv =
-            BORING_QUEUE.previewAssetsOut(address(WSTETH), uint128(totalGGV), params.discount);
-        wsteth = Math.mulDiv(_ggvShares, totalWstethFromGgv, totalGGV);
+        wsteth = BORING_QUEUE.previewAssetsOut(address(WSTETH), uint128(_ggvShares), params.discount);
     }
 
     /**
-     * @notice Requests a withdrawal of ggv shares from the strategy
-     * @param _wstethToBurn The amount of wsteth to burn
-     * @param _params The parameters for the withdrawal
-     * @return requestId The request id
+     * @inheritdoc IStrategy
      */
-    function requestExitByWsteth(uint256 _wstethToBurn, bytes calldata _params)
-        public
-        returns (bytes32 requestId)
-    {
+    function requestExitByWsteth(uint256 _wsteth, bytes calldata _params) external returns (bytes32 requestId) {
         GGVParamsRequestExit memory params = abi.decode(_params, (GGVParamsRequestExit));
 
-        IStrategyCallForwarder callForwarder = IStrategyCallForwarder(_getOrCreateCallForwarder(msg.sender));
+        IStrategyCallForwarder callForwarder = _getOrCreateCallForwarder(msg.sender);
         IERC20 boringVault = IERC20(TELLER.vault());
 
         // Calculate how much wsteth we'll get from total GGV shares
         uint256 totalGGV = boringVault.balanceOf(address(callForwarder));
-        uint256 totalWstethFromGgv =
-            BORING_QUEUE.previewAssetsOut(address(WSTETH), uint128(totalGGV), params.discount);
-        if (totalWstethFromGgv == 0) revert InvalidWstethAmount();
-        if (_wstethToBurn > totalWstethFromGgv) revert InvalidWstethAmount();
+        uint256 totalWstethFromGGV = previewWstethByGGV(totalGGV, _params);
+        if (totalWstethFromGGV == 0) revert InvalidWstethAmount();
+        if (_wsteth > totalWstethFromGGV) revert InvalidWstethAmount();
 
         // Approve GGV shares
-        uint256 ggvShares = Math.mulDiv(totalGGV, _wstethToBurn, totalWstethFromGgv);
+        uint256 ggvShares = Math.mulDiv(totalGGV, _wsteth, totalWstethFromGGV, Math.Rounding.Ceil);
         callForwarder.call(
                 address(boringVault),
                 abi.encodeWithSelector(boringVault.approve.selector, address(BORING_QUEUE), ggvShares)
             );
 
-        uint128 requestedGGV = uint128(ggvShares);
-
         // Withdrawal request from GGV
-        bytes memory data = callForwarder.call(
+        bytes memory data = IStrategyCallForwarder(callForwarder)
+            .call(
                 address(BORING_QUEUE),
                 abi.encodeWithSelector(
                     BORING_QUEUE.requestOnChainWithdraw.selector,
                     address(WSTETH),
-                    requestedGGV,
+                    uint128(ggvShares),
                     params.discount,
                     params.secondsToDeadline
                 )
             );
         requestId = abi.decode(data, (bytes32));
 
-        emit StrategyExitRequested(msg.sender, requestId, _wstethToBurn, _params);
-        emit GGVWithdrawalRequested(msg.sender, requestId, requestedGGV, _params);
+        emit StrategyExitRequested(msg.sender, requestId, _wsteth, _params);
+        emit GGVWithdrawalRequested(msg.sender, requestId, ggvShares, _params);
     }
 
     /**
-     * @notice Finalizes a withdrawal from the strategy
+     * @inheritdoc IStrategy
      */
     function finalizeRequestExit(
-        address /* _receiver */,
-        bytes32 /* _requestId */
+        address, /*_receiver*/
+        bytes32 /*_requestId*/
     )
         external
         pure
@@ -259,11 +224,11 @@ contract GGVStrategy is IStrategy, AccessControlEnumerableUpgradeable, FeaturePa
     // =================================================================================
 
     /**
-     * @notice Cancels a withdrawal request
+     * @notice Cancels a GGV withdrawal request
      * @param request The request to cancel
      */
-    function cancelGgvRequest(IBoringOnChainQueue.OnChainWithdraw memory request) external {
-        IStrategyCallForwarder callForwarder = IStrategyCallForwarder(getStrategyCallForwarderAddress(msg.sender));
+    function cancelGGVOnChainWithdraw(IBoringOnChainQueue.OnChainWithdraw memory request) external {
+        IStrategyCallForwarder callForwarder = getStrategyCallForwarderAddress(msg.sender);
         if (address(callForwarder) != request.user) revert InvalidSender();
 
         callForwarder.call(address(BORING_QUEUE), abi.encodeWithSelector(BORING_QUEUE.cancelOnChainWithdraw.selector, request));
@@ -277,7 +242,7 @@ contract GGVStrategy is IStrategy, AccessControlEnumerableUpgradeable, FeaturePa
      * @return oldRequestId The old request id
      * @return newRequestId The new request id
      */
-    function replaceGgvOnChainWithdraw(
+    function replaceGGVOnChainWithdraw(
         IBoringOnChainQueue.OnChainWithdraw memory request,
         uint16 discount,
         uint24 secondsToDeadline
@@ -302,24 +267,46 @@ contract GGVStrategy is IStrategy, AccessControlEnumerableUpgradeable, FeaturePa
      * @inheritdoc IStrategy
      */
     function mintedStethSharesOf(address _user) external view returns (uint256 mintedStethShares) {
-        address callForwarder = getStrategyCallForwarderAddress(_user);
-        mintedStethShares = POOL_.mintedStethSharesOf(callForwarder);
+        IStrategyCallForwarder callForwarder = getStrategyCallForwarderAddress(_user);
+        mintedStethShares = POOL_.mintedStethSharesOf(address(callForwarder));
+    }
+
+    /**
+     * @inheritdoc IStrategy
+     */
+    function remainingMintingCapacitySharesOf(address _user, uint256 _ethToFund)
+        external
+        view
+        returns (uint256 stethShares)
+    {
+        IStrategyCallForwarder callForwarder = getStrategyCallForwarderAddress(_user);
+        stethShares = POOL_.remainingMintingCapacitySharesOf(address(callForwarder), _ethToFund);
     }
 
     /**
      * @inheritdoc IStrategy
      */
     function wstethOf(address _user) external view returns (uint256 wsteth) {
-        address callForwarder = getStrategyCallForwarderAddress(_user);
-        wsteth = WSTETH.balanceOf(callForwarder);
+        IStrategyCallForwarder callForwarder = getStrategyCallForwarderAddress(_user);
+        wsteth = WSTETH.balanceOf(address(callForwarder));
     }
 
     /**
      * @inheritdoc IStrategy
      */
     function stvOf(address _user) external view returns (uint256 stv) {
-        address callForwarder = getStrategyCallForwarderAddress(_user);
-        stv = POOL_.balanceOf(callForwarder);
+        IStrategyCallForwarder callForwarder = getStrategyCallForwarderAddress(_user);
+        stv = POOL_.balanceOf(address(callForwarder));
+    }
+
+    /**
+     * @notice Returns the amount of GGV shares of a user
+     * @param _user The user to get the GGV shares for
+     * @return ggvShares The amount of GGV shares
+     */
+    function ggvOf(address _user) external view returns (uint256 ggvShares) {
+        IStrategyCallForwarder callForwarder = getStrategyCallForwarderAddress(_user);
+        ggvShares = IERC20(TELLER.vault()).balanceOf(address(callForwarder));
     }
 
     // =================================================================================
@@ -328,22 +315,22 @@ contract GGVStrategy is IStrategy, AccessControlEnumerableUpgradeable, FeaturePa
 
     /**
      * @notice Requests a withdrawal from the Withdrawal Queue
+     * @param _recipient The address to receive the stv
      * @param _stvToWithdraw The amount of stv to withdraw
      * @param _stethSharesToRebalance The amount of stETH shares to rebalance
-     * @param _receiver The address to receive the stv
      * @return requestId The Withdrawal Queue request ID
      */
-    function requestWithdrawalFromPool(uint256 _stvToWithdraw, uint256 _stethSharesToRebalance, address _receiver)
+    function requestWithdrawalFromPool(address _recipient, uint256 _stvToWithdraw, uint256 _stethSharesToRebalance)
         external
         returns (uint256 requestId)
     {
-        IStrategyCallForwarder callForwarder = IStrategyCallForwarder(_getOrCreateCallForwarder(msg.sender));
+        IStrategyCallForwarder callForwarder = _getOrCreateCallForwarder(msg.sender);
 
         // request withdrawal from pool
         bytes memory withdrawalData = callForwarder.call(
                 address(POOL_.WITHDRAWAL_QUEUE()),
                 abi.encodeWithSelector(
-                    WithdrawalQueue.requestWithdrawal.selector, _receiver, _stvToWithdraw, _stethSharesToRebalance
+                    WithdrawalQueue.requestWithdrawal.selector, _recipient, _stvToWithdraw, _stethSharesToRebalance
                 )
             );
         requestId = abi.decode(withdrawalData, (uint256));
@@ -354,7 +341,7 @@ contract GGVStrategy is IStrategy, AccessControlEnumerableUpgradeable, FeaturePa
      * @param _wstethToBurn The amount of wstETH to burn
      */
     function burnWsteth(uint256 _wstethToBurn) external {
-        IStrategyCallForwarder callForwarder = IStrategyCallForwarder(getStrategyCallForwarderAddress(msg.sender));
+        IStrategyCallForwarder callForwarder = getStrategyCallForwarderAddress(msg.sender);
         callForwarder.call(address(WSTETH), abi.encodeWithSelector(WSTETH.approve.selector, address(POOL_), _wstethToBurn));
         callForwarder.call(address(POOL_), abi.encodeWithSelector(StvStETHPool.burnWsteth.selector, _wstethToBurn));
     }
@@ -374,7 +361,7 @@ contract GGVStrategy is IStrategy, AccessControlEnumerableUpgradeable, FeaturePa
         if (_recipient == address(0)) revert ZeroArgument("_recipient");
         if (_amount == 0) revert ZeroArgument("_amount");
 
-        IStrategyCallForwarder callForwarder = IStrategyCallForwarder(getStrategyCallForwarderAddress(msg.sender));
+        IStrategyCallForwarder callForwarder = getStrategyCallForwarderAddress(msg.sender);
         callForwarder.call(_token, abi.encodeWithSelector(IERC20.transfer.selector, _recipient, _amount));
     }
 }

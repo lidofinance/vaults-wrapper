@@ -15,7 +15,7 @@ abstract contract StrategyCallForwarderRegistry {
 
     /// @custom:storage-location erc7201:pool.storage.StrategyCallForwarderRegistry
     struct CallForwarderStorage {
-        mapping(bytes32 salt => address proxy) userCallForwarder;
+        mapping(bytes32 salt => IStrategyCallForwarder callForwarder) userCallForwarder;
     }
 
     // keccak256(abi.encode(uint256(keccak256("pool.storage.StrategyCallForwarderRegistry")) - 1)) & ~bytes32(uint256(0xff))
@@ -38,25 +38,25 @@ abstract contract StrategyCallForwarderRegistry {
 
     /**
      * @notice Returns the address of the strategy call forwarder for a given user
-     * @param user The user for which to get the strategy call forwarder address
+     * @param _user The user for which to get the strategy call forwarder address
      * @return callForwarder The address of the strategy call forwarder
      */
-    function getStrategyCallForwarderAddress(address user) public view returns (address callForwarder) {
-        bytes32 salt = _generateSalt(user);
-        callForwarder = Clones.predictDeterministicAddress(STRATEGY_CALL_FORWARDER_IMPL, salt);
-    }   
+    function getStrategyCallForwarderAddress(address _user) public view returns (IStrategyCallForwarder callForwarder) {
+        bytes32 salt = _generateSalt(_user);
+        callForwarder = IStrategyCallForwarder(Clones.predictDeterministicAddress(STRATEGY_CALL_FORWARDER_IMPL, salt));
+    }
 
-    function _getOrCreateCallForwarder(address _user) internal returns (address callForwarder) {
+    function _getOrCreateCallForwarder(address _user) internal returns (IStrategyCallForwarder callForwarder) {
         if (_user == address(0)) revert CallForwarderZeroArgument("_user");
 
         CallForwarderStorage storage $ = _getStorage();
 
         bytes32 salt = _generateSalt(_user);
         callForwarder = $.userCallForwarder[salt];
-        if (callForwarder != address(0)) return callForwarder;
+        if (address(callForwarder) != address(0)) return callForwarder;
 
-        callForwarder = Clones.cloneDeterministic(STRATEGY_CALL_FORWARDER_IMPL, salt);
-        IStrategyCallForwarder(callForwarder).initialize(address(this));
+        callForwarder = IStrategyCallForwarder(Clones.cloneDeterministic(STRATEGY_CALL_FORWARDER_IMPL, salt));
+        callForwarder.initialize(address(this));
 
         $.userCallForwarder[salt] = callForwarder;
     }

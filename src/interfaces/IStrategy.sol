@@ -2,7 +2,9 @@
 pragma solidity >=0.8.25;
 
 interface IStrategy {
-    event StrategySupplied(address indexed user, uint256 ethAmount, uint256 stv, uint256 wstethToMint, bytes data);
+    event StrategySupplied(
+        address indexed user, address indexed referral, uint256 ethAmount, uint256 stv, uint256 wstethToMint, bytes data
+    );
     event StrategyExitRequested(address indexed user, bytes32 requestId, uint256 wsteth, bytes data);
     event StrategyExitFinalized(address indexed user, bytes32 requestId, uint256 wsteth);
 
@@ -10,23 +12,58 @@ interface IStrategy {
 
     function POOL() external view returns (address);
 
-    /// @notice Supplies wstETH to the strategy
-    function supply(address _referral, uint256 _wstethToMint, bytes calldata _params) external payable;
-    //    function previewSupply(address _user, bytes calldata _params) external view returns (uint256 stv, uint256 maxWstethToMint);
-
-    /// @notice Requests a withdrawal from the strategy
-    function requestExitByWsteth(uint256 wstethToBurn, bytes calldata params)
+    /**
+     * @notice Supplies wstETH to the strategy
+     * @param _referral The referral address
+     * @param _wstethToMint The amount of wstETH to mint
+     * @param _params The parameters for the supply
+     * @return stv The amount of stv that would be minted
+     */
+    function supply(address _referral, uint256 _wstethToMint, bytes calldata _params)
         external
-        returns (bytes32 requestId);
+        payable
+        returns (uint256 stv);
 
-    /// @notice Finalizes a withdrawal from the strategy
+    /**
+     * @notice Returns the remaining minting capacity shares of a user
+     * @param _user The user to get the remaining minting capacity shares for
+     * @param _ethToFund The amount of ETH to fund
+     * @return stethShares The remaining minting capacity shares
+     */
+    function remainingMintingCapacitySharesOf(address _user, uint256 _ethToFund)
+        external
+        view
+        returns (uint256 stethShares);
+
+    /**
+     * @notice Requests a withdrawal from the strategy
+     * @param _wsteth The amount of wstETH to request exit for
+     * @param _params The parameters for the withdrawal
+     * @return requestId The Strategy request id
+     */
+    function requestExitByWsteth(uint256 _wsteth, bytes calldata _params) external returns (bytes32 requestId);
+
+    /**
+     * @notice Finalizes a withdrawal from the strategy
+     * @param receiver The address to receive the withdrawal
+     * @param requestId The Strategy request id
+     */
     function finalizeRequestExit(address receiver, bytes32 requestId) external;
 
-    /// @notice Burns wstETH to reduce the user's minted stETH obligation
+    /**
+     * @notice Burns wstETH to reduce the user's minted stETH obligation
+     * @param _wstethToBurn The amount of wstETH to burn
+     */
     function burnWsteth(uint256 _wstethToBurn) external;
 
-    /// @notice Requests a withdrawal from the Withdrawal Queue
-    function requestWithdrawalFromPool(uint256 _stvToWithdraw, uint256 _stethSharesToRebalance, address _receiver)
+    /**
+     * @notice Requests a withdrawal from the Withdrawal Queue
+     * @param _recipient The address to receive the withdrawal
+     * @param _stvToWithdraw The amount of stv to withdraw
+     * @param _stethSharesToRebalance The amount of stETH shares to rebalance
+     * @return requestId The Withdrawal Queue request ID
+     */
+    function requestWithdrawalFromPool(address _recipient, uint256 _stvToWithdraw, uint256 _stethSharesToRebalance)
         external
         returns (uint256 requestId);
 
