@@ -134,6 +134,7 @@ contract Factory {
         DISTRIBUTOR_FACTORY = DistributorFactory(_subFactories.distributorFactory);
         GGV_STRATEGY_FACTORY = GGVStrategyFactory(_subFactories.ggvStrategyFactory);
         TIMELOCK_FACTORY = TimelockFactory(_subFactories.timelockFactory);
+
         DUMMY_IMPLEMENTATION = address(new DummyImplementation());
 
         STV_POOL_TYPE = _toBytes32("StvPool");
@@ -214,11 +215,6 @@ contract Factory {
             poolType = STV_STETH_POOL_TYPE;
         }
 
-        // TODO: maybe check taking into account Vault's reserve ratio
-        if (_auxiliaryConfig.reserveRatioGapBP >= TOTAL_BASIS_POINTS) {
-            revert InvalidConfiguration("reserveRatioGapBP must be less than TOTAL_BASIS_POINTS");
-        }
-
         if (bytes(_commonPoolConfig.name).length == 0 || bytes(_commonPoolConfig.symbol).length == 0) {
             revert InvalidConfiguration("name and symbol must be set");
         }
@@ -229,12 +225,12 @@ contract Factory {
         address tempAdmin = address(this);
 
         (, address dashboardAddress) = VAULT_FACTORY.createVaultWithDashboard{value: msg.value}(
-            tempAdmin, // TODO
+            tempAdmin,
             _vaultConfig.nodeOperator,
             _vaultConfig.nodeOperatorManager,
             _vaultConfig.nodeOperatorFeeBP,
             _vaultConfig.confirmExpiry,
-            new IVaultFactory.RoleAssignment[](0)
+            new IVaultFactory.RoleAssignment[](0) // NB: assigned later because require pool and wq deployed
         );
 
         address poolProxy = payable(address(new OssifiableProxy(DUMMY_IMPLEMENTATION, tempAdmin, bytes(""))));

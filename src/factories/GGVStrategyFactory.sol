@@ -22,9 +22,9 @@ contract GGVStrategyFactory is IStrategyFactory {
         WSTETH = _wsteth;
     }
 
-    function deploy(address _pool, bytes calldata deployBytes) external returns (address impl) {
-        // deployBytes is unused for GGVStrategy, but required by IStrategyFactory interface
-        deployBytes;
+    function deploy(address _pool, bytes calldata _deployBytes) external returns (address impl) {
+        // _deployBytes is unused for GGVStrategy, but required by IStrategyFactory interface
+        _deployBytes;
         address strategyCallForwarderImpl = address(new StrategyCallForwarder());
         impl = address(new GGVStrategy(strategyCallForwarderImpl, _pool, STETH, WSTETH, TELLER, BORING_QUEUE));
     }
