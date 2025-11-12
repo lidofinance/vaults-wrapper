@@ -54,9 +54,11 @@ The Factory orchestrates deployment of the entire pool system (Vault, Dashboard,
   - **Implementation factories**: `StvPoolFactory`, `StvStETHPoolFactory`, `StvStETHPoolFactory`, `WithdrawalQueueFactory`, `LoopStrategyFactory`, `GGVStrategyFactory`
   - **Proxy stub**: `DummyImplementation` (for `OssifiableProxy` bootstrap)
 
-- Deploy `Factory` (either deploy the factories yourself or use `script/DeployWrapperFactory.s.sol`):
-  - `DeployWrapperFactory` now requires `CORE_LOCATOR_ADDRESS` and `FACTORY_PARAMS_JSON`; it derives all core addresses from the Locator.
-- Constructor shape for reference: `new Factory(locator, SubFactories{ ... }, TimelockConfig{ ... }, StrategyParameters{ ggvTeller, ggvBoringOnChainQueue })`
+- Reusing an existing deployment: export `FACTORY_ADDRESS` (alongside `CORE_LOCATOR_ADDRESS`) before running scripts or integration tests. When the variable is set, the harness logs `Using predeployed factory from FACTORY_ADDRESS ...` and skips deploying a fresh `Factory` instance.
+
+- Deploy `Factory` (either deploy the factories yourself or use `script/DeployFactory.s.sol`):
+  - `DeployFactory` requires `CORE_LOCATOR_ADDRESS` and `FACTORY_PARAMS_JSON`; it derives all core addresses from the Locator and wires the `GGVStrategyFactory` inputs.
+- Constructor shape for reference: `new Factory(locator, SubFactories{ ... })`
 
 - Create a complete pool system using one of the specialized entrypoints (send `msg.value == VaultHub.CONNECT_DEPOSIT`):
   - `createVaultWithNoMintingNoStrategy(nodeOperator, nodeOperatorManager, nodeOperatorFeeBP, confirmExpiry, allowlistEnabled)`
@@ -153,6 +155,14 @@ Local deployment (quickstart)
   - Artifacts:
     - `deployments/pool-<chainId>.json`: deployed `Factory` and implementation factory addresses
     - `deployments/pool-instance.json`: deployed Vault, Dashboard, Wrapper proxy, Withdrawal Queue, and Strategy (if applicable)
+
+- Quick verification using the test harness:
+  ```bash
+  FACTORY_ADDRESS=<existing_factory> \
+  CORE_LOCATOR_ADDRESS=<core_locator> \
+  RPC_URL=http://localhost:9123 \
+  make -s test-integration
+  ```
 
 ### Cast
 

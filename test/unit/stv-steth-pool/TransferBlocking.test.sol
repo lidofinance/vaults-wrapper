@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity >=0.8.25;
+pragma solidity 0.8.30;
 
-import {Test} from "forge-std/Test.sol";
 import {SetupStvStETHPool} from "./SetupStvStETHPool.sol";
-import {StvStETHPool} from "src/StvStETHPool.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+import {Test} from "forge-std/Test.sol";
+import {StvStETHPool} from "src/StvStETHPool.sol";
 
 contract TransferBlockingTest is Test, SetupStvStETHPool {
     uint256 ethToDeposit = 10 ether;
@@ -246,12 +246,8 @@ contract TransferBlockingTest is Test, SetupStvStETHPool {
 
         // Verify calculation logic
         uint256 stethAmount = steth.getPooledEthBySharesRoundUp(testShares);
-        uint256 expectedAssetsToLock = Math.mulDiv(
-            stethAmount,
-            totalBasisPoints,
-            totalBasisPoints - reserveRatio,
-            Math.Rounding.Ceil
-        );
+        uint256 expectedAssetsToLock =
+            Math.mulDiv(stethAmount, totalBasisPoints, totalBasisPoints - reserveRatio, Math.Rounding.Ceil);
         uint256 calculatedAssetsToLock = pool.calcAssetsToLockForStethShares(testShares);
 
         assertEq(calculatedAssetsToLock, expectedAssetsToLock);

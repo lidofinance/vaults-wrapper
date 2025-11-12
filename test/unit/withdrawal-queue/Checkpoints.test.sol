@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
-pragma solidity >=0.8.25;
+pragma solidity 0.8.30;
 
-import {Test} from "forge-std/Test.sol";
 import {SetupWithdrawalQueue} from "./SetupWithdrawalQueue.sol";
+import {Test} from "forge-std/Test.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
 
 contract CheckpointsTest is Test, SetupWithdrawalQueue {
@@ -72,11 +72,8 @@ contract CheckpointsTest is Test, SetupWithdrawalQueue {
         uint256[] memory requestIds = new uint256[](1);
         requestIds[0] = requestId;
 
-        uint256[] memory hints = withdrawalQueue.findCheckpointHintBatch(
-            requestIds,
-            1,
-            withdrawalQueue.getLastCheckpointIndex()
-        );
+        uint256[] memory hints =
+            withdrawalQueue.findCheckpointHintBatch(requestIds, 1, withdrawalQueue.getLastCheckpointIndex());
 
         assertEq(hints.length, 1);
         assertEq(hints[0], 1); // Should point to first checkpoint
@@ -89,11 +86,8 @@ contract CheckpointsTest is Test, SetupWithdrawalQueue {
         requestIds[1] = _requestWithdrawalAndFinalize(10 ** STV_DECIMALS);
         requestIds[2] = _requestWithdrawalAndFinalize(10 ** STV_DECIMALS);
 
-        uint256[] memory hints = withdrawalQueue.findCheckpointHintBatch(
-            requestIds,
-            1,
-            withdrawalQueue.getLastCheckpointIndex()
-        );
+        uint256[] memory hints =
+            withdrawalQueue.findCheckpointHintBatch(requestIds, 1, withdrawalQueue.getLastCheckpointIndex());
 
         assertEq(hints.length, 3);
         assertEq(hints[0], 1); // First request → first checkpoint
@@ -110,11 +104,8 @@ contract CheckpointsTest is Test, SetupWithdrawalQueue {
         uint256[] memory requestIds = new uint256[](1);
         requestIds[0] = requestId2; // Second request not finalized
 
-        uint256[] memory hints = withdrawalQueue.findCheckpointHintBatch(
-            requestIds,
-            1,
-            withdrawalQueue.getLastCheckpointIndex()
-        );
+        uint256[] memory hints =
+            withdrawalQueue.findCheckpointHintBatch(requestIds, 1, withdrawalQueue.getLastCheckpointIndex());
 
         // Should return NOT_FOUND (0) for unfinalized request
         assertEq(hints[0], 0);
@@ -150,11 +141,8 @@ contract CheckpointsTest is Test, SetupWithdrawalQueue {
         searchIds[1] = requestIds[2]; // Request 3
         searchIds[2] = requestIds[3]; // Request 4
 
-        uint256[] memory hints = withdrawalQueue.findCheckpointHintBatch(
-            searchIds,
-            1,
-            withdrawalQueue.getLastCheckpointIndex()
-        );
+        uint256[] memory hints =
+            withdrawalQueue.findCheckpointHintBatch(searchIds, 1, withdrawalQueue.getLastCheckpointIndex());
 
         assertEq(hints[0], 2); // Request 2 → Checkpoint 2
         assertEq(hints[1], 3); // Request 3 → Checkpoint 3
@@ -169,11 +157,8 @@ contract CheckpointsTest is Test, SetupWithdrawalQueue {
 
         _finalizeRequests(3); // All requests in one checkpoint
 
-        uint256[] memory hints = withdrawalQueue.findCheckpointHintBatch(
-            requestIds,
-            1,
-            withdrawalQueue.getLastCheckpointIndex()
-        );
+        uint256[] memory hints =
+            withdrawalQueue.findCheckpointHintBatch(requestIds, 1, withdrawalQueue.getLastCheckpointIndex());
 
         // All requests should point to the same checkpoint
         assertEq(hints[0], 1);
@@ -208,6 +193,27 @@ contract CheckpointsTest is Test, SetupWithdrawalQueue {
         uint256[] memory hints = withdrawalQueue.findCheckpointHintBatch(requestIds, 2, 2);
 
         assertEq(hints[0], 0);
+    }
+
+    function test_FindCheckpointHint_ReturnsZeroWhenStartGreaterThanEnd() public {
+        uint256 requestId = _requestWithdrawalAndFinalize(10 ** STV_DECIMALS);
+
+        uint256 lastIndex = withdrawalQueue.getLastCheckpointIndex();
+        assertEq(lastIndex, 1);
+
+        uint256 hint = withdrawalQueue.findCheckpointHint(requestId, lastIndex + 1, lastIndex);
+        assertEq(hint, 0);
+    }
+
+    function test_FindCheckpointHint_RevertOnRequestBeyondLastId() public {
+        _requestWithdrawalAndFinalize(10 ** STV_DECIMALS);
+
+        uint256 invalidRequestId = withdrawalQueue.getLastRequestId() + 1;
+        uint256 startCheckpointIndex = 1;
+        uint256 endCheckpointIndex = withdrawalQueue.getLastCheckpointIndex();
+
+        vm.expectRevert(abi.encodeWithSelector(WithdrawalQueue.InvalidRequestId.selector, invalidRequestId));
+        withdrawalQueue.findCheckpointHint(invalidRequestId, startCheckpointIndex, endCheckpointIndex);
     }
 
     // Receive ETH for tests

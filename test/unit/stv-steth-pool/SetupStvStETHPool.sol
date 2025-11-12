@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity >=0.8.25;
+pragma solidity 0.8.30;
 
-import {Test} from "forge-std/Test.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
+import {Test} from "forge-std/Test.sol";
 
 import {StvStETHPool} from "src/StvStETHPool.sol";
 import {MockDashboard, MockDashboardFactory} from "test/mocks/MockDashboard.sol";
-import {MockVaultHub} from "test/mocks/MockVaultHub.sol";
 import {MockStETH} from "test/mocks/MockStETH.sol";
+import {MockVaultHub} from "test/mocks/MockVaultHub.sol";
 import {MockWstETH} from "test/mocks/MockWstETH.sol";
 
 abstract contract SetupStvStETHPool is Test {
@@ -47,12 +47,7 @@ abstract contract SetupStvStETHPool is Test {
 
         // Deploy the pool with mock withdrawal queue
         StvStETHPool poolImpl = new StvStETHPool(
-            address(dashboard),
-            false,
-            reserveRatioGapBP,
-            withdrawalQueue,
-            address(0),
-            keccak256("test.stv.steth.pool")
+            address(dashboard), false, reserveRatioGapBP, withdrawalQueue, address(0), keccak256("test.stv.steth.pool")
         );
         ERC1967Proxy poolProxy = new ERC1967Proxy(address(poolImpl), "");
 

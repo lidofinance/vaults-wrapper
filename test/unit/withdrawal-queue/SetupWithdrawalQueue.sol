@@ -1,29 +1,32 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity >=0.8.25;
+pragma solidity 0.8.30;
 
 import {Test} from "forge-std/Test.sol";
-import {OssifiableProxy} from "src/proxy/OssifiableProxy.sol";
-import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
 import {StvStETHPool} from "src/StvStETHPool.sol";
-import {MockLazyOracle} from "test/mocks/MockLazyOracle.sol";
+import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
+import {OssifiableProxy} from "src/proxy/OssifiableProxy.sol";
 import {MockDashboard, MockDashboardFactory} from "test/mocks/MockDashboard.sol";
+import {MockLazyOracle} from "test/mocks/MockLazyOracle.sol";
 import {MockStETH} from "test/mocks/MockStETH.sol";
+import {MockVaultHub} from "test/mocks/MockVaultHub.sol";
 
 abstract contract SetupWithdrawalQueue is Test {
     WithdrawalQueue public withdrawalQueue;
     StvStETHPool public pool;
     MockLazyOracle public lazyOracle;
     MockDashboard public dashboard;
+    MockVaultHub public vaultHub;
     MockStETH public steth;
 
     address public owner;
     address public finalizeRoleHolder;
-    address public pauseRoleHolder;
-    address public resumeRoleHolder;
+    address public finalizePauseRoleHolder;
+    address public finalizeResumeRoleHolder;
+    address public withdrawalsPauseRoleHolder;
+    address public withdrawalsResumeRoleHolder;
     address public userAlice;
     address public userBob;
 
-    uint256 public constant MAX_ACCEPTABLE_WQ_FINALIZATION_TIME = 7 days;
     uint256 public constant MIN_WITHDRAWAL_DELAY_TIME = 1 days;
     uint256 public constant initialDeposit = 1 ether;
     uint256 public constant reserveRatioGapBP = 5_00; // 5%
@@ -35,8 +38,10 @@ abstract contract SetupWithdrawalQueue is Test {
         // Create addresses
         owner = makeAddr("owner");
         finalizeRoleHolder = makeAddr("finalizeRoleHolder");
-        pauseRoleHolder = makeAddr("pauseRoleHolder");
-        resumeRoleHolder = makeAddr("resumeRoleHolder");
+        finalizePauseRoleHolder = makeAddr("finalizePauseRoleHolder");
+        finalizeResumeRoleHolder = makeAddr("finalizeResumeRoleHolder");
+        withdrawalsPauseRoleHolder = makeAddr("withdrawalsPauseRoleHolder");
+        withdrawalsResumeRoleHolder = makeAddr("withdrawalsResumeRoleHolder");
         userAlice = makeAddr("userAlice");
         userBob = makeAddr("userBob");
 
@@ -49,18 +54,14 @@ abstract contract SetupWithdrawalQueue is Test {
         dashboard = new MockDashboardFactory().createMockDashboard(owner);
         lazyOracle = new MockLazyOracle();
         steth = dashboard.STETH();
+        vaultHub = dashboard.VAULT_HUB();
 
         // Fund dashboard
         dashboard.fund{value: initialDeposit}();
 
         // Deploy StvStETHPool proxy with temporary implementation
         StvStETHPool tempImpl = new StvStETHPool(
-            address(dashboard),
-            false,
-            reserveRatioGapBP,
-            address(0),
-            address(0),
-            keccak256("test.wq.pool")
+            address(dashboard), false, reserveRatioGapBP, address(0), address(0), keccak256("test.wq.pool")
         );
         OssifiableProxy poolProxy = new OssifiableProxy(address(tempImpl), owner, "");
         pool = StvStETHPool(payable(poolProxy));
@@ -69,11 +70,10 @@ abstract contract SetupWithdrawalQueue is Test {
         WithdrawalQueue wqImpl = new WithdrawalQueue(
             address(pool),
             address(dashboard),
-            address(dashboard.VAULT_HUB()),
+            address(vaultHub),
             address(steth),
-            address(dashboard.STAKING_VAULT()),
+            address(dashboard.VAULT()),
             address(lazyOracle),
-            MAX_ACCEPTABLE_WQ_FINALIZATION_TIME,
             MIN_WITHDRAWAL_DELAY_TIME,
             true
         );
@@ -86,8 +86,10 @@ abstract contract SetupWithdrawalQueue is Test {
 
         // Grant additional roles
         vm.startPrank(owner);
-        withdrawalQueue.grantRole(withdrawalQueue.PAUSE_ROLE(), pauseRoleHolder);
-        withdrawalQueue.grantRole(withdrawalQueue.RESUME_ROLE(), resumeRoleHolder);
+        withdrawalQueue.grantRole(withdrawalQueue.WITHDRAWALS_PAUSE_ROLE(), withdrawalsPauseRoleHolder);
+        withdrawalQueue.grantRole(withdrawalQueue.WITHDRAWALS_RESUME_ROLE(), withdrawalsResumeRoleHolder);
+        withdrawalQueue.grantRole(withdrawalQueue.FINALIZE_PAUSE_ROLE(), finalizePauseRoleHolder);
+        withdrawalQueue.grantRole(withdrawalQueue.FINALIZE_RESUME_ROLE(), finalizeResumeRoleHolder);
         vm.stopPrank();
 
         // Set oracle timestamp to current time
@@ -117,9 +119,14 @@ abstract contract SetupWithdrawalQueue is Test {
     }
 
     function _finalizeRequests(uint256 _maxRequests) internal {
+        _warpAndMockOracleReport();
+
+        vm.prank(finalizeRoleHolder);
+        withdrawalQueue.finalize(_maxRequests, address(0));
+    }
+
+    function _warpAndMockOracleReport() internal {
         lazyOracle.mock__updateLatestReportTimestamp(block.timestamp);
         vm.warp(MIN_WITHDRAWAL_DELAY_TIME + 1 + block.timestamp);
-        vm.prank(finalizeRoleHolder);
-        withdrawalQueue.finalize(_maxRequests);
     }
 }

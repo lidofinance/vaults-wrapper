@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
-pragma solidity >=0.8.25;
+pragma solidity 0.8.30;
 
-import {Test} from "forge-std/Test.sol";
 import {SetupDistributor} from "./SetupDistributor.sol";
-import {Distributor} from "src/Distributor.sol";
 import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
+import {Test} from "forge-std/Test.sol";
+import {Distributor} from "src/Distributor.sol";
 
 contract MerkleRootTest is Test, SetupDistributor {
     function setUp() public override {
@@ -21,43 +21,38 @@ contract MerkleRootTest is Test, SetupDistributor {
 
         vm.prank(userAlice);
         vm.expectRevert(
-            abi.encodeWithSelector(
-                IAccessControl.AccessControlUnauthorizedAccount.selector,
-                userAlice,
-                managerRole
-            )
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, userAlice, managerRole)
         );
         distributor.setMerkleRoot(newRoot, newCid);
     }
 
-    function test_SetMerkleRoot_RevertsOnSameRoot() public {
-        bytes32 newRoot = keccak256("testRoot");
-        string memory cid1 = "QmTestCID1";
+    function test_SetMerkleRoot_RevertsWhenNoChanges() public {
+        bytes32 initialRoot = keccak256("root");
+        string memory initialCid = "QmCID";
 
-        vm.prank(manager);
-        distributor.setMerkleRoot(newRoot, cid1);
+        vm.startPrank(manager);
+        distributor.setMerkleRoot(initialRoot, initialCid);
 
-        // Try to set the same root with different CID
-        string memory cid2 = "QmTestCID2";
-
-        vm.prank(manager);
         vm.expectRevert(Distributor.AlreadyProcessed.selector);
-        distributor.setMerkleRoot(newRoot, cid2);
+        distributor.setMerkleRoot(initialRoot, initialCid);
+        vm.stopPrank();
     }
 
-    function test_SetMerkleRoot_RevertsOnSameCid() public {
+    function test_SetMerkleRoot_AllowsPartialUpdates() public {
         bytes32 root1 = keccak256("root1");
-        string memory sameCid = "QmTestCID";
-
-        vm.prank(manager);
-        distributor.setMerkleRoot(root1, sameCid);
-
-        // Try to set different root with same CID
         bytes32 root2 = keccak256("root2");
+        string memory cid1 = "QmCid1";
+        string memory cid2 = "QmCid2";
 
-        vm.prank(manager);
-        vm.expectRevert(Distributor.AlreadyProcessed.selector);
-        distributor.setMerkleRoot(root2, sameCid);
+        vm.startPrank(manager);
+        distributor.setMerkleRoot(root1, cid1);
+
+        // Same root, new cid
+        distributor.setMerkleRoot(root1, cid2);
+
+        // Same cid, new root
+        distributor.setMerkleRoot(root2, cid2);
+        vm.stopPrank();
     }
 
     // ==================== Successful Merkle Root Setting ====================
@@ -115,6 +110,4 @@ contract MerkleRootTest is Test, SetupDistributor {
         assertEq(distributor.root(), newRoot);
     }
 }
-
-
 

@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity >=0.8.25;
+pragma solidity 0.8.30;
 
-import {StvPoolHarness} from "test/utils/StvPoolHarness.sol";
 import {StvStETHPool} from "src/StvStETHPool.sol";
+import {StvPoolHarness} from "test/utils/StvPoolHarness.sol";
 
 /**
  * @title StvStETHPoolHarness
@@ -21,12 +21,13 @@ contract StvStETHPoolHarness is StvPoolHarness {
             nodeOperatorManager: NODE_OPERATOR,
             nodeOperatorFeeBP: nodeOperatorFeeBP,
             confirmExpiry: CONFIRM_EXPIRY,
-            maxFinalizationTime: 30 days,
             minWithdrawalDelayTime: 1 days,
             reserveRatioGapBP: reserveRatioGapBP,
             strategyKind: StrategyKind.NONE,
             ggvTeller: address(0),
             ggvBoringQueue: address(0),
+            timelockMinDelaySeconds: 0,
+            timelockExecutor: NODE_OPERATOR,
             name: "Test stETH Pool",
             symbol: "tSTETH"
         });

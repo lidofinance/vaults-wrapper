@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity >=0.8.25;
+pragma solidity 0.8.30;
 
-import {Test} from "forge-std/Test.sol";
 import {SetupAllowList} from "./SetupAllowList.sol";
+import {Test} from "forge-std/Test.sol";
 import {AllowList} from "src/AllowList.sol";
 
 contract AllowListDepositsTest is Test, SetupAllowList {

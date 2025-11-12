@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
-pragma solidity >=0.8.25;
+pragma solidity 0.8.30;
 
-import {IVaultFactory} from "../../src/interfaces/IVaultFactory.sol";
+import {IVaultFactory} from "../../src/interfaces/core/IVaultFactory.sol";
 import {MockDashboard} from "./MockDashboard.sol";
 import {MockStakingVault} from "./MockStakingVault.sol";
 import {MockVaultHub} from "./MockVaultHub.sol";
@@ -28,10 +28,10 @@ contract MockVaultFactory is IVaultFactory {
 
     function createVaultWithDashboard(
         address _admin,
-        address /* _nodeOperator */,
-        address /* _nodeOperatorManager */,
-        uint256 /* _nodeOperatorFeeBP */,
-        uint256 /* _confirmExpiry */,
+        address, /* _nodeOperator */
+        address, /* _nodeOperatorManager */
+        uint256, /* _nodeOperatorFeeBP */
+        uint256, /* _confirmExpiry */
         IVaultFactory.RoleAssignment[] memory /* _roleAssignments */
     ) external payable returns (address vault, address dashboard) {
         if (msg.value != 1 ether) {
@@ -43,7 +43,7 @@ contract MockVaultFactory is IVaultFactory {
         dashboard = address(new MockDashboard(steth, wsteth, VAULT_HUB, vault, _admin));
 
         // Send the connect deposit to the vault to simulate the real factory behavior
-        (bool success, ) = vault.call{value: msg.value}("");
+        (bool success,) = vault.call{value: msg.value}("");
         require(success, "Transfer to vault failed");
 
         return (vault, dashboard);
@@ -51,10 +51,10 @@ contract MockVaultFactory is IVaultFactory {
 
     function createVaultWithDashboardWithoutConnectingToVaultHub(
         address _admin,
-        address /* _nodeOperator */,
-        address /* _nodeOperatorManager */,
-        uint256 /* _nodeOperatorFeeBP */,
-        uint256 /* _confirmExpiry */,
+        address, /* _nodeOperator */
+        address, /* _nodeOperatorManager */
+        uint256, /* _nodeOperatorFeeBP */
+        uint256, /* _confirmExpiry */
         RoleAssignment[] calldata /* _roleAssignments */
     ) external payable returns (address vault, address dashboard) {
         require(msg.value == 0 ether, "invalid value sent");

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity >=0.8.25;
+pragma solidity 0.8.30;
 
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
 
@@ -11,7 +11,6 @@ contract WithdrawalQueueFactory {
         address _steth,
         address _vault,
         address _lazyOracle,
-        uint256 _maxFinalizationTime,
         uint256 _minWithdrawalDelayTime,
         bool _isRebalancingSupported
     ) external returns (address impl) {
@@ -23,7 +22,6 @@ contract WithdrawalQueueFactory {
                 _steth,
                 _vault,
                 _lazyOracle,
-                _maxFinalizationTime,
                 _minWithdrawalDelayTime,
                 _isRebalancingSupported
             )

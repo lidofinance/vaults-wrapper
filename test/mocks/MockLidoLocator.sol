@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
-pragma solidity >=0.8.25;
+pragma solidity 0.8.30;
 
-import {ILidoLocator} from "src/interfaces/ILidoLocator.sol";
+import {ILidoLocator} from "src/interfaces/core/ILidoLocator.sol";
 
 contract MockLidoLocator is ILidoLocator {
     address internal _accountingOracle;
@@ -25,13 +25,7 @@ contract MockLidoLocator is ILidoLocator {
     address internal _lazyOracle;
     address internal _operatorGrid;
 
-    constructor(
-        address lido_,
-        address wsteth_,
-        address lazyOracle_,
-        address vaultHub_,
-        address vaultFactory_
-    ) {
+    constructor(address lido_, address wsteth_, address lazyOracle_, address vaultHub_, address vaultFactory_) {
         _lido = lido_;
         _wstETH = wsteth_;
         _lazyOracle = lazyOracle_;
@@ -229,5 +223,4 @@ contract MockLidoLocator is ILidoLocator {
         _operatorGrid = value;
     }
 }
-
 

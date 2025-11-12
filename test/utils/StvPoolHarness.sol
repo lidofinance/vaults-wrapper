@@ -1,20 +1,20 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity >=0.8.25;
+pragma solidity 0.8.30;
 
 import {Test, console} from "forge-std/Test.sol";
 
-import {CoreHarness} from "test/utils/CoreHarness.sol";
-import {IDashboard} from "src/interfaces/IDashboard.sol";
-import {IVaultHub} from "src/interfaces/IVaultHub.sol";
-import {IStakingVault} from "src/interfaces/IStakingVault.sol";
-import {ILido} from "src/interfaces/ILido.sol";
-import {IWstETH} from "src/interfaces/IWstETH.sol";
-
+import {TimelockController} from "@openzeppelin/contracts/governance/TimelockController.sol";
+import {Distributor} from "src/Distributor.sol";
+import {Factory} from "src/Factory.sol";
 import {StvPool} from "src/StvPool.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
-import {Factory} from "src/Factory.sol";
+import {IDashboard} from "src/interfaces/core/IDashboard.sol";
+import {ILido} from "src/interfaces/core/ILido.sol";
+import {IStakingVault} from "src/interfaces/core/IStakingVault.sol";
+import {IVaultHub} from "src/interfaces/core/IVaultHub.sol";
+import {IWstETH} from "src/interfaces/core/IWstETH.sol";
+import {CoreHarness} from "test/utils/CoreHarness.sol";
 import {FactoryHelper} from "test/utils/FactoryHelper.sol";
-import {Distributor} from "src/Distributor.sol";
 
 /**
  * @title StvPoolHarness
@@ -48,7 +48,6 @@ contract StvPoolHarness is Test {
     // Deployment configuration struct
     enum StrategyKind {
         NONE,
-        LOOP,
         GGV
     }
 
@@ -60,12 +59,13 @@ contract StvPoolHarness is Test {
         address nodeOperatorManager;
         uint256 nodeOperatorFeeBP;
         uint256 confirmExpiry;
-        uint256 maxFinalizationTime;
         uint256 minWithdrawalDelayTime;
         uint256 reserveRatioGapBP;
         StrategyKind strategyKind;
         address ggvTeller;
         address ggvBoringQueue;
+        uint256 timelockMinDelaySeconds;
+        address timelockExecutor;
         string name;
         string symbol;
     }
@@ -77,6 +77,7 @@ contract StvPoolHarness is Test {
         IStakingVault vault;
         address strategy;
         Distributor distributor;
+        TimelockController timelock;
     }
 
     function _initializeCore() internal {
@@ -107,48 +108,43 @@ contract StvPoolHarness is Test {
             console.log("Using predeployed factory from FACTORY_ADDRESS", factoryFromEnv);
         } else {
             FactoryHelper helper = new FactoryHelper();
-
-            Factory.StrategyParameters memory strategyParams = Factory.StrategyParameters({
-                ggvTeller: config.ggvTeller,
-                ggvBoringOnChainQueue: config.ggvBoringQueue
-            });
-
-            Factory.TimelockConfig memory timelockConfig = Factory.TimelockConfig({
-                minDelaySeconds: 0,
-                executor: owner
-            });
-
-            factory = helper.deployMainFactory(address(core.locator()), strategyParams, timelockConfig);
+            factory = helper.deployMainFactory(address(core.locator()), config.ggvTeller, config.ggvBoringQueue);
         }
 
-        Factory.PoolFullConfig memory poolConfig = Factory.PoolFullConfig({
-            allowlistEnabled: config.allowlistEnabled,
-            mintingEnabled: config.mintingEnabled,
-            owner: owner,
+        Factory.VaultConfig memory vaultConfig = Factory.VaultConfig({
             nodeOperator: config.nodeOperator,
             nodeOperatorManager: config.nodeOperatorManager,
             nodeOperatorFeeBP: config.nodeOperatorFeeBP,
-            confirmExpiry: config.confirmExpiry,
-            maxFinalizationTime: config.maxFinalizationTime,
-            minWithdrawalDelayTime: config.minWithdrawalDelayTime,
-            reserveRatioGapBP: config.reserveRatioGapBP,
-            name: config.name,
-            symbol: config.symbol
+            confirmExpiry: config.confirmExpiry
+        });
+
+        Factory.CommonPoolConfig memory commonPoolConfig = Factory.CommonPoolConfig({
+            minWithdrawalDelayTime: config.minWithdrawalDelayTime, name: config.name, symbol: config.symbol
+        });
+
+        Factory.AuxiliaryPoolConfig memory auxiliaryConfig = Factory.AuxiliaryPoolConfig({
+            allowlistEnabled: config.allowlistEnabled,
+            mintingEnabled: config.mintingEnabled,
+            reserveRatioGapBP: config.reserveRatioGapBP
+        });
+
+        Factory.TimelockConfig memory timelockConfig = Factory.TimelockConfig({
+            minDelaySeconds: config.timelockMinDelaySeconds,
+            proposer: config.timelockExecutor == address(0) ? owner : config.timelockExecutor,
+            executor: config.timelockExecutor == address(0) ? owner : config.timelockExecutor
         });
 
         address strategyFactoryAddress = address(0);
-        if (config.strategyKind == StrategyKind.LOOP) {
-            strategyFactoryAddress = address(factory.LOOP_STRATEGY_FACTORY());
-        } else if (config.strategyKind == StrategyKind.GGV) {
+        if (config.strategyKind == StrategyKind.GGV) {
             strategyFactoryAddress = address(factory.GGV_STRATEGY_FACTORY());
         }
-
-        Factory.StrategyConfig memory strategyConfig = Factory.StrategyConfig({factory: strategyFactoryAddress});
+        // StrategyKind.NONE: strategyFactoryAddress remains address(0)
 
         vm.startPrank(config.nodeOperator);
-        Factory.StvPoolIntermediate memory intermediate =
-            factory.createPoolStart{value: CONNECT_DEPOSIT}(poolConfig, strategyConfig);
-        Factory.StvPoolDeployment memory deployment = factory.createPoolFinish(intermediate, strategyConfig);
+        Factory.PoolIntermediate memory intermediate = factory.createPoolStart{value: CONNECT_DEPOSIT}(
+            vaultConfig, commonPoolConfig, auxiliaryConfig, timelockConfig, strategyFactoryAddress, ""
+        );
+        Factory.PoolDeployment memory deployment = factory.createPoolFinish(intermediate);
         vm.stopPrank();
 
         IDashboard dashboard = IDashboard(payable(deployment.dashboard));
@@ -158,6 +154,7 @@ contract StvPoolHarness is Test {
         Distributor distributor = Distributor(deployment.distributor);
 
         address strategy_ = deployment.strategy;
+        TimelockController timelock = TimelockController(payable(deployment.timelock));
 
         // Apply initial vault report with current total value equal to connect deposit
         core.applyVaultReport(vault_, CONNECT_DEPOSIT, 0, 0, 0);
@@ -168,7 +165,8 @@ contract StvPoolHarness is Test {
             dashboard: dashboard,
             vault: IStakingVault(vault_),
             strategy: strategy_,
-            distributor: distributor
+            distributor: distributor,
+            timelock: timelock
         });
     }
 
@@ -184,12 +182,13 @@ contract StvPoolHarness is Test {
             nodeOperatorManager: NODE_OPERATOR,
             nodeOperatorFeeBP: nodeOperatorFeeBP,
             confirmExpiry: CONFIRM_EXPIRY,
-            maxFinalizationTime: 30 days,
             minWithdrawalDelayTime: 1 days,
             reserveRatioGapBP: 0,
             strategyKind: StrategyKind.NONE,
             ggvTeller: address(0),
             ggvBoringQueue: address(0),
+            timelockMinDelaySeconds: 0,
+            timelockExecutor: NODE_OPERATOR,
             name: "Test STV Pool",
             symbol: "tSTV"
         });

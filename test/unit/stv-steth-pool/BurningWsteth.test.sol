@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity >=0.8.25;
+pragma solidity 0.8.30;
 
-import {Test} from "forge-std/Test.sol";
 import {SetupStvStETHPool} from "./SetupStvStETHPool.sol";
+import {Test} from "forge-std/Test.sol";
 import {StvStETHPool} from "src/StvStETHPool.sol";
 
 contract BurningWstethTest is Test, SetupStvStETHPool {
@@ -335,5 +335,43 @@ contract BurningWstethTest is Test, SetupStvStETHPool {
         pool.burnWsteth(wstethToBurn);
 
         assertEq(pool.mintedStethSharesOf(address(this)), wstethToMint - expectedSharesToBurn);
+    }
+
+    // Rounding tests
+
+    function test_BurnWsteth_AccountsForRoundingLoss() public {
+        // Set share rate to create rounding loss
+        steth.mock_setTotalPooled(1001 * 10 ** 18, 1000 * 10 ** 18); // share rate = 1.001
+
+        uint256 wstethToBurn = 123456789; // Odd number to trigger rounding
+        uint256 mintedBefore = pool.mintedStethSharesOf(address(this));
+
+        // Calculate what actually gets burned (simulating unwrap rounding)
+        uint256 unwrappedSteth = steth.getPooledEthByShares(wstethToBurn);
+        uint256 unwrappedStethShares = steth.getSharesByPooledEth(unwrappedSteth);
+
+        pool.burnWsteth(wstethToBurn);
+
+        // Should decrease by unwrapped shares, accounting for rounding loss
+        assertEq(pool.mintedStethSharesOf(address(this)), mintedBefore - unwrappedStethShares);
+        assertLe(unwrappedStethShares, wstethToBurn); // Loss due to rounding
+    }
+
+    function test_BurnWsteth_DustAccumulatesOnWsteth() public {
+        // Set share rate to create dust
+        steth.mock_setTotalPooled(333 * 10 ** 18, 100 * 10 ** 18); // share rate = 3.33
+
+        uint256 wstethToBurn = 1000;
+
+        // Unwrap simulation: wsteth -> steth -> shares
+        uint256 unwrappedSteth = steth.getPooledEthByShares(wstethToBurn);
+        uint256 unwrappedStethShares = steth.getSharesByPooledEth(unwrappedSteth);
+
+        pool.burnWsteth(wstethToBurn);
+
+        // Pool should not hold wsteth, dust goes elsewhere in the process
+        assertEq(wsteth.balanceOf(address(pool)), 0);
+        // Verify rounding occurred (shares decreased by less than or equal to wsteth burned)
+        assertLe(unwrappedStethShares, wstethToBurn);
     }
 }

@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity >=0.8.25;
+pragma solidity 0.8.30;
 
 import {Test} from "forge-std/Test.sol";
 
+import {MockVaultHub} from "../../mocks/MockVaultHub.sol";
 import {SetupStvStETHPool} from "./SetupStvStETHPool.sol";
 import {StvStETHPool} from "src/StvStETHPool.sol";
-import {MockVaultHub} from "../../mocks/MockVaultHub.sol";
 
 contract VaultParametersTest is Test, SetupStvStETHPool {
     function test_ReserveRatioBP_ReturnsExpectedValue() public view {
@@ -46,8 +46,7 @@ contract VaultParametersTest is Test, SetupStvStETHPool {
 
         vm.expectEmit(false, false, false, true);
         emit StvStETHPool.VaultParametersUpdated(
-            baseReserveRatioBP + reserveRatioGapBP,
-            baseForcedThresholdBP + reserveRatioGapBP
+            baseReserveRatioBP + reserveRatioGapBP, baseForcedThresholdBP + reserveRatioGapBP
         );
         pool.syncVaultParameters();
     }

@@ -1,23 +1,25 @@
 // SPDX-License-Identifier: MIT
-pragma solidity >=0.8.25;
+pragma solidity 0.8.30;
 
 import {StvPool} from "./StvPool.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
-import {IStETH} from "./interfaces/IStETH.sol";
-import {IVaultHub} from "./interfaces/IVaultHub.sol";
-import {IWstETH} from "./interfaces/IWstETH.sol";
+import {IStETH} from "./interfaces/core/IStETH.sol";
+import {IVaultHub} from "./interfaces/core/IVaultHub.sol";
+import {IWstETH} from "./interfaces/core/IWstETH.sol";
 
 /**
  * @title StvStETHPool
- * @notice Configuration B: Minting, no strategy - stv + maximum stETH minting for user
+ * @notice Extended STV pool with (w)stETH minting, liability management, and rebalancing capabilities
+ * @dev Allows users to mint (w)stETH against their deposits with configurable reserve ratios
  */
 contract StvStETHPool is StvPool {
     event StethSharesMinted(address indexed account, uint256 stethShares);
     event StethSharesBurned(address indexed account, uint256 stethShares);
     event StethSharesRebalanced(address indexed account, uint256 stethShares, uint256 stvBurned);
-    event SocializedLoss(uint256 stv, uint256 assets);
+    event SocializedLoss(uint256 stv, uint256 assets, uint256 maxLossSocializationBP);
     event VaultParametersUpdated(uint256 newReserveRatioBP, uint256 newForcedRebalanceThresholdBP);
+    event MaxLossSocializationUpdated(uint256 newMaxLossSocializationBP);
 
     error InsufficientMintingCapacity();
     error InsufficientStethShares();
@@ -27,10 +29,15 @@ contract StvStETHPool is StvPool {
     error InsufficientStv();
     error ZeroArgument();
     error ArraysLengthMismatch(uint256 firstArrayLength, uint256 secondArrayLength);
-    error NothingToRebalance();
-    error VaultReportStale();
     error UndercollateralizedAccount();
     error CollateralizedAccount();
+    error ExcessiveLossSocialization();
+    error SameValue();
+    error InvalidValue();
+
+    bytes32 public constant MINTING_FEATURE = keccak256("MINTING_FEATURE");
+    bytes32 public constant MINTING_PAUSE_ROLE = keccak256("MINTING_PAUSE_ROLE");
+    bytes32 public constant MINTING_RESUME_ROLE = keccak256("MINTING_RESUME_ROLE");
 
     bytes32 public constant LOSS_SOCIALIZER_ROLE = keccak256("LOSS_SOCIALIZER_ROLE");
 
@@ -39,14 +46,13 @@ contract StvStETHPool is StvPool {
 
     IWstETH public immutable WSTETH;
 
-    bytes32 private immutable POOL_TYPE;
-
     /// @custom:storage-location erc7201:pool.storage.StvStETHPool
     struct StvStETHPoolStorage {
         mapping(address => uint256) mintedStethShares;
         uint256 totalMintedStethShares;
         uint16 reserveRatioBP;
         uint16 forcedRebalanceThresholdBP;
+        uint16 maxLossSocializationBP;
     }
 
     // keccak256(abi.encode(uint256(keccak256("pool.storage.StvStETHPool")) - 1)) & ~bytes32(uint256(0xff))
@@ -66,15 +72,15 @@ contract StvStETHPool is StvPool {
         address _withdrawalQueue,
         address _distributor,
         bytes32 _poolType
-    ) StvPool(_dashboard, _allowListEnabled, _withdrawalQueue, _distributor) {
+    ) StvPool(_dashboard, _allowListEnabled, _withdrawalQueue, _distributor, _poolType) {
+        uint256 vaultRR = VAULT_HUB.vaultConnection(address(VAULT)).reserveRatioBP;
+        if (_reserveRatioGapBP + vaultRR >= TOTAL_BASIS_POINTS) revert InvalidValue();
+
         RESERVE_RATIO_GAP_BP = _reserveRatioGapBP;
         WSTETH = IWstETH(DASHBOARD.WSTETH());
 
-        POOL_TYPE = _poolType;
-    }
-
-    function poolType() external view override returns (bytes32) {
-        return POOL_TYPE;
+        // Pause features in implementation
+        _pauseFeature(MINTING_FEATURE);
     }
 
     function initialize(address _owner, string memory _name, string memory _symbol) public override initializer {
@@ -94,46 +100,34 @@ contract StvStETHPool is StvPool {
 
     /**
      * @notice Deposit native ETH and receive stv, minting a specific amount of stETH shares
-     * @param _recipient Address to receive stv and minted steth shares
      * @param _referral Address of the referral (if any)
      * @param _stethSharesToMint Optional amount of stETH shares to mint (18 decimals)
      * @return stv Amount of stv minted (27 decimals)
-     * @dev If the recipient is different from msg.sender, checks that enough stv is deposited to lock the requested stETH shares
      */
-    function depositETHAndMintStethShares(address _recipient, address _referral, uint256 _stethSharesToMint)
+    function depositETHAndMintStethShares(address _referral, uint256 _stethSharesToMint)
         external
         payable
         virtual
         returns (uint256 stv)
     {
-        stv = depositETH(_recipient, _referral);
-
-        if (_stethSharesToMint != 0) {
-            if (_recipient != msg.sender) _checkMinStvToLock(stv, _stethSharesToMint);
-            _mintStethShares(_recipient, _stethSharesToMint);
-        }
+        stv = depositETH(msg.sender, _referral);
+        if (_stethSharesToMint != 0) mintStethShares(_stethSharesToMint);
     }
 
     /**
      * @notice Deposit native ETH and receive stv, minting a specific amount of wstETH
-     * @param _recipient Address to receive stv and minted wstETH
      * @param _referral Address of the referral (if any)
      * @param _wstethToMint Optional amount of wstETH to mint (18 decimals)
      * @return stv Amount of stv minted (27 decimals)
-     * @dev If the recipient is different from msg.sender, checks that enough stv is deposited to lock the requested wstETH
      */
-    function depositETHAndMintWsteth(address _recipient, address _referral, uint256 _wstethToMint)
+    function depositETHAndMintWsteth(address _referral, uint256 _wstethToMint)
         external
         payable
         virtual
         returns (uint256 stv)
     {
-        stv = depositETH(_recipient, _referral);
-
-        if (_wstethToMint != 0) {
-            if (_recipient != msg.sender) _checkMinStvToLock(stv, _wstethToMint);
-            _mintWsteth(_recipient, _wstethToMint);
-        }
+        stv = depositETH(msg.sender, _referral);
+        if (_wstethToMint != 0) mintWsteth(_wstethToMint);
     }
 
     // =================================================================================
@@ -257,7 +251,7 @@ contract StvStETHPool is StvPool {
         /// should not be returned to Staking Vault, but should be distributed among all participants
         /// in exchange for the withdrawn ETH.
         ///
-        /// Thus, in rare situations, Staking Vault may have two assets: ETH and stETH, which are
+        /// Thus, in rare situations, StvStETHPool may have two assets: ETH and stETH, which are
         /// distributed among all users in proportion to their shares.
         assets = _convertToAssets(balanceOf(_account));
     }
@@ -312,28 +306,24 @@ contract StvStETHPool is StvPool {
      * @dev Note that minted wstETH can be not enough to cover the full obligation in stETH shares because of rounding error
      * on WSTETH contract during unwrapping. The dust from rounding accumulates on the WSTETH contract during unwrapping
      */
-    function mintWsteth(uint256 _wsteth) external {
-        _mintWsteth(msg.sender, _wsteth);
-    }
+    function mintWsteth(uint256 _wsteth) public {
+        _checkFeatureNotPaused(MINTING_FEATURE);
+        _checkRemainingMintingCapacityOf(msg.sender, _wsteth);
 
-    function _mintWsteth(address _account, uint256 _wsteth) internal {
-        _checkRemainingMintingCapacityOf(_account, _wsteth);
-        _increaseMintedStethShares(_account, _wsteth);
-        DASHBOARD.mintWstETH(_account, _wsteth);
+        _increaseMintedStethShares(msg.sender, _wsteth);
+        DASHBOARD.mintWstETH(msg.sender, _wsteth);
     }
 
     /**
      * @notice Mint stETH shares up to the user's minting capacity
      * @param _stethShares The amount of stETH shares to mint
      */
-    function mintStethShares(uint256 _stethShares) external {
-        _mintStethShares(msg.sender, _stethShares);
-    }
+    function mintStethShares(uint256 _stethShares) public {
+        _checkFeatureNotPaused(MINTING_FEATURE);
+        _checkRemainingMintingCapacityOf(msg.sender, _stethShares);
 
-    function _mintStethShares(address _account, uint256 _stethShares) internal {
-        _checkRemainingMintingCapacityOf(_account, _stethShares);
-        _increaseMintedStethShares(_account, _stethShares);
-        DASHBOARD.mintShares(_account, _stethShares);
+        _increaseMintedStethShares(msg.sender, _stethShares);
+        DASHBOARD.mintShares(msg.sender, _stethShares);
     }
 
     /**
@@ -343,16 +333,12 @@ contract StvStETHPool is StvPool {
      * on WSTETH contract during unwrapping. The dust from rounding accumulates on the WSTETH contract during unwrapping
      */
     function burnWsteth(uint256 _wsteth) external {
-        _burnWsteth(msg.sender, _wsteth);
-    }
-
-    function _burnWsteth(address _account, uint256 _wsteth) internal {
         /// @dev Simulate conversions during unwrapping to account for possible reduction due to rounding errors
         uint256 unwrappedSteth = _getPooledEthByShares(_wsteth);
         uint256 unwrappedStethShares = _getSharesByPooledEth(unwrappedSteth);
-        _decreaseMintedStethShares(_account, unwrappedStethShares);
+        _decreaseMintedStethShares(msg.sender, unwrappedStethShares);
 
-        WSTETH.transferFrom(_account, address(this), _wsteth);
+        WSTETH.transferFrom(msg.sender, address(this), _wsteth);
         DASHBOARD.burnWstETH(_wsteth);
     }
 
@@ -361,12 +347,8 @@ contract StvStETHPool is StvPool {
      * @param _stethShares The amount of stETH shares to burn
      */
     function burnStethShares(uint256 _stethShares) external {
-        _burnStethShares(msg.sender, _stethShares);
-    }
-
-    function _burnStethShares(address _account, uint256 _stethShares) internal {
-        _decreaseMintedStethShares(_account, _stethShares);
-        STETH.transferSharesFrom(_account, address(this), _stethShares);
+        _decreaseMintedStethShares(msg.sender, _stethShares);
+        STETH.transferSharesFrom(msg.sender, address(this), _stethShares);
         DASHBOARD.burnShares(_stethShares);
     }
 
@@ -454,8 +436,7 @@ contract StvStETHPool is StvPool {
      * @return stvToLock The min amount of stv to lock (27 decimals)
      */
     function calcStvToLockForStethShares(uint256 _stethShares) public view returns (uint256 stvToLock) {
-        uint256 assetsToLock = calcAssetsToLockForStethShares(_stethShares);
-        stvToLock = _convertToStv(assetsToLock, Math.Rounding.Ceil);
+        stvToLock = _convertToStv(calcAssetsToLockForStethShares(_stethShares), Math.Rounding.Ceil);
     }
 
     // =================================================================================
@@ -482,31 +463,34 @@ contract StvStETHPool is StvPool {
      * @notice Sync reserve ratio and forced rebalance threshold from VaultHub
      * @dev Permissionless method to keep reserve ratio and forced rebalance threshold in sync with VaultHub
      * @dev Adds a gap defined by RESERVE_RATIO_GAP_BP to VaultHub's values
-     * @dev Reverts if the new reserve ratio or forced rebalance threshold is invalid (>= TOTAL_BASIS_POINTS)
      */
     function syncVaultParameters() public {
         IVaultHub.VaultConnection memory connection = DASHBOARD.vaultConnection();
 
         uint256 maxReserveRatioBP = TOTAL_BASIS_POINTS - 1;
+        uint256 maxForcedRebalanceThresholdBP = maxReserveRatioBP - 1;
 
         /// Invariants from the OperatorGrid
         assert(connection.reserveRatioBP > 0);
         assert(connection.reserveRatioBP <= maxReserveRatioBP);
         assert(connection.forcedRebalanceThresholdBP > 0);
-        assert(connection.forcedRebalanceThresholdBP <= connection.reserveRatioBP);
+        assert(connection.forcedRebalanceThresholdBP < connection.reserveRatioBP);
 
         uint16 newReserveRatioBP = uint16(Math.min(connection.reserveRatioBP + RESERVE_RATIO_GAP_BP, maxReserveRatioBP));
-        uint16 newThresholdBP =
-            uint16(Math.min(connection.forcedRebalanceThresholdBP + RESERVE_RATIO_GAP_BP, maxReserveRatioBP));
+        uint16 newForcedRebalanceThresholdBP = uint16(
+            Math.min(connection.forcedRebalanceThresholdBP + RESERVE_RATIO_GAP_BP, maxForcedRebalanceThresholdBP)
+        );
 
         StvStETHPoolStorage storage $ = _getStvStETHPoolStorage();
 
-        if (newReserveRatioBP == $.reserveRatioBP && newThresholdBP == $.forcedRebalanceThresholdBP) return;
+        if (newReserveRatioBP == $.reserveRatioBP && newForcedRebalanceThresholdBP == $.forcedRebalanceThresholdBP) {
+            return;
+        }
 
         $.reserveRatioBP = newReserveRatioBP;
-        $.forcedRebalanceThresholdBP = newThresholdBP;
+        $.forcedRebalanceThresholdBP = newForcedRebalanceThresholdBP;
 
-        emit VaultParametersUpdated(newReserveRatioBP, newThresholdBP);
+        emit VaultParametersUpdated(newReserveRatioBP, newForcedRebalanceThresholdBP);
     }
 
     // =================================================================================
@@ -558,7 +542,7 @@ contract StvStETHPool is StvPool {
      * @dev Second, if there are remaining liability shares, rebalances Staking Vault
      * @dev Requires fresh oracle report, which is checked in the Withdrawal Queue
      */
-    function rebalanceMintedStethShares(uint256 _stethShares, uint256 _maxStvToBurn)
+    function rebalanceMintedStethSharesForWithdrawalQueue(uint256 _stethShares, uint256 _maxStvToBurn)
         public
         returns (uint256 stvBurned)
     {
@@ -574,9 +558,9 @@ contract StvStETHPool is StvPool {
      * @dev Requires fresh oracle report to price stv accurately
      */
     function forceRebalance(address _account) public returns (uint256 stvBurned) {
-        (uint256 stethShares, uint256 stv, bool isUndercollateralized) = previewForceRebalance(_account);
+        _checkFreshReport();
 
-        if (stethShares == 0) revert NothingToRebalance();
+        (uint256 stethShares, uint256 stv, bool isUndercollateralized) = previewForceRebalance(_account);
         if (isUndercollateralized) revert UndercollateralizedAccount();
 
         stvBurned = _rebalanceMintedStethShares(_account, stethShares, stv);
@@ -590,6 +574,7 @@ contract StvStETHPool is StvPool {
      */
     function forceRebalanceAndSocializeLoss(address _account) public returns (uint256 stvBurned) {
         _checkRole(LOSS_SOCIALIZER_ROLE, msg.sender);
+        _checkFreshReport();
 
         (uint256 stethShares, uint256 stv, bool isUndercollateralized) = previewForceRebalance(_account);
         if (!isUndercollateralized) revert CollateralizedAccount();
@@ -603,15 +588,13 @@ contract StvStETHPool is StvPool {
      * @return stethShares The amount of stETH shares to rebalance, limited by available assets
      * @return stv The amount of stv needed to burn in exchange for the stETH shares, limited by user's stv balance
      * @return isUndercollateralized True if the user's assets are insufficient to cover the liability
-     * @dev Requires fresh oracle report to price stv accurately
+     * @dev Requires fresh oracle report to price stv accurately (not enforced in this method, so caller must ensure it)
      */
     function previewForceRebalance(address _account)
         public
         view
         returns (uint256 stethShares, uint256 stv, bool isUndercollateralized)
     {
-        _checkFreshReport();
-
         uint256 stethSharesLiability = mintedStethSharesOf(_account);
         uint256 stvBalance = balanceOf(_account);
         uint256 assets = assetsOf(_account);
@@ -644,12 +627,12 @@ contract StvStETHPool is StvPool {
         ///
         /// First, the rebalancing will use exceeding minted steth, bringing the vault closer to minted steth == liability,
         /// then the rebalancing mechanism on the vault, which is limited by available balance in the staking vault
-        uint256 stethToRebalance = totalExceedingMintedSteth() + STAKING_VAULT.availableBalance();
+        uint256 stethToRebalance = totalExceedingMintedSteth() + VAULT.availableBalance();
         stethToRebalance = Math.min(targetStethToRebalance, stethToRebalance);
 
         uint256 stvRequired = _convertToStv(stethToRebalance, Math.Rounding.Ceil);
 
-        stethShares = _getSharesByPooledEth(stethToRebalance); // TODO: round up, can it exceed liability?
+        stethShares = _getSharesByPooledEth(stethToRebalance);
         stv = Math.min(stvRequired, stvBalance);
         isUndercollateralized = isUndercollateralized || stvRequired > stvBalance;
     }
@@ -671,6 +654,7 @@ contract StvStETHPool is StvPool {
         returns (uint256 stvToBurn)
     {
         _checkNoUnassignedLiability();
+        _checkNoBadDebt();
 
         if (_stethShares == 0) revert ZeroArgument();
         if (_stethShares > mintedStethSharesOf(_account)) revert InsufficientMintedShares();
@@ -682,9 +666,14 @@ contract StvStETHPool is StvPool {
 
         if (remainingStethShares > 0) DASHBOARD.rebalanceVaultWithShares(remainingStethShares);
 
-        // TODO: Add sanity check for loss socialization
         if (stvToBurn > _maxStvToBurn) {
-            emit SocializedLoss(stvToBurn - _maxStvToBurn, ethToRebalance - _convertToAssets(_maxStvToBurn));
+            _checkAllowedLossSocializationPortion(stvToBurn, _maxStvToBurn);
+
+            emit SocializedLoss(
+                stvToBurn - _maxStvToBurn,
+                ethToRebalance - _convertToAssets(_maxStvToBurn),
+                _getStvStETHPoolStorage().maxLossSocializationBP
+            );
             stvToBurn = _maxStvToBurn;
         }
 
@@ -707,8 +696,54 @@ contract StvStETHPool is StvPool {
         isBreached = _assets < assetsThreshold;
     }
 
-    function _checkFreshReport() internal view {
-        if (!VAULT_HUB.isReportFresh(address(STAKING_VAULT))) revert VaultReportStale();
+    function _checkAllowedLossSocializationPortion(uint256 stvRequired, uint256 stvAvailable) internal view {
+        // It's guaranteed that stvRequired > stvAvailable here
+        uint256 portionToSocializeBP =
+            Math.mulDiv(stvRequired - stvAvailable, TOTAL_BASIS_POINTS, stvRequired, Math.Rounding.Ceil);
+
+        if (portionToSocializeBP > _getStvStETHPoolStorage().maxLossSocializationBP) {
+            revert ExcessiveLossSocialization();
+        }
+    }
+
+    // =================================================================================
+    // LOSS SOCIALIZATION LIMITER
+    // =================================================================================
+
+    // During rebalancing, it's possible that the stv available for burning is not sufficient to cover the entire liability.
+    // This may be due to a sharp drop in the stv price, which has resulted in an individual account or a request in Withdrawal Queue
+    // no longer being collateralized (assets < liability).
+    //
+    // The limiter on loss socialization is introduced to prevent excessive losses from being socialized to all pool participants.
+    // The limiter is defined as a maximum portion of the loss that can be socialized, expressed in basis points (BP).
+    //
+    // The default value is set to 0 BP, meaning that no loss socialization is allowed without explicit permission.
+
+    /**
+     * @notice Maximum allowed loss socialization in basis points
+     * @return maxSocializablePortionBP The maximum allowed portion of loss to be socialized in basis points
+     * @dev Used to limit the portion of loss that can be socialized to all pool participants during rebalance
+     */
+    function maxLossSocializationBP() external view returns (uint256 maxSocializablePortionBP) {
+        maxSocializablePortionBP = uint256(_getStvStETHPoolStorage().maxLossSocializationBP);
+    }
+
+    /**
+     * @notice Set the maximum allowed loss socialization in basis points
+     * @param _maxSocializablePortionBP The new maximum allowed loss socialization in basis points
+     * @dev Sets the maximum portion of loss that can be socialized to all pool participants during rebalance
+     * @dev Can only be called by accounts with the DEFAULT_ADMIN_ROLE
+     */
+    function setMaxLossSocializationBP(uint16 _maxSocializablePortionBP) external {
+        _checkRole(DEFAULT_ADMIN_ROLE, msg.sender);
+
+        if (_maxSocializablePortionBP > TOTAL_BASIS_POINTS) revert InvalidValue();
+
+        StvStETHPoolStorage storage $ = _getStvStETHPoolStorage();
+        if (_maxSocializablePortionBP == $.maxLossSocializationBP) revert SameValue();
+        $.maxLossSocializationBP = _maxSocializablePortionBP;
+
+        emit MaxLossSocializationUpdated(_maxSocializablePortionBP);
     }
 
     // =================================================================================
@@ -752,5 +787,27 @@ contract StvStETHPool is StvPool {
         uint256 stvToLock = calcStvToLockForStethShares(mintedStethShares);
 
         if (balanceOf(_from) < stvToLock) revert InsufficientReservedBalance();
+    }
+
+    // =================================================================================
+    // PAUSE / RESUME MINTING
+    // =================================================================================
+
+    /**
+     * @notice Pause (w)stETH minting
+     * @dev Can only be called by accounts with the MINTING_PAUSE_ROLE
+     */
+    function pauseMinting() external {
+        _checkRole(MINTING_PAUSE_ROLE, msg.sender);
+        _pauseFeature(MINTING_FEATURE);
+    }
+
+    /**
+     * @notice Resume (w)stETH minting
+     * @dev Can only be called by accounts with the MINTING_RESUME_ROLE
+     */
+    function resumeMinting() external {
+        _checkRole(MINTING_RESUME_ROLE, msg.sender);
+        _resumeFeature(MINTING_FEATURE);
     }
 }

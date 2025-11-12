@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity >=0.8.25;
+pragma solidity 0.8.30;
 
-import {StvStETHPoolHarness} from "test/utils/StvStETHPoolHarness.sol";
 import {StvStETHPool} from "src/StvStETHPool.sol";
 import {IStrategy} from "src/interfaces/IStrategy.sol";
+import {StvStETHPoolHarness} from "test/utils/StvStETHPoolHarness.sol";
 
 /**
  * @title StvStrategyPoolHarness
@@ -27,12 +27,13 @@ contract StvStrategyPoolHarness is StvStETHPoolHarness {
             nodeOperatorManager: NODE_OPERATOR,
             nodeOperatorFeeBP: nodeOperatorFeeBP,
             confirmExpiry: CONFIRM_EXPIRY,
-            maxFinalizationTime: 30 days,
             minWithdrawalDelayTime: 1 days,
             reserveRatioGapBP: reserveRatioGapBP,
             strategyKind: StrategyKind.GGV,
             ggvTeller: _teller,
             ggvBoringQueue: _boringQueue,
+            timelockMinDelaySeconds: 0,
+            timelockExecutor: NODE_OPERATOR,
             name: "Integration Strategy Pool",
             symbol: "iSTRAT"
         });

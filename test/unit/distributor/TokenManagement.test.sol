@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
-pragma solidity >=0.8.25;
+pragma solidity 0.8.30;
 
-import {Test} from "forge-std/Test.sol";
 import {SetupDistributor} from "./SetupDistributor.sol";
-import {Distributor} from "src/Distributor.sol";
 import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
+import {Test} from "forge-std/Test.sol";
+import {Distributor} from "src/Distributor.sol";
 
 contract TokenManagementTest is Test, SetupDistributor {
     function setUp() public override {
@@ -14,16 +14,11 @@ contract TokenManagementTest is Test, SetupDistributor {
     // ==================== Error Cases ====================
 
     function test_AddToken_RevertsIfNotManager() public {
-
         bytes32 managerRole = distributor.MANAGER_ROLE();
 
         vm.prank(userAlice);
         vm.expectRevert(
-            abi.encodeWithSelector(
-                IAccessControl.AccessControlUnauthorizedAccount.selector,
-                userAlice,
-                managerRole
-            )
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, userAlice, managerRole)
         );
         distributor.addToken(address(token1));
     }
@@ -99,6 +94,4 @@ contract TokenManagementTest is Test, SetupDistributor {
         assertEq(tokens[0], address(token1));
     }
 }
-
-
 

@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
-pragma solidity >=0.8.25;
+pragma solidity 0.8.30;
 
 import {Test} from "forge-std/Test.sol";
 
-import {GGVVaultMock} from "src/mock/ggv/GGVVaultMock.sol";
 import {GGVMockTeller} from "src/mock/ggv/GGVMockTeller.sol";
 import {GGVQueueMock} from "src/mock/ggv/GGVQueueMock.sol";
+import {GGVVaultMock} from "src/mock/ggv/GGVVaultMock.sol";
 import {MockStETH} from "test/mocks/MockStETH.sol";
 import {MockWstETH} from "test/mocks/MockWstETH.sol";
 
@@ -56,7 +56,7 @@ contract GGVMockTest is Test {
 
         vm.startPrank(admin);
         // add 1 steth to ggv balance for rebase
-        vault.rebase(1 ether);
+        vault.rebaseSteth(1 ether);
         uint256 newGgvUserAssets = vault.getAssetsByShares(ggvShares);
         assertEq(newGgvUserAssets > ggvUserAssets, true);
     }

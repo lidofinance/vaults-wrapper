@@ -1,19 +1,19 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity >=0.8.25;
+pragma solidity 0.8.30;
 
 import {Test, console} from "forge-std/Test.sol";
 
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
-import {IOssifiableProxy} from "src/interfaces/IOssifiableProxy.sol";
-import {ILidoLocator} from "src/interfaces/ILidoLocator.sol";
-import {ILido} from "src/interfaces/ILido.sol";
-import {ILazyOracle} from "src/interfaces/ILazyOracle.sol";
-import {IDashboard} from "src/interfaces/IDashboard.sol";
-import {IOperatorGrid} from "src/interfaces/IOperatorGrid.sol";
-import {IVaultHub as IVaultHubIntact} from "src/interfaces/IVaultHub.sol";
-import {IVaultFactory} from "src/interfaces/IVaultFactory.sol";
-import {IWstETH} from "../../src/interfaces/IWstETH.sol";
+import {IWstETH} from "../../src/interfaces/core/IWstETH.sol";
+import {IDashboard} from "src/interfaces/core/IDashboard.sol";
+import {ILazyOracle} from "src/interfaces/core/ILazyOracle.sol";
+import {ILido} from "src/interfaces/core/ILido.sol";
+import {ILidoLocator} from "src/interfaces/core/ILidoLocator.sol";
+import {IOperatorGrid} from "src/interfaces/core/IOperatorGrid.sol";
+import {IOssifiableProxy} from "src/interfaces/core/IOssifiableProxy.sol";
+import {IVaultFactory} from "src/interfaces/core/IVaultFactory.sol";
+import {IVaultHub as IVaultHubIntact} from "src/interfaces/core/IVaultHub.sol";
 
 interface IHashConsensus {
     function updateInitialEpoch(uint256 initialEpoch) external;
@@ -65,7 +65,12 @@ contract CoreHarness is Test {
     constructor() {
         vm.deal(address(this), 10000000 ether);
 
-        address locatorAddress = vm.parseAddress(vm.envString("CORE_LOCATOR_ADDRESS"));
+        string memory locatorAddressStr = vm.envString("CORE_LOCATOR_ADDRESS");
+        if (bytes(locatorAddressStr).length == 0) {
+            revert("CORE_LOCATOR_ADDRESS is not set");
+        }
+
+        address locatorAddress = vm.parseAddress(locatorAddressStr);
         console.log("Locator address:", locatorAddress);
 
         locator = ILidoLocator(locatorAddress);
@@ -101,8 +106,9 @@ contract CoreHarness is Test {
         vm.startPrank(agent);
         {
             try IHashConsensus(hashConsensusAddr).updateInitialEpoch(1) {
-                // ok
-            } catch {
+            // ok
+            }
+                catch {
                 // ignore if already set on pre-deployed core (Hoodi)
             }
 
@@ -120,7 +126,7 @@ contract CoreHarness is Test {
         uint256 totalShares = steth.getTotalShares();
         if (totalShares < 100000) {
             try steth.submit{value: INITIAL_LIDO_SUBMISSION}(address(this)) {}
-            catch {
+                catch {
                 // ignore stake limit or other constraints on pre-deployed core
             }
         }
@@ -217,7 +223,6 @@ contract CoreHarness is Test {
             emptyProof
         );
     }
-
 
     /**
      * @dev Mock function to simulate validators receiving ETH from the staking vault

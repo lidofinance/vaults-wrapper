@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity >=0.8.25;
+pragma solidity 0.8.30;
 
-import {Test} from "forge-std/Test.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
+import {Test} from "forge-std/Test.sol";
 import {StvPool} from "src/StvPool.sol";
 import {MockDashboard, MockDashboardFactory} from "test/mocks/MockDashboard.sol";
 import {MockStETH} from "test/mocks/MockStETH.sol";
@@ -44,7 +44,8 @@ abstract contract SetupAllowList is Test {
             _dashboard: address(dashboard),
             _allowListEnabled: false,
             _withdrawalQueue: address(0),
-            _distributor: address(0)
+            _distributor: address(0),
+            _poolType: bytes32("TestPool")
         });
         ERC1967Proxy poolProxyWithoutAllowList = new ERC1967Proxy(address(implWithoutAllowList), "");
         poolWithoutAllowList = StvPool(payable(poolProxyWithoutAllowList));
@@ -55,7 +56,8 @@ abstract contract SetupAllowList is Test {
             _dashboard: address(dashboard),
             _allowListEnabled: true,
             _withdrawalQueue: address(0),
-            _distributor: address(0)
+            _distributor: address(0),
+            _poolType: bytes32("TestPool")
         });
         ERC1967Proxy poolProxyWithAllowList = new ERC1967Proxy(address(implWithAllowList), "");
         poolWithAllowList = StvPool(payable(poolProxyWithAllowList));

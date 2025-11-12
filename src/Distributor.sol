@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity >=0.8.25;
+pragma solidity 0.8.30;
 
 import {AccessControlEnumerable} from "@openzeppelin/contracts/access/extensions/AccessControlEnumerable.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -32,7 +32,7 @@ contract Distributor is AccessControlEnumerable {
     event TokenAdded(address indexed token);
     event Claimed(address indexed recipient, address indexed token, uint256 amount);
     event MerkleRootUpdated(
-        bytes32 oldRoot, bytes32 newRoot, string oldCid, string newCid, uint256 oldBlock, uint256 newBlock
+        bytes32 oldRoot, bytes32 indexed newRoot, string oldCid, string newCid, uint256 oldBlock, uint256 newBlock
     );
 
     // ==================== Errors ====================
@@ -42,9 +42,13 @@ contract Distributor is AccessControlEnumerable {
     error RootNotSet();
     error TokenAlreadyAdded(address token);
     error ZeroAddress();
+    error TokenNotSupported(address token);
 
-    /// @param _owner The address of the owner (admin)
-    /// @param _manager The address of the manager (MANAGER_ROLE)
+    /**
+     * @notice Constructor
+     * @param _owner The address of the owner (admin)
+     * @param _manager The address of the manager (MANAGER_ROLE)
+     */
     constructor(address _owner, address _manager) {
         lastProcessedBlock = block.number;
 
@@ -52,8 +56,10 @@ contract Distributor is AccessControlEnumerable {
         _grantRole(MANAGER_ROLE, _manager);
     }
 
-    /// @notice Add a token to the list of supported tokens
-    /// @param token The address of the token to add
+    /**
+     * @notice Add a token to the list of supported tokens
+     * @param token The address of the token to add
+     */
     function addToken(address token) external {
         _checkRole(MANAGER_ROLE, msg.sender);
         if (token == address(0)) revert ZeroAddress();
@@ -64,18 +70,22 @@ contract Distributor is AccessControlEnumerable {
         emit TokenAdded(token);
     }
 
-    /// @notice Get the list of supported tokens
-    /// @return tokens The list of supported tokens
+    /**
+     * @notice Get the list of supported tokens
+     * @return tokens The list of supported tokens
+     */
     function getTokens() external view returns (address[] memory) {
         return tokens.values();
     }
 
-    /// @notice Sets the Merkle root and CID
-    /// @param _root The new Merkle root
-    /// @param _cid The new CID
+    /**
+     * @notice Sets the Merkle root and CID
+     * @param _root The new Merkle root
+     * @param _cid The new CID
+     */
     function setMerkleRoot(bytes32 _root, string calldata _cid) external {
         _checkRole(MANAGER_ROLE, msg.sender);
-        if (_root == root || keccak256(bytes(_cid)) == keccak256(bytes(cid))) revert AlreadyProcessed();
+        if (_root == root && keccak256(bytes(_cid)) == keccak256(bytes(cid))) revert AlreadyProcessed();
 
         emit MerkleRootUpdated(root, _root, cid, _cid, lastProcessedBlock, block.number);
 
@@ -84,30 +94,53 @@ contract Distributor is AccessControlEnumerable {
         lastProcessedBlock = block.number;
     }
 
-    /// @notice Claims rewards.
-    /// @param _recipient The address to claim rewards for.
-    /// @param _token The address of the reward token.
-    /// @param _amount The overall claimable amount of token rewards.
-    /// @param _proof The merkle proof that validates this claim.
-    /// @return claimedAmount The amount of reward token claimed.
-    /// @dev Anyone can claim rewards on behalf of an account.
-    function claim(address _recipient, address _token, uint256 _amount, bytes32[] calldata _proof)
+    /**
+     * @notice Preview the amount of tokens that can be claimed
+     * @param _recipient The address to claim rewards for.
+     * @param _token The address of the reward token.
+     * @param _cumulativeAmount The overall claimable amount of token rewards.
+     * @param _proof The merkle proof that validates this claim.
+     * @return claimable The amount of tokens that can be claimed.
+     */
+    function previewClaim(address _recipient, address _token, uint256 _cumulativeAmount, bytes32[] calldata _proof)
+        public
+        view
+        returns (uint256 claimable)
+    {
+        if (root == bytes32(0)) revert RootNotSet();
+        if (!tokens.contains(_token)) revert TokenNotSupported(_token);
+
+        if (!MerkleProof.verifyCalldata(
+                _proof, root, keccak256(bytes.concat(keccak256(abi.encode(_recipient, _token, _cumulativeAmount))))
+            )) revert InvalidProof();
+
+        uint256 alreadyClaimed = claimed[_recipient][_token];
+        if (_cumulativeAmount <= alreadyClaimed) return 0;
+
+        unchecked {
+            claimable = _cumulativeAmount - alreadyClaimed;
+        }
+    }
+
+    /**
+     * @notice Claims rewards.
+     * @dev Anyone can claim rewards on behalf of an account.
+     *
+     * @param _recipient The address to claim rewards for.
+     * @param _token The address of the reward token.
+     * @param _cumulativeAmount The overall claimable amount of token rewards.
+     * @param _proof The merkle proof that validates this claim.
+     * @return claimedAmount The amount of reward token claimed.
+     */
+    function claim(address _recipient, address _token, uint256 _cumulativeAmount, bytes32[] calldata _proof)
         external
         returns (uint256 claimedAmount)
     {
-        if (root == bytes32(0)) revert RootNotSet();
-        if (!MerkleProof.verifyCalldata(
-                _proof, root, keccak256(bytes.concat(keccak256(abi.encode(_recipient, _token, _amount))))
-            )) revert InvalidProof();
-
-        if (_amount <= claimed[_recipient][_token]) revert ClaimableTooLow();
-
-        claimedAmount = _amount - claimed[_recipient][_token];
-
-        claimed[_recipient][_token] = _amount;
+        claimedAmount = previewClaim(_recipient, _token, _cumulativeAmount, _proof);
+        if (claimedAmount == 0) revert ClaimableTooLow();
+        claimed[_recipient][_token] = _cumulativeAmount;
 
         IERC20(_token).safeTransfer(_recipient, claimedAmount);
-
         emit Claimed(_recipient, _token, claimedAmount);
     }
 }

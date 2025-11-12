@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity >=0.8.25;
+pragma solidity 0.8.30;
 
 /**
  * @title MockStakingVault
@@ -34,7 +34,7 @@ contract MockStakingVault {
 
     function withdraw(address recipient, uint256 amount) external {
         // require(msg.sender == nodeOperator, "Not node operator");
-        (bool success, ) = recipient.call{value: amount}("");
+        (bool success,) = recipient.call{value: amount}("");
         require(success, "Transfer failed");
     }
 

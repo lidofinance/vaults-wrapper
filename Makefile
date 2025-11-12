@@ -1,5 +1,7 @@
 .ONESHELL:
 
+# TODO: get this deprecated in favour of just
+
 CORE_RPC_PORT ?= 9123
 CORE_BRANCH ?= feat/vaults
 CORE_SUBDIR ?= lido-core
@@ -26,6 +28,14 @@ test-integration-b:
 		-$(VERBOSITY) \
 		--fork-url "$$RPC_URL"
 
+test-integration-dashboard:
+	[ -f .env ] && . .env; \
+	FOUNDRY_PROFILE=test \
+	CORE_LOCATOR_ADDRESS="$$CORE_LOCATOR_ADDRESS" \
+	forge test \
+		"test/integration/dashboard*.test.sol" \
+		-$(VERBOSITY) \
+		--fork-url "$$RPC_URL"
 
 test-integration-ggv:
 	[ -f .env ] && . .env; \

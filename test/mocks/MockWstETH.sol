@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
-pragma solidity >=0.8.25;
+pragma solidity 0.8.30;
 
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import {IStETH} from "src/interfaces/IStETH.sol";
+import {IStETH} from "src/interfaces/core/IStETH.sol";
 
 contract MockWstETH is ERC20 {
     IStETH public stETH;

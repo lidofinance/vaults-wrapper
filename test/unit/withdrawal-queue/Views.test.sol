@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
-pragma solidity >=0.8.25;
+pragma solidity 0.8.30;
 
-import {Test} from "forge-std/Test.sol";
 import {SetupWithdrawalQueue} from "./SetupWithdrawalQueue.sol";
+import {Test} from "forge-std/Test.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
 
 contract ViewsTest is Test, SetupWithdrawalQueue {
@@ -48,9 +48,7 @@ contract ViewsTest is Test, SetupWithdrawalQueue {
         assertFalse(statuses[1].isFinalized);
 
         lazyOracle.mock__updateLatestReportTimestamp(block.timestamp);
-        vm.warp(block.timestamp + MIN_WITHDRAWAL_DELAY_TIME + 1);
-        vm.prank(finalizeRoleHolder);
-        withdrawalQueue.finalize(1);
+        _finalizeRequests(1);
 
         WithdrawalQueue.WithdrawalRequestStatus memory statusSingle = withdrawalQueue.getWithdrawalStatus(requestId1);
         assertTrue(statusSingle.isFinalized);
@@ -72,6 +70,18 @@ contract ViewsTest is Test, SetupWithdrawalQueue {
         withdrawalQueue.getWithdrawalStatusBatch(ids);
     }
 
+    function test_GetWithdrawalStatusBatch_RevertWhenArrayContainsZero() public {
+        pool.depositETH{value: 100 ether}(address(this), address(0));
+        uint256 requestId = withdrawalQueue.requestWithdrawal(address(this), 10 ** STV_DECIMALS, 0);
+
+        uint256[] memory ids = new uint256[](2);
+        ids[0] = requestId;
+        ids[1] = 0;
+
+        vm.expectRevert(abi.encodeWithSelector(WithdrawalQueue.InvalidRequestId.selector, 0));
+        withdrawalQueue.getWithdrawalStatusBatch(ids);
+    }
+
     function test_GetClaimableEther_ViewLifecycle() public {
         pool.depositETH{value: 100 ether}(address(this), address(0));
         uint256 requestId = withdrawalQueue.requestWithdrawal(address(this), 10 ** STV_DECIMALS, 0);
@@ -79,17 +89,12 @@ contract ViewsTest is Test, SetupWithdrawalQueue {
         assertEq(withdrawalQueue.getClaimableEther(requestId), 0);
 
         lazyOracle.mock__updateLatestReportTimestamp(block.timestamp);
-        vm.warp(block.timestamp + MIN_WITHDRAWAL_DELAY_TIME + 1);
-        vm.prank(finalizeRoleHolder);
-        withdrawalQueue.finalize(1);
+        _finalizeRequests(1);
 
         uint256[] memory requestIds = new uint256[](1);
         requestIds[0] = requestId;
-        uint256[] memory hints = withdrawalQueue.findCheckpointHintBatch(
-            requestIds,
-            1,
-            withdrawalQueue.getLastCheckpointIndex()
-        );
+        uint256[] memory hints =
+            withdrawalQueue.findCheckpointHintBatch(requestIds, 1, withdrawalQueue.getLastCheckpointIndex());
 
         uint256 claimable = withdrawalQueue.getClaimableEther(requestId);
         assertGt(claimable, 0);

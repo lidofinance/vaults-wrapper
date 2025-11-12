@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: MIT
-pragma solidity >=0.8.25;
+pragma solidity 0.8.30;
 
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
 import {BorrowedMath} from "./BorrowedMath.sol";
 import {GGVMockTeller} from "./GGVMockTeller.sol";
 import {GGVQueueMock} from "./GGVQueueMock.sol";
-import {IStETH} from "src/interfaces/IStETH.sol";
+import {IStETH} from "src/interfaces/core/IStETH.sol";
+import {IWstETH} from "src/interfaces/core/IWstETH.sol";
 import {IBoringOnChainQueue} from "src/interfaces/ggv/IBoringOnChainQueue.sol";
 import {ITellerWithMultiAssetSupport} from "src/interfaces/ggv/ITellerWithMultiAssetSupport.sol";
 
@@ -15,32 +16,62 @@ contract GGVVaultMock is ERC20 {
     ITellerWithMultiAssetSupport public immutable TELLER;
     GGVQueueMock public immutable BORING_QUEUE;
     IStETH public immutable steth;
+    IWstETH public immutable wsteth;
 
     // steth shares as base vault asset
     // real ggv uses weth but it should be okay to peg it to steth shares for mock
     uint256 public _totalAssets;
+
+    error OnlyOwner();
+    error OnlyTeller();
+    error OnlyQueue();
 
     constructor(address _owner, address _steth, address _wsteth) ERC20("GGVVaultMock", "tGGV") {
         owner = _owner;
         TELLER = ITellerWithMultiAssetSupport(address(new GGVMockTeller(_owner, address(this), _steth, _wsteth)));
         BORING_QUEUE = new GGVQueueMock(address(this), _steth, _wsteth, _owner);
         steth = IStETH(_steth);
+        wsteth = IWstETH(_wsteth);
 
         // Mint some initial tokens to the dead address to avoid zero totalSupply issues
         _mint(address(0xdead), 1e18);
         _totalAssets = 1e18;
     }
 
-    function rebase(uint256 stethSharesToRebaseWith) external {
-        require(msg.sender == owner, "Only owner can rebase");
-        steth.transferSharesFrom(msg.sender, address(this), stethSharesToRebaseWith);
-        _totalAssets += stethSharesToRebaseWith;
+    function _onlyOwner() internal view {
+        if (msg.sender != owner) revert OnlyOwner();
     }
 
-    function negativeRebase(uint256 stethSharesToRebaseWith) external {
-        require(msg.sender == owner, "Only owner can rebase");
+    function _onlyTeller() internal view {
+        if (msg.sender != address(TELLER)) revert OnlyTeller();
+    }
+
+    function _onlyQueue() internal view {
+        if (msg.sender != address(BORING_QUEUE)) revert OnlyQueue();
+    }
+
+    function rebaseSteth(uint256 _stethShares) external {
+        _onlyOwner();
+        steth.transferSharesFrom(msg.sender, address(this), _stethShares);
+        _totalAssets += _stethShares;
+    }
+
+    function negativeRebaseSteth(uint256 stethSharesToRebaseWith) external {
+        _onlyOwner();
         steth.transferShares(msg.sender, stethSharesToRebaseWith);
         _totalAssets -= stethSharesToRebaseWith;
+    }
+
+    function rebaseWsteth(uint256 wstethAmount) external {
+        _onlyOwner();
+        wsteth.transferFrom(msg.sender, address(this), wstethAmount);
+        _totalAssets += wstethAmount;
+    }
+
+    function negativeRebaseWsteth(uint256 wstethAmount) external {
+        _onlyOwner();
+        wsteth.transfer(msg.sender, wstethAmount);
+        _totalAssets -= wstethAmount;
     }
 
     function getSharesByAssets(uint256 assets) public view returns (uint256) {
@@ -59,17 +90,22 @@ contract GGVVaultMock is ERC20 {
     }
 
     function depositByTeller(address asset, uint256 shares, uint256 assets, address user) external {
-        require(msg.sender == address(TELLER), "Only teller can call depositByTeller");
-        require(asset == address(steth), "Only steth asset supported");
+        _onlyTeller();
 
-        steth.transferSharesFrom(user, address(this), assets);
+        if (asset == address(steth)) {
+            steth.transferSharesFrom(user, address(this), assets);
+        } else if (asset == address(wsteth)) {
+            wsteth.transferFrom(user, address(this), assets);
+        } else {
+            revert("Unsupported asset");
+        }
 
         _mint(user, shares);
         _totalAssets += assets;
     }
 
     function burnSharesReturnAssets(ERC20 assetOut, uint256 shares, uint256 assets, address user) external {
-        require(msg.sender == address(BORING_QUEUE), "Only queue can call burnShares");
+        _onlyQueue();
         _burn(address(BORING_QUEUE), shares);
         _totalAssets -= assets;
         assetOut.transfer(user, assets);

@@ -1,18 +1,18 @@
 // SPDX-License-Identifier: MIT
-pragma solidity >=0.8.25;
+pragma solidity 0.8.30;
 
+import {IVaultHub} from "../../src/interfaces/core/IVaultHub.sol";
 import {MockStETH} from "./MockStETH.sol";
-import {MockWstETH} from "./MockWstETH.sol";
-import {MockVaultHub} from "./MockVaultHub.sol";
 import {MockStakingVault} from "./MockStakingVault.sol";
+import {MockVaultHub} from "./MockVaultHub.sol";
+import {MockWstETH} from "./MockWstETH.sol";
 import {AccessControlEnumerable} from "@openzeppelin/contracts/access/extensions/AccessControlEnumerable.sol";
-import {IVaultHub} from "../../src/interfaces/IVaultHub.sol";
 
 contract MockDashboard is AccessControlEnumerable {
     MockStETH public immutable STETH;
     MockWstETH public immutable WSTETH;
     MockVaultHub public immutable VAULT_HUB;
-    address public immutable STAKING_VAULT;
+    address public immutable VAULT;
 
     event DashboardFunded(address sender, uint256 amount);
 
@@ -28,12 +28,12 @@ contract MockDashboard is AccessControlEnumerable {
         STETH = MockStETH(_steth);
         WSTETH = MockWstETH(payable(_wsteth));
         VAULT_HUB = MockVaultHub(payable(_vaultHub));
-        STAKING_VAULT = _stakingVault; // Mock staking vault address
+        VAULT = _stakingVault; // Mock staking vault address
         _grantRole(DEFAULT_ADMIN_ROLE, _admin);
 
         // Set default report freshness to true
-        VAULT_HUB.mock_setReportFreshness(STAKING_VAULT, true);
-        VAULT_HUB.mock_setConnectionParameters(STAKING_VAULT, 10_00, 9_75); // 10% reserve, 9.75% forced rebalance
+        VAULT_HUB.mock_setReportFreshness(VAULT, true);
+        VAULT_HUB.mock_setConnectionParameters(VAULT, 10_00, 9_75); // 10% reserve, 9.75% forced rebalance
     }
 
     function initialize() external {
@@ -42,19 +42,19 @@ contract MockDashboard is AccessControlEnumerable {
 
     function fund() external payable {
         emit DashboardFunded(msg.sender, msg.value);
-        VAULT_HUB.fund{value: msg.value}(STAKING_VAULT);
+        VAULT_HUB.fund{value: msg.value}(VAULT);
     }
 
     function withdrawableValue() external view returns (uint256) {
-        return address(STAKING_VAULT).balance - locked;
+        return address(VAULT).balance - locked;
     }
 
     function maxLockableValue() external view returns (uint256) {
-        return VAULT_HUB.totalValue(STAKING_VAULT);
+        return VAULT_HUB.totalValue(VAULT);
     }
 
     function withdraw(address recipient, uint256 etherAmount) external {
-        VAULT_HUB.withdraw(STAKING_VAULT, recipient, etherAmount);
+        VAULT_HUB.withdraw(VAULT, recipient, etherAmount);
     }
 
     function vaultHub() external view returns (MockVaultHub) {
@@ -62,7 +62,7 @@ contract MockDashboard is AccessControlEnumerable {
     }
 
     function stakingVault() external view returns (address) {
-        return STAKING_VAULT;
+        return VAULT;
     }
 
     function mock_setLocked(uint256 _locked) external {
@@ -70,24 +70,24 @@ contract MockDashboard is AccessControlEnumerable {
     }
 
     function mock_simulateRewards(int256 amount) external {
-        VAULT_HUB.mock_simulateRewards(STAKING_VAULT, amount);
+        VAULT_HUB.mock_simulateRewards(VAULT, amount);
     }
 
     function mock_increaseLiability(uint256 amount) external {
-        VAULT_HUB.mock_increaseLiability(STAKING_VAULT, amount);
+        VAULT_HUB.mock_increaseLiability(VAULT, amount);
     }
 
     function liabilityShares() external view returns (uint256) {
-        return VAULT_HUB.vaultLiabilityShares(STAKING_VAULT);
+        return VAULT_HUB.vaultLiabilityShares(VAULT);
     }
 
     // Mock implementation for minting stETH
     function mintShares(address to, uint256 amount) external {
-        VAULT_HUB.mintShares(STAKING_VAULT, to, amount);
+        VAULT_HUB.mintShares(VAULT, to, amount);
     }
 
     function mintWstETH(address to, uint256 amount) external {
-        VAULT_HUB.mintShares(STAKING_VAULT, address(this), amount);
+        VAULT_HUB.mintShares(VAULT, address(this), amount);
         uint256 mintedStETH = STETH.getPooledEthBySharesRoundUp(amount);
         uint256 wrappedWstETH = WSTETH.wrap(mintedStETH);
         WSTETH.transfer(to, wrappedWstETH);
@@ -95,7 +95,7 @@ contract MockDashboard is AccessControlEnumerable {
 
     function burnShares(uint256 amount) external {
         STETH.transferSharesFrom(msg.sender, address(VAULT_HUB), amount);
-        VAULT_HUB.burnShares(STAKING_VAULT, amount);
+        VAULT_HUB.burnShares(VAULT, amount);
     }
 
     function burnWstETH(uint256 amount) external {
@@ -104,10 +104,16 @@ contract MockDashboard is AccessControlEnumerable {
         uint256 unwrappedShares = STETH.getSharesByPooledEth(unwrappedStETH);
 
         STETH.transferShares(address(VAULT_HUB), unwrappedShares);
-        VAULT_HUB.burnShares(STAKING_VAULT, amount);
+        VAULT_HUB.burnShares(VAULT, amount);
     }
 
-    function remainingMintingCapacityShares(uint256 /* vaultId */) external pure returns (uint256) {
+    function remainingMintingCapacityShares(
+        uint256 /* vaultId */
+    )
+        external
+        pure
+        returns (uint256)
+    {
         return 1000 ether; // Mock large capacity
     }
 
@@ -116,7 +122,7 @@ contract MockDashboard is AccessControlEnumerable {
     }
 
     function vaultConnection() external view returns (IVaultHub.VaultConnection memory) {
-        return VAULT_HUB.vaultConnection(STAKING_VAULT);
+        return VAULT_HUB.vaultConnection(VAULT);
     }
 
     function requestValidatorExit(bytes calldata pubkeys) external {
@@ -137,11 +143,11 @@ contract MockDashboard is AccessControlEnumerable {
 
     function rebalanceVaultWithEther(uint256 _ether) external payable {
         _rebalanceVault(STETH.getSharesByPooledEth(_ether));
-        VAULT_HUB.fund{value: msg.value}(STAKING_VAULT);
+        VAULT_HUB.fund{value: msg.value}(VAULT);
     }
 
     function _rebalanceVault(uint256 _shares) internal {
-        VAULT_HUB.rebalance(STAKING_VAULT, _shares);
+        VAULT_HUB.rebalance(VAULT, _shares);
     }
 
     function voluntaryDisconnect() external {
@@ -160,13 +166,8 @@ contract MockDashboardFactory {
 
         steth.mock_setTotalPooled(1000 ether, 800 * 10 ** 18);
 
-        MockDashboard dashboard = new MockDashboard(
-            address(steth),
-            address(wsteth),
-            address(vaultHub),
-            address(stakingVault),
-            _owner
-        );
+        MockDashboard dashboard =
+            new MockDashboard(address(steth), address(wsteth), address(vaultHub), address(stakingVault), _owner);
 
         dashboard.initialize();
 

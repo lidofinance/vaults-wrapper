@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: MIT
-pragma solidity >=0.8.25;
+pragma solidity 0.8.30;
 
-import {IDashboard} from "./IDashboard.sol";
-import {IVaultHub} from "./IVaultHub.sol";
+import {IDashboard} from "./core/IDashboard.sol";
+import {IVaultHub} from "./core/IVaultHub.sol";
 
 interface IBasePool {
     function STETH() external view returns (address);
     function DASHBOARD() external view returns (IDashboard);
     function VAULT_HUB() external view returns (IVaultHub);
-    function STAKING_VAULT() external view returns (address);
+    function VAULT() external view returns (address);
 
     function previewWithdraw(uint256 _assets) external view returns (uint256);
     function previewRedeem(uint256 _stv) external view returns (uint256);

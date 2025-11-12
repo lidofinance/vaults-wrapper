@@ -11,6 +11,7 @@ lido-core/
 .code/
 .vscode/
 .wake/
+.zed/
 
 # LLM files
 **/CLAUDE.md
@@ -28,6 +29,8 @@ docs/
 
 # Dotenv file
 .env
+.env.hoodi
+.env.mainnet
 
 # MacOS
 .DS_Store
