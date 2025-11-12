@@ -36,7 +36,8 @@ contract StrategyCallForwarder is
         return Address.functionCall(_target, _data);
     }
 
-    /** @notice Executes a call on the target contract, but also transferring value wei to the target.
+    /**
+     * @notice Executes a call on the target contract, but also transferring value wei to the target.
      * @dev Only callable by owner. To convert to the expected return value, use abi.decode.
      * @param _target The address of the target contract
      * @param _data The call data

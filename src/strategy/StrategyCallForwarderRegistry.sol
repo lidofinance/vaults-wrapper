@@ -44,7 +44,7 @@ abstract contract StrategyCallForwarderRegistry {
     function getStrategyCallForwarderAddress(address user) public view returns (address callForwarder) {
         bytes32 salt = _generateSalt(user);
         callForwarder = Clones.predictDeterministicAddress(STRATEGY_CALL_FORWARDER_IMPL, salt);
-    }   
+    }
 
     function _getOrCreateCallForwarder(address _user) internal returns (address callForwarder) {
         if (_user == address(0)) revert CallForwarderZeroArgument("_user");

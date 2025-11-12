@@ -190,8 +190,7 @@ contract GGVStrategy is IStrategy, AccessControlEnumerableUpgradeable, FeaturePa
         if (totalGGV == 0) return 0;
         if (_ggvShares > totalGGV) revert InvalidGGVAmount();
 
-        uint256 totalWstethFromGgv =
-            BORING_QUEUE.previewAssetsOut(address(WSTETH), uint128(totalGGV), params.discount);
+        uint256 totalWstethFromGgv = BORING_QUEUE.previewAssetsOut(address(WSTETH), uint128(totalGGV), params.discount);
         wsteth = Math.mulDiv(_ggvShares, totalWstethFromGgv, totalGGV);
     }
 
@@ -201,10 +200,7 @@ contract GGVStrategy is IStrategy, AccessControlEnumerableUpgradeable, FeaturePa
      * @param _params The parameters for the withdrawal
      * @return requestId The request id
      */
-    function requestExitByWsteth(uint256 _wstethToBurn, bytes calldata _params)
-        public
-        returns (bytes32 requestId)
-    {
+    function requestExitByWsteth(uint256 _wstethToBurn, bytes calldata _params) public returns (bytes32 requestId) {
         GGVParamsRequestExit memory params = abi.decode(_params, (GGVParamsRequestExit));
 
         address callForwarder = _getOrCreateCallForwarder(msg.sender);
@@ -212,8 +208,7 @@ contract GGVStrategy is IStrategy, AccessControlEnumerableUpgradeable, FeaturePa
 
         // Calculate how much wsteth we'll get from total GGV shares
         uint256 totalGGV = boringVault.balanceOf(callForwarder);
-        uint256 totalWstethFromGgv =
-            BORING_QUEUE.previewAssetsOut(address(WSTETH), uint128(totalGGV), params.discount);
+        uint256 totalWstethFromGgv = BORING_QUEUE.previewAssetsOut(address(WSTETH), uint128(totalGGV), params.discount);
         if (totalWstethFromGgv == 0) revert InvalidWstethAmount();
         if (_wstethToBurn > totalWstethFromGgv) revert InvalidWstethAmount();
 

@@ -19,8 +19,6 @@ contract GGVStrategyFactory is IStrategyFactory {
 
     function deploy(address _pool) external returns (address impl) {
         address strategyCallForwarderImpl = address(new StrategyCallForwarder());
-        impl = address(
-            new GGVStrategy(STRATEGY_ID, strategyCallForwarderImpl, _pool, TELLER, BORING_QUEUE)
-        );
+        impl = address(new GGVStrategy(STRATEGY_ID, strategyCallForwarderImpl, _pool, TELLER, BORING_QUEUE));
     }
 }

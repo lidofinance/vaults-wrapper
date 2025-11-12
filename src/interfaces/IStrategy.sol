@@ -15,9 +15,7 @@ interface IStrategy {
     //    function previewSupply(address _user, bytes calldata _params) external view returns (uint256 stv, uint256 maxWstethToMint);
 
     /// @notice Requests a withdrawal from the strategy
-    function requestExitByWsteth(uint256 wstethToBurn, bytes calldata params)
-        external
-        returns (bytes32 requestId);
+    function requestExitByWsteth(uint256 wstethToBurn, bytes calldata params) external returns (bytes32 requestId);
 
     /// @notice Finalizes a withdrawal from the strategy
     function finalizeRequestExit(address receiver, bytes32 requestId) external;
