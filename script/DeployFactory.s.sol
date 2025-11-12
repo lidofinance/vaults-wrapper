@@ -13,7 +13,7 @@ import {WithdrawalQueueFactory} from "src/factories/WithdrawalQueueFactory.sol";
 import {ILidoLocator} from "src/interfaces/ILidoLocator.sol";
 
 contract DeployFactory is Script {
-    function _deployImplFactories(address ggvTeller, address ggvBoringQueue, address steth, address wsteth)
+    function _deployImplFactories(address _ggvTeller, address _ggvBoringQueue, address _steth, address _wsteth)
         internal
         returns (Factory.SubFactories memory f)
     {
@@ -21,43 +21,43 @@ contract DeployFactory is Script {
         f.stvStETHPoolFactory = address(new StvStETHPoolFactory());
         f.withdrawalQueueFactory = address(new WithdrawalQueueFactory());
         f.distributorFactory = address(new DistributorFactory());
-        f.ggvStrategyFactory = address(new GGVStrategyFactory(ggvTeller, ggvBoringQueue, steth, wsteth));
+        f.ggvStrategyFactory = address(new GGVStrategyFactory(_ggvTeller, _ggvBoringQueue, _steth, _wsteth));
         f.timelockFactory = address(new TimelockFactory());
     }
 
     function _writeArtifacts(
-        Factory.SubFactories memory subFactories,
-        address factoryAddr,
-        string memory outputJsonPath
+        Factory.SubFactories memory _subFactories,
+        address _factoryAddr,
+        string memory _outputJsonPath
     ) internal {
         string memory factoriesSection = "";
-        factoriesSection = vm.serializeAddress("factories", "stvPoolFactory", subFactories.stvPoolFactory);
-        factoriesSection = vm.serializeAddress("factories", "stvStETHPoolFactory", subFactories.stvStETHPoolFactory);
+        factoriesSection = vm.serializeAddress("factories", "stvPoolFactory", _subFactories.stvPoolFactory);
+        factoriesSection = vm.serializeAddress("factories", "stvStETHPoolFactory", _subFactories.stvStETHPoolFactory);
         factoriesSection =
-            vm.serializeAddress("factories", "withdrawalQueueFactory", subFactories.withdrawalQueueFactory);
-        factoriesSection = vm.serializeAddress("factories", "ggvStrategyFactory", subFactories.ggvStrategyFactory);
-        factoriesSection = vm.serializeAddress("factories", "timelockFactory", subFactories.timelockFactory);
+            vm.serializeAddress("factories", "withdrawalQueueFactory", _subFactories.withdrawalQueueFactory);
+        factoriesSection = vm.serializeAddress("factories", "ggvStrategyFactory", _subFactories.ggvStrategyFactory);
+        factoriesSection = vm.serializeAddress("factories", "timelockFactory", _subFactories.timelockFactory);
 
         string memory out = "";
-        out = vm.serializeAddress("deployment", "factory", factoryAddr);
+        out = vm.serializeAddress("deployment", "factory", _factoryAddr);
         out = vm.serializeString("deployment", "network", vm.toString(block.chainid));
 
         string memory json = vm.serializeString("_root", "factories", factoriesSection);
         json = vm.serializeString("_root", "deployment", out);
 
-        vm.writeJson(json, outputJsonPath);
+        vm.writeJson(json, _outputJsonPath);
         vm.writeJson(json, "deployments/pool-factory-latest.json");
     }
 
-    function _readGGVStrategyAddresses(string memory paramsPath)
+    function _readGGVStrategyAddresses(string memory _paramsPath)
         internal
         view
         returns (address teller, address boringQueue)
     {
         require(
-            vm.isFile(paramsPath), string(abi.encodePacked("FACTORY_PARAMS_JSON file does not exist at: ", paramsPath))
+            vm.isFile(_paramsPath), string(abi.encodePacked("FACTORY_PARAMS_JSON file does not exist at: ", _paramsPath))
         );
-        string memory json = vm.readFile(paramsPath);
+        string memory json = vm.readFile(_paramsPath);
 
         teller = vm.parseJsonAddress(json, "$.strategies.ggv.teller");
         boringQueue = vm.parseJsonAddress(json, "$.strategies.ggv.boringOnChainQueue");
