@@ -190,7 +190,7 @@ contract GGVStrategy is IStrategy, AccessControlEnumerableUpgradeable, FeaturePa
             address(boringVault), abi.encodeWithSelector(boringVault.approve.selector, address(BORING_QUEUE), ggvShares)
         );
 
-        // Withdrawal request from GGV  
+        // Withdrawal request from GGV
         bytes memory data = callForwarder.doCall(
             address(BORING_QUEUE),
             abi.encodeWithSelector(
