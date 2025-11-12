@@ -18,14 +18,12 @@ contract FactoryHelper {
     constructor() {
         address dummyTeller = address(new DummyImplementation());
         address dummyQueue = address(new DummyImplementation());
-        address dummySteth = address(new DummyImplementation());
-        address dummyWsteth = address(new DummyImplementation());
 
         subFactories.stvPoolFactory = address(new StvPoolFactory());
         subFactories.stvStETHPoolFactory = address(new StvStETHPoolFactory());
         subFactories.withdrawalQueueFactory = address(new WithdrawalQueueFactory());
         subFactories.distributorFactory = address(new DistributorFactory());
-        subFactories.ggvStrategyFactory = address(new GGVStrategyFactory(dummyTeller, dummyQueue, dummySteth, dummyWsteth));
+        subFactories.ggvStrategyFactory = address(new GGVStrategyFactory(dummyTeller, dummyQueue));
         subFactories.timelockFactory = address(new TimelockFactory());
 
         defaultTimelockConfig = Factory.TimelockConfig({
@@ -46,10 +44,7 @@ contract FactoryHelper {
     ) external returns (Factory factory) {
         Factory.SubFactories memory factories = subFactories;
         if (ggvTeller != address(0) && ggvBoringQueue != address(0)) {
-            ILidoLocator locator = ILidoLocator(locatorAddress);
-            address steth = address(locator.lido());
-            address wsteth = address(locator.wstETH());
-            factories.ggvStrategyFactory = address(new GGVStrategyFactory(ggvTeller, ggvBoringQueue, steth, wsteth));
+            factories.ggvStrategyFactory = address(new GGVStrategyFactory(ggvTeller, ggvBoringQueue));
         }
 
         factory = new Factory(locatorAddress, factories);

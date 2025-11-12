@@ -60,8 +60,7 @@ contract FactoryTest is Test {
         subFactories.distributorFactory = address(new DistributorFactory());
         address dummyTeller = address(new DummyImplementation());
         address dummyQueue = address(new DummyImplementation());
-        subFactories.ggvStrategyFactory =
-            address(new GGVStrategyFactory(dummyTeller, dummyQueue, address(stETH), address(wstETH)));
+        subFactories.ggvStrategyFactory = address(new GGVStrategyFactory(dummyTeller, dummyQueue));
         subFactories.timelockFactory = address(new TimelockFactory());
 
         wrapperFactory = new Factory(address(locator), subFactories);
