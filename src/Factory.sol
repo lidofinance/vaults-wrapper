@@ -398,10 +398,7 @@ contract Factory {
         );
 
         intermediate = PoolIntermediate({
-            dashboard: dashboardAddress,
-            poolProxy: poolProxy,
-            withdrawalQueueProxy: wqProxy,
-            timelock: timelock
+            dashboard: dashboardAddress, poolProxy: poolProxy, withdrawalQueueProxy: wqProxy, timelock: timelock
         });
 
         bytes32 deploymentHash = _hashIntermediate(intermediate, msg.sender);
@@ -424,10 +421,7 @@ contract Factory {
         address _strategyFactory,
         bytes memory _strategyDeployBytes,
         PoolIntermediate calldata _intermediate
-    )
-        external
-        returns (PoolDeployment memory deployment)
-    {
+    ) external returns (PoolDeployment memory deployment) {
         bytes32 deploymentHash = _hashIntermediate(_intermediate, msg.sender);
         uint256 finishDeadline = intermediateState[deploymentHash];
         if (finishDeadline == 0) {
@@ -464,7 +458,11 @@ contract Factory {
         address poolImpl = address(0);
         if (poolType == STV_POOL_TYPE) {
             poolImpl = STV_POOL_FACTORY.deploy(
-                _intermediate.dashboard, _auxiliaryConfig.allowlistEnabled, _intermediate.withdrawalQueueProxy, distributor, poolType
+                _intermediate.dashboard,
+                _auxiliaryConfig.allowlistEnabled,
+                _intermediate.withdrawalQueueProxy,
+                distributor,
+                poolType
             );
         } else if (poolType == STV_STETH_POOL_TYPE || poolType == STRATEGY_POOL_TYPE) {
             poolImpl = STV_STETH_POOL_FACTORY.deploy(
@@ -486,8 +484,7 @@ contract Factory {
 
         OssifiableProxy(payable(_intermediate.withdrawalQueueProxy))
             .proxy__upgradeToAndCall(
-                wqImpl,
-                abi.encodeCall(WithdrawalQueue.initialize, (_intermediate.timelock, _vaultConfig.nodeOperator))
+                wqImpl, abi.encodeCall(WithdrawalQueue.initialize, (_intermediate.timelock, _vaultConfig.nodeOperator))
             );
         OssifiableProxy(payable(_intermediate.withdrawalQueueProxy)).proxy__changeAdmin(_intermediate.timelock);
 
@@ -497,8 +494,7 @@ contract Factory {
 
         address strategy = address(0);
         if (_strategyFactory != address(0)) {
-            strategy = IStrategyFactory(_strategyFactory)
-                .deploy(address(pool), _strategyDeployBytes);
+            strategy = IStrategyFactory(_strategyFactory).deploy(address(pool), _strategyDeployBytes);
             pool.addToAllowList(strategy);
         }
 
