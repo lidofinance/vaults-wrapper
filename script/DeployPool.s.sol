@@ -44,6 +44,7 @@ contract DeployPool is Script {
 
         p.timelockConfig = Factory.TimelockConfig({
             minDelaySeconds: vm.parseJsonUint(json, "$.timelockConfig.minDelaySeconds"),
+            proposer: vm.parseJsonAddress(json, "$.timelockConfig.proposer"),
             executor: vm.parseJsonAddress(json, "$.timelockConfig.executor")
         });
 
@@ -88,6 +89,7 @@ contract DeployPool is Script {
 
     function _serializeTimelockConfig(Factory.TimelockConfig memory _cfg) internal returns (string memory json) {
         json = vm.serializeUint("_timelockConfig", "minDelaySeconds", _cfg.minDelaySeconds);
+        json = vm.serializeAddress("_timelockConfig", "proposer", _cfg.proposer);
         json = vm.serializeAddress("_timelockConfig", "executor", _cfg.executor);
     }
 
@@ -204,6 +206,7 @@ contract DeployPool is Script {
             }),
             timelockConfig: Factory.TimelockConfig({
                 minDelaySeconds: vm.parseJsonUint(json, "$.config.timelockConfig.minDelaySeconds"),
+                proposer: vm.parseJsonAddress(json, "$.config.timelockConfig.proposer"),
                 executor: vm.parseJsonAddress(json, "$.config.timelockConfig.executor")
             }),
             strategyFactory: vm.parseJsonAddress(json, "$.config.strategyFactory"),

@@ -99,7 +99,7 @@ contract FactoryTest is Test {
     }
 
     function _defaultTimelockConfig() internal view returns (Factory.TimelockConfig memory) {
-        return Factory.TimelockConfig({minDelaySeconds: 0, executor: admin});
+        return Factory.TimelockConfig({minDelaySeconds: 0, proposer: address(this), executor: admin});
     }
 
     function test_canCreatePool() public {

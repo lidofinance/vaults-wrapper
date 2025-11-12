@@ -54,7 +54,7 @@ contract FactoryIntegrationTest is StvPoolHarness {
             reserveRatioGapBP: reserveRatioGapBP
         });
 
-        timelockConfig = Factory.TimelockConfig({minDelaySeconds: 0, executor: NODE_OPERATOR});
+        timelockConfig = Factory.TimelockConfig({minDelaySeconds: 0, proposer: NODE_OPERATOR, executor: NODE_OPERATOR});
     }
 
     function _deployThroughFactory(

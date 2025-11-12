@@ -42,8 +42,8 @@ contract Factory {
 
     struct TimelockConfig {
         uint256 minDelaySeconds;
+        address proposer;
         address executor;
-        // proposer is set to the node operator
     }
 
     struct CommonPoolConfig {
@@ -215,7 +215,7 @@ contract Factory {
         }
 
         address timelock =
-            TIMELOCK_FACTORY.deploy(_timelockConfig.minDelaySeconds, _vaultConfig.nodeOperator, _timelockConfig.executor);
+            TIMELOCK_FACTORY.deploy(_timelockConfig.minDelaySeconds, _timelockConfig.proposer, _timelockConfig.executor);
 
         address tempAdmin = address(this);
 

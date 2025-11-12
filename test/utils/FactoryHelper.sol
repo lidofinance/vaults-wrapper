@@ -30,6 +30,7 @@ contract FactoryHelper {
 
         defaultTimelockConfig = Factory.TimelockConfig({
             minDelaySeconds: 7 days,
+            proposer: address(this),
             executor: address(this)
         });
     }

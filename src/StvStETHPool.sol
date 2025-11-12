@@ -76,7 +76,8 @@ contract StvStETHPool is StvPool {
         address _distributor,
         bytes32 _poolType
     ) StvPool(_dashboard, _allowListEnabled, _withdrawalQueue, _distributor) {
-        if (_reserveRatioGapBP >= TOTAL_BASIS_POINTS) revert InvalidValue();
+        uint256 vaultRR = VAULT_HUB.vaultConnection(address(STAKING_VAULT)).reserveRatioBP;
+        if (_reserveRatioGapBP + vaultRR >= TOTAL_BASIS_POINTS) revert InvalidValue();
 
         RESERVE_RATIO_GAP_BP = _reserveRatioGapBP;
         POOL_TYPE = _poolType;

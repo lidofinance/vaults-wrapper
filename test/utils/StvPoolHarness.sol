@@ -132,6 +132,7 @@ contract StvPoolHarness is Test {
 
         Factory.TimelockConfig memory timelockConfig = Factory.TimelockConfig({
             minDelaySeconds: config.timelockMinDelaySeconds,
+            proposer: config.timelockExecutor == address(0) ? owner : config.timelockExecutor,
             executor: config.timelockExecutor == address(0) ? owner : config.timelockExecutor
         });
 
