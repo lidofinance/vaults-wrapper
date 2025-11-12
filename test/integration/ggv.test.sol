@@ -183,16 +183,16 @@ contract GGVTest is StvStrategyPoolHarness {
 
         //         3. Request withdrawal (full amount, based on appreciated value)
         uint256 totalGgvShares = boringVault.balanceOf(user1StrategyCallForwarder);
-        uint256 withdrawalStethAmount =
-            boringOnChainQueue.previewAssetsOut(address(steth), uint128(totalGgvShares), uint16(ggvDiscount));
+        uint256 withdrawalWstethAmount =
+            boringOnChainQueue.previewAssetsOut(address(wsteth), uint128(totalGgvShares), uint16(ggvDiscount));
 
-        console.log("\n[SCENARIO] Requesting withdrawal based on new appreciated assets:", withdrawalStethAmount);
+        console.log("\n[SCENARIO] Requesting withdrawal based on new appreciated assets:", withdrawalWstethAmount);
 
         GGVStrategy.GGVParamsRequestExit memory params =
             GGVStrategy.GGVParamsRequestExit({discount: uint16(ggvDiscount), secondsToDeadline: type(uint24).max});
 
         vm.prank(USER1);
-        bytes32 requestId = ggvStrategy.requestExitByWsteth(withdrawalStethAmount, abi.encode(params));
+        bytes32 requestId = ggvStrategy.requestExitByWsteth(withdrawalWstethAmount, abi.encode(params));
         assertNotEq(requestId, 0);
 
         // Apply 1% increase to core (stETH share ratio)
@@ -221,7 +221,11 @@ contract GGVTest is StvStrategyPoolHarness {
 
         // simulate the unwrapping of wstETH to stETH with rounding issue
         uint256 wstethUserBalance = ggvStrategy.wstethOf(USER1);
-        assertGt(userMintedStethSharesAfterDeposit, wstethUserBalance, "user minted steth shares should be greater than wsteth balance");
+        assertGt(
+            userMintedStethSharesAfterDeposit,
+            wstethUserBalance,
+            "user minted steth shares should be greater than wsteth balance"
+        );
 
         uint256 mintedStethShares = ggvStrategy.mintedStethSharesOf(USER1);
         uint256 wstethToBurn = Math.min(mintedStethShares, wstethUserBalance);
@@ -299,8 +303,7 @@ contract GGVTest is StvStrategyPoolHarness {
             GGVStrategy.GGVParamsRequestExit({discount: discount, secondsToDeadline: type(uint24).max});
 
         vm.prank(USER1);
-        bytes32 requestId =
-            ggvStrategy.requestExitByWsteth(uint256(withdrawSharesPreview), abi.encode(params));
+        bytes32 requestId = ggvStrategy.requestExitByWsteth(uint256(withdrawSharesPreview), abi.encode(params));
 
         IBoringOnChainQueue.OnChainWithdraw memory request =
             GGVQueueMock(address(boringOnChainQueue)).mockGetRequestById(requestId);
@@ -317,8 +320,10 @@ contract GGVTest is StvStrategyPoolHarness {
 
         vm.startPrank(USER1);
         ggvStrategy.burnWsteth(mintedSharesBefore);
+
+        uint256 remainingLiability = ggvStrategy.mintedStethSharesOf(USER1);
         uint256 leftoverWsteth = ggvStrategy.wstethOf(USER1);
-        ggvStrategy.requestWithdrawalFromPool(USER1, stvBalance, 0);
+        ggvStrategy.requestWithdrawalFromPool(USER1, stvBalance, remainingLiability);
         vm.stopPrank();
 
         assertGt(leftoverWsteth, 0, "surplus wstETH expected after covering liability");
@@ -343,9 +348,7 @@ contract GGVTest is StvStrategyPoolHarness {
 
         assertEq(ggvStrategy.wstethOf(USER1), 0, "strategy call forwarder should have no wstETH left");
         assertEq(
-            wsteth.balanceOf(USER1) - userWstethBefore,
-            recoverableWsteth,
-            "user must receive recovered wstETH amount"
+            wsteth.balanceOf(USER1) - userWstethBefore, recoverableWsteth, "user must receive recovered wstETH amount"
         );
     }
 
