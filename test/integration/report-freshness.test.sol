@@ -153,7 +153,7 @@ contract ReportFreshnessTest is StvStETHPoolHarness {
         pool.mintStethShares(maxStethSharesToMint);
 
         // Deliver oracle report with losses
-        reportVaultValueChangeNoFees(ctx, 50_00); // 50% loss
+        reportVaultValueChangeNoFees(ctx, 80_00); // 20% loss
 
         // Check user is unhealthy
         assertFalse(pool.isHealthyOf(address(this)));
