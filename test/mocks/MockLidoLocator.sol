@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >=0.8.25;
 
-import {ILidoLocator} from "src/interfaces/ILidoLocator.sol";
+import {ILidoLocator} from "src/interfaces/core/ILidoLocator.sol";
 
 contract MockLidoLocator is ILidoLocator {
     address internal _accountingOracle;

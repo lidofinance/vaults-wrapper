@@ -5,7 +5,7 @@ import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
 import {StvStETHPool} from "src/StvStETHPool.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
-import {IStETH} from "src/interfaces/IStETH.sol";
+import {IStETH} from "src/interfaces/core/IStETH.sol";
 import {StvStETHPoolHarness} from "test/utils/StvStETHPoolHarness.sol";
 
 /**

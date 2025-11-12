@@ -2,10 +2,10 @@
 pragma solidity >=0.8.25;
 
 import {StvPoolHarness} from "test/utils/StvPoolHarness.sol";
-import {Factory, InsufficientConnectDeposit, InvalidConfiguration} from "src/Factory.sol";
+import {Factory} from "src/Factory.sol";
 import {FactoryHelper} from "test/utils/FactoryHelper.sol";
 import {StvPool} from "src/StvPool.sol";
-import {IDashboard} from "src/interfaces/IDashboard.sol";
+import {IDashboard} from "src/interfaces/core/IDashboard.sol";
 import {Vm} from "forge-std/Vm.sol";
 
 contract FactoryIntegrationTest is StvPoolHarness {
@@ -93,7 +93,7 @@ contract FactoryIntegrationTest is StvPoolHarness {
         vm.startPrank(vaultConfig.nodeOperator);
         vm.expectRevert(
             abi.encodeWithSelector(
-                InsufficientConnectDeposit.selector, CONNECT_DEPOSIT, CONNECT_DEPOSIT - 1
+                Factory.InsufficientConnectDeposit.selector, CONNECT_DEPOSIT, CONNECT_DEPOSIT - 1
             )
         );
         factory.createPoolStart{value: CONNECT_DEPOSIT - 1}(
@@ -196,7 +196,7 @@ contract FactoryIntegrationTest is StvPoolHarness {
         // Tamper with the intermediate before finishing to ensure the deployment hash is checked.
         intermediate.pool = address(0xdead);
 
-        vm.expectRevert(abi.encodeWithSelector(InvalidConfiguration.selector, "deploy not started"));
+        vm.expectRevert(abi.encodeWithSelector(Factory.InvalidConfiguration.selector, "deploy not started"));
         factory.createPoolFinish(intermediate);
         vm.stopPrank();
     }
@@ -223,7 +223,7 @@ contract FactoryIntegrationTest is StvPoolHarness {
         vm.stopPrank();
 
         address otherSender = address(0xbeef);
-        vm.expectRevert(abi.encodeWithSelector(InvalidConfiguration.selector, "deploy not started"));
+        vm.expectRevert(abi.encodeWithSelector(Factory.InvalidConfiguration.selector, "deploy not started"));
         vm.prank(otherSender);
         factory.createPoolFinish(intermediate);
     }
@@ -251,7 +251,7 @@ contract FactoryIntegrationTest is StvPoolHarness {
         factory.createPoolFinish(intermediate);
 
         // The intermediate hash is set to DEPLOY_COMPLETE after the first successful call; the second should fail.
-        vm.expectRevert(abi.encodeWithSelector(InvalidConfiguration.selector, "deploy already finished"));
+        vm.expectRevert(abi.encodeWithSelector(Factory.InvalidConfiguration.selector, "deploy already finished"));
         factory.createPoolFinish(intermediate);
         vm.stopPrank();
     }

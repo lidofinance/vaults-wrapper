@@ -8,11 +8,11 @@ import {Distributor} from "src/Distributor.sol";
 import {Factory} from "src/Factory.sol";
 import {StvPool} from "src/StvPool.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
-import {IDashboard} from "src/interfaces/IDashboard.sol";
-import {ILido} from "src/interfaces/ILido.sol";
-import {IStakingVault} from "src/interfaces/IStakingVault.sol";
-import {IVaultHub} from "src/interfaces/IVaultHub.sol";
-import {IWstETH} from "src/interfaces/IWstETH.sol";
+import {IDashboard} from "src/interfaces/core/IDashboard.sol";
+import {ILido} from "src/interfaces/core/ILido.sol";
+import {IStakingVault} from "src/interfaces/core/IStakingVault.sol";
+import {IVaultHub} from "src/interfaces/core/IVaultHub.sol";
+import {IWstETH} from "src/interfaces/core/IWstETH.sol";
 import {CoreHarness} from "test/utils/CoreHarness.sol";
 import {FactoryHelper} from "test/utils/FactoryHelper.sol";
 

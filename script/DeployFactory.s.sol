@@ -10,7 +10,7 @@ import {StvPoolFactory} from "src/factories/StvPoolFactory.sol";
 import {StvStETHPoolFactory} from "src/factories/StvStETHPoolFactory.sol";
 import {TimelockFactory} from "src/factories/TimelockFactory.sol";
 import {WithdrawalQueueFactory} from "src/factories/WithdrawalQueueFactory.sol";
-import {ILidoLocator} from "src/interfaces/ILidoLocator.sol";
+import {ILidoLocator} from "src/interfaces/core/ILidoLocator.sol";
 
 contract DeployFactory is Script {
     function _deployImplFactories(address _ggvTeller, address _ggvBoringQueue, address _steth, address _wsteth)

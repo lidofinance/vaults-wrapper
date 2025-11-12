@@ -5,15 +5,15 @@ import {Test, console} from "forge-std/Test.sol";
 
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
-import {IOssifiableProxy} from "src/interfaces/IOssifiableProxy.sol";
-import {ILidoLocator} from "src/interfaces/ILidoLocator.sol";
-import {ILido} from "src/interfaces/ILido.sol";
-import {ILazyOracle} from "src/interfaces/ILazyOracle.sol";
-import {IDashboard} from "src/interfaces/IDashboard.sol";
-import {IOperatorGrid} from "src/interfaces/IOperatorGrid.sol";
-import {IVaultHub as IVaultHubIntact} from "src/interfaces/IVaultHub.sol";
-import {IVaultFactory} from "src/interfaces/IVaultFactory.sol";
-import {IWstETH} from "../../src/interfaces/IWstETH.sol";
+import {IOssifiableProxy} from "src/interfaces/core/IOssifiableProxy.sol";
+import {ILidoLocator} from "src/interfaces/core/ILidoLocator.sol";
+import {ILido} from "src/interfaces/core/ILido.sol";
+import {ILazyOracle} from "src/interfaces/core/ILazyOracle.sol";
+import {IDashboard} from "src/interfaces/core/IDashboard.sol";
+import {IOperatorGrid} from "src/interfaces/core/IOperatorGrid.sol";
+import {IVaultHub as IVaultHubIntact} from "src/interfaces/core/IVaultHub.sol";
+import {IVaultFactory} from "src/interfaces/core/IVaultFactory.sol";
+import {IWstETH} from "../../src/interfaces/core/IWstETH.sol";
 
 interface IHashConsensus {
     function updateInitialEpoch(uint256 initialEpoch) external;

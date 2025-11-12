@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >=0.8.25;
 
-import {IDashboard} from "./IDashboard.sol";
-import {IVaultHub} from "./IVaultHub.sol";
+import {IDashboard} from "./core/IDashboard.sol";
+import {IVaultHub} from "./core/IVaultHub.sol";
 
 interface IBasePool {
     function STETH() external view returns (address);

@@ -10,21 +10,24 @@ import {StvPoolFactory} from "./factories/StvPoolFactory.sol";
 import {StvStETHPoolFactory} from "./factories/StvStETHPoolFactory.sol";
 import {TimelockFactory} from "./factories/TimelockFactory.sol";
 import {WithdrawalQueueFactory} from "./factories/WithdrawalQueueFactory.sol";
-import {ILidoLocator} from "./interfaces/ILidoLocator.sol";
+import {ILidoLocator} from "./interfaces/core/ILidoLocator.sol";
 import {IStrategyFactory} from "./interfaces/IStrategyFactory.sol";
-import {IVaultHub} from "./interfaces/IVaultHub.sol";
+import {IVaultHub} from "./interfaces/core/IVaultHub.sol";
 import {DummyImplementation} from "./proxy/DummyImplementation.sol";
 import {OssifiableProxy} from "./proxy/OssifiableProxy.sol";
 
 import {WithdrawalQueue} from "./WithdrawalQueue.sol";
-import {IDashboard} from "./interfaces/IDashboard.sol";
-import {IVaultFactory} from "./interfaces/IVaultFactory.sol";
+import {IDashboard} from "./interfaces/core/IDashboard.sol";
+import {IVaultFactory} from "./interfaces/core/IVaultFactory.sol";
 
-error InvalidConfiguration(string reason);
-error InsufficientConnectDeposit(uint256 required, uint256 provided);
-error StringTooLong(string str);
+
 
 contract Factory {
+
+    //
+    // Structs
+    //
+
     struct SubFactories {
         address stvPoolFactory;
         address stvStETHPoolFactory;
@@ -82,11 +85,27 @@ contract Factory {
         address strategy;
     }
 
+    //
+    // Events
+    //
+
     event PoolCreationStarted(PoolIntermediate intermediate);
 
     event VaultPoolCreated(
         address vault, address pool, address withdrawalQueue, address indexed strategyFactory, address strategy
     );
+
+    //
+    // Custom errors
+    //
+
+    error InvalidConfiguration(string reason);
+    error InsufficientConnectDeposit(uint256 required, uint256 provided);
+    error StringTooLong(string str);
+
+    //
+    // Constants and immutables
+    //
 
     IVaultFactory public immutable VAULT_FACTORY;
     IVaultHub public immutable VAULT_HUB;

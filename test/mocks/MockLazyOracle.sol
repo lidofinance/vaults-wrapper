@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >=0.8.25;
 
-import {ILazyOracle} from "../../src/interfaces/ILazyOracle.sol";
+import {ILazyOracle} from "../../src/interfaces/core/ILazyOracle.sol";
 
 contract MockLazyOracle is ILazyOracle {
     uint256 private _latestReportTimestamp;

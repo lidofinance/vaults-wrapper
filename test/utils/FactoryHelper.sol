@@ -9,7 +9,7 @@ import {DistributorFactory} from "src/factories/DistributorFactory.sol";
 import {DummyImplementation} from "src/proxy/DummyImplementation.sol";
 import {GGVStrategyFactory} from "src/factories/GGVStrategyFactory.sol";
 import {TimelockFactory} from "src/factories/TimelockFactory.sol";
-import {ILidoLocator} from "src/interfaces/ILidoLocator.sol";
+import {ILidoLocator} from "src/interfaces/core/ILidoLocator.sol";
 
 contract FactoryHelper {
     Factory.SubFactories public subFactories;

@@ -15,7 +15,7 @@ import {Distributor} from "src/Distributor.sol";
 import {StvPool} from "src/StvPool.sol";
 import {StvStETHPool} from "src/StvStETHPool.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
-import {IDashboard} from "src/interfaces/IDashboard.sol";
+import {IDashboard} from "src/interfaces/core/IDashboard.sol";
 
 import {DummyImplementation} from "src/proxy/DummyImplementation.sol";
 import {MockDashboard} from "test/mocks/MockDashboard.sol";

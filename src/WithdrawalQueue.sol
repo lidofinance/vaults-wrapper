@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >=0.8.25;
 
-import {IDashboard} from "./interfaces/IDashboard.sol";
-import {ILazyOracle} from "./interfaces/ILazyOracle.sol";
-import {IStETH} from "./interfaces/IStETH.sol";
-import {IStakingVault} from "./interfaces/IStakingVault.sol";
+import {IDashboard} from "./interfaces/core/IDashboard.sol";
+import {ILazyOracle} from "./interfaces/core/ILazyOracle.sol";
+import {IStETH} from "./interfaces/core/IStETH.sol";
+import {IStakingVault} from "./interfaces/core/IStakingVault.sol";
 import {IStvStETHPool} from "./interfaces/IStvStETHPool.sol";
-import {IVaultHub} from "./interfaces/IVaultHub.sol";
+import {IVaultHub} from "./interfaces/core/IVaultHub.sol";
 import {FeaturePausable} from "./utils/FeaturePausable.sol";
 import {
     AccessControlEnumerableUpgradeable
