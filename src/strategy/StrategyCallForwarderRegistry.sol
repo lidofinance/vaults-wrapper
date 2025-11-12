@@ -62,6 +62,6 @@ abstract contract StrategyCallForwarderRegistry {
     }
 
     function _generateSalt(address _user) internal view returns (bytes32 salt) {
-        salt = keccak256(abi.encode(STRATEGY_ID, address(this), _user));
+        salt = keccak256(abi.encode(block.chainid, STRATEGY_ID, address(this), _user));
     }
 }

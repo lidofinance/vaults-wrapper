@@ -44,7 +44,6 @@ contract FactoryHelper {
     ) external returns (Factory factory) {
         Factory.SubFactories memory factories = subFactories;
         if (ggvTeller != address(0) && ggvBoringQueue != address(0)) {
-            ILidoLocator locator = ILidoLocator(locatorAddress);
             factories.ggvStrategyFactory = address(new GGVStrategyFactory(ggvTeller, ggvBoringQueue));
         }
 
