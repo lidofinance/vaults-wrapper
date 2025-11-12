@@ -287,9 +287,6 @@ contract DeployPool is Script {
         Factory.PoolIntermediate memory intermediate = _loadIntermediate(_intermediateJsonPath);
         PoolParams memory p = _loadPoolParams(_intermediateJsonPath);
 
-        StvPool pool = StvPool(payable(intermediate.pool));
-        bytes32 poolType = pool.poolType();
-
         vm.startBroadcast();
 
         _factory.createPoolFinish(intermediate);

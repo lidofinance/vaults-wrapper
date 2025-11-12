@@ -99,7 +99,6 @@ contract ExceedingMintedStethTest is Test, SetupStvStETHPool {
             pool.depositETH{value: uint256(assets)}(address(this), address(0));
         }
 
-        uint256 maxSharesToMintOnDashboard = dashboard.remainingMintingCapacityShares(0);
         uint256 maxSharesToMintOnPool = pool.remainingMintingCapacitySharesOf(address(this), 0);
         pool.mintStethShares(maxSharesToMintOnPool);
 
