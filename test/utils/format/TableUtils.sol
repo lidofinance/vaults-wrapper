@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity >=0.8.25;
+pragma solidity 0.8.30;
 
-import {console} from "forge-std/console.sol";
-import {Vm} from "forge-std/Vm.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {Vm} from "forge-std/Vm.sol";
+import {console} from "forge-std/console.sol";
 
 import {IStETH} from "src/interfaces/core/IStETH.sol";
 import {IWstETH} from "src/interfaces/core/IWstETH.sol";
@@ -49,7 +49,7 @@ library TableUtils {
         self.boringQueue = IBoringOnChainQueue(_boringQueue);
     }
 
-    function printHeader( string memory title) internal pure {
+    function printHeader(string memory title) internal pure {
         console.log();
         console.log();
         console.log(title);
@@ -77,8 +77,11 @@ library TableUtils {
         );
     }
 
-    function printUsers(Context storage self, string memory title, User[] memory _addresses, uint256 _discount) internal view {
-        printHeader( title);
+    function printUsers(Context storage self, string memory title, User[] memory _addresses, uint256 _discount)
+        internal
+        view
+    {
+        printHeader(title);
 
         for (uint256 i = 0; i < _addresses.length; i++) {
             printUserRow(self, _addresses[i].name, _addresses[i].user, _discount);
@@ -86,13 +89,18 @@ library TableUtils {
 
         uint256 stethShareRate = self.steth.getPooledEthByShares(1e18);
 
-        console.log(unicode"─────────────────────────────────────────────────");
+        console.log(
+            unicode"─────────────────────────────────────────────────"
+        );
         console.log("  stETH Share Rate:", formatETH(stethShareRate));
         console.log("pool totalSupply", formatETH(self.pool.totalSupply()));
         console.log("pool totalAssets", formatETH(self.pool.totalAssets()));
     }
 
-    function printUserRow(Context storage self, string memory userName, address _user, uint256 _discount) internal view {
+    function printUserRow(Context storage self, string memory userName, address _user, uint256 _discount)
+        internal
+        view
+    {
         uint256 balance = _user.balance;
         uint256 stv = self.pool.balanceOf(_user);
         uint256 assets = self.pool.previewRedeem(stv);

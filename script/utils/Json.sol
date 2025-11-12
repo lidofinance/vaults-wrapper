@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2025 Lido <info@lido.fi>
 // SPDX-License-Identifier: MIT
 
-pragma solidity >=0.8.25;
+pragma solidity 0.8.30;
 
 import {Vm} from "forge-std/Vm.sol";
 

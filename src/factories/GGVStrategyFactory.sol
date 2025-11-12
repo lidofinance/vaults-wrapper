@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity >=0.8.25;
+pragma solidity 0.8.30;
 
 import {IStrategyFactory} from "src/interfaces/IStrategyFactory.sol";
 import {GGVStrategy} from "src/strategy/GGVStrategy.sol";

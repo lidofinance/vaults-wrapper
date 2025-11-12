@@ -117,7 +117,7 @@ errors = [render_error(i) for i in abi if i.get('type') == 'error']
 
 lines = []
 lines.append('// SPDX-License-Identifier: MIT')
-lines.append('pragma solidity >=0.8.25;')
+lines.append('pragma solidity 0.8.30;')
 lines.append('')
 lines.append(f'interface I{name} {{')
 for e in events:

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity >=0.8.25;
+pragma solidity 0.8.30;
 
 import {SetupAllowList} from "./SetupAllowList.sol";
 import {Test} from "forge-std/Test.sol";

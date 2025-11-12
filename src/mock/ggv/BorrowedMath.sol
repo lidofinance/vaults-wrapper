@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity >=0.8.25;
+pragma solidity 0.8.30;
 
 library BorrowedMath {
     uint256 internal constant MAX_UINT256 = 2 ** 256 - 1;
