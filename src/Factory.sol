@@ -325,7 +325,8 @@ contract Factory {
 
         address strategy = address(0);
         if (intermediate.strategyFactory != address(0)) {
-            strategy = IStrategyFactory(intermediate.strategyFactory).deploy(address(pool), intermediate.strategyDeployBytes);
+            strategy =
+                IStrategyFactory(intermediate.strategyFactory).deploy(address(pool), intermediate.strategyDeployBytes);
             pool.addToAllowList(strategy);
         }
 
@@ -357,8 +358,11 @@ contract Factory {
         // TODO: LOSS_SOCIALIZER_ROLE
     }
 
-    function _hashIntermediate(PoolIntermediate memory intermediate, address sender) public pure returns (bytes32 result) {
+    function _hashIntermediate(PoolIntermediate memory intermediate, address sender)
+        public
+        pure
+        returns (bytes32 result)
+    {
         result = keccak256(abi.encodePacked(sender, abi.encode(intermediate)));
     }
-
 }

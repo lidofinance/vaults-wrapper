@@ -13,7 +13,6 @@ import {WithdrawalQueueFactory} from "src/factories/WithdrawalQueueFactory.sol";
 import {ILidoLocator} from "src/interfaces/ILidoLocator.sol";
 
 contract DeployFactory is Script {
-
     function _deployImplFactories(address ggvTeller, address ggvBoringQueue, address steth, address wsteth)
         internal
         returns (Factory.SubFactories memory f)

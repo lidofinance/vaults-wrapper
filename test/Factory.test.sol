@@ -60,7 +60,8 @@ contract FactoryTest is Test {
         subFactories.distributorFactory = address(new DistributorFactory());
         address dummyTeller = address(new DummyImplementation());
         address dummyQueue = address(new DummyImplementation());
-        subFactories.ggvStrategyFactory = address(new GGVStrategyFactory(dummyTeller, dummyQueue, address(stETH), address(wstETH)));
+        subFactories.ggvStrategyFactory =
+            address(new GGVStrategyFactory(dummyTeller, dummyQueue, address(stETH), address(wstETH)));
         subFactories.timelockFactory = address(new TimelockFactory());
 
         wrapperFactory = new Factory(address(locator), subFactories);
@@ -151,7 +152,9 @@ contract FactoryTest is Test {
 
         vm.startPrank(admin);
         vm.expectRevert();
-        wrapperFactory.createPoolStart(vaultConfig, commonPoolConfig, auxiliaryConfig, timelockConfig, strategyFactory, "");
+        wrapperFactory.createPoolStart(
+            vaultConfig, commonPoolConfig, auxiliaryConfig, timelockConfig, strategyFactory, ""
+        );
         vm.stopPrank();
     }
 
@@ -387,8 +390,9 @@ contract FactoryTest is Test {
         address strategyFactory = address(0);
 
         // Create an intermediate struct but don't call createPoolStart
-        Factory.PoolIntermediate memory fakeIntermediate =
-            Factory.PoolIntermediate({pool: address(0x123), timelock: address(0x456), strategyFactory: address(0), strategyDeployBytes: ""});
+        Factory.PoolIntermediate memory fakeIntermediate = Factory.PoolIntermediate({
+            pool: address(0x123), timelock: address(0x456), strategyFactory: address(0), strategyDeployBytes: ""
+        });
 
         vm.startPrank(admin);
         // Should revert with "deploy not started" error
