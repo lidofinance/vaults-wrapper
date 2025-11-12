@@ -30,10 +30,10 @@ contract StrategyCallForwarder is
      * @dev Only callable by owner. To convert to the expected return value, use abi.decode.
      * @param _target The address of the target contract
      * @param _data The call data
-     * @return Returns the raw returned data.
+     * @return data The raw returned data.
      */
-    function call(address _target, bytes calldata _data) external payable onlyOwner returns (bytes memory) {
-        return Address.functionCall(_target, _data);
+    function call(address _target, bytes calldata _data) external onlyOwner returns (bytes memory data) {
+        data = Address.functionCall(_target, _data);
     }
 
     /**
@@ -46,7 +46,6 @@ contract StrategyCallForwarder is
      */
     function callWithValue(address _target, bytes calldata _data, uint256 _value)
         external
-        payable
         onlyOwner
         returns (bytes memory)
     {

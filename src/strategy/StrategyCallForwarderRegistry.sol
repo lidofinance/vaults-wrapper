@@ -22,7 +22,7 @@ abstract contract StrategyCallForwarderRegistry {
     bytes32 private constant CALL_FORWARDER_STORAGE_LOCATION =
         0x3074294e9a887c21033ca796133e603629c1fad03ac5b84cce0cfe20ad599d00;
 
-    function _getStorage() internal pure returns (CallForwarderStorage storage $) {
+    function _getCallForwarderRegistryStorage() internal pure returns (CallForwarderStorage storage $) {
         assembly {
             $.slot := CALL_FORWARDER_STORAGE_LOCATION
         }
@@ -49,7 +49,7 @@ abstract contract StrategyCallForwarderRegistry {
     function _getOrCreateCallForwarder(address _user) internal returns (IStrategyCallForwarder callForwarder) {
         if (_user == address(0)) revert CallForwarderZeroArgument("_user");
 
-        CallForwarderStorage storage $ = _getStorage();
+        CallForwarderStorage storage $ = _getCallForwarderRegistryStorage();
 
         bytes32 salt = _generateSalt(_user);
         callForwarder = $.userCallForwarder[salt];
