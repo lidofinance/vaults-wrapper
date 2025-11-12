@@ -20,8 +20,10 @@ abstract contract SetupWithdrawalQueue is Test {
 
     address public owner;
     address public finalizeRoleHolder;
-    address public pauseRoleHolder;
-    address public resumeRoleHolder;
+    address public finalizePauseRoleHolder;
+    address public finalizeResumeRoleHolder;
+    address public withdrawalsPauseRoleHolder;
+    address public withdrawalsResumeRoleHolder;
     address public userAlice;
     address public userBob;
 
@@ -36,8 +38,10 @@ abstract contract SetupWithdrawalQueue is Test {
         // Create addresses
         owner = makeAddr("owner");
         finalizeRoleHolder = makeAddr("finalizeRoleHolder");
-        pauseRoleHolder = makeAddr("pauseRoleHolder");
-        resumeRoleHolder = makeAddr("resumeRoleHolder");
+        finalizePauseRoleHolder = makeAddr("finalizePauseRoleHolder");
+        finalizeResumeRoleHolder = makeAddr("finalizeResumeRoleHolder");
+        withdrawalsPauseRoleHolder = makeAddr("withdrawalsPauseRoleHolder");
+        withdrawalsResumeRoleHolder = makeAddr("withdrawalsResumeRoleHolder");
         userAlice = makeAddr("userAlice");
         userBob = makeAddr("userBob");
 
@@ -82,8 +86,10 @@ abstract contract SetupWithdrawalQueue is Test {
 
         // Grant additional roles
         vm.startPrank(owner);
-        withdrawalQueue.grantRole(withdrawalQueue.PAUSE_ROLE(), pauseRoleHolder);
-        withdrawalQueue.grantRole(withdrawalQueue.RESUME_ROLE(), resumeRoleHolder);
+        withdrawalQueue.grantRole(withdrawalQueue.WITHDRAWALS_PAUSE_ROLE(), withdrawalsPauseRoleHolder);
+        withdrawalQueue.grantRole(withdrawalQueue.WITHDRAWALS_RESUME_ROLE(), withdrawalsResumeRoleHolder);
+        withdrawalQueue.grantRole(withdrawalQueue.FINALIZE_PAUSE_ROLE(), finalizePauseRoleHolder);
+        withdrawalQueue.grantRole(withdrawalQueue.FINALIZE_RESUME_ROLE(), finalizeResumeRoleHolder);
         vm.stopPrank();
 
         // Set oracle timestamp to current time

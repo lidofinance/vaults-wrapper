@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity >=0.8.25;
 
+import {SetupStvStETHPool} from "./SetupStvStETHPool.sol";
+import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {Test} from "forge-std/Test.sol";
-
-import {SetupStvStETHPool} from "./SetupStvStETHPool.sol";
 import {StvStETHPool} from "src/StvStETHPool.sol";
 import {MockVaultHub} from "test/mocks/MockVaultHub.sol";
 
@@ -148,10 +148,163 @@ contract ForceRebalanceTest is Test, SetupStvStETHPool {
     }
 
     function test_ForceRebalanceAndSocializeLoss_DoNotRevertIfAccountIsUndercollateralized() public {
+        // Enable loss socialization
+        vm.prank(owner);
+        pool.setMaxLossSocializationBP(100_00); // 100%
+
         _mintMaxStethShares(userAlice);
         _simulateLoss(4 ether);
 
         vm.prank(socializer);
         pool.forceRebalanceAndSocializeLoss(userAlice);
+    }
+
+    function test_ForceRebalance_PermissionlessExecution() public {
+        _mintMaxStethShares(userAlice);
+        _simulateLoss(_calcLossToBreachThreshold(userAlice));
+
+        // Anyone can call forceRebalance
+        vm.prank(userBob);
+        pool.forceRebalance(userAlice);
+    }
+
+    function test_ForceRebalance_UpdatesMintedShares() public {
+        _mintMaxStethShares(userAlice);
+        uint256 mintedBefore = pool.mintedStethSharesOf(userAlice);
+        _simulateLoss(_calcLossToBreachThreshold(userAlice));
+
+        pool.forceRebalance(userAlice);
+
+        uint256 mintedAfter = pool.mintedStethSharesOf(userAlice);
+        assertLt(mintedAfter, mintedBefore);
+    }
+
+    function test_ForceRebalance_BurnsCorrectStv() public {
+        _mintMaxStethShares(userAlice);
+        uint256 balanceBefore = pool.balanceOf(userAlice);
+        _simulateLoss(_calcLossToBreachThreshold(userAlice));
+
+        uint256 stvBurned = pool.forceRebalance(userAlice);
+
+        assertEq(pool.balanceOf(userAlice), balanceBefore - stvBurned);
+        assertGt(stvBurned, 0);
+    }
+
+    function test_ForceRebalance_EmitsCorrectEvent() public {
+        _mintMaxStethShares(userAlice);
+        _simulateLoss(_calcLossToBreachThreshold(userAlice));
+
+        (uint256 expectedShares, uint256 expectedStv,) = pool.previewForceRebalance(userAlice);
+
+        vm.expectEmit(true, true, true, true);
+        emit StvStETHPool.StethSharesRebalanced(userAlice, expectedShares, expectedStv);
+
+        pool.forceRebalance(userAlice);
+    }
+
+    function test_ForceRebalance_RestoresHealthStatus() public {
+        _mintMaxStethShares(userAlice);
+        _simulateLoss(_calcLossToBreachThreshold(userAlice));
+
+        assertFalse(pool.isHealthyOf(userAlice));
+
+        pool.forceRebalance(userAlice);
+
+        assertTrue(pool.isHealthyOf(userAlice));
+    }
+
+    function test_ForceRebalance_WithMinimalThresholdBreach() public {
+        _mintMaxStethShares(userAlice);
+        uint256 loss = _calcLossToBreachThreshold(userAlice);
+        _simulateLoss(loss);
+
+        uint256 stvBurned = pool.forceRebalance(userAlice);
+        assertGt(stvBurned, 0);
+    }
+
+    function test_ForceRebalance_MultipleTimesForSameUser() public {
+        _mintMaxStethShares(userAlice);
+        _simulateLoss(_calcLossToBreachThreshold(userAlice));
+
+        pool.forceRebalance(userAlice);
+        assertTrue(pool.isHealthyOf(userAlice));
+
+        // Simulate another loss
+        _simulateLoss(_calcLossToBreachThreshold(userAlice));
+        assertFalse(pool.isHealthyOf(userAlice));
+
+        pool.forceRebalance(userAlice);
+        assertTrue(pool.isHealthyOf(userAlice));
+    }
+
+    function test_ForceRebalance_DifferentUsers_Independent() public {
+        vm.prank(userBob);
+        pool.depositETH{value: DEPOSIT_AMOUNT}(userBob, address(0));
+
+        _mintMaxStethShares(userAlice);
+        _mintMaxStethShares(userBob);
+
+        _simulateLoss(_calcLossToBreachThreshold(userAlice));
+
+        assertFalse(pool.isHealthyOf(userAlice));
+        assertFalse(pool.isHealthyOf(userBob));
+
+        uint256 bobMintedBefore = pool.mintedStethSharesOf(userBob);
+
+        pool.forceRebalance(userAlice);
+
+        assertTrue(pool.isHealthyOf(userAlice));
+        assertFalse(pool.isHealthyOf(userBob));
+        assertEq(pool.mintedStethSharesOf(userBob), bobMintedBefore);
+    }
+
+    function test_SocializeLoss_OnlyByRole() public {
+        _mintMaxStethShares(userAlice);
+        _simulateLoss(4 ether);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IAccessControl.AccessControlUnauthorizedAccount.selector, address(this), pool.LOSS_SOCIALIZER_ROLE()
+            )
+        );
+        pool.forceRebalanceAndSocializeLoss(userAlice);
+    }
+
+    function test_SocializeLoss_RevertWhenHealthy() public {
+        _mintMaxStethShares(userAlice);
+
+        vm.prank(socializer);
+        vm.expectRevert(StvStETHPool.CollateralizedAccount.selector);
+        pool.forceRebalanceAndSocializeLoss(userAlice);
+    }
+
+    function test_SocializeLoss_BurnsAvailableStv() public {
+        // Enable loss socialization
+        vm.prank(owner);
+        pool.setMaxLossSocializationBP(100_00); // 100%
+
+        _mintMaxStethShares(userAlice);
+        uint256 balanceBefore = pool.balanceOf(userAlice);
+        _simulateLoss(4 ether);
+
+        vm.prank(socializer);
+        uint256 stvBurned = pool.forceRebalanceAndSocializeLoss(userAlice);
+
+        assertEq(stvBurned, balanceBefore);
+        assertEq(pool.balanceOf(userAlice), 0);
+    }
+
+    function test_SocializeLoss_ClearsAllMintedShares() public {
+        // Enable loss socialization
+        vm.prank(owner);
+        pool.setMaxLossSocializationBP(100_00); // 100%
+
+        _mintMaxStethShares(userAlice);
+        _simulateLoss(4 ether);
+
+        vm.prank(socializer);
+        pool.forceRebalanceAndSocializeLoss(userAlice);
+
+        assertEq(pool.mintedStethSharesOf(userAlice), 0);
     }
 }

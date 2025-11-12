@@ -8,6 +8,7 @@ import {IDashboard} from "./interfaces/IDashboard.sol";
 import {IStETH} from "./interfaces/IStETH.sol";
 import {IStakingVault} from "./interfaces/IStakingVault.sol";
 import {IVaultHub} from "./interfaces/IVaultHub.sol";
+import {FeaturePausable} from "./utils/FeaturePausable.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {ERC20Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
@@ -17,23 +18,23 @@ import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
  * @notice ERC20 staking vault token pool that accepts ETH deposits and manages withdrawals through a queue
  * @dev Implements a tokenized staking pool where users deposit ETH and receive STV tokens representing their share
  */
-contract StvPool is Initializable, ERC20Upgradeable, AllowList {
+contract StvPool is Initializable, ERC20Upgradeable, AllowList, FeaturePausable {
     // Custom errors
     error ZeroDeposit();
-    error InvalidReceiver();
+    error InvalidRecipient();
     error NotWithdrawalQueue();
     error NotEnoughToRebalance();
     error UnassignedLiabilityOnVault();
     error VaultInBadDebt();
 
-    bytes32 public constant REQUEST_VALIDATOR_EXIT_ROLE = keccak256("REQUEST_VALIDATOR_EXIT_ROLE");
-    bytes32 public constant TRIGGER_VALIDATOR_WITHDRAWAL_ROLE = keccak256("TRIGGER_VALIDATOR_WITHDRAWAL_ROLE");
+    bytes32 public constant DEPOSITS_FEATURE = keccak256("DEPOSITS_FEATURE");
+    bytes32 public constant DEPOSITS_PAUSE_ROLE = keccak256("DEPOSITS_PAUSE_ROLE");
+    bytes32 public constant DEPOSITS_RESUME_ROLE = keccak256("DEPOSITS_RESUME_ROLE");
 
     uint256 public constant TOTAL_BASIS_POINTS = 100_00;
 
     uint256 private constant DECIMALS = 27;
     uint256 private constant ASSET_DECIMALS = 18;
-    uint256 private constant EXTRA_DECIMALS_BASE = 10 ** (DECIMALS - ASSET_DECIMALS);
 
     IStETH public immutable STETH;
     IDashboard public immutable DASHBOARD;
@@ -44,7 +45,7 @@ contract StvPool is Initializable, ERC20Upgradeable, AllowList {
     Distributor public immutable DISTRIBUTOR;
 
     event Deposit(
-        address indexed sender, address indexed receiver, address indexed referral, uint256 assets, uint256 stv
+        address indexed sender, address indexed recipient, address indexed referral, uint256 assets, uint256 stv
     );
 
     event UnassignedLiabilityRebalanced(uint256 stethShares, uint256 ethFunded);
@@ -61,6 +62,9 @@ contract StvPool is Initializable, ERC20Upgradeable, AllowList {
 
         // Disable initializers since we only support proxy deployment
         _disableInitializers();
+
+        // Pause features in implementation
+        _pauseFeature(DEPOSITS_FEATURE);
     }
 
     function poolType() external view virtual returns (bytes32) {
@@ -83,8 +87,10 @@ contract StvPool is Initializable, ERC20Upgradeable, AllowList {
         uint256 initialVaultBalance = address(STAKING_VAULT).balance;
         uint256 connectDeposit = VAULT_HUB.CONNECT_DEPOSIT();
         assert(initialVaultBalance >= connectDeposit);
+        assert(totalSupply() == 0);
 
-        _mint(address(this), _convertToStv(initialVaultBalance, Math.Rounding.Floor));
+        uint256 stvToMint = initialVaultBalance * 10 ** (DECIMALS - ASSET_DECIMALS);
+        _mint(address(this), stvToMint);
     }
 
     // =================================================================================
@@ -132,27 +138,22 @@ contract StvPool is Initializable, ERC20Upgradeable, AllowList {
     // CONVERSION
     // =================================================================================
 
-    function _convertToStv(uint256 _assetsE18, Math.Rounding _rounding) internal view returns (uint256 stv) {
-        uint256 totalAssetsE18 = totalAssets();
-        uint256 totalSupplyE27 = totalSupply();
+    function _convertToStv(uint256 _assets, Math.Rounding _rounding) internal view returns (uint256 stv) {
+        uint256 totalAssets_ = totalAssets();
+        if (totalAssets_ == 0) return 0;
 
-        if (totalSupplyE27 == 0) return _assetsE18 * EXTRA_DECIMALS_BASE; // 1:1 for the first deposit
-        if (totalAssetsE18 == 0) return 0;
-
-        stv = Math.mulDiv(_assetsE18, totalSupplyE27, totalAssetsE18, _rounding);
+        stv = Math.mulDiv(_assets, totalSupply(), totalAssets_, _rounding);
     }
 
     function _convertToAssets(uint256 _stv) internal view returns (uint256 assets) {
         assets = _getAssetsShare(_stv, totalAssets());
     }
 
-    function _getAssetsShare(uint256 _stv, uint256 _assetsE18) internal view returns (uint256 assets) {
-        uint256 supplyE27 = totalSupply();
-        if (supplyE27 == 0) return 0;
+    function _getAssetsShare(uint256 _stv, uint256 _assets) internal view returns (uint256 assets) {
+        uint256 totalSupply_ = totalSupply();
+        if (totalSupply_ == 0) return 0;
 
-        // TODO: review this Math.Rounding.Ceil
-        uint256 assetsShare = Math.mulDiv(_stv * EXTRA_DECIMALS_BASE, _assetsE18, supplyE27, Math.Rounding.Ceil);
-        assets = assetsShare / EXTRA_DECIMALS_BASE;
+        assets = Math.mulDiv(_stv, _assets, totalSupply_, Math.Rounding.Floor);
     }
 
     // =================================================================================
@@ -207,7 +208,8 @@ contract StvPool is Initializable, ERC20Upgradeable, AllowList {
 
     function _deposit(address _recipient, address _referral) internal returns (uint256 stv) {
         if (msg.value == 0) revert ZeroDeposit();
-        if (_recipient == address(0)) revert InvalidReceiver();
+        if (_recipient == address(0)) revert InvalidRecipient();
+        _checkFeatureNotPaused(DEPOSITS_FEATURE);
         _checkAllowList();
 
         stv = previewDeposit(msg.value);
@@ -374,5 +376,27 @@ contract StvPool is Initializable, ERC20Upgradeable, AllowList {
 
     function _checkOnlyWithdrawalQueue() internal view {
         if (address(WITHDRAWAL_QUEUE) != msg.sender) revert NotWithdrawalQueue();
+    }
+
+    // =================================================================================
+    // PAUSE / RESUME DEPOSITS
+    // =================================================================================
+
+    /**
+     * @notice Pause deposits
+     * @dev Can only be called by accounts with the DEPOSITS_PAUSE_ROLE
+     */
+    function pauseDeposits() external {
+        _checkRole(DEPOSITS_PAUSE_ROLE, msg.sender);
+        _pauseFeature(DEPOSITS_FEATURE);
+    }
+
+    /**
+     * @notice Resume deposits
+     * @dev Can only be called by accounts with the DEPOSITS_RESUME_ROLE
+     */
+    function resumeDeposits() external {
+        _checkRole(DEPOSITS_RESUME_ROLE, msg.sender);
+        _resumeFeature(DEPOSITS_FEATURE);
     }
 }

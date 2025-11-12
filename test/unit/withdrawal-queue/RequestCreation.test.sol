@@ -2,10 +2,10 @@
 pragma solidity >=0.8.25;
 
 import {SetupWithdrawalQueue} from "./SetupWithdrawalQueue.sol";
-import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
 import {Test} from "forge-std/Test.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
+import {FeaturePausable} from "src/utils/FeaturePausable.sol";
 
 contract RequestCreationTest is Test, SetupWithdrawalQueue {
     function setUp() public override {
@@ -34,12 +34,15 @@ contract RequestCreationTest is Test, SetupWithdrawalQueue {
     function test_InitialState_CorrectRoles() public view {
         assertTrue(withdrawalQueue.hasRole(withdrawalQueue.DEFAULT_ADMIN_ROLE(), owner));
         assertTrue(withdrawalQueue.hasRole(withdrawalQueue.FINALIZE_ROLE(), finalizeRoleHolder));
-        assertTrue(withdrawalQueue.hasRole(withdrawalQueue.PAUSE_ROLE(), pauseRoleHolder));
-        assertTrue(withdrawalQueue.hasRole(withdrawalQueue.RESUME_ROLE(), resumeRoleHolder));
+        assertTrue(withdrawalQueue.hasRole(withdrawalQueue.WITHDRAWALS_PAUSE_ROLE(), withdrawalsPauseRoleHolder));
+        assertTrue(withdrawalQueue.hasRole(withdrawalQueue.WITHDRAWALS_RESUME_ROLE(), withdrawalsResumeRoleHolder));
+        assertTrue(withdrawalQueue.hasRole(withdrawalQueue.FINALIZE_PAUSE_ROLE(), finalizePauseRoleHolder));
+        assertTrue(withdrawalQueue.hasRole(withdrawalQueue.FINALIZE_RESUME_ROLE(), finalizeResumeRoleHolder));
     }
 
     function test_InitialState_NotPaused() public view {
-        assertFalse(withdrawalQueue.paused());
+        assertFalse(withdrawalQueue.isFeaturePaused(withdrawalQueue.WITHDRAWALS_FEATURE()));
+        assertFalse(withdrawalQueue.isFeaturePaused(withdrawalQueue.FINALIZE_FEATURE()));
     }
 
     // Single Request Tests
@@ -206,39 +209,45 @@ contract RequestCreationTest is Test, SetupWithdrawalQueue {
         withdrawalQueue.requestWithdrawal(address(this), hugeStvAmount, 0);
     }
 
-    function test_RequestWithdrawal_RevertWhenPaused() public {
-        vm.prank(pauseRoleHolder);
-        withdrawalQueue.pause();
+    // Pause & resume withdrawal requests submission
 
-        vm.prank(address(this));
-        vm.expectRevert(abi.encodeWithSelector(PausableUpgradeable.EnforcedPause.selector));
+    function test_RequestWithdrawal_RevertWhenPaused() public {
+        bytes32 withdrawalsFeatureId = withdrawalQueue.WITHDRAWALS_FEATURE();
+        vm.prank(withdrawalsPauseRoleHolder);
+        withdrawalQueue.pauseWithdrawals();
+
+        vm.expectRevert(abi.encodeWithSelector(FeaturePausable.FeaturePauseEnforced.selector, withdrawalsFeatureId));
         withdrawalQueue.requestWithdrawal(address(this), 10 ** STV_DECIMALS, 0);
     }
 
-    function test_Pause_RevertWhenCallerUnauthorized() public {
+    function test_PauseWithdrawals_RevertWhenCallerUnauthorized() public {
         vm.expectRevert(
             abi.encodeWithSelector(
-                IAccessControl.AccessControlUnauthorizedAccount.selector, address(this), withdrawalQueue.PAUSE_ROLE()
+                IAccessControl.AccessControlUnauthorizedAccount.selector,
+                address(this),
+                withdrawalQueue.WITHDRAWALS_PAUSE_ROLE()
             )
         );
-        withdrawalQueue.pause();
+        withdrawalQueue.pauseWithdrawals();
     }
 
-    function test_Resume_RevertWhenCallerUnauthorized() public {
+    function test_ResumeWithdrawals_RevertWhenCallerUnauthorized() public {
         vm.expectRevert(
             abi.encodeWithSelector(
-                IAccessControl.AccessControlUnauthorizedAccount.selector, address(this), withdrawalQueue.RESUME_ROLE()
+                IAccessControl.AccessControlUnauthorizedAccount.selector,
+                address(this),
+                withdrawalQueue.WITHDRAWALS_RESUME_ROLE()
             )
         );
-        withdrawalQueue.resume();
+        withdrawalQueue.resumeWithdrawals();
     }
 
     function test_Resume_AllowsRequestsAfterPause() public {
-        vm.prank(pauseRoleHolder);
-        withdrawalQueue.pause();
+        vm.prank(withdrawalsPauseRoleHolder);
+        withdrawalQueue.pauseWithdrawals();
 
-        vm.prank(resumeRoleHolder);
-        withdrawalQueue.resume();
+        vm.prank(withdrawalsResumeRoleHolder);
+        withdrawalQueue.resumeWithdrawals();
 
         uint256 requestId = withdrawalQueue.requestWithdrawal(address(this), 10 ** STV_DECIMALS, 0);
         assertEq(requestId, 1);

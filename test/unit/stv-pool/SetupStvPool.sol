@@ -18,12 +18,16 @@ abstract contract SetupStvPool is Test {
     address public userAlice;
     address public userBob;
 
+    address public withdrawalQueue;
+
     uint256 public constant initialDeposit = 1 ether;
 
     function setUp() public virtual {
         owner = makeAddr("owner");
         userAlice = makeAddr("userAlice");
         userBob = makeAddr("userBob");
+
+        withdrawalQueue = makeAddr("withdrawalQueue");
 
         // Fund accounts
         vm.deal(owner, 100 ether);
@@ -42,7 +46,7 @@ abstract contract SetupStvPool is Test {
         StvPool poolImpl = new StvPool({
             _dashboard: address(dashboard),
             _allowListEnabled: false,
-            _withdrawalQueue: address(0),
+            _withdrawalQueue: withdrawalQueue,
             _distributor: address(0)
         });
         ERC1967Proxy poolProxy = new ERC1967Proxy(address(poolImpl), "");
