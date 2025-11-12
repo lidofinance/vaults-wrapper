@@ -44,13 +44,15 @@ contract StvPool is Initializable, ERC20Upgradeable, AllowList, FeaturePausable 
     WithdrawalQueue public immutable WITHDRAWAL_QUEUE;
     Distributor public immutable DISTRIBUTOR;
 
+    bytes32 private immutable POOL_TYPE;
+
     event Deposit(
         address indexed sender, address indexed recipient, address indexed referral, uint256 assets, uint256 stv
     );
 
     event UnassignedLiabilityRebalanced(uint256 stethShares, uint256 ethFunded);
 
-    constructor(address _dashboard, bool _allowListEnabled, address _withdrawalQueue, address _distributor)
+    constructor(address _dashboard, bool _allowListEnabled, address _withdrawalQueue, address _distributor, bytes32 _poolType)
         AllowList(_allowListEnabled)
     {
         DASHBOARD = IDashboard(payable(_dashboard));
@@ -59,6 +61,7 @@ contract StvPool is Initializable, ERC20Upgradeable, AllowList, FeaturePausable 
         WITHDRAWAL_QUEUE = WithdrawalQueue(payable(_withdrawalQueue));
         STETH = IStETH(payable(DASHBOARD.STETH()));
         DISTRIBUTOR = Distributor(_distributor);
+        POOL_TYPE = _poolType;
 
         // Disable initializers since we only support proxy deployment
         _disableInitializers();
@@ -68,7 +71,7 @@ contract StvPool is Initializable, ERC20Upgradeable, AllowList, FeaturePausable 
     }
 
     function poolType() external view virtual returns (bytes32) {
-        return keccak256("StvPool");
+        return POOL_TYPE;
     }
 
     function initialize(address _owner, string memory _name, string memory _symbol) public virtual initializer {

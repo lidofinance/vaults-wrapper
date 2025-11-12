@@ -22,6 +22,7 @@ import {IVaultFactory} from "./interfaces/IVaultFactory.sol";
 
 error InvalidConfiguration(string reason);
 error InsufficientConnectDeposit(uint256 required, uint256 provided);
+error StringTooLong(string str);
 
 contract Factory {
     struct SubFactories {
@@ -93,9 +94,9 @@ contract Factory {
     address public immutable WSTETH;
     address public immutable LAZY_ORACLE;
 
-    bytes32 public immutable STV_POOL_TYPE = keccak256("StvPool");
-    bytes32 public immutable STV_STETH_POOL_TYPE = keccak256("StvStETHPool");
-    bytes32 public immutable STRATEGY_POOL_TYPE = keccak256("StvStrategyPool");
+    bytes32 public immutable STV_POOL_TYPE;
+    bytes32 public immutable STV_STETH_POOL_TYPE;
+    bytes32 public immutable STRATEGY_POOL_TYPE;
 
     StvPoolFactory public immutable STV_POOL_FACTORY;
     StvStETHPoolFactory public immutable STV_STETH_POOL_FACTORY;
@@ -112,6 +113,10 @@ contract Factory {
     uint256 public constant DEPLOY_START_FINISH_SPAN_SECONDS = 1 days;
 
     uint256 public constant DEPLOY_COMPLETE = type(uint256).max;
+
+    //
+    // Structured storage
+    //
 
     mapping(bytes32 => uint256) public intermediateState;
 
@@ -130,6 +135,10 @@ contract Factory {
         GGV_STRATEGY_FACTORY = GGVStrategyFactory(_subFactories.ggvStrategyFactory);
         TIMELOCK_FACTORY = TimelockFactory(_subFactories.timelockFactory);
         DUMMY_IMPLEMENTATION = address(new DummyImplementation());
+
+        STV_POOL_TYPE = _toBytes32("StvPool");
+        STV_STETH_POOL_TYPE = _toBytes32("StvStETHPool");
+        STRATEGY_POOL_TYPE = _toBytes32("StvStrategyPool");
     }
 
     function createPoolStvStart(
@@ -257,7 +266,7 @@ contract Factory {
         address poolImpl = address(0);
         if (poolType == STV_POOL_TYPE) {
             poolImpl = STV_POOL_FACTORY.deploy(
-                dashboardAddress, _auxiliaryConfig.allowlistEnabled, withdrawalQueueProxy, distributor
+                dashboardAddress, _auxiliaryConfig.allowlistEnabled, withdrawalQueueProxy, distributor, poolType
             );
         } else if (poolType == STV_STETH_POOL_TYPE || poolType == STRATEGY_POOL_TYPE) {
             poolImpl = STV_STETH_POOL_FACTORY.deploy(
@@ -365,4 +374,14 @@ contract Factory {
     {
         result = keccak256(abi.encodePacked(_sender, abi.encode(_intermediate)));
     }
+
+    /// @dev encodes string `_str` in bytes32. Reverts if the string length > 31
+    function _toBytes32(string memory _str) internal pure returns (bytes32) {
+        bytes memory bstr = bytes(_str);
+        if (bstr.length > 31) {
+            revert StringTooLong(_str);
+        }
+        return bytes32(uint256(bytes32(bstr)) | bstr.length);
+    }
+
 }

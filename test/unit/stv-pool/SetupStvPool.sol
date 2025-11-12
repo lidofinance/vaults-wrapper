@@ -47,7 +47,8 @@ abstract contract SetupStvPool is Test {
             _dashboard: address(dashboard),
             _allowListEnabled: false,
             _withdrawalQueue: withdrawalQueue,
-            _distributor: address(0)
+            _distributor: address(0),
+            _poolType: bytes32("TestPool")
         });
         ERC1967Proxy poolProxy = new ERC1967Proxy(address(poolImpl), "");
 
