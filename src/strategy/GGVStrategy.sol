@@ -41,7 +41,7 @@ contract GGVStrategy is IStrategy, AccessControlEnumerableUpgradeable, FeaturePa
     }
 
     event GGVDeposited(
-        address indexed recipient, uint256 wstethAmount, uint256 ggvShares, address referralAddress, bytes paramsSupply
+        address indexed recipient, uint256 wstethAmount, uint256 ggvShares, address indexed referralAddress, bytes paramsSupply
     );
     event GGVWithdrawalRequested(address indexed recipient, bytes32 requestId, uint256 ggvShares, bytes paramsRequestExit);
 
