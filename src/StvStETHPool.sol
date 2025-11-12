@@ -29,7 +29,6 @@ contract StvStETHPool is StvPool {
     error InsufficientStv();
     error ZeroArgument();
     error ArraysLengthMismatch(uint256 firstArrayLength, uint256 secondArrayLength);
-    error VaultReportStale();
     error UndercollateralizedAccount();
     error CollateralizedAccount();
     error ExcessiveLossSocialization();
@@ -543,7 +542,7 @@ contract StvStETHPool is StvPool {
      * @dev Second, if there are remaining liability shares, rebalances Staking Vault
      * @dev Requires fresh oracle report, which is checked in the Withdrawal Queue
      */
-    function rebalanceMintedStethShares(uint256 _stethShares, uint256 _maxStvToBurn)
+    function rebalanceMintedStethSharesForWithdrawalQueue(uint256 _stethShares, uint256 _maxStvToBurn)
         public
         returns (uint256 stvBurned)
     {
@@ -559,6 +558,8 @@ contract StvStETHPool is StvPool {
      * @dev Requires fresh oracle report to price stv accurately
      */
     function forceRebalance(address _account) public returns (uint256 stvBurned) {
+        _checkFreshReport();
+
         (uint256 stethShares, uint256 stv, bool isUndercollateralized) = previewForceRebalance(_account);
         if (isUndercollateralized) revert UndercollateralizedAccount();
 
@@ -573,6 +574,7 @@ contract StvStETHPool is StvPool {
      */
     function forceRebalanceAndSocializeLoss(address _account) public returns (uint256 stvBurned) {
         _checkRole(LOSS_SOCIALIZER_ROLE, msg.sender);
+        _checkFreshReport();
 
         (uint256 stethShares, uint256 stv, bool isUndercollateralized) = previewForceRebalance(_account);
         if (!isUndercollateralized) revert CollateralizedAccount();
@@ -586,15 +588,13 @@ contract StvStETHPool is StvPool {
      * @return stethShares The amount of stETH shares to rebalance, limited by available assets
      * @return stv The amount of stv needed to burn in exchange for the stETH shares, limited by user's stv balance
      * @return isUndercollateralized True if the user's assets are insufficient to cover the liability
-     * @dev Requires fresh oracle report to price stv accurately
+     * @dev Requires fresh oracle report to price stv accurately (not enforced in this method, so caller must ensure it)
      */
     function previewForceRebalance(address _account)
         public
         view
         returns (uint256 stethShares, uint256 stv, bool isUndercollateralized)
     {
-        _checkFreshReport();
-
         uint256 stethSharesLiability = mintedStethSharesOf(_account);
         uint256 stvBalance = balanceOf(_account);
         uint256 assets = assetsOf(_account);
@@ -704,10 +704,6 @@ contract StvStETHPool is StvPool {
         if (portionToSocializeBP > _getStvStETHPoolStorage().maxLossSocializationBP) {
             revert ExcessiveLossSocialization();
         }
-    }
-
-    function _checkFreshReport() internal view {
-        if (!VAULT_HUB.isReportFresh(address(VAULT))) revert VaultReportStale();
     }
 
     // =================================================================================

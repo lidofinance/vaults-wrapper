@@ -303,6 +303,8 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, FeaturePausable 
      * @param _stvToWithdraw Array of amounts of stv to withdraw
      * @param _stethSharesToRebalance Array of amounts of stETH shares to rebalance if supported by the pool, array of 0 otherwise
      * @return requestIds the created withdrawal request ids
+     * @dev Transfers stv and liability shares from the requester to the withdrawal queue
+     * @dev Requires fresh oracle report to price stv accurately
      */
     function requestWithdrawalBatch(
         address _owner,
@@ -311,6 +313,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, FeaturePausable 
     ) external returns (uint256[] memory requestIds) {
         _checkFeatureNotPaused(WITHDRAWALS_FEATURE);
         _checkArrayLength(_stvToWithdraw.length, _stethSharesToRebalance.length);
+        _checkFreshReport();
 
         requestIds = new uint256[](_stvToWithdraw.length);
         for (uint256 i = 0; i < _stvToWithdraw.length; ++i) {
@@ -325,12 +328,15 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, FeaturePausable 
      * @param _stethSharesToRebalance Amount of steth shares to rebalance if supported by the pool, 0 otherwise
      * @return requestId The created withdrawal request id
      * @dev Transfers stv and liability shares from the requester to the withdrawal queue
+     * @dev Requires fresh oracle report to price stv accurately
      */
     function requestWithdrawal(address _owner, uint256 _stvToWithdraw, uint256 _stethSharesToRebalance)
         external
         returns (uint256 requestId)
     {
         _checkFeatureNotPaused(WITHDRAWALS_FEATURE);
+        _checkFreshReport();
+
         requestId = _requestWithdrawal(_owner, _stvToWithdraw, _stethSharesToRebalance);
     }
 
@@ -562,7 +568,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, FeaturePausable 
 
             // Stv burning is limited at this point by maxStvToRebalance calculated above
             // to make sure that only stv of finalized requests is used for rebalancing
-            totalStvRebalanced = POOL.rebalanceMintedStethShares(totalStethShares, maxStvToRebalance);
+            totalStvRebalanced = POOL.rebalanceMintedStethSharesForWithdrawalQueue(totalStethShares, maxStvToRebalance);
         }
 
         // 3. Burn any remaining stv that was not used for rebalancing
@@ -570,7 +576,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, FeaturePausable 
         //   - the changed stv rate after the first step
         //   - accumulated rounding errors in maxStvToRebalance
         //
-        // It's guaranteed by POOL.rebalanceMintedStethShares() that maxStvToRebalance >= totalStvRebalanced
+        // It's guaranteed by POOL.rebalanceMintedStethSharesForWithdrawalQueue() that maxStvToRebalance >= totalStvRebalanced
         uint256 remainingStvForRebalance = maxStvToRebalance - totalStvRebalanced;
         if (remainingStvForRebalance > 0) {
             POOL.burnStvForWithdrawalQueue(remainingStvForRebalance);
@@ -959,7 +965,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, FeaturePausable 
     function _calcRequestAmounts(
         WithdrawalRequest memory _prevRequest,
         WithdrawalRequest memory _request,
-        Checkpoint memory checkpoint
+        Checkpoint memory _checkpoint
     )
         internal
         pure
@@ -979,21 +985,21 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, FeaturePausable 
         uint256 requestStvRate = (assetsToClaim * E36_PRECISION_BASE) / stv;
 
         // Apply discount if the request stv rate is above the finalization stv rate
-        if (requestStvRate > checkpoint.stvRate) {
-            assetsToClaim = Math.mulDiv(stv, checkpoint.stvRate, E36_PRECISION_BASE, Math.Rounding.Floor);
+        if (requestStvRate > _checkpoint.stvRate) {
+            assetsToClaim = Math.mulDiv(stv, _checkpoint.stvRate, E36_PRECISION_BASE, Math.Rounding.Floor);
         }
 
         if (stethSharesToRebalance > 0) {
             assetsToRebalance =
-                Math.mulDiv(stethSharesToRebalance, checkpoint.stethShareRate, E27_PRECISION_BASE, Math.Rounding.Ceil);
+                Math.mulDiv(stethSharesToRebalance, _checkpoint.stethShareRate, E27_PRECISION_BASE, Math.Rounding.Ceil);
 
             // Decrease assets to claim by the amount of assets to rebalance
             assetsToClaim = Math.saturatingSub(assetsToClaim, assetsToRebalance);
         }
 
         // Apply request finalization gas cost coverage
-        if (checkpoint.gasCostCoverage > 0) {
-            gasCostCoverage = Math.min(assetsToClaim, checkpoint.gasCostCoverage);
+        if (_checkpoint.gasCostCoverage > 0) {
+            gasCostCoverage = Math.min(assetsToClaim, _checkpoint.gasCostCoverage);
             assetsToClaim -= gasCostCoverage;
         }
     }
@@ -1064,8 +1070,10 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, FeaturePausable 
     // CHECKS
     // =================================================================================
 
-    function _checkArrayLength(uint256 firstArrayLength, uint256 secondArrayLength) internal pure {
-        if (firstArrayLength != secondArrayLength) revert ArraysLengthMismatch(firstArrayLength, secondArrayLength);
+    function _checkArrayLength(uint256 _firstArrayLength, uint256 _secondArrayLength) internal pure {
+        if (_firstArrayLength != _secondArrayLength) {
+            revert ArraysLengthMismatch(_firstArrayLength, _secondArrayLength);
+        }
     }
 
     function _checkFreshReport() internal view {

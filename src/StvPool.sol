@@ -26,6 +26,7 @@ contract StvPool is Initializable, ERC20Upgradeable, AllowList, FeaturePausable 
     error NotEnoughToRebalance();
     error UnassignedLiabilityOnVault();
     error VaultInBadDebt();
+    error VaultReportStale();
 
     bytes32 public constant DEPOSITS_FEATURE = keccak256("DEPOSITS_FEATURE");
     bytes32 public constant DEPOSITS_PAUSE_ROLE = keccak256("DEPOSITS_PAUSE_ROLE");
@@ -208,6 +209,7 @@ contract StvPool is Initializable, ERC20Upgradeable, AllowList, FeaturePausable 
      * @param _recipient Address to receive the minted shares
      * @param _referral Address of the referral (if any)
      * @return stv Amount of stv minted
+     * @dev Requires fresh oracle report to price stv accurately
      */
     function depositETH(address _recipient, address _referral) public payable returns (uint256 stv) {
         stv = _deposit(_recipient, _referral);
@@ -218,6 +220,7 @@ contract StvPool is Initializable, ERC20Upgradeable, AllowList, FeaturePausable 
         if (_recipient == address(0)) revert InvalidRecipient();
         _checkFeatureNotPaused(DEPOSITS_FEATURE);
         _checkAllowList();
+        _checkFreshReport();
 
         stv = previewDeposit(msg.value);
         _mint(_recipient, stv);
@@ -260,7 +263,7 @@ contract StvPool is Initializable, ERC20Upgradeable, AllowList, FeaturePausable 
      * @param _stethShares Amount of stETH shares to rebalance (18 decimals)
      * @dev Only unassigned liability can be rebalanced with this method, not individual liability
      * @dev Can be called by anyone if there is any unassigned liability
-     * @dev Required fresh oracle report before calling
+     * @dev Required fresh oracle report before calling (check is performed in VaultHub)
      */
     function rebalanceUnassignedLiability(uint256 _stethShares) external {
         _checkOnlyUnassignedLiabilityRebalance(_stethShares);
@@ -274,7 +277,7 @@ contract StvPool is Initializable, ERC20Upgradeable, AllowList, FeaturePausable 
      * @dev Only unassigned liability can be rebalanced with this method, not individual liability
      * @dev Can be called by anyone if there is any unassigned liability
      * @dev This function accepts ETH and uses it to rebalance unassigned liability
-     * @dev Required fresh oracle report before calling
+     * @dev Required fresh oracle report before calling (check is performed in VaultHub)
      */
     function rebalanceUnassignedLiabilityWithEther() external payable {
         uint256 stethShares = _getSharesByPooledEth(msg.value);
@@ -405,5 +408,13 @@ contract StvPool is Initializable, ERC20Upgradeable, AllowList, FeaturePausable 
     function resumeDeposits() external {
         _checkRole(DEPOSITS_RESUME_ROLE, msg.sender);
         _resumeFeature(DEPOSITS_FEATURE);
+    }
+
+    // =================================================================================
+    // ORACLE FRESHNESS CHECK
+    // =================================================================================
+
+    function _checkFreshReport() internal view {
+        if (!VAULT_HUB.isReportFresh(address(VAULT))) revert VaultReportStale();
     }
 }
