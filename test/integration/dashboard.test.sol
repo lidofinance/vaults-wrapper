@@ -2,8 +2,8 @@
 pragma solidity >=0.8.25;
 
 import {ERC20Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
-import {IOperatorGrid} from "src/interfaces/IOperatorGrid.sol";
-import {IVaultHub} from "src/interfaces/IVaultHub.sol";
+import {IOperatorGrid} from "src/interfaces/core/IOperatorGrid.sol";
+import {IVaultHub} from "src/interfaces/core/IVaultHub.sol";
 import {OssifiableProxy} from "src/proxy/OssifiableProxy.sol";
 import {StvPoolHarness} from "test/utils/StvPoolHarness.sol";
 import {TimelockHarness} from "test/utils/TimelockHarness.sol";

@@ -1,4 +1,4 @@
-// src/interfaces/IWstETH.sol
+// src/interfaces/core/IWstETH.sol
 pragma solidity >=0.8.25;
 
 import {IStETH} from "./IStETH.sol";

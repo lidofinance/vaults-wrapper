@@ -8,11 +8,11 @@ import {Distributor} from "src/Distributor.sol";
 import {Factory} from "src/Factory.sol";
 import {StvPool} from "src/StvPool.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
-import {IDashboard} from "src/interfaces/IDashboard.sol";
-import {ILido} from "src/interfaces/ILido.sol";
-import {IStakingVault} from "src/interfaces/IStakingVault.sol";
-import {IVaultHub} from "src/interfaces/IVaultHub.sol";
-import {IWstETH} from "src/interfaces/IWstETH.sol";
+import {IDashboard} from "src/interfaces/core/IDashboard.sol";
+import {ILido} from "src/interfaces/core/ILido.sol";
+import {IStakingVault} from "src/interfaces/core/IStakingVault.sol";
+import {IVaultHub} from "src/interfaces/core/IVaultHub.sol";
+import {IWstETH} from "src/interfaces/core/IWstETH.sol";
 import {CoreHarness} from "test/utils/CoreHarness.sol";
 import {FactoryHelper} from "test/utils/FactoryHelper.sol";
 
@@ -48,7 +48,6 @@ contract StvPoolHarness is Test {
     // Deployment configuration struct
     enum StrategyKind {
         NONE,
-        LOOP,
         GGV
     }
 
@@ -133,25 +132,26 @@ contract StvPoolHarness is Test {
 
         Factory.TimelockConfig memory timelockConfig = Factory.TimelockConfig({
             minDelaySeconds: config.timelockMinDelaySeconds,
+            proposer: config.timelockExecutor == address(0) ? owner : config.timelockExecutor,
             executor: config.timelockExecutor == address(0) ? owner : config.timelockExecutor
         });
 
         address strategyFactoryAddress = address(0);
-        if (config.strategyKind == StrategyKind.LOOP) {
-            strategyFactoryAddress = address(factory.LOOP_STRATEGY_FACTORY());
-        } else if (config.strategyKind == StrategyKind.GGV) {
+        if (config.strategyKind == StrategyKind.GGV) {
             strategyFactoryAddress = address(factory.GGV_STRATEGY_FACTORY());
         }
+        // StrategyKind.NONE: strategyFactoryAddress remains address(0)
 
         vm.startPrank(config.nodeOperator);
-        Factory.StvPoolIntermediate memory intermediate = factory.createPoolStart{value: CONNECT_DEPOSIT}(
+        Factory.PoolIntermediate memory intermediate = factory.createPoolStart{value: CONNECT_DEPOSIT}(
             vaultConfig,
             commonPoolConfig,
             auxiliaryConfig,
             timelockConfig,
-            strategyFactoryAddress
+            strategyFactoryAddress,
+            ""
         );
-        Factory.StvPoolDeployment memory deployment = factory.createPoolFinish(intermediate);
+        Factory.PoolDeployment memory deployment = factory.createPoolFinish(intermediate);
         vm.stopPrank();
 
         IDashboard dashboard = IDashboard(payable(deployment.dashboard));

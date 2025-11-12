@@ -4,10 +4,10 @@ pragma solidity >=0.8.25;
 import {AllowList} from "./AllowList.sol";
 import {Distributor} from "./Distributor.sol";
 import {WithdrawalQueue} from "./WithdrawalQueue.sol";
-import {IDashboard} from "./interfaces/IDashboard.sol";
-import {IStETH} from "./interfaces/IStETH.sol";
-import {IStakingVault} from "./interfaces/IStakingVault.sol";
-import {IVaultHub} from "./interfaces/IVaultHub.sol";
+import {IDashboard} from "./interfaces/core/IDashboard.sol";
+import {IStETH} from "./interfaces/core/IStETH.sol";
+import {IStakingVault} from "./interfaces/core/IStakingVault.sol";
+import {IVaultHub} from "./interfaces/core/IVaultHub.sol";
 import {FeaturePausable} from "./utils/FeaturePausable.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {ERC20Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
@@ -39,10 +39,12 @@ contract StvPool is Initializable, ERC20Upgradeable, AllowList, FeaturePausable 
     IStETH public immutable STETH;
     IDashboard public immutable DASHBOARD;
     IVaultHub public immutable VAULT_HUB;
-    IStakingVault public immutable STAKING_VAULT;
+    IStakingVault public immutable VAULT;
 
     WithdrawalQueue public immutable WITHDRAWAL_QUEUE;
     Distributor public immutable DISTRIBUTOR;
+
+    bytes32 private immutable POOL_TYPE;
 
     event Deposit(
         address indexed sender, address indexed recipient, address indexed referral, uint256 assets, uint256 stv
@@ -50,15 +52,20 @@ contract StvPool is Initializable, ERC20Upgradeable, AllowList, FeaturePausable 
 
     event UnassignedLiabilityRebalanced(uint256 stethShares, uint256 ethFunded);
 
-    constructor(address _dashboard, bool _allowListEnabled, address _withdrawalQueue, address _distributor)
-        AllowList(_allowListEnabled)
-    {
+    constructor(
+        address _dashboard,
+        bool _allowListEnabled,
+        address _withdrawalQueue,
+        address _distributor,
+        bytes32 _poolType
+    ) AllowList(_allowListEnabled) {
         DASHBOARD = IDashboard(payable(_dashboard));
         VAULT_HUB = IVaultHub(DASHBOARD.VAULT_HUB());
-        STAKING_VAULT = IStakingVault(DASHBOARD.stakingVault());
+        VAULT = IStakingVault(DASHBOARD.stakingVault());
         WITHDRAWAL_QUEUE = WithdrawalQueue(payable(_withdrawalQueue));
         STETH = IStETH(payable(DASHBOARD.STETH()));
         DISTRIBUTOR = Distributor(_distributor);
+        POOL_TYPE = _poolType;
 
         // Disable initializers since we only support proxy deployment
         _disableInitializers();
@@ -68,7 +75,7 @@ contract StvPool is Initializable, ERC20Upgradeable, AllowList, FeaturePausable 
     }
 
     function poolType() external view virtual returns (bytes32) {
-        return keccak256("StvPool");
+        return POOL_TYPE;
     }
 
     function initialize(address _owner, string memory _name, string memory _symbol) public virtual initializer {
@@ -84,7 +91,7 @@ contract StvPool is Initializable, ERC20Upgradeable, AllowList, FeaturePausable 
 
         // Initial vault balance must include the connect deposit
         // Minting stv for it to have clear stv math
-        uint256 initialVaultBalance = address(STAKING_VAULT).balance;
+        uint256 initialVaultBalance = address(VAULT).balance;
         uint256 connectDeposit = VAULT_HUB.CONNECT_DEPOSIT();
         assert(initialVaultBalance >= connectDeposit);
         assert(totalSupply() == 0);
@@ -296,7 +303,7 @@ contract StvPool is Initializable, ERC20Upgradeable, AllowList, FeaturePausable 
      * @dev Checks if the vault is not in bad debt (value < liability)
      */
     function _checkNoBadDebt() internal view {
-        uint256 totalValueInStethShares = _getSharesByPooledEth(VAULT_HUB.totalValue(address(STAKING_VAULT)));
+        uint256 totalValueInStethShares = _getSharesByPooledEth(VAULT_HUB.totalValue(address(VAULT)));
         if (totalValueInStethShares < totalLiabilityShares()) revert VaultInBadDebt();
     }
 

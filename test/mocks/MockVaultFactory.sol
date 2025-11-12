@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >=0.8.25;
 
-import {IVaultFactory} from "../../src/interfaces/IVaultFactory.sol";
+import {IVaultFactory} from "../../src/interfaces/core/IVaultFactory.sol";
 import {MockDashboard} from "./MockDashboard.sol";
 import {MockStakingVault} from "./MockStakingVault.sol";
 import {MockVaultHub} from "./MockVaultHub.sol";

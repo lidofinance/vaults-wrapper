@@ -5,8 +5,8 @@ import {BorrowedMath} from "./BorrowedMath.sol";
 import {GGVVaultMock} from "./GGVVaultMock.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
-import {IStETH} from "src/interfaces/IStETH.sol";
-import {IWstETH} from "src/interfaces/IWstETH.sol";
+import {IStETH} from "src/interfaces/core/IStETH.sol";
+import {IWstETH} from "src/interfaces/core/IWstETH.sol";
 import {IBoringOnChainQueue} from "src/interfaces/ggv/IBoringOnChainQueue.sol";
 
 import {console} from "forge-std/console.sol";

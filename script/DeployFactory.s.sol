@@ -6,22 +6,14 @@ import "forge-std/Script.sol";
 import {Factory} from "src/Factory.sol";
 import {DistributorFactory} from "src/factories/DistributorFactory.sol";
 import {GGVStrategyFactory} from "src/factories/GGVStrategyFactory.sol";
-import {LoopStrategyFactory} from "src/factories/LoopStrategyFactory.sol";
 import {StvPoolFactory} from "src/factories/StvPoolFactory.sol";
 import {StvStETHPoolFactory} from "src/factories/StvStETHPoolFactory.sol";
 import {TimelockFactory} from "src/factories/TimelockFactory.sol";
 import {WithdrawalQueueFactory} from "src/factories/WithdrawalQueueFactory.sol";
+import {ILidoLocator} from "src/interfaces/core/ILidoLocator.sol";
 
 contract DeployFactory is Script {
-    // function _readCore(address locatorAddress) internal view returns (CoreRefs memory c) {
-    //     ILidoLocator locator = ILidoLocator(locatorAddress);
-    //     c.vaultFactory = locator.vaultFactory();
-    //     c.steth = address(locator.lido());
-    //     c.wsteth = address(locator.wstETH());
-    //     c.lazyOracle = locator.lazyOracle();
-    // }
-
-    function _deployImplFactories(address ggvTeller, address ggvBoringQueue)
+    function _deployImplFactories(address _ggvTeller, address _ggvBoringQueue, address _steth, address _wsteth)
         internal
         returns (Factory.SubFactories memory f)
     {
@@ -29,45 +21,44 @@ contract DeployFactory is Script {
         f.stvStETHPoolFactory = address(new StvStETHPoolFactory());
         f.withdrawalQueueFactory = address(new WithdrawalQueueFactory());
         f.distributorFactory = address(new DistributorFactory());
-        f.loopStrategyFactory = address(new LoopStrategyFactory());
-        f.ggvStrategyFactory = address(new GGVStrategyFactory(ggvTeller, ggvBoringQueue));
+        f.ggvStrategyFactory = address(new GGVStrategyFactory(_ggvTeller, _ggvBoringQueue, _steth, _wsteth));
         f.timelockFactory = address(new TimelockFactory());
     }
 
     function _writeArtifacts(
-        Factory.SubFactories memory subFactories,
-        address factoryAddr,
-        string memory outputJsonPath
+        Factory.SubFactories memory _subFactories,
+        address _factoryAddr,
+        string memory _outputJsonPath
     ) internal {
         string memory factoriesSection = "";
-        factoriesSection = vm.serializeAddress("factories", "stvPoolFactory", subFactories.stvPoolFactory);
-        factoriesSection = vm.serializeAddress("factories", "stvStETHPoolFactory", subFactories.stvStETHPoolFactory);
+        factoriesSection = vm.serializeAddress("factories", "stvPoolFactory", _subFactories.stvPoolFactory);
+        factoriesSection = vm.serializeAddress("factories", "stvStETHPoolFactory", _subFactories.stvStETHPoolFactory);
         factoriesSection =
-            vm.serializeAddress("factories", "withdrawalQueueFactory", subFactories.withdrawalQueueFactory);
-        factoriesSection = vm.serializeAddress("factories", "loopStrategyFactory", subFactories.loopStrategyFactory);
-        factoriesSection = vm.serializeAddress("factories", "ggvStrategyFactory", subFactories.ggvStrategyFactory);
-        factoriesSection = vm.serializeAddress("factories", "timelockFactory", subFactories.timelockFactory);
+            vm.serializeAddress("factories", "withdrawalQueueFactory", _subFactories.withdrawalQueueFactory);
+        factoriesSection = vm.serializeAddress("factories", "ggvStrategyFactory", _subFactories.ggvStrategyFactory);
+        factoriesSection = vm.serializeAddress("factories", "timelockFactory", _subFactories.timelockFactory);
 
         string memory out = "";
-        out = vm.serializeAddress("deployment", "factory", factoryAddr);
+        out = vm.serializeAddress("deployment", "factory", _factoryAddr);
         out = vm.serializeString("deployment", "network", vm.toString(block.chainid));
 
         string memory json = vm.serializeString("_root", "factories", factoriesSection);
         json = vm.serializeString("_root", "deployment", out);
 
-        vm.writeJson(json, outputJsonPath);
+        vm.writeJson(json, _outputJsonPath);
         vm.writeJson(json, "deployments/pool-factory-latest.json");
     }
 
-    function _readGGVStrategyAddresses(string memory paramsPath)
+    function _readGGVStrategyAddresses(string memory _paramsPath)
         internal
         view
         returns (address teller, address boringQueue)
     {
         require(
-            vm.isFile(paramsPath), string(abi.encodePacked("FACTORY_PARAMS_JSON file does not exist at: ", paramsPath))
+            vm.isFile(_paramsPath),
+            string(abi.encodePacked("FACTORY_PARAMS_JSON file does not exist at: ", _paramsPath))
         );
-        string memory json = vm.readFile(paramsPath);
+        string memory json = vm.readFile(_paramsPath);
 
         teller = vm.parseJsonAddress(json, "$.strategies.ggv.teller");
         boringQueue = vm.parseJsonAddress(json, "$.strategies.ggv.boringOnChainQueue");
@@ -95,10 +86,14 @@ contract DeployFactory is Script {
 
         (address ggvTeller, address ggvBoringQueue) = _readGGVStrategyAddresses(paramsJsonPath);
 
+        ILidoLocator locator = ILidoLocator(locatorAddress);
+        address steth = address(locator.lido());
+        address wsteth = address(locator.wstETH());
+
         vm.startBroadcast();
 
         // Deploy implementation factories and proxy stub
-        Factory.SubFactories memory subFactories = _deployImplFactories(ggvTeller, ggvBoringQueue);
+        Factory.SubFactories memory subFactories = _deployImplFactories(ggvTeller, ggvBoringQueue, steth, wsteth);
 
         Factory factory = new Factory(locatorAddress, subFactories);
 

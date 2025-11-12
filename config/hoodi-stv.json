@@ -6,7 +6,7 @@
     "confirmExpiry": 3600
   },
   "commonPoolConfig": {
-    "minWithdrawalDelayTime": 180,
+    "minWithdrawalDelayTime": 3600,
     "name": "Staked ETH Pool",
     "symbol": "STV"
   },
@@ -17,6 +17,7 @@
   },
   "timelockConfig": {
     "minDelaySeconds": 60,
+    "proposer": "0xcc95b0Dbe1519AfaC58d954444839A80700380a2",
     "executor": "0xcc95b0Dbe1519AfaC58d954444839A80700380a2"
   },
   "strategyFactory": "0x0000000000000000000000000000000000000000",

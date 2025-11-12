@@ -6,7 +6,7 @@ import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {BorrowedMath} from "./BorrowedMath.sol";
 import {GGVMockTeller} from "./GGVMockTeller.sol";
 import {GGVQueueMock} from "./GGVQueueMock.sol";
-import {IStETH} from "src/interfaces/IStETH.sol";
+import {IStETH} from "src/interfaces/core/IStETH.sol";
 import {IBoringOnChainQueue} from "src/interfaces/ggv/IBoringOnChainQueue.sol";
 import {ITellerWithMultiAssetSupport} from "src/interfaces/ggv/ITellerWithMultiAssetSupport.sol";
 

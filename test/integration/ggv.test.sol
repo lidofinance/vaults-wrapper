@@ -271,11 +271,11 @@ contract GGVTest is StvStrategyPoolHarness {
     }
 
     function _finalizeWQ(uint256 _maxRequest, uint256 vaultProfit) public {
-        vm.deal(address(pool.STAKING_VAULT()), 1 ether);
+        vm.deal(address(pool.VAULT()), 1 ether);
 
         vm.warp(block.timestamp + 1 days);
         core.applyVaultReport(
-            address(pool.STAKING_VAULT()), pool.totalAssets(), 0, pool.DASHBOARD().liabilityShares(), 0
+            address(pool.VAULT()), pool.totalAssets(), 0, pool.DASHBOARD().liabilityShares(), 0
         );
 
         if (vaultProfit != 0) {

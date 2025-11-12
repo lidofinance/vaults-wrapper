@@ -11,6 +11,7 @@ lido-core/
 .code/
 .vscode/
 .wake/
+.zed/
 
 # LLM files
 **/CLAUDE.md

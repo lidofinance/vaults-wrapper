@@ -14,7 +14,7 @@ contract BadDebtTest is Test, SetupStvPool {
     }
 
     function _getValueAndLiabilityShares() internal view returns (uint256 valueShares, uint256 liabilityShares) {
-        valueShares = steth.getSharesByPooledEth(vaultHub.totalValue(address(pool.STAKING_VAULT())));
+        valueShares = steth.getSharesByPooledEth(vaultHub.totalValue(address(pool.VAULT())));
         liabilityShares = pool.totalLiabilityShares();
     }
 
