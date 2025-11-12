@@ -93,7 +93,7 @@ contract FactoryIntegrationTest is StvPoolHarness {
         vm.startPrank(vaultConfig.nodeOperator);
         vm.expectRevert(
             abi.encodeWithSelector(
-                Factory.InsufficientConnectDeposit.selector, CONNECT_DEPOSIT, CONNECT_DEPOSIT - 1
+                Factory.InsufficientConnectDeposit.selector, CONNECT_DEPOSIT - 1, CONNECT_DEPOSIT
             )
         );
         factory.createPoolStart{value: CONNECT_DEPOSIT - 1}(
@@ -271,7 +271,7 @@ contract FactoryIntegrationTest is StvPoolHarness {
 
         Vm.Log[] memory entries = vm.getRecordedLogs();
         bytes32 expectedTopic = keccak256(
-            "PoolCreationStarted((address,address,address,bytes))"
+            "PoolCreationStarted((address,address,address,bytes),uint256)"
         );
 
         bool found;

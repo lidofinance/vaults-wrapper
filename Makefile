@@ -1,5 +1,7 @@
 .ONESHELL:
 
+# TODO: get this deprecated in favour of just
+
 CORE_RPC_PORT ?= 9123
 CORE_BRANCH ?= feat/vaults
 CORE_SUBDIR ?= lido-core

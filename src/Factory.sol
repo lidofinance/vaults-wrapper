@@ -86,10 +86,16 @@ contract Factory {
     // Events
     //
 
-    event PoolCreationStarted(PoolIntermediate intermediate);
+    event PoolCreationStarted(PoolIntermediate intermediate, uint256 finishDeadline);
 
     event PoolCreated(
-        address vault, address pool, address withdrawalQueue, address indexed strategyFactory, address strategy
+        address vault,
+        address pool,
+        bytes32 indexed poolType,
+        address withdrawalQueue,
+        address indexed strategyFactory,
+        bytes strategyDeployBytes,
+        address strategy
     );
 
     //
@@ -97,7 +103,7 @@ contract Factory {
     //
 
     error InvalidConfiguration(string reason);
-    error InsufficientConnectDeposit(uint256 required, uint256 provided);
+    error InsufficientConnectDeposit(uint256 provided, uint256 required);
     error StringTooLong(string str);
 
     //
@@ -218,7 +224,7 @@ contract Factory {
         bytes memory _strategyDeployBytes
     ) public payable returns (PoolIntermediate memory intermediate) {
         if (msg.value < VAULT_HUB.CONNECT_DEPOSIT()) {
-            revert InsufficientConnectDeposit(VAULT_HUB.CONNECT_DEPOSIT(), msg.value);
+            revert InsufficientConnectDeposit(msg.value, VAULT_HUB.CONNECT_DEPOSIT());
         }
 
         bytes32 poolType = STV_POOL_TYPE;
@@ -274,7 +280,7 @@ contract Factory {
             )
         );
 
-        address distributor = DISTRIBUTOR_FACTORY.deploy(_vaultConfig.nodeOperator, _vaultConfig.nodeOperatorManager);
+        address distributor = DISTRIBUTOR_FACTORY.deploy(timelock, _vaultConfig.nodeOperatorManager);
 
         address poolImpl = address(0);
         if (poolType == STV_POOL_TYPE) {
@@ -310,7 +316,7 @@ contract Factory {
         uint256 finishDeadline = block.timestamp + DEPLOY_START_FINISH_SPAN_SECONDS;
         intermediateState[deploymentHash] = finishDeadline;
 
-        emit PoolCreationStarted(intermediate);
+        emit PoolCreationStarted(intermediate, finishDeadline);
     }
 
     function createPoolFinish(PoolIntermediate calldata _intermediate)
@@ -372,8 +378,10 @@ contract Factory {
         emit PoolCreated(
             deployment.vault,
             deployment.pool,
+            deployment.poolType,
             deployment.withdrawalQueue,
             _intermediate.strategyFactory,
+            _intermediate.strategyDeployBytes,
             deployment.strategy
         );
 
@@ -386,7 +394,7 @@ contract Factory {
         pure
         returns (bytes32 result)
     {
-        result = keccak256(abi.encodePacked(_sender, abi.encode(_intermediate)));
+        result = keccak256(abi.encode(_sender, abi.encode(_intermediate)));
     }
 
     /// @dev encodes string `_str` in bytes32. Reverts if the string length > 31
