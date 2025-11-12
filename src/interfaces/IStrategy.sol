@@ -12,7 +12,10 @@ interface IStrategy {
 
     /// @notice Supplies wstETH to the strategy
     function supply(address _referral, uint256 _wstethToMint, bytes calldata _params) external payable;
-    //    function previewSupply(address _user, bytes calldata _params) external view returns (uint256 stv, uint256 maxWstethToMint);
+    function previewSupply(uint256 _assets, bytes calldata _params)
+        external
+        view
+        returns (uint256 stv, uint256 maxWstethToMint);
 
     /// @notice Requests a withdrawal from the strategy
     function requestExitByWsteth(uint256 wstethToBurn, bytes calldata params) external returns (bytes32 requestId);

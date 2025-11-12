@@ -153,6 +153,26 @@ contract GGVStrategy is IStrategy, AccessControlEnumerableUpgradeable, FeaturePa
         emit GGVDeposited(msg.sender, _wstethToMint, ggvShares, _referral, _params);
     }
 
+    /**
+     * @notice Previews the amount of stv and the maximum amount of wstETH that can be minted
+     * @param _assets The amount of assets to preview the amount of stv and the maximum amount of wstETH for
+     * @return stv The amount of stv that would be minted
+     * @return maxWstethToMint The maximum amount of wstETH that can be minted
+     */
+    function previewSupply(
+        uint256 _assets,
+        bytes calldata /* _params */
+    )
+        external
+        view
+        returns (uint256 stv, uint256 maxWstethToMint)
+    {
+        address callForwarder = getStrategyCallForwarderAddress(msg.sender);
+
+        stv = POOL_.previewDeposit(_assets);
+        maxWstethToMint = POOL_.remainingMintingCapacitySharesOf(callForwarder, _assets);
+    }
+
     // =================================================================================
     // REQUEST EXIT FROM STRATEGY
     // =================================================================================
