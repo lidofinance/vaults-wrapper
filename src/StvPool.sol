@@ -263,7 +263,7 @@ contract StvPool is Initializable, ERC20Upgradeable, AllowList, FeaturePausable 
      * @param _stethShares Amount of stETH shares to rebalance (18 decimals)
      * @dev Only unassigned liability can be rebalanced with this method, not individual liability
      * @dev Can be called by anyone if there is any unassigned liability
-     * @dev Required fresh oracle report before calling (check is performed in VaultHub)
+     * @dev Requires fresh oracle report before calling (check is performed in VaultHub)
      */
     function rebalanceUnassignedLiability(uint256 _stethShares) external {
         _checkOnlyUnassignedLiabilityRebalance(_stethShares);
@@ -277,7 +277,7 @@ contract StvPool is Initializable, ERC20Upgradeable, AllowList, FeaturePausable 
      * @dev Only unassigned liability can be rebalanced with this method, not individual liability
      * @dev Can be called by anyone if there is any unassigned liability
      * @dev This function accepts ETH and uses it to rebalance unassigned liability
-     * @dev Required fresh oracle report before calling (check is performed in VaultHub)
+     * @dev Requires fresh oracle report before calling (check is performed in VaultHub)
      */
     function rebalanceUnassignedLiabilityWithEther() external payable {
         uint256 stethShares = _getSharesByPooledEth(msg.value);
