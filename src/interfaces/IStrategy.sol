@@ -12,6 +12,8 @@ interface IStrategy {
 
     /// @notice Supplies wstETH to the strategy
     function supply(address _referral, uint256 _wstethToMint, bytes calldata _params) external payable;
+
+    /// @notice Previews the amount of stv and the maximum amount of wstETH that can be minted
     function previewSupply(uint256 _assets, bytes calldata _params)
         external
         view
