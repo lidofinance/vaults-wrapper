@@ -48,3 +48,4 @@ ignore = [
 
 [lint]
 lint_on_build = false # TODO: enable later
+exclude_lints = ["mixed-case-variable", "mixed-case-function"]

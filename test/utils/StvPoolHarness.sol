@@ -151,7 +151,9 @@ contract StvPoolHarness is Test {
             strategyFactoryAddress,
             ""
         );
-        Factory.PoolDeployment memory deployment = factory.createPoolFinish(intermediate);
+        Factory.PoolDeployment memory deployment = factory.createPoolFinish(
+            vaultConfig, commonPoolConfig, auxiliaryConfig, timelockConfig, strategyFactoryAddress, "", intermediate
+        );
         vm.stopPrank();
 
         IDashboard dashboard = IDashboard(payable(deployment.dashboard));

@@ -100,10 +100,10 @@ contract Factory {
     /// @param strategyFactory Address of the strategy factory (zero if not using strategies)
     /// @param strategyDeployBytes ABI-encoded parameters for strategy deployment
     struct PoolIntermediate {
-        address pool;
+        address dashboard;
+        address poolProxy;
+        address withdrawalQueueProxy;
         address timelock;
-        address strategyFactory;
-        bytes strategyDeployBytes;
     }
 
     /// @notice Complete deployment result returned by finish function
@@ -362,15 +362,7 @@ contract Factory {
             revert InsufficientConnectDeposit(msg.value, VAULT_HUB.CONNECT_DEPOSIT());
         }
 
-        bytes32 poolType = STV_POOL_TYPE;
-        if (_strategyFactory != address(0)) {
-            poolType = STRATEGY_POOL_TYPE;
-            if (!_auxiliaryConfig.allowlistEnabled) {
-                revert InvalidConfiguration("allowlistEnabled must be true if strategy factory is set");
-            }
-        } else if (_auxiliaryConfig.mintingEnabled) {
-            poolType = STV_STETH_POOL_TYPE;
-        }
+        bytes32 poolType = _derivePoolType(_auxiliaryConfig, _strategyFactory);
 
         if (bytes(_commonPoolConfig.name).length == 0 || bytes(_commonPoolConfig.symbol).length == 0) {
             revert InvalidConfiguration("name and symbol must be set");
@@ -382,69 +374,34 @@ contract Factory {
 
         address tempAdmin = address(this);
 
+        address poolProxy = payable(address(new OssifiableProxy(DUMMY_IMPLEMENTATION, tempAdmin, bytes(""))));
+        address wqProxy = payable(address(new OssifiableProxy(DUMMY_IMPLEMENTATION, tempAdmin, bytes(""))));
+
+        uint256 numDashboardRoles = _auxiliaryConfig.mintingEnabled ? 5 : 3;
+        IVaultFactory.RoleAssignment[] memory roleAssignments = new IVaultFactory.RoleAssignment[](numDashboardRoles);
+        IDashboard dashboardImpl = IDashboard(payable(VAULT_FACTORY.DASHBOARD_IMPL()));
+        roleAssignments[0] = IVaultFactory.RoleAssignment({account: poolProxy, role: dashboardImpl.FUND_ROLE()});
+        roleAssignments[1] = IVaultFactory.RoleAssignment({account: poolProxy, role: dashboardImpl.REBALANCE_ROLE()});
+        roleAssignments[2] = IVaultFactory.RoleAssignment({account: wqProxy, role: dashboardImpl.WITHDRAW_ROLE()});
+        if (_auxiliaryConfig.mintingEnabled) {
+            roleAssignments[3] = IVaultFactory.RoleAssignment({account: poolProxy, role: dashboardImpl.MINT_ROLE()});
+            roleAssignments[4] = IVaultFactory.RoleAssignment({account: poolProxy, role: dashboardImpl.BURN_ROLE()});
+        }
+
         (, address dashboardAddress) = VAULT_FACTORY.createVaultWithDashboard{value: msg.value}(
-            tempAdmin,
+            timelock,
             _vaultConfig.nodeOperator,
             _vaultConfig.nodeOperatorManager,
             _vaultConfig.nodeOperatorFeeBP,
             _vaultConfig.confirmExpiry,
-            new IVaultFactory.RoleAssignment[](0) // NB: assigned later because require pool and wq deployed
+            roleAssignments
         );
-
-        address poolProxy = payable(address(new OssifiableProxy(DUMMY_IMPLEMENTATION, tempAdmin, bytes(""))));
-
-        address wqImpl = WITHDRAWAL_QUEUE_FACTORY.deploy(
-            poolProxy,
-            dashboardAddress,
-            address(VAULT_HUB),
-            STETH,
-            address(IDashboard(payable(dashboardAddress)).stakingVault()),
-            LAZY_ORACLE,
-            _commonPoolConfig.minWithdrawalDelayTime,
-            _auxiliaryConfig.mintingEnabled
-        );
-
-        address withdrawalQueueProxy = address(
-            new OssifiableProxy(
-                wqImpl,
-                timelock,
-                abi.encodeCall(
-                    WithdrawalQueue.initialize,
-                    (timelock, _vaultConfig.nodeOperator) // (admin, finalizerRoleHolder)
-                )
-            )
-        );
-
-        address distributor = DISTRIBUTOR_FACTORY.deploy(timelock, _vaultConfig.nodeOperatorManager);
-
-        address poolImpl = address(0);
-        if (poolType == STV_POOL_TYPE) {
-            poolImpl = STV_POOL_FACTORY.deploy(
-                dashboardAddress, _auxiliaryConfig.allowlistEnabled, withdrawalQueueProxy, distributor, poolType
-            );
-        } else if (poolType == STV_STETH_POOL_TYPE || poolType == STRATEGY_POOL_TYPE) {
-            poolImpl = STV_STETH_POOL_FACTORY.deploy(
-                dashboardAddress,
-                _auxiliaryConfig.allowlistEnabled,
-                _auxiliaryConfig.reserveRatioGapBP,
-                withdrawalQueueProxy,
-                distributor,
-                poolType
-            );
-        }
-
-        OssifiableProxy(payable(poolProxy))
-            .proxy__upgradeToAndCall(
-                poolImpl,
-                abi.encodeCall(StvPool.initialize, (tempAdmin, _commonPoolConfig.name, _commonPoolConfig.symbol))
-            );
-        OssifiableProxy(payable(poolProxy)).proxy__changeAdmin(timelock);
 
         intermediate = PoolIntermediate({
-            pool: poolProxy,
-            timelock: timelock,
-            strategyFactory: _strategyFactory,
-            strategyDeployBytes: _strategyDeployBytes
+            dashboard: dashboardAddress,
+            poolProxy: poolProxy,
+            withdrawalQueueProxy: wqProxy,
+            timelock: timelock
         });
 
         bytes32 deploymentHash = _hashIntermediate(intermediate, msg.sender);
@@ -459,7 +416,15 @@ contract Factory {
     /// @return deployment Complete deployment information with all component addresses
     /// @dev Must be called by the same address that called createPoolStart
     /// @dev Must be called within DEPLOY_START_FINISH_SPAN_SECONDS of start
-    function createPoolFinish(PoolIntermediate calldata _intermediate)
+    function createPoolFinish(
+        VaultConfig memory _vaultConfig,
+        CommonPoolConfig memory _commonPoolConfig,
+        AuxiliaryPoolConfig memory _auxiliaryConfig,
+        TimelockConfig memory _timelockConfig,
+        address _strategyFactory,
+        bytes memory _strategyDeployBytes,
+        PoolIntermediate calldata _intermediate
+    )
         external
         returns (PoolDeployment memory deployment)
     {
@@ -475,40 +440,76 @@ contract Factory {
         }
         intermediateState[deploymentHash] = DEPLOY_FINISHED;
 
-        StvPool pool = StvPool(payable(_intermediate.pool));
-        IDashboard dashboard = pool.DASHBOARD();
-        WithdrawalQueue withdrawalQueue = pool.WITHDRAWAL_QUEUE();
-        address timelock = _intermediate.timelock;
+        // StvPool pool = StvPool(payable(_intermediate.pool));
+
+        // IDashboard dashboard = pool.DASHBOARD();
+        // WithdrawalQueue withdrawalQueue = pool.WITHDRAWAL_QUEUE();
+        // address timelock = _intermediate.timelock;
         address tempAdmin = address(this);
-        bytes32 poolType = pool.poolType();
+        bytes32 poolType = _derivePoolType(_auxiliaryConfig, _strategyFactory);
 
-        dashboard.grantRole(dashboard.FUND_ROLE(), address(pool));
-        dashboard.grantRole(dashboard.REBALANCE_ROLE(), address(pool));
-        dashboard.grantRole(dashboard.WITHDRAW_ROLE(), address(withdrawalQueue));
+        address wqImpl = WITHDRAWAL_QUEUE_FACTORY.deploy(
+            _intermediate.poolProxy,
+            _intermediate.dashboard,
+            address(VAULT_HUB),
+            STETH,
+            address(IDashboard(payable(_intermediate.dashboard)).stakingVault()),
+            LAZY_ORACLE,
+            _commonPoolConfig.minWithdrawalDelayTime,
+            _auxiliaryConfig.mintingEnabled
+        );
 
-        if (poolType != STV_POOL_TYPE) {
-            dashboard.grantRole(dashboard.MINT_ROLE(), address(pool));
-            dashboard.grantRole(dashboard.BURN_ROLE(), address(pool));
+        address distributor = DISTRIBUTOR_FACTORY.deploy(_intermediate.timelock, _vaultConfig.nodeOperatorManager);
+
+        address poolImpl = address(0);
+        if (poolType == STV_POOL_TYPE) {
+            poolImpl = STV_POOL_FACTORY.deploy(
+                _intermediate.dashboard, _auxiliaryConfig.allowlistEnabled, _intermediate.withdrawalQueueProxy, distributor, poolType
+            );
+        } else if (poolType == STV_STETH_POOL_TYPE || poolType == STRATEGY_POOL_TYPE) {
+            poolImpl = STV_STETH_POOL_FACTORY.deploy(
+                _intermediate.dashboard,
+                _auxiliaryConfig.allowlistEnabled,
+                _auxiliaryConfig.reserveRatioGapBP,
+                _intermediate.withdrawalQueueProxy,
+                distributor,
+                poolType
+            );
         }
 
+        OssifiableProxy(payable(_intermediate.poolProxy))
+            .proxy__upgradeToAndCall(
+                poolImpl,
+                abi.encodeCall(StvPool.initialize, (tempAdmin, _commonPoolConfig.name, _commonPoolConfig.symbol))
+            );
+        OssifiableProxy(payable(_intermediate.poolProxy)).proxy__changeAdmin(_intermediate.timelock);
+
+        OssifiableProxy(payable(_intermediate.withdrawalQueueProxy))
+            .proxy__upgradeToAndCall(
+                wqImpl,
+                abi.encodeCall(WithdrawalQueue.initialize, (_intermediate.timelock, _vaultConfig.nodeOperator))
+            );
+        OssifiableProxy(payable(_intermediate.withdrawalQueueProxy)).proxy__changeAdmin(_intermediate.timelock);
+
+        StvPool pool = StvPool(payable(_intermediate.poolProxy));
+        IDashboard dashboard = IDashboard(payable(_intermediate.dashboard));
+        WithdrawalQueue withdrawalQueue = WithdrawalQueue(payable(_intermediate.withdrawalQueueProxy));
+
         address strategy = address(0);
-        if (_intermediate.strategyFactory != address(0)) {
-            strategy = IStrategyFactory(_intermediate.strategyFactory)
-                .deploy(address(pool), _intermediate.strategyDeployBytes);
+        if (_strategyFactory != address(0)) {
+            strategy = IStrategyFactory(_strategyFactory)
+                .deploy(address(pool), _strategyDeployBytes);
             pool.addToAllowList(strategy);
         }
 
-        pool.grantRole(DEFAULT_ADMIN_ROLE, timelock);
+        pool.grantRole(DEFAULT_ADMIN_ROLE, _intermediate.timelock);
         pool.revokeRole(DEFAULT_ADMIN_ROLE, tempAdmin);
-
-        dashboard.grantRole(DEFAULT_ADMIN_ROLE, timelock);
-        dashboard.revokeRole(DEFAULT_ADMIN_ROLE, tempAdmin);
 
         deployment = PoolDeployment({
             poolType: poolType,
-            vault: address(pool.VAULT()),
+            vault: address(dashboard.stakingVault()),
             dashboard: address(dashboard),
-            pool: _intermediate.pool,
+            pool: address(pool),
             withdrawalQueue: address(withdrawalQueue),
             distributor: address(pool.DISTRIBUTOR()),
             timelock: _intermediate.timelock,
@@ -520,8 +521,8 @@ contract Factory {
             deployment.pool,
             deployment.poolType,
             deployment.withdrawalQueue,
-            _intermediate.strategyFactory,
-            _intermediate.strategyDeployBytes,
+            _strategyFactory,
+            _strategyDeployBytes,
             deployment.strategy
         );
 
@@ -551,5 +552,24 @@ contract Factory {
             revert StringTooLong(_str);
         }
         return bytes32(uint256(bytes32(bstr)) | bstr.length);
+    }
+
+    function _derivePoolType(AuxiliaryPoolConfig memory _auxiliaryConfig, address _strategyFactory)
+        internal
+        view
+        returns (bytes32 poolType)
+    {
+        poolType = STV_POOL_TYPE;
+        if (_strategyFactory != address(0)) {
+            poolType = STRATEGY_POOL_TYPE;
+            if (!_auxiliaryConfig.allowlistEnabled) {
+                revert InvalidConfiguration("allowlistEnabled must be true if strategy factory is set");
+            }
+            if (!_auxiliaryConfig.mintingEnabled) {
+                revert InvalidConfiguration("mintingEnabled must be true if strategy factory is set");
+            }
+        } else if (_auxiliaryConfig.mintingEnabled) {
+            poolType = STV_STETH_POOL_TYPE;
+        }
     }
 }
