@@ -314,7 +314,7 @@ contract Factory {
 
         address strategyProxy = address(0);
         if (intermediate.strategyFactory != address(0)) {
-            address strategyImpl = IStrategyFactory(intermediate.strategyFactory).deploy(address(pool), STETH, WSTETH);
+            address strategyImpl = IStrategyFactory(intermediate.strategyFactory).deploy(address(pool));
 
             strategyProxy =
                 address(new OssifiableProxy(strategyImpl, timelock, abi.encodeCall(IStrategy.initialize, (timelock))));

@@ -4,6 +4,7 @@ pragma solidity >=0.8.25;
 import {console} from "forge-std/Test.sol";
 
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
 import {IBoringOnChainQueue} from "src/interfaces/ggv/IBoringOnChainQueue.sol";
 import {IBoringSolver} from "src/interfaces/ggv/IBoringSolver.sol";
@@ -107,7 +108,7 @@ contract GGVTest is StvStrategyPoolHarness {
         vm.stopPrank();
 
         vm.startPrank(SOLVER);
-        uint256 solverSteth = steth.submit{value: 1 ether}(SOLVER);
+        uint256 solverSteth = steth.submit{value: 2 ether}(SOLVER);
         steth.approve(address(wsteth), type(uint256).max);
         uint256 solverWsteth = wsteth.wrap(solverSteth);
         wsteth.transfer(address(boringVault), solverWsteth);
@@ -141,6 +142,13 @@ contract GGVTest is StvStrategyPoolHarness {
         console.log("setup GGV finished\n");
     }
 
+    function test_revert_if_user_is_not_allowlisted() public {
+        uint256 depositAmount = 1 ether;
+        vm.prank(USER1);
+        vm.expectRevert(abi.encodeWithSelector(AllowList.NotAllowListed.selector, USER1));
+        pool.depositETH{value: depositAmount}(USER1, address(0));
+    }
+
     function test_rebase_scenario() public {
         uint256 stethIncrease = 0;
         uint256 vaultIncrease = 0;
@@ -162,11 +170,6 @@ contract GGVTest is StvStrategyPoolHarness {
 
         _log.printUsers("[SCENARIO] Initial State", logUsers, ggvDiscount);
 
-        // Check that user is not allowed to deposit directly
-        vm.prank(USER1);
-        vm.expectRevert(abi.encodeWithSelector(AllowList.NotAllowListed.selector, USER1));
-        pool.depositETH{value: depositAmount}(USER1, address(0));
-
         // 1. Initial Deposit
 
         uint256 wstethToMint = pool.remainingMintingCapacitySharesOf(USER1, depositAmount);
@@ -176,16 +179,7 @@ contract GGVTest is StvStrategyPoolHarness {
 
         _log.printUsers("[SCENARIO] After Deposit (1 ETH)", logUsers, ggvDiscount);
 
-        // 2. Simulate Rebases
-        console.log("\n[SCENARIO] Simulating Rebases (Vault +5%, stETH +4%)");
-
-        // a) Vault Rebase (simulated via mock report)
-        // uint256 currentLiabilityShares = pool.DASHBOARD().liabilityShares();
-        // uint256 currentTotalAssets = pool.totalAssets();
-
-        // core.applyVaultReport(address(ctx.vault), currentTotalAssets + vaultProfit, 0, currentLiabilityShares, 0, false);
-
-        // _log.printUsers("[SCENARIO] After report (increase vault balance)", logUsers, ggvDiscount);
+        uint256 userMintedStethSharesAfterDeposit = ggvStrategy.mintedStethSharesOf(USER1);
 
         //         3. Request withdrawal (full amount, based on appreciated value)
         uint256 totalGgvShares = boringVault.balanceOf(user1StrategyCallForwarder);
@@ -226,12 +220,20 @@ contract GGVTest is StvStrategyPoolHarness {
         console.log("\n[SCENARIO] Step 5. Finalize Wrapper withdrawal");
 
         // simulate the unwrapping of wstETH to stETH with rounding issue
-        uint256 wstethToBurn = ggvStrategy.wstethOf(USER1);
-        uint256 stETHAmount = ggvStrategy.STETH().getPooledEthByShares(wstethToBurn);
-        uint256 sharesAfterUnwrapping = ggvStrategy.STETH().getSharesByPooledEth(stETHAmount);
+        uint256 wstethUserBalance = ggvStrategy.wstethOf(USER1);
+        assertGt(userMintedStethSharesAfterDeposit, wstethUserBalance, "user minted steth shares should be greater than wsteth balance");
 
         uint256 mintedStethShares = ggvStrategy.mintedStethSharesOf(USER1);
-        uint256 stethSharesToRebalance = mintedStethShares - sharesAfterUnwrapping;
+        uint256 wstethToBurn = Math.min(mintedStethShares, wstethUserBalance);
+
+        uint256 stETHAmount = steth.getPooledEthByShares(wstethToBurn);
+        uint256 sharesAfterUnwrapping = steth.getSharesByPooledEth(stETHAmount);
+
+        uint256 stethSharesToRebalance = 0;
+        if (mintedStethShares > sharesAfterUnwrapping) {
+            stethSharesToRebalance = mintedStethShares - sharesAfterUnwrapping;
+        }
+
         uint256 stvToWithdraw = ggvStrategy.stvOf(USER1);
 
         vm.startPrank(USER1);
@@ -264,21 +266,87 @@ contract GGVTest is StvStrategyPoolHarness {
         console.log("ETH Claimed:", ethClaimed);
 
         _log.printUsers("After User Claims ETH", logUsers, ggvDiscount);
+    }
 
-        //         // 8. Recover Surplus stETH (если есть)
-        //         uint256 surplusStETH = steth.balanceOf(user1StrategyCallForwarder);
-        //         if (surplusStETH > 0) {
-        //             uint256 stethBalance = steth.sharesOf(user1StrategyCallForwarder);
-        //             uint256 stethDebt = pool.mintedStethSharesOf(user1StrategyCallForwarder);
-        //             uint256 surplusInShares = stethBalance > stethDebt ? stethBalance - stethDebt : 0;
-        //             uint256 maxAmount = steth.getPooledEthByShares(surplusInShares);
+    function test_positive_wsteth_rebase_flow() public {
+        uint256 depositAmount = 1 ether;
+        uint16 discount = 0;
 
-        //             console.log("\n[SCENARIO] Step 8. Recover Surplus stETH:", maxAmount);
-        //             vm.prank(USER1);
-        //             ggvStrategy.recoverERC20(address(steth), USER1, maxAmount);
-        //         }
+        uint256 wstethToMint = pool.remainingMintingCapacitySharesOf(USER1, depositAmount);
 
-        //         _log.printUsers("After Recovery", logUsers);
+        vm.prank(USER1);
+        ggvStrategy.supply{value: depositAmount}(address(0), wstethToMint, abi.encode(GGVStrategy.GGVParamsSupply(0)));
+
+        uint256 mintedSharesBefore = ggvStrategy.mintedStethSharesOf(USER1);
+        assertEq(mintedSharesBefore, wstethToMint, "minted shares mismatch");
+
+        address callForwarder = ggvStrategy.getStrategyCallForwarderAddress(USER1);
+        uint256 totalGGVShares = boringVault.balanceOf(callForwarder);
+
+        // Simulate GGV rewards
+        uint256 rebaseStethAmount = 0.1 ether;
+        vm.startPrank(ADMIN);
+        steth.approve(address(wsteth), type(uint256).max);
+        uint256 rebaseWstethAmount = wsteth.wrap(rebaseStethAmount);
+        wsteth.approve(address(boringVault), type(uint256).max);
+        boringVault.rebaseWsteth(rebaseWstethAmount);
+        vm.stopPrank();
+
+        uint128 withdrawSharesPreview =
+            boringOnChainQueue.previewAssetsOut(address(wsteth), uint128(totalGGVShares), discount);
+
+        GGVStrategy.GGVParamsRequestExit memory params =
+            GGVStrategy.GGVParamsRequestExit({discount: discount, secondsToDeadline: type(uint24).max});
+
+        vm.prank(USER1);
+        bytes32 requestId =
+            ggvStrategy.requestExitByWsteth(uint256(withdrawSharesPreview), abi.encode(params));
+
+        IBoringOnChainQueue.OnChainWithdraw memory request =
+            GGVQueueMock(address(boringOnChainQueue)).mockGetRequestById(requestId);
+        IBoringOnChainQueue.OnChainWithdraw[] memory requests = new IBoringOnChainQueue.OnChainWithdraw[](1);
+        requests[0] = request;
+
+        vm.prank(SOLVER);
+        boringOnChainQueue.solveOnChainWithdraws(requests, new bytes(0), address(0));
+
+        uint256 wstethAfterSolve = ggvStrategy.wstethOf(USER1);
+        assertGt(wstethAfterSolve, mintedSharesBefore, "wstETH returned should exceed supplied amount");
+
+        uint256 stvBalance = ggvStrategy.stvOf(USER1);
+
+        vm.startPrank(USER1);
+        ggvStrategy.burnWsteth(mintedSharesBefore);
+        uint256 leftoverWsteth = ggvStrategy.wstethOf(USER1);
+        ggvStrategy.requestWithdrawalFromPool(stvBalance, 0, USER1);
+        vm.stopPrank();
+
+        assertGt(leftoverWsteth, 0, "surplus wstETH expected after covering liability");
+
+        _finalizeWQ(1, 0);
+
+        uint256[] memory wqRequestIds = withdrawalQueue.withdrawalRequestsOf(USER1);
+        uint256 userEthBefore = USER1.balance;
+
+        vm.prank(USER1);
+        withdrawalQueue.claimWithdrawal(USER1, wqRequestIds[0]);
+
+        assertGt(USER1.balance - userEthBefore, 0, "user should receive ETH on claim");
+
+        uint256 recoverableWsteth = ggvStrategy.wstethOf(USER1);
+        assertEq(recoverableWsteth, leftoverWsteth, "unexpected wstETH balance on strategy");
+
+        uint256 userWstethBefore = wsteth.balanceOf(USER1);
+
+        vm.prank(USER1);
+        ggvStrategy.recoverERC20(address(wsteth), USER1, recoverableWsteth);
+
+        assertEq(ggvStrategy.wstethOf(USER1), 0, "strategy call forwarder should have no wstETH left");
+        assertEq(
+            wsteth.balanceOf(USER1) - userWstethBefore,
+            recoverableWsteth,
+            "user must receive recovered wstETH amount"
+        );
     }
 
     function _finalizeWQ(uint256 _maxRequest, uint256 vaultProfit) public {

@@ -5,7 +5,7 @@ import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IStrategyCallForwarder} from "src/interfaces/IStrategyCallForwarder.sol";
 
-abstract contract CallForwarder {
+abstract contract StrategyCallForwarderRegistry {
     error CallForwarderZeroArgument(string name);
 
     /// @dev WARNING: This ID is used to calculate user proxy addresses.
@@ -13,14 +13,14 @@ abstract contract CallForwarder {
     bytes32 public immutable STRATEGY_ID;
     address public immutable STRATEGY_CALL_FORWARDER_IMPL;
 
-    /// @custom:storage-location erc7201:pool.storage.CallForwarder
+    /// @custom:storage-location erc7201:pool.storage.StrategyCallForwarderRegistry
     struct CallForwarderStorage {
         mapping(bytes32 salt => address proxy) userCallForwarder;
     }
 
-    // keccak256(abi.encode(uint256(keccak256("pool.storage.CallForwarder")) - 1)) & ~bytes32(uint256(0xff))
+    // keccak256(abi.encode(uint256(keccak256("pool.storage.StrategyCallForwarderRegistry")) - 1)) & ~bytes32(uint256(0xff))
     bytes32 private constant CALL_FORWARDER_STORAGE_LOCATION =
-        0x5c9f76d9e14874ca461072d5f875d2d6da8538e72a25e52a3229de69a88f5b00;
+        0x3074294e9a887c21033ca796133e603629c1fad03ac5b84cce0cfe20ad599d00;
 
     function _getStorage() internal pure returns (CallForwarderStorage storage $) {
         assembly {
@@ -36,13 +36,15 @@ abstract contract CallForwarder {
         STRATEGY_CALL_FORWARDER_IMPL = _strategyCallForwarderImpl;
     }
 
-    /// @notice Returns the address of the strategy call forwarder for a given user
-    /// @param user The user for which to get the strategy call forwarder address
-    /// @return callForwarder The address of the strategy call forwarder
+    /**
+     * @notice Returns the address of the strategy call forwarder for a given user
+     * @param user The user for which to get the strategy call forwarder address
+     * @return callForwarder The address of the strategy call forwarder
+     */
     function getStrategyCallForwarderAddress(address user) public view returns (address callForwarder) {
         bytes32 salt = _generateSalt(user);
         callForwarder = Clones.predictDeterministicAddress(STRATEGY_CALL_FORWARDER_IMPL, salt);
-    }
+    }   
 
     function _getOrCreateCallForwarder(address _user) internal returns (address callForwarder) {
         if (_user == address(0)) revert CallForwarderZeroArgument("_user");

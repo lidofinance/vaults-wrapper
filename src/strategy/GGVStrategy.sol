@@ -12,16 +12,15 @@ import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
 import {IStrategyCallForwarder} from "src/interfaces/IStrategyCallForwarder.sol";
 import {IBoringOnChainQueue} from "src/interfaces/ggv/IBoringOnChainQueue.sol";
 import {ITellerWithMultiAssetSupport} from "src/interfaces/ggv/ITellerWithMultiAssetSupport.sol";
-import {CallForwarder} from "src/strategy/libraries/CallForwarder.sol";
+import {StrategyCallForwarderRegistry} from "src/strategy/StrategyCallForwarderRegistry.sol";
 import {FeaturePausable} from "src/utils/FeaturePausable.sol";
 
 import {IStETH} from "src/interfaces/IStETH.sol";
 import {IStrategy} from "src/interfaces/IStrategy.sol";
 import {IWstETH} from "src/interfaces/IWstETH.sol";
 
-contract GGVStrategy is IStrategy, AccessControlEnumerableUpgradeable, FeaturePausable, CallForwarder {
+contract GGVStrategy is IStrategy, AccessControlEnumerableUpgradeable, FeaturePausable, StrategyCallForwarderRegistry {
     StvStETHPool private immutable POOL_;
-    IStETH public immutable STETH;
     IWstETH public immutable WSTETH;
 
     ITellerWithMultiAssetSupport public immutable TELLER;
@@ -46,24 +45,21 @@ contract GGVStrategy is IStrategy, AccessControlEnumerableUpgradeable, FeaturePa
     );
     event GGVWithdrawalRequested(address indexed recipient, bytes32 requestId, uint128 requestedGGV, bytes data);
 
-    error InvalidSender();
-    error InvalidStethAmount();
-    error NotImplemented();
-    error InvalidGGVAmount();
     error ZeroArgument(string name);
+    error InvalidSender();
+    error InvalidWstethAmount();
+    error InvalidGGVAmount();
+    error NotImplemented();
 
     constructor(
         bytes32 _strategyId,
         address _strategyCallForwarderImpl,
         address _pool,
-        address _stETH,
-        address _wstETH,
         address _teller,
         address _boringQueue
-    ) CallForwarder(_strategyId, _strategyCallForwarderImpl) {
-        STETH = IStETH(_stETH);
-        WSTETH = IWstETH(_wstETH);
+    ) StrategyCallForwarderRegistry(_strategyId, _strategyCallForwarderImpl) {
         POOL_ = StvStETHPool(payable(_pool));
+        WSTETH = IWstETH(POOL_.WSTETH());
 
         TELLER = ITellerWithMultiAssetSupport(_teller);
         BORING_QUEUE = IBoringOnChainQueue(_boringQueue);
@@ -134,8 +130,6 @@ contract GGVStrategy is IStrategy, AccessControlEnumerableUpgradeable, FeaturePa
         }
 
         IStrategyCallForwarder(callForwarder)
-            .call(address(STETH), abi.encodeWithSelector(STETH.approve.selector, address(POOL_), type(uint256).max));
-        IStrategyCallForwarder(callForwarder)
             .call(address(WSTETH), abi.encodeWithSelector(WSTETH.approve.selector, address(POOL_), type(uint256).max));
 
         IStrategyCallForwarder(callForwarder)
@@ -155,9 +149,7 @@ contract GGVStrategy is IStrategy, AccessControlEnumerableUpgradeable, FeaturePa
             );
         uint256 ggvShares = abi.decode(data, (uint256));
 
-        uint256 stethAmount = STETH.getPooledEthByShares(_wstethToMint);
-
-        emit StrategySupplied(msg.sender, stv, _wstethToMint, stethAmount, _params);
+        emit StrategySupplied(msg.sender, msg.value, stv, _wstethToMint, _params);
         emit GGVDeposited(msg.sender, _wstethToMint, ggvShares, _referral, _params);
     }
 
@@ -172,21 +164,21 @@ contract GGVStrategy is IStrategy, AccessControlEnumerableUpgradeable, FeaturePa
      * @return requestId The request id
      */
     function requestExitByStETH(uint256 _stethAmount, bytes calldata _params) external returns (bytes32 requestId) {
-        uint256 stethSharesToBurn = STETH.getSharesByPooledEth(_stethAmount);
-        requestId = requestExitByStethShares(stethSharesToBurn, _params);
+        uint256 wstethToBurn = WSTETH.getWstETHByStETH(_stethAmount);
+        requestId = requestExitByWsteth(wstethToBurn, _params);
     }
 
     /**
-     * @notice Previews the amount of stETH shares that can be withdrawn by a given amount of GGV shares
-     * @param _user The user to preview the amount of stETH shares for
-     * @param _ggvShares The amount of GGV shares to preview the amount of stETH shares for
+     * @notice Previews the amount of wstETH that can be withdrawn by a given amount of GGV shares
+     * @param _user The user to preview the amount of wstETH for
+     * @param _ggvShares The amount of GGV shares to preview the amount of wstETH for
      * @param _params The parameters for the withdrawal
-     * @return stethShares The amount of stETH shares that can be withdrawn
+     * @return wsteth The amount of wstETH that can be withdrawn
      */
-    function previewStethSharesByGGV(address _user, uint256 _ggvShares, bytes calldata _params)
+    function previewWstethByGGV(address _user, uint256 _ggvShares, bytes calldata _params)
         external
         view
-        returns (uint256 stethShares)
+        returns (uint256 wsteth)
     {
         address callForwarder = getStrategyCallForwarderAddress(_user);
 
@@ -198,18 +190,18 @@ contract GGVStrategy is IStrategy, AccessControlEnumerableUpgradeable, FeaturePa
         if (totalGGV == 0) return 0;
         if (_ggvShares > totalGGV) revert InvalidGGVAmount();
 
-        uint256 totalStethSharesFromGgv =
+        uint256 totalWstethFromGgv =
             BORING_QUEUE.previewAssetsOut(address(WSTETH), uint128(totalGGV), params.discount);
-        stethShares = Math.mulDiv(_ggvShares, totalStethSharesFromGgv, totalGGV);
+        wsteth = Math.mulDiv(_ggvShares, totalWstethFromGgv, totalGGV);
     }
 
     /**
      * @notice Requests a withdrawal of ggv shares from the strategy
-     * @param _stethSharesToBurn The amount of steth shares to burn
+     * @param _wstethToBurn The amount of wsteth to burn
      * @param _params The parameters for the withdrawal
      * @return requestId The request id
      */
-    function requestExitByStethShares(uint256 _stethSharesToBurn, bytes calldata _params)
+    function requestExitByWsteth(uint256 _wstethToBurn, bytes calldata _params)
         public
         returns (bytes32 requestId)
     {
@@ -220,13 +212,13 @@ contract GGVStrategy is IStrategy, AccessControlEnumerableUpgradeable, FeaturePa
 
         // Calculate how much wsteth we'll get from total GGV shares
         uint256 totalGGV = boringVault.balanceOf(callForwarder);
-        uint256 totalStethSharesFromGgv =
+        uint256 totalWstethFromGgv =
             BORING_QUEUE.previewAssetsOut(address(WSTETH), uint128(totalGGV), params.discount);
-        if (totalStethSharesFromGgv == 0) revert InvalidStethAmount();
-        if (_stethSharesToBurn > totalStethSharesFromGgv) revert InvalidStethAmount();
+        if (totalWstethFromGgv == 0) revert InvalidWstethAmount();
+        if (_wstethToBurn > totalWstethFromGgv) revert InvalidWstethAmount();
 
         // Approve GGV shares
-        uint256 ggvShares = Math.mulDiv(totalGGV, _stethSharesToBurn, totalStethSharesFromGgv);
+        uint256 ggvShares = Math.mulDiv(totalGGV, _wstethToBurn, totalWstethFromGgv);
         IStrategyCallForwarder(callForwarder)
             .call(
                 address(boringVault),
@@ -249,7 +241,7 @@ contract GGVStrategy is IStrategy, AccessControlEnumerableUpgradeable, FeaturePa
             );
         requestId = abi.decode(data, (bytes32));
 
-        emit StrategyExitRequested(msg.sender, requestId, _stethSharesToBurn, _params);
+        emit StrategyExitRequested(msg.sender, requestId, _wstethToBurn, _params);
         emit GGVWithdrawalRequested(msg.sender, requestId, requestedGGV, _params);
     }
 
@@ -399,6 +391,6 @@ contract GGVStrategy is IStrategy, AccessControlEnumerableUpgradeable, FeaturePa
         address proxy = getStrategyCallForwarderAddress(msg.sender);
 
         IStrategyCallForwarder(proxy)
-            .call(address(STETH), abi.encodeWithSelector(IERC20.transfer.selector, _recipient, _amount));
+            .call(_token, abi.encodeWithSelector(IERC20.transfer.selector, _recipient, _amount));
     }
 }

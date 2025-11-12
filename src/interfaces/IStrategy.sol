@@ -2,9 +2,9 @@
 pragma solidity >=0.8.25;
 
 interface IStrategy {
-    event StrategySupplied(address indexed user, uint256 stv, uint256 stethShares, uint256 stethAmount, bytes data);
-    event StrategyExitRequested(address indexed user, bytes32 requestId, uint256 stethSharesToBurn, bytes data);
-    event StrategyExitFinalized(address indexed user, bytes32 requestId, uint256 stethShares);
+    event StrategySupplied(address indexed user, uint256 ethAmount, uint256 stv, uint256 wstethToMint, bytes data);
+    event StrategyExitRequested(address indexed user, bytes32 requestId, uint256 wsteth, bytes data);
+    event StrategyExitFinalized(address indexed user, bytes32 requestId, uint256 wsteth);
 
     function initialize(address _admin) external;
 
@@ -15,7 +15,7 @@ interface IStrategy {
     //    function previewSupply(address _user, bytes calldata _params) external view returns (uint256 stv, uint256 maxWstethToMint);
 
     /// @notice Requests a withdrawal from the strategy
-    function requestExitByStethShares(uint256 stethSharesToBurn, bytes calldata params)
+    function requestExitByWsteth(uint256 wstethToBurn, bytes calldata params)
         external
         returns (bytes32 requestId);
 
