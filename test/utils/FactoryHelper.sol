@@ -7,9 +7,9 @@ import {StvStETHPoolFactory} from "src/factories/StvStETHPoolFactory.sol";
 import {WithdrawalQueueFactory} from "src/factories/WithdrawalQueueFactory.sol";
 import {DistributorFactory} from "src/factories/DistributorFactory.sol";
 import {DummyImplementation} from "src/proxy/DummyImplementation.sol";
-import {LoopStrategyFactory} from "src/factories/LoopStrategyFactory.sol";
 import {GGVStrategyFactory} from "src/factories/GGVStrategyFactory.sol";
 import {TimelockFactory} from "src/factories/TimelockFactory.sol";
+import {ILidoLocator} from "src/interfaces/core/ILidoLocator.sol";
 
 contract FactoryHelper {
     Factory.SubFactories public subFactories;
@@ -23,12 +23,12 @@ contract FactoryHelper {
         subFactories.stvStETHPoolFactory = address(new StvStETHPoolFactory());
         subFactories.withdrawalQueueFactory = address(new WithdrawalQueueFactory());
         subFactories.distributorFactory = address(new DistributorFactory());
-        subFactories.loopStrategyFactory = address(new LoopStrategyFactory());
         subFactories.ggvStrategyFactory = address(new GGVStrategyFactory(dummyTeller, dummyQueue));
         subFactories.timelockFactory = address(new TimelockFactory());
 
         defaultTimelockConfig = Factory.TimelockConfig({
             minDelaySeconds: 7 days,
+            proposer: address(this),
             executor: address(this)
         });
     }
@@ -44,6 +44,7 @@ contract FactoryHelper {
     ) external returns (Factory factory) {
         Factory.SubFactories memory factories = subFactories;
         if (ggvTeller != address(0) && ggvBoringQueue != address(0)) {
+            ILidoLocator locator = ILidoLocator(locatorAddress);
             factories.ggvStrategyFactory = address(new GGVStrategyFactory(ggvTeller, ggvBoringQueue));
         }
 

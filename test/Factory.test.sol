@@ -6,7 +6,6 @@ import {Test} from "forge-std/Test.sol";
 import {Factory} from "src/Factory.sol";
 import {DistributorFactory} from "src/factories/DistributorFactory.sol";
 import {GGVStrategyFactory} from "src/factories/GGVStrategyFactory.sol";
-import {LoopStrategyFactory} from "src/factories/LoopStrategyFactory.sol";
 import {StvPoolFactory} from "src/factories/StvPoolFactory.sol";
 import {StvStETHPoolFactory} from "src/factories/StvStETHPoolFactory.sol";
 import {TimelockFactory} from "src/factories/TimelockFactory.sol";
@@ -16,7 +15,7 @@ import {Distributor} from "src/Distributor.sol";
 import {StvPool} from "src/StvPool.sol";
 import {StvStETHPool} from "src/StvStETHPool.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
-import {IDashboard} from "src/interfaces/IDashboard.sol";
+import {IDashboard} from "src/interfaces/core/IDashboard.sol";
 
 import {DummyImplementation} from "src/proxy/DummyImplementation.sol";
 import {MockDashboard} from "test/mocks/MockDashboard.sol";
@@ -59,7 +58,6 @@ contract FactoryTest is Test {
         subFactories.stvStETHPoolFactory = address(new StvStETHPoolFactory());
         subFactories.withdrawalQueueFactory = address(new WithdrawalQueueFactory());
         subFactories.distributorFactory = address(new DistributorFactory());
-        subFactories.loopStrategyFactory = address(new LoopStrategyFactory());
         address dummyTeller = address(new DummyImplementation());
         address dummyQueue = address(new DummyImplementation());
         subFactories.ggvStrategyFactory = address(new GGVStrategyFactory(dummyTeller, dummyQueue));
@@ -100,7 +98,7 @@ contract FactoryTest is Test {
     }
 
     function _defaultTimelockConfig() internal view returns (Factory.TimelockConfig memory) {
-        return Factory.TimelockConfig({minDelaySeconds: 0, executor: admin});
+        return Factory.TimelockConfig({minDelaySeconds: 0, proposer: address(this), executor: admin});
     }
 
     function test_canCreatePool() public {
@@ -114,10 +112,10 @@ contract FactoryTest is Test {
         address strategyFactory = address(0);
 
         vm.startPrank(admin);
-        Factory.StvPoolIntermediate memory intermediate = wrapperFactory.createPoolStart{value: connectDeposit}(
-            vaultConfig, commonPoolConfig, auxiliaryConfig, timelockConfig, strategyFactory
+        Factory.PoolIntermediate memory intermediate = wrapperFactory.createPoolStart{value: connectDeposit}(
+            vaultConfig, commonPoolConfig, auxiliaryConfig, timelockConfig, strategyFactory, ""
         );
-        Factory.StvPoolDeployment memory deployment = wrapperFactory.createPoolFinish(intermediate);
+        Factory.PoolDeployment memory deployment = wrapperFactory.createPoolFinish(intermediate);
         vm.stopPrank();
 
         StvPool pool = StvPool(payable(deployment.pool));
@@ -130,7 +128,7 @@ contract FactoryTest is Test {
         assertEq(address(pool.DISTRIBUTOR()), address(distributor));
 
         assertEq(deployment.vault, address(dashboard.stakingVault()));
-        assertEq(address(pool.STAKING_VAULT()), deployment.vault);
+        assertEq(address(pool.VAULT()), deployment.vault);
 
         MockDashboard mockDashboard = MockDashboard(payable(address(dashboard)));
         assertTrue(mockDashboard.hasRole(mockDashboard.DEFAULT_ADMIN_ROLE(), deployment.timelock));
@@ -153,7 +151,9 @@ contract FactoryTest is Test {
 
         vm.startPrank(admin);
         vm.expectRevert();
-        wrapperFactory.createPoolStart(vaultConfig, commonPoolConfig, auxiliaryConfig, timelockConfig, strategyFactory);
+        wrapperFactory.createPoolStart(
+            vaultConfig, commonPoolConfig, auxiliaryConfig, timelockConfig, strategyFactory, ""
+        );
         vm.stopPrank();
     }
 
@@ -170,11 +170,11 @@ contract FactoryTest is Test {
         address ggvFactory = address(wrapperFactory.GGV_STRATEGY_FACTORY());
 
         vm.startPrank(admin);
-        Factory.StvPoolIntermediate memory intermediate = wrapperFactory.createPoolStart{value: connectDeposit}(
-            vaultConfig, commonPoolConfig, auxiliaryConfig, timelockConfig, strategyFactory
+        Factory.PoolIntermediate memory intermediate = wrapperFactory.createPoolStart{value: connectDeposit}(
+            vaultConfig, commonPoolConfig, auxiliaryConfig, timelockConfig, strategyFactory, ""
         );
         uint256 nonceBefore = vm.getNonce(ggvFactory);
-        Factory.StvPoolDeployment memory deployment = wrapperFactory.createPoolFinish(intermediate);
+        Factory.PoolDeployment memory deployment = wrapperFactory.createPoolFinish(intermediate);
         vm.stopPrank();
 
         StvStETHPool pool = StvStETHPool(payable(deployment.pool));
@@ -201,10 +201,10 @@ contract FactoryTest is Test {
         address strategyFactory = address(0);
 
         vm.startPrank(admin);
-        Factory.StvPoolIntermediate memory intermediate = wrapperFactory.createPoolStart{value: connectDeposit}(
-            vaultConfig, commonPoolConfig, auxiliaryConfig, timelockConfig, strategyFactory
+        Factory.PoolIntermediate memory intermediate = wrapperFactory.createPoolStart{value: connectDeposit}(
+            vaultConfig, commonPoolConfig, auxiliaryConfig, timelockConfig, strategyFactory, ""
         );
-        Factory.StvPoolDeployment memory deployment = wrapperFactory.createPoolFinish(intermediate);
+        Factory.PoolDeployment memory deployment = wrapperFactory.createPoolFinish(intermediate);
         vm.stopPrank();
 
         StvPool pool = StvPool(payable(deployment.pool));
@@ -224,8 +224,8 @@ contract FactoryTest is Test {
 
         vm.startPrank(admin);
         uint256 gasBefore = gasleft();
-        Factory.StvPoolIntermediate memory intermediate = wrapperFactory.createPoolStart{value: connectDeposit}(
-            vaultConfig, commonPoolConfig, auxiliaryConfig, timelockConfig, strategyFactory
+        Factory.PoolIntermediate memory intermediate = wrapperFactory.createPoolStart{value: connectDeposit}(
+            vaultConfig, commonPoolConfig, auxiliaryConfig, timelockConfig, strategyFactory, ""
         );
         uint256 gasUsedStart = gasBefore - gasleft();
 
@@ -252,8 +252,8 @@ contract FactoryTest is Test {
 
         vm.startPrank(admin);
         uint256 gasBefore = gasleft();
-        Factory.StvPoolIntermediate memory intermediate = wrapperFactory.createPoolStart{value: connectDeposit}(
-            vaultConfig, commonPoolConfig, auxiliaryConfig, timelockConfig, strategyFactory
+        Factory.PoolIntermediate memory intermediate = wrapperFactory.createPoolStart{value: connectDeposit}(
+            vaultConfig, commonPoolConfig, auxiliaryConfig, timelockConfig, strategyFactory, ""
         );
         uint256 gasUsedStart = gasBefore - gasleft();
 
@@ -280,8 +280,8 @@ contract FactoryTest is Test {
 
         vm.startPrank(admin);
         uint256 gasBefore = gasleft();
-        Factory.StvPoolIntermediate memory intermediate = wrapperFactory.createPoolStart{value: connectDeposit}(
-            vaultConfig, commonPoolConfig, auxiliaryConfig, timelockConfig, strategyFactory
+        Factory.PoolIntermediate memory intermediate = wrapperFactory.createPoolStart{value: connectDeposit}(
+            vaultConfig, commonPoolConfig, auxiliaryConfig, timelockConfig, strategyFactory, ""
         );
         uint256 gasUsedStart = gasBefore - gasleft();
 
@@ -294,5 +294,171 @@ contract FactoryTest is Test {
         emit log_named_uint("createPoolFinish stv ggv gas", gasUsedFinish);
         assertLt(gasUsedStart, fusakaTxGasLimit, "createPoolStart stv ggv gas exceeds Fusaka limit");
         assertLt(gasUsedFinish, fusakaTxGasLimit, "createPoolFinish stv ggv gas exceeds Fusaka limit");
+    }
+
+    // ============ Finish Deadline Tests ============
+
+    function test_finishWithinDeadline() public {
+        // Test that finishing within the deadline (1 day) works correctly
+        (
+            Factory.VaultConfig memory vaultConfig,
+            Factory.CommonPoolConfig memory commonPoolConfig,
+            Factory.AuxiliaryPoolConfig memory auxiliaryConfig
+        ) = _buildConfigs(false, false, 0, "Deadline Test Pool", "DTP");
+
+        Factory.TimelockConfig memory timelockConfig = _defaultTimelockConfig();
+        address strategyFactory = address(0);
+
+        vm.startPrank(admin);
+        Factory.PoolIntermediate memory intermediate = wrapperFactory.createPoolStart{value: connectDeposit}(
+            vaultConfig, commonPoolConfig, auxiliaryConfig, timelockConfig, strategyFactory, ""
+        );
+
+        // Move time forward but still within deadline (23 hours)
+        vm.warp(block.timestamp + 23 hours);
+
+        // Should succeed
+        Factory.PoolDeployment memory deployment = wrapperFactory.createPoolFinish(intermediate);
+        vm.stopPrank();
+
+        // Verify deployment was successful
+        assertTrue(deployment.pool != address(0), "Pool should be deployed");
+        assertTrue(deployment.dashboard != address(0), "Dashboard should be deployed");
+    }
+
+    function test_finishAtExactDeadline() public {
+        // Test that finishing exactly at the deadline works
+        (
+            Factory.VaultConfig memory vaultConfig,
+            Factory.CommonPoolConfig memory commonPoolConfig,
+            Factory.AuxiliaryPoolConfig memory auxiliaryConfig
+        ) = _buildConfigs(false, false, 0, "Deadline Test Pool", "DTP");
+
+        Factory.TimelockConfig memory timelockConfig = _defaultTimelockConfig();
+        address strategyFactory = address(0);
+
+        vm.startPrank(admin);
+        Factory.PoolIntermediate memory intermediate = wrapperFactory.createPoolStart{value: connectDeposit}(
+            vaultConfig, commonPoolConfig, auxiliaryConfig, timelockConfig, strategyFactory, ""
+        );
+
+        // Move time forward to exactly the deadline (1 day)
+        vm.warp(block.timestamp + wrapperFactory.DEPLOY_START_FINISH_SPAN_SECONDS());
+
+        // Should succeed (deadline is inclusive)
+        Factory.PoolDeployment memory deployment = wrapperFactory.createPoolFinish(intermediate);
+        vm.stopPrank();
+
+        assertTrue(deployment.pool != address(0), "Pool should be deployed at exact deadline");
+    }
+
+    function test_revertFinishAfterDeadlineExpired() public {
+        // Test that finishing after the deadline reverts
+        (
+            Factory.VaultConfig memory vaultConfig,
+            Factory.CommonPoolConfig memory commonPoolConfig,
+            Factory.AuxiliaryPoolConfig memory auxiliaryConfig
+        ) = _buildConfigs(false, false, 0, "Deadline Test Pool", "DTP");
+
+        Factory.TimelockConfig memory timelockConfig = _defaultTimelockConfig();
+        address strategyFactory = address(0);
+
+        vm.startPrank(admin);
+        Factory.PoolIntermediate memory intermediate = wrapperFactory.createPoolStart{value: connectDeposit}(
+            vaultConfig, commonPoolConfig, auxiliaryConfig, timelockConfig, strategyFactory, ""
+        );
+
+        // Move time forward past the deadline (1 day + 1 second)
+        vm.warp(block.timestamp + wrapperFactory.DEPLOY_START_FINISH_SPAN_SECONDS() + 1);
+
+        // Should revert with deadline passed error
+        vm.expectRevert(abi.encodeWithSignature("InvalidConfiguration(string)", "deploy finish deadline passed"));
+        wrapperFactory.createPoolFinish(intermediate);
+        vm.stopPrank();
+    }
+
+    function test_revertFinishWithoutStart() public {
+        // Test that calling finish without start reverts
+
+        // Create an intermediate struct but don't call createPoolStart
+        Factory.PoolIntermediate memory fakeIntermediate = Factory.PoolIntermediate({
+            pool: address(0x123), timelock: address(0x456), strategyFactory: address(0), strategyDeployBytes: ""
+        });
+
+        vm.startPrank(admin);
+        // Should revert with "deploy not started" error
+        vm.expectRevert(abi.encodeWithSignature("InvalidConfiguration(string)", "deploy not started"));
+        wrapperFactory.createPoolFinish(fakeIntermediate);
+        vm.stopPrank();
+    }
+
+    function test_revertDoubleFinish() public {
+        // Test that calling finish twice on the same deployment reverts
+        (
+            Factory.VaultConfig memory vaultConfig,
+            Factory.CommonPoolConfig memory commonPoolConfig,
+            Factory.AuxiliaryPoolConfig memory auxiliaryConfig
+        ) = _buildConfigs(false, false, 0, "Deadline Test Pool", "DTP");
+
+        Factory.TimelockConfig memory timelockConfig = _defaultTimelockConfig();
+        address strategyFactory = address(0);
+
+        vm.startPrank(admin);
+        Factory.PoolIntermediate memory intermediate = wrapperFactory.createPoolStart{value: connectDeposit}(
+            vaultConfig, commonPoolConfig, auxiliaryConfig, timelockConfig, strategyFactory, ""
+        );
+
+        // First finish should succeed
+        wrapperFactory.createPoolFinish(intermediate);
+
+        // Second finish should revert with "deploy already finished"
+        vm.expectRevert(abi.encodeWithSignature("InvalidConfiguration(string)", "deploy already finished"));
+        wrapperFactory.createPoolFinish(intermediate);
+        vm.stopPrank();
+    }
+
+    function test_finishDeadlineIndependentPerDeployer() public {
+        // Test that different deployers have independent deadlines for the same config
+        (
+            Factory.VaultConfig memory vaultConfig,
+            Factory.CommonPoolConfig memory commonPoolConfig,
+            Factory.AuxiliaryPoolConfig memory auxiliaryConfig
+        ) = _buildConfigs(false, false, 0, "Deadline Test Pool", "DTP");
+
+        Factory.TimelockConfig memory timelockConfig = _defaultTimelockConfig();
+        address strategyFactory = address(0);
+
+        address deployer1 = address(0x1001);
+        address deployer2 = address(0x1002);
+        vm.deal(deployer1, 10 ether);
+        vm.deal(deployer2, 10 ether);
+
+        // Deployer 1 starts deployment
+        vm.prank(deployer1);
+        Factory.PoolIntermediate memory intermediate1 = wrapperFactory.createPoolStart{value: connectDeposit}(
+            vaultConfig, commonPoolConfig, auxiliaryConfig, timelockConfig, strategyFactory, ""
+        );
+
+        // Move time forward
+        vm.warp(block.timestamp + 12 hours);
+
+        // Deployer 2 starts deployment
+        vm.prank(deployer2);
+        Factory.PoolIntermediate memory intermediate2 = wrapperFactory.createPoolStart{value: connectDeposit}(
+            vaultConfig, commonPoolConfig, auxiliaryConfig, timelockConfig, strategyFactory, ""
+        );
+
+        // Move time forward past deployer1's deadline but within deployer2's deadline
+        vm.warp(block.timestamp + 13 hours); // Total: 25 hours from deployer1's start, 13 hours from deployer2's start
+
+        // Deployer 1's finish should fail (past deadline)
+        vm.prank(deployer1);
+        vm.expectRevert(abi.encodeWithSignature("InvalidConfiguration(string)", "deploy finish deadline passed"));
+        wrapperFactory.createPoolFinish(intermediate1);
+
+        // Deployer 2's finish should succeed (within deadline)
+        vm.prank(deployer2);
+        Factory.PoolDeployment memory deployment2 = wrapperFactory.createPoolFinish(intermediate2);
+        assertTrue(deployment2.pool != address(0), "Deployer 2 should successfully finish");
     }
 }

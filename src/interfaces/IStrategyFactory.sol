@@ -6,6 +6,7 @@ pragma solidity >=0.8.25;
 interface IStrategyFactory {
     /// @notice Deploys a new strategy contract instance
     /// @param _pool Address of the pool contract
+    /// @param deployBytes Strategy-specific deployment parameters (can be empty)
     /// @return impl The address of the newly deployed strategy contract
-    function deploy(address _pool) external returns (address impl);
+    function deploy(address _pool, bytes calldata deployBytes) external returns (address impl);
 }

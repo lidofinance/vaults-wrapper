@@ -2,8 +2,8 @@
 pragma solidity >=0.8.25;
 
 import {MockStETH} from "./MockStETH.sol";
-import {IVaultHub} from "src/interfaces/IVaultHub.sol";
-import {IStakingVault} from "../../src/interfaces/IStakingVault.sol";
+import {IVaultHub} from "src/interfaces/core/IVaultHub.sol";
+import {IStakingVault} from "../../src/interfaces/core/IStakingVault.sol";
 
 contract MockVaultHub {
     // TODO: maybe inherit IVaultHub

@@ -17,7 +17,9 @@ contract GGVStrategyFactory is IStrategyFactory {
         BORING_QUEUE = _boringQueue;
     }
 
-    function deploy(address _pool) external returns (address impl) {
+    function deploy(address _pool, bytes calldata _deployBytes) external returns (address impl) {
+        // _deployBytes is unused for GGVStrategy, but required by IStrategyFactory interface
+        _deployBytes;
         address strategyCallForwarderImpl = address(new StrategyCallForwarder());
         impl = address(new GGVStrategy(STRATEGY_ID, strategyCallForwarderImpl, _pool, TELLER, BORING_QUEUE));
     }

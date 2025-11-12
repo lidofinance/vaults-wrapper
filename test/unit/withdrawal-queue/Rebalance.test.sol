@@ -146,6 +146,10 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
         // which result in the request exceeding the reserve ratio
         dashboard.mock_simulateRewards(-90_000 ether);
 
+        // Enable loss socialization
+        vm.prank(owner);
+        pool.setMaxLossSocializationBP(100_00); // 100%
+
         // Finalize request
         uint256 strangerAssetsBefore = pool.previewRedeem(pool.balanceOf(address(userAlice)));
         _finalizeRequests(1);
@@ -195,8 +199,12 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
 
         _warpAndMockOracleReport();
 
+        // Enable socialization
+        vm.prank(owner);
+        pool.setMaxLossSocializationBP(100_00); // 100%
+
         vm.expectEmit(true, true, true, false, address(pool));
-        emit StvStETHPool.SocializedLoss(0, 0);
+        emit StvStETHPool.SocializedLoss(0, 0, 0);
 
         vm.prank(finalizeRoleHolder);
         withdrawalQueue.finalize(1, address(0));

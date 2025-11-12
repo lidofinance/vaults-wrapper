@@ -4,9 +4,9 @@ pragma solidity >=0.8.25;
 import {StvPool} from "./StvPool.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
-import {IStETH} from "./interfaces/IStETH.sol";
-import {IVaultHub} from "./interfaces/IVaultHub.sol";
-import {IWstETH} from "./interfaces/IWstETH.sol";
+import {IStETH} from "./interfaces/core/IStETH.sol";
+import {IVaultHub} from "./interfaces/core/IVaultHub.sol";
+import {IWstETH} from "./interfaces/core/IWstETH.sol";
 
 /**
  * @title StvStETHPool
@@ -17,8 +17,9 @@ contract StvStETHPool is StvPool {
     event StethSharesMinted(address indexed account, uint256 stethShares);
     event StethSharesBurned(address indexed account, uint256 stethShares);
     event StethSharesRebalanced(address indexed account, uint256 stethShares, uint256 stvBurned);
-    event SocializedLoss(uint256 stv, uint256 assets);
+    event SocializedLoss(uint256 stv, uint256 assets, uint256 maxLossSocializationBP);
     event VaultParametersUpdated(uint256 newReserveRatioBP, uint256 newForcedRebalanceThresholdBP);
+    event MaxLossSocializationUpdated(uint256 newMaxLossSocializationBP);
 
     error InsufficientMintingCapacity();
     error InsufficientStethShares();
@@ -28,9 +29,11 @@ contract StvStETHPool is StvPool {
     error InsufficientStv();
     error ZeroArgument();
     error ArraysLengthMismatch(uint256 firstArrayLength, uint256 secondArrayLength);
-    error VaultReportStale();
     error UndercollateralizedAccount();
     error CollateralizedAccount();
+    error ExcessiveLossSocialization();
+    error SameValue();
+    error InvalidValue();
 
     bytes32 public constant MINTING_FEATURE = keccak256("MINTING_FEATURE");
     bytes32 public constant MINTING_PAUSE_ROLE = keccak256("MINTING_PAUSE_ROLE");
@@ -43,14 +46,13 @@ contract StvStETHPool is StvPool {
 
     IWstETH public immutable WSTETH;
 
-    bytes32 private immutable POOL_TYPE;
-
     /// @custom:storage-location erc7201:pool.storage.StvStETHPool
     struct StvStETHPoolStorage {
         mapping(address => uint256) mintedStethShares;
         uint256 totalMintedStethShares;
         uint16 reserveRatioBP;
         uint16 forcedRebalanceThresholdBP;
+        uint16 maxLossSocializationBP;
     }
 
     // keccak256(abi.encode(uint256(keccak256("pool.storage.StvStETHPool")) - 1)) & ~bytes32(uint256(0xff))
@@ -70,17 +72,15 @@ contract StvStETHPool is StvPool {
         address _withdrawalQueue,
         address _distributor,
         bytes32 _poolType
-    ) StvPool(_dashboard, _allowListEnabled, _withdrawalQueue, _distributor) {
+    ) StvPool(_dashboard, _allowListEnabled, _withdrawalQueue, _distributor, _poolType) {
+        uint256 vaultRR = VAULT_HUB.vaultConnection(address(VAULT)).reserveRatioBP;
+        if (_reserveRatioGapBP + vaultRR >= TOTAL_BASIS_POINTS) revert InvalidValue();
+
         RESERVE_RATIO_GAP_BP = _reserveRatioGapBP;
-        POOL_TYPE = _poolType;
         WSTETH = IWstETH(DASHBOARD.WSTETH());
 
         // Pause features in implementation
         _pauseFeature(MINTING_FEATURE);
-    }
-
-    function poolType() external view override returns (bytes32) {
-        return POOL_TYPE;
     }
 
     function initialize(address _owner, string memory _name, string memory _symbol) public override initializer {
@@ -542,7 +542,7 @@ contract StvStETHPool is StvPool {
      * @dev Second, if there are remaining liability shares, rebalances Staking Vault
      * @dev Requires fresh oracle report, which is checked in the Withdrawal Queue
      */
-    function rebalanceMintedStethShares(uint256 _stethShares, uint256 _maxStvToBurn)
+    function rebalanceMintedStethSharesForWithdrawalQueue(uint256 _stethShares, uint256 _maxStvToBurn)
         public
         returns (uint256 stvBurned)
     {
@@ -558,6 +558,8 @@ contract StvStETHPool is StvPool {
      * @dev Requires fresh oracle report to price stv accurately
      */
     function forceRebalance(address _account) public returns (uint256 stvBurned) {
+        _checkFreshReport();
+
         (uint256 stethShares, uint256 stv, bool isUndercollateralized) = previewForceRebalance(_account);
         if (isUndercollateralized) revert UndercollateralizedAccount();
 
@@ -572,6 +574,7 @@ contract StvStETHPool is StvPool {
      */
     function forceRebalanceAndSocializeLoss(address _account) public returns (uint256 stvBurned) {
         _checkRole(LOSS_SOCIALIZER_ROLE, msg.sender);
+        _checkFreshReport();
 
         (uint256 stethShares, uint256 stv, bool isUndercollateralized) = previewForceRebalance(_account);
         if (!isUndercollateralized) revert CollateralizedAccount();
@@ -585,15 +588,13 @@ contract StvStETHPool is StvPool {
      * @return stethShares The amount of stETH shares to rebalance, limited by available assets
      * @return stv The amount of stv needed to burn in exchange for the stETH shares, limited by user's stv balance
      * @return isUndercollateralized True if the user's assets are insufficient to cover the liability
-     * @dev Requires fresh oracle report to price stv accurately
+     * @dev Requires fresh oracle report to price stv accurately (not enforced in this method, so caller must ensure it)
      */
     function previewForceRebalance(address _account)
         public
         view
         returns (uint256 stethShares, uint256 stv, bool isUndercollateralized)
     {
-        _checkFreshReport();
-
         uint256 stethSharesLiability = mintedStethSharesOf(_account);
         uint256 stvBalance = balanceOf(_account);
         uint256 assets = assetsOf(_account);
@@ -626,7 +627,7 @@ contract StvStETHPool is StvPool {
         ///
         /// First, the rebalancing will use exceeding minted steth, bringing the vault closer to minted steth == liability,
         /// then the rebalancing mechanism on the vault, which is limited by available balance in the staking vault
-        uint256 stethToRebalance = totalExceedingMintedSteth() + STAKING_VAULT.availableBalance();
+        uint256 stethToRebalance = totalExceedingMintedSteth() + VAULT.availableBalance();
         stethToRebalance = Math.min(targetStethToRebalance, stethToRebalance);
 
         uint256 stvRequired = _convertToStv(stethToRebalance, Math.Rounding.Ceil);
@@ -665,9 +666,14 @@ contract StvStETHPool is StvPool {
 
         if (remainingStethShares > 0) DASHBOARD.rebalanceVaultWithShares(remainingStethShares);
 
-        // TODO: Add sanity check for loss socialization
         if (stvToBurn > _maxStvToBurn) {
-            emit SocializedLoss(stvToBurn - _maxStvToBurn, ethToRebalance - _convertToAssets(_maxStvToBurn));
+            _checkAllowedLossSocializationPortion(stvToBurn, _maxStvToBurn);
+
+            emit SocializedLoss(
+                stvToBurn - _maxStvToBurn,
+                ethToRebalance - _convertToAssets(_maxStvToBurn),
+                _getStvStETHPoolStorage().maxLossSocializationBP
+            );
             stvToBurn = _maxStvToBurn;
         }
 
@@ -690,8 +696,54 @@ contract StvStETHPool is StvPool {
         isBreached = _assets < assetsThreshold;
     }
 
-    function _checkFreshReport() internal view {
-        if (!VAULT_HUB.isReportFresh(address(STAKING_VAULT))) revert VaultReportStale();
+    function _checkAllowedLossSocializationPortion(uint256 stvRequired, uint256 stvAvailable) internal view {
+        // It's guaranteed that stvRequired > stvAvailable here
+        uint256 portionToSocializeBP =
+            Math.mulDiv(stvRequired - stvAvailable, TOTAL_BASIS_POINTS, stvRequired, Math.Rounding.Ceil);
+
+        if (portionToSocializeBP > _getStvStETHPoolStorage().maxLossSocializationBP) {
+            revert ExcessiveLossSocialization();
+        }
+    }
+
+    // =================================================================================
+    // LOSS SOCIALIZATION LIMITER
+    // =================================================================================
+
+    // During rebalancing, it's possible that the stv available for burning is not sufficient to cover the entire liability.
+    // This may be due to a sharp drop in the stv price, which has resulted in an individual account or a request in Withdrawal Queue
+    // no longer being collateralized (assets < liability).
+    //
+    // The limiter on loss socialization is introduced to prevent excessive losses from being socialized to all pool participants.
+    // The limiter is defined as a maximum portion of the loss that can be socialized, expressed in basis points (BP).
+    //
+    // The default value is set to 0 BP, meaning that no loss socialization is allowed without explicit permission.
+
+    /**
+     * @notice Maximum allowed loss socialization in basis points
+     * @return maxSocializablePortionBP The maximum allowed portion of loss to be socialized in basis points
+     * @dev Used to limit the portion of loss that can be socialized to all pool participants during rebalance
+     */
+    function maxLossSocializationBP() external view returns (uint256 maxSocializablePortionBP) {
+        maxSocializablePortionBP = uint256(_getStvStETHPoolStorage().maxLossSocializationBP);
+    }
+
+    /**
+     * @notice Set the maximum allowed loss socialization in basis points
+     * @param _maxSocializablePortionBP The new maximum allowed loss socialization in basis points
+     * @dev Sets the maximum portion of loss that can be socialized to all pool participants during rebalance
+     * @dev Can only be called by accounts with the DEFAULT_ADMIN_ROLE
+     */
+    function setMaxLossSocializationBP(uint16 _maxSocializablePortionBP) external {
+        _checkRole(DEFAULT_ADMIN_ROLE, msg.sender);
+
+        if (_maxSocializablePortionBP > TOTAL_BASIS_POINTS) revert InvalidValue();
+
+        StvStETHPoolStorage storage $ = _getStvStETHPoolStorage();
+        if (_maxSocializablePortionBP == $.maxLossSocializationBP) revert SameValue();
+        $.maxLossSocializationBP = _maxSocializablePortionBP;
+
+        emit MaxLossSocializationUpdated(_maxSocializablePortionBP);
     }
 
     // =================================================================================

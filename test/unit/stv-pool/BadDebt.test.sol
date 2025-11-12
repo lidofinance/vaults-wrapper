@@ -7,20 +7,14 @@ import {StvPool} from "src/StvPool.sol";
 
 contract BadDebtTest is Test, SetupStvPool {
     function _simulateBadDebt() internal {
-        // Deposit some ETH
-        pool.depositETH{value: 10 ether}(address(this), address(0));
-
-        // Simulate liability transfer
-        dashboard.mock_increaseLiability(steth.getSharesByPooledEth(10 ether));
-
-        // Simulate negative rewards to create bad debt
-        dashboard.mock_simulateRewards(int256(-2 ether));
+        // Create bad debt
+        dashboard.mock_increaseLiability(steth.getSharesByPooledEth(pool.totalAssets()) + 1);
 
         _assertBadDebt();
     }
 
     function _getValueAndLiabilityShares() internal view returns (uint256 valueShares, uint256 liabilityShares) {
-        valueShares = steth.getSharesByPooledEth(vaultHub.totalValue(address(pool.STAKING_VAULT())));
+        valueShares = steth.getSharesByPooledEth(vaultHub.totalValue(address(pool.VAULT())));
         liabilityShares = pool.totalLiabilityShares();
     }
 

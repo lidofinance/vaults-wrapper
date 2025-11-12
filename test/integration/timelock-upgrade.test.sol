@@ -7,8 +7,8 @@ import {OssifiableProxy} from "src/proxy/OssifiableProxy.sol";
 import {StvPool} from "src/StvPool.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
 import {TimelockController} from "@openzeppelin/contracts/governance/TimelockController.sol";
-import {ILidoLocator} from "src/interfaces/ILidoLocator.sol";
-import {IDashboard} from "src/interfaces/IDashboard.sol";
+import {ILidoLocator} from "src/interfaces/core/ILidoLocator.sol";
+import {IDashboard} from "src/interfaces/core/IDashboard.sol";
 import {FactoryHelper} from "test/utils/FactoryHelper.sol";
 
 contract TimelockUpgradeIntegrationTest is Test {
@@ -18,7 +18,6 @@ contract TimelockUpgradeIntegrationTest is Test {
         // Deploy a fresh Factory using core addresses discovered from the locator
         string memory locatorAddressStr = vm.envString("CORE_LOCATOR_ADDRESS");
         address locatorAddress = vm.parseAddress(locatorAddressStr);
-        ILidoLocator locator = ILidoLocator(locatorAddress);
 
         FactoryHelper helper = new FactoryHelper();
         factory = helper.deployMainFactory(locatorAddress);

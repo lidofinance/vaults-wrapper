@@ -8,8 +8,16 @@ interface IStrategy {
     event StrategyExitRequested(address indexed user, bytes32 requestId, uint256 wsteth, bytes data);
     event StrategyExitFinalized(address indexed user, bytes32 requestId, uint256 wsteth);
 
+    /**
+     * @notice Initializes the strategy
+     * @param _admin The admin address
+     */
     function initialize(address _admin) external;
 
+    /**
+     * @notice Returns the address of the pool
+     * @return The address of the pool
+     */
     function POOL() external view returns (address);
 
     /**
@@ -17,7 +25,7 @@ interface IStrategy {
      * @param _referral The referral address
      * @param _wstethToMint The amount of wstETH to mint
      * @param _params The parameters for the supply
-     * @return stv The amount of stv that would be minted
+     * @return stv The minted amount of stv
      */
     function supply(address _referral, uint256 _wstethToMint, bytes calldata _params)
         external
@@ -36,22 +44,21 @@ interface IStrategy {
         returns (uint256 stethShares);
 
     /**
-     * @notice Requests a withdrawal from the strategy
+     * @notice Requests exit from the strategy
      * @param _wsteth The amount of wstETH to request exit for
-     * @param _params The parameters for the withdrawal
+     * @param _params The parameters for the exit
      * @return requestId The Strategy request id
      */
     function requestExitByWsteth(uint256 _wsteth, bytes calldata _params) external returns (bytes32 requestId);
 
     /**
-     * @notice Finalizes a withdrawal from the strategy
-     * @param receiver The address to receive the withdrawal
+     * @notice Finalizes exit from the strategy
      * @param requestId The Strategy request id
      */
-    function finalizeRequestExit(address receiver, bytes32 requestId) external;
+    function finalizeRequestExit(bytes32 requestId) external;
 
     /**
-     * @notice Burns wstETH to reduce the user's minted stETH obligation
+     * @notice Burns wstETH to reduce the user's minted stETH shares obligation
      * @param _wstethToBurn The amount of wstETH to burn
      */
     function burnWsteth(uint256 _wstethToBurn) external;

@@ -4,10 +4,10 @@ pragma solidity >=0.8.25;
 import {AllowList} from "./AllowList.sol";
 import {Distributor} from "./Distributor.sol";
 import {WithdrawalQueue} from "./WithdrawalQueue.sol";
-import {IDashboard} from "./interfaces/IDashboard.sol";
-import {IStETH} from "./interfaces/IStETH.sol";
-import {IStakingVault} from "./interfaces/IStakingVault.sol";
-import {IVaultHub} from "./interfaces/IVaultHub.sol";
+import {IDashboard} from "./interfaces/core/IDashboard.sol";
+import {IStETH} from "./interfaces/core/IStETH.sol";
+import {IStakingVault} from "./interfaces/core/IStakingVault.sol";
+import {IVaultHub} from "./interfaces/core/IVaultHub.sol";
 import {FeaturePausable} from "./utils/FeaturePausable.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {ERC20Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
@@ -21,11 +21,12 @@ import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 contract StvPool is Initializable, ERC20Upgradeable, AllowList, FeaturePausable {
     // Custom errors
     error ZeroDeposit();
-    error InvalidReceiver();
+    error InvalidRecipient();
     error NotWithdrawalQueue();
     error NotEnoughToRebalance();
     error UnassignedLiabilityOnVault();
     error VaultInBadDebt();
+    error VaultReportStale();
 
     bytes32 public constant DEPOSITS_FEATURE = keccak256("DEPOSITS_FEATURE");
     bytes32 public constant DEPOSITS_PAUSE_ROLE = keccak256("DEPOSITS_PAUSE_ROLE");
@@ -39,26 +40,33 @@ contract StvPool is Initializable, ERC20Upgradeable, AllowList, FeaturePausable 
     IStETH public immutable STETH;
     IDashboard public immutable DASHBOARD;
     IVaultHub public immutable VAULT_HUB;
-    IStakingVault public immutable STAKING_VAULT;
+    IStakingVault public immutable VAULT;
 
     WithdrawalQueue public immutable WITHDRAWAL_QUEUE;
     Distributor public immutable DISTRIBUTOR;
 
+    bytes32 private immutable POOL_TYPE;
+
     event Deposit(
-        address indexed sender, address indexed receiver, address indexed referral, uint256 assets, uint256 stv
+        address indexed sender, address indexed recipient, address indexed referral, uint256 assets, uint256 stv
     );
 
     event UnassignedLiabilityRebalanced(uint256 stethShares, uint256 ethFunded);
 
-    constructor(address _dashboard, bool _allowListEnabled, address _withdrawalQueue, address _distributor)
-        AllowList(_allowListEnabled)
-    {
+    constructor(
+        address _dashboard,
+        bool _allowListEnabled,
+        address _withdrawalQueue,
+        address _distributor,
+        bytes32 _poolType
+    ) AllowList(_allowListEnabled) {
         DASHBOARD = IDashboard(payable(_dashboard));
         VAULT_HUB = IVaultHub(DASHBOARD.VAULT_HUB());
-        STAKING_VAULT = IStakingVault(DASHBOARD.stakingVault());
+        VAULT = IStakingVault(DASHBOARD.stakingVault());
         WITHDRAWAL_QUEUE = WithdrawalQueue(payable(_withdrawalQueue));
         STETH = IStETH(payable(DASHBOARD.STETH()));
         DISTRIBUTOR = Distributor(_distributor);
+        POOL_TYPE = _poolType;
 
         // Disable initializers since we only support proxy deployment
         _disableInitializers();
@@ -68,7 +76,7 @@ contract StvPool is Initializable, ERC20Upgradeable, AllowList, FeaturePausable 
     }
 
     function poolType() external view virtual returns (bytes32) {
-        return keccak256("StvPool");
+        return POOL_TYPE;
     }
 
     function initialize(address _owner, string memory _name, string memory _symbol) public virtual initializer {
@@ -84,7 +92,7 @@ contract StvPool is Initializable, ERC20Upgradeable, AllowList, FeaturePausable 
 
         // Initial vault balance must include the connect deposit
         // Minting stv for it to have clear stv math
-        uint256 initialVaultBalance = address(STAKING_VAULT).balance;
+        uint256 initialVaultBalance = address(VAULT).balance;
         uint256 connectDeposit = VAULT_HUB.CONNECT_DEPOSIT();
         assert(initialVaultBalance >= connectDeposit);
         assert(totalSupply() == 0);
@@ -201,6 +209,7 @@ contract StvPool is Initializable, ERC20Upgradeable, AllowList, FeaturePausable 
      * @param _recipient Address to receive the minted shares
      * @param _referral Address of the referral (if any)
      * @return stv Amount of stv minted
+     * @dev Requires fresh oracle report to price stv accurately
      */
     function depositETH(address _recipient, address _referral) public payable returns (uint256 stv) {
         stv = _deposit(_recipient, _referral);
@@ -208,9 +217,10 @@ contract StvPool is Initializable, ERC20Upgradeable, AllowList, FeaturePausable 
 
     function _deposit(address _recipient, address _referral) internal returns (uint256 stv) {
         if (msg.value == 0) revert ZeroDeposit();
-        if (_recipient == address(0)) revert InvalidReceiver();
+        if (_recipient == address(0)) revert InvalidRecipient();
         _checkFeatureNotPaused(DEPOSITS_FEATURE);
         _checkAllowList();
+        _checkFreshReport();
 
         stv = previewDeposit(msg.value);
         _mint(_recipient, stv);
@@ -253,7 +263,7 @@ contract StvPool is Initializable, ERC20Upgradeable, AllowList, FeaturePausable 
      * @param _stethShares Amount of stETH shares to rebalance (18 decimals)
      * @dev Only unassigned liability can be rebalanced with this method, not individual liability
      * @dev Can be called by anyone if there is any unassigned liability
-     * @dev Required fresh oracle report before calling
+     * @dev Requires fresh oracle report before calling (check is performed in VaultHub)
      */
     function rebalanceUnassignedLiability(uint256 _stethShares) external {
         _checkOnlyUnassignedLiabilityRebalance(_stethShares);
@@ -267,7 +277,7 @@ contract StvPool is Initializable, ERC20Upgradeable, AllowList, FeaturePausable 
      * @dev Only unassigned liability can be rebalanced with this method, not individual liability
      * @dev Can be called by anyone if there is any unassigned liability
      * @dev This function accepts ETH and uses it to rebalance unassigned liability
-     * @dev Required fresh oracle report before calling
+     * @dev Requires fresh oracle report before calling (check is performed in VaultHub)
      */
     function rebalanceUnassignedLiabilityWithEther() external payable {
         uint256 stethShares = _getSharesByPooledEth(msg.value);
@@ -296,7 +306,7 @@ contract StvPool is Initializable, ERC20Upgradeable, AllowList, FeaturePausable 
      * @dev Checks if the vault is not in bad debt (value < liability)
      */
     function _checkNoBadDebt() internal view {
-        uint256 totalValueInStethShares = _getSharesByPooledEth(VAULT_HUB.totalValue(address(STAKING_VAULT)));
+        uint256 totalValueInStethShares = _getSharesByPooledEth(VAULT_HUB.totalValue(address(VAULT)));
         if (totalValueInStethShares < totalLiabilityShares()) revert VaultInBadDebt();
     }
 
@@ -398,5 +408,13 @@ contract StvPool is Initializable, ERC20Upgradeable, AllowList, FeaturePausable 
     function resumeDeposits() external {
         _checkRole(DEPOSITS_RESUME_ROLE, msg.sender);
         _resumeFeature(DEPOSITS_FEATURE);
+    }
+
+    // =================================================================================
+    // ORACLE FRESHNESS CHECK
+    // =================================================================================
+
+    function _checkFreshReport() internal view {
+        if (!VAULT_HUB.isReportFresh(address(VAULT))) revert VaultReportStale();
     }
 }

@@ -72,7 +72,7 @@ abstract contract SetupWithdrawalQueue is Test {
             address(dashboard),
             address(vaultHub),
             address(steth),
-            address(dashboard.STAKING_VAULT()),
+            address(dashboard.VAULT()),
             address(lazyOracle),
             MIN_WITHDRAWAL_DELAY_TIME,
             true

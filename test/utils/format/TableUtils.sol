@@ -5,8 +5,8 @@ import {console} from "forge-std/console.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
-import {IStETH} from "src/interfaces/IStETH.sol";
-import {IWstETH} from "src/interfaces/IWstETH.sol";
+import {IStETH} from "src/interfaces/core/IStETH.sol";
+import {IWstETH} from "src/interfaces/core/IWstETH.sol";
 import {IBoringOnChainQueue} from "src/interfaces/ggv/IBoringOnChainQueue.sol";
 
 interface IWrapper {

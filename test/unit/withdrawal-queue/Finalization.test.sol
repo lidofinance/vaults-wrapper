@@ -10,7 +10,7 @@ import {FeaturePausable} from "src/utils/FeaturePausable.sol";
 contract FinalizationTest is Test, SetupWithdrawalQueue {
     function setUp() public override {
         super.setUp();
-        pool.depositETH{value: 100_000 ether}(address(this), address(0));
+        pool.depositETH{value: 10_000 ether}(address(this), address(0));
     }
 
     // Basic Finalization
@@ -145,7 +145,7 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
 
         _warpAndMockOracleReport();
 
-        address stakingVault = address(dashboard.STAKING_VAULT());
+        address stakingVault = address(dashboard.VAULT());
         uint256 vaultBalance = stakingVault.balance;
         dashboard.mock_setLocked(vaultBalance);
 
@@ -165,7 +165,7 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
         _warpAndMockOracleReport();
 
         uint256 expectedEthFirst = pool.previewRedeem(stvRequest1);
-        address stakingVault = address(dashboard.STAKING_VAULT());
+        address stakingVault = address(dashboard.VAULT());
         uint256 vaultBalance = stakingVault.balance;
         dashboard.mock_setLocked(vaultBalance - expectedEthFirst);
 
@@ -190,7 +190,7 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
         uint256 assetsPreview = pool.previewRedeem(stvToRequest);
         uint256 assetsToRebalance = pool.STETH().getPooledEthBySharesRoundUp(mintedStethShares);
 
-        address stakingVault = address(dashboard.STAKING_VAULT());
+        address stakingVault = address(dashboard.VAULT());
         vm.deal(stakingVault, assetsPreview);
         dashboard.mock_setLocked(assetsToRebalance + 1); // block by 1 wei
 
@@ -212,7 +212,7 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
         uint256 assetsPreview = pool.previewRedeem(stvToRequest);
         uint256 assetsToRebalance = pool.STETH().getPooledEthBySharesRoundUp(mintedStethShares);
 
-        address stakingVault = address(dashboard.STAKING_VAULT());
+        address stakingVault = address(dashboard.VAULT());
         vm.deal(stakingVault, assetsPreview);
         dashboard.mock_setLocked(assetsToRebalance);
 
@@ -233,7 +233,7 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
         _warpAndMockOracleReport();
 
         uint256 assetsRequired = pool.previewRedeem(stvToRequest);
-        address stakingVault = address(dashboard.STAKING_VAULT());
+        address stakingVault = address(dashboard.VAULT());
         vm.deal(stakingVault, assetsRequired);
         dashboard.mock_setLocked(0);
 
@@ -335,7 +335,7 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
 
         _warpAndMockOracleReport();
 
-        dashboard.VAULT_HUB().mock_setReportFreshness(address(dashboard.STAKING_VAULT()), false);
+        dashboard.VAULT_HUB().mock_setReportFreshness(address(dashboard.VAULT()), false);
 
         vm.prank(finalizeRoleHolder);
         vm.expectRevert(WithdrawalQueue.VaultReportStale.selector);
@@ -432,6 +432,41 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
 
         // Check finalized request has correct ETH amount unaffected by rewards
         assertEq(withdrawalQueue.getClaimableEther(requestId), expectedEth);
+    }
+
+    // Exceeding Minted StETH
+
+    function test_Finalize_MultipleRequestsWithExceedingSteth() public {
+        uint256 mintedStethShares = pool.totalMintingCapacitySharesOf(address(this)) / 3 * 3;
+        pool.mintStethShares(mintedStethShares);
+
+        // Initially no exceeding minted steth
+        assertEq(pool.totalExceedingMintedStethShares(), 0);
+
+        // Create multiple withdrawal requests with enough stv to cover liability
+        uint256 stvPerRequest = pool.balanceOf(address(this)) / 3;
+        withdrawalQueue.requestWithdrawal(address(this), stvPerRequest, mintedStethShares / 3);
+        withdrawalQueue.requestWithdrawal(address(this), stvPerRequest, mintedStethShares / 3);
+        withdrawalQueue.requestWithdrawal(address(this), stvPerRequest, mintedStethShares / 3);
+
+        assertEq(withdrawalQueue.getLastRequestId(), 3);
+
+        // Simulate vault rebalance to create exceeding minted steth
+        uint256 liabilityShares = dashboard.liabilityShares();
+        assertGt(liabilityShares, 0);
+        dashboard.rebalanceVaultWithShares(liabilityShares / 2);
+
+        // Exceeding minted steth should now be present
+        assertGt(pool.totalExceedingMintedStethShares(), 0);
+
+        // Finalize all requests
+        _finalizeRequests(3);
+
+        // Verify no unfinalized requests remain
+        assertEq(withdrawalQueue.unfinalizedRequestsNumber(), 0);
+
+        // Exceeding steth should be consumed during finalization
+        assertEq(pool.totalExceedingMintedStethShares(), 0);
     }
 }
 

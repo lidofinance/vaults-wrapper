@@ -4,8 +4,8 @@ pragma solidity >=0.8.25;
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
 import {GGVVaultMock} from "./GGVVaultMock.sol";
-import {IStETH} from "src/interfaces/IStETH.sol";
-import {IWstETH} from "src/interfaces/IWstETH.sol";
+import {IStETH} from "src/interfaces/core/IStETH.sol";
+import {IWstETH} from "src/interfaces/core/IWstETH.sol";
 import {ITellerWithMultiAssetSupport} from "src/interfaces/ggv/ITellerWithMultiAssetSupport.sol";
 
 contract GGVMockTeller is ITellerWithMultiAssetSupport {

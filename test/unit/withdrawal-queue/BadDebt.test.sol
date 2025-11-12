@@ -22,7 +22,7 @@ contract BadDebtTest is Test, SetupWithdrawalQueue {
 
     function _simulateBadDebt() internal {
         // Simulate negative rewards to create bad debt
-        uint256 totalAssets = vaultHub.totalValue(address(pool.STAKING_VAULT()));
+        uint256 totalAssets = vaultHub.totalValue(address(pool.VAULT()));
         uint256 liabilitySteth = steth.getPooledEthBySharesRoundUp(pool.totalLiabilityShares());
         uint256 value = totalAssets - liabilitySteth;
 
@@ -32,7 +32,7 @@ contract BadDebtTest is Test, SetupWithdrawalQueue {
     }
 
     function _getValueAndLiabilityShares() internal view returns (uint256 valueShares, uint256 liabilityShares) {
-        valueShares = steth.getSharesByPooledEth(vaultHub.totalValue(address(pool.STAKING_VAULT())));
+        valueShares = steth.getSharesByPooledEth(vaultHub.totalValue(address(pool.VAULT())));
         liabilityShares = pool.totalLiabilityShares();
     }
 
