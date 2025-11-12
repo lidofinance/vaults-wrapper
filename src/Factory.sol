@@ -10,6 +10,7 @@ import {StvPoolFactory} from "./factories/StvPoolFactory.sol";
 import {StvStETHPoolFactory} from "./factories/StvStETHPoolFactory.sol";
 import {TimelockFactory} from "./factories/TimelockFactory.sol";
 import {WithdrawalQueueFactory} from "./factories/WithdrawalQueueFactory.sol";
+import {IStrategy} from "./interfaces/IStrategy.sol";
 import {IStrategyFactory} from "./interfaces/IStrategyFactory.sol";
 import {ILidoLocator} from "./interfaces/core/ILidoLocator.sol";
 import {IVaultHub} from "./interfaces/core/IVaultHub.sol";
@@ -491,11 +492,15 @@ contract Factory {
             dashboard.grantRole(dashboard.BURN_ROLE(), address(pool));
         }
 
-        address strategy = address(0);
+        address strategyProxy = address(0);
         if (_intermediate.strategyFactory != address(0)) {
-            strategy = IStrategyFactory(_intermediate.strategyFactory)
+            address strategyImpl = IStrategyFactory(_intermediate.strategyFactory)
                 .deploy(address(pool), _intermediate.strategyDeployBytes);
-            pool.addToAllowList(strategy);
+
+            strategyProxy =
+                address(new OssifiableProxy(strategyImpl, timelock, abi.encodeCall(IStrategy.initialize, (timelock))));
+
+            pool.addToAllowList(strategyProxy);
         }
 
         pool.grantRole(DEFAULT_ADMIN_ROLE, timelock);
@@ -512,7 +517,7 @@ contract Factory {
             withdrawalQueue: address(withdrawalQueue),
             distributor: address(pool.DISTRIBUTOR()),
             timelock: _intermediate.timelock,
-            strategy: strategy
+            strategy: strategyProxy
         });
 
         emit PoolCreated(

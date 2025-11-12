@@ -56,7 +56,7 @@ contract GGVMockTest is Test {
 
         vm.startPrank(admin);
         // add 1 steth to ggv balance for rebase
-        vault.rebase(1 ether);
+        vault.rebaseSteth(1 ether);
         uint256 newGgvUserAssets = vault.getAssetsByShares(ggvShares);
         assertEq(newGgvUserAssets > ggvUserAssets, true);
     }

@@ -69,9 +69,7 @@ library TableUtils {
                 padLeft("debt.stethShares", 20),
                 padLeft("ggv", 20),
                 padLeft("ggv.wstETHOut", 20),
-                padLeft("wstETH", 20),
-                padLeft("stETH", 20),
-                padLeft("stethShares", 20)
+                padLeft("wstETH", 20)
             )
         );
         console.log(
@@ -110,8 +108,6 @@ library TableUtils {
         uint256 ggv = self.boringVault.balanceOf(_user);
         uint256 ggvStethOut = self.boringQueue.previewAssetsOut(address(self.wsteth), uint128(ggv), uint16(_discount));
         uint256 wsteth = self.wsteth.balanceOf(_user);
-        uint256 steth = self.steth.balanceOf(_user);
-        uint256 stethShares = self.steth.sharesOf(_user);
 
         console.log(
             string.concat(
@@ -122,9 +118,7 @@ library TableUtils {
                 padLeft(vm.toString(debtSteth), 20),
                 padLeft(vm.toString(ggv), 20),
                 padLeft(vm.toString(ggvStethOut), 20),
-                padLeft(vm.toString(wsteth), 20),
-                padLeft(vm.toString(steth), 20),
-                padLeft(vm.toString(stethShares), 20)
+                padLeft(vm.toString(wsteth), 20)
             )
         );
     }

@@ -21,7 +21,7 @@ contract DeployFactory is Script {
         f.stvStETHPoolFactory = address(new StvStETHPoolFactory());
         f.withdrawalQueueFactory = address(new WithdrawalQueueFactory());
         f.distributorFactory = address(new DistributorFactory());
-        f.ggvStrategyFactory = address(new GGVStrategyFactory(_ggvTeller, _ggvBoringQueue, _steth, _wsteth));
+        f.ggvStrategyFactory = address(new GGVStrategyFactory(_ggvTeller, _ggvBoringQueue));
         f.timelockFactory = address(new TimelockFactory());
     }
 
