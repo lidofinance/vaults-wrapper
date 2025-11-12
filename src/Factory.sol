@@ -67,6 +67,7 @@ contract Factory {
         address pool;
         address timelock;
         address strategyFactory;
+        bytes strategyDeployBytes;
     }
 
     struct PoolDeployment {
@@ -142,7 +143,8 @@ contract Factory {
             commonPoolConfig,
             AuxiliaryPoolConfig({allowlistEnabled: allowListEnabled, mintingEnabled: false, reserveRatioGapBP: 0}),
             timelockConfig,
-            address(0)
+            address(0),
+            ""
         );
     }
 
@@ -160,7 +162,8 @@ contract Factory {
                 allowlistEnabled: allowListEnabled, mintingEnabled: true, reserveRatioGapBP: reserveRatioGapBP
             }),
             timelockConfig,
-            address(0)
+            address(0),
+            ""
         );
     }
 
@@ -175,7 +178,8 @@ contract Factory {
             commonPoolConfig,
             AuxiliaryPoolConfig({allowlistEnabled: true, mintingEnabled: true, reserveRatioGapBP: reserveRatioGapBP}),
             timelockConfig,
-            address(GGV_STRATEGY_FACTORY)
+            address(GGV_STRATEGY_FACTORY),
+            ""
         );
     }
 
@@ -184,7 +188,8 @@ contract Factory {
         CommonPoolConfig memory commonPoolConfig,
         AuxiliaryPoolConfig memory auxiliaryConfig,
         TimelockConfig memory timelockConfig,
-        address strategyFactory
+        address strategyFactory,
+        bytes memory strategyDeployBytes
     ) public payable returns (PoolIntermediate memory intermediate) {
         if (msg.value < VAULT_HUB.CONNECT_DEPOSIT()) {
             revert InsufficientConnectDeposit(VAULT_HUB.CONNECT_DEPOSIT(), msg.value);
@@ -272,7 +277,12 @@ contract Factory {
             );
         OssifiableProxy(payable(poolProxy)).proxy__changeAdmin(timelock);
 
-        intermediate = PoolIntermediate({pool: poolProxy, timelock: timelock, strategyFactory: strategyFactory});
+        intermediate = PoolIntermediate({
+            pool: poolProxy,
+            timelock: timelock,
+            strategyFactory: strategyFactory,
+            strategyDeployBytes: strategyDeployBytes
+        });
 
         bytes32 deploymentHash = _hashIntermediate(intermediate, msg.sender);
         uint256 finishDeadline = block.timestamp + DEPLOY_START_FINISH_SPAN_SECONDS;
@@ -315,7 +325,7 @@ contract Factory {
 
         address strategy = address(0);
         if (intermediate.strategyFactory != address(0)) {
-            strategy = IStrategyFactory(intermediate.strategyFactory).deploy(address(pool), STETH, WSTETH);
+            strategy = IStrategyFactory(intermediate.strategyFactory).deploy(address(pool), intermediate.strategyDeployBytes);
             pool.addToAllowList(strategy);
         }
 

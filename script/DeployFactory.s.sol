@@ -10,17 +10,11 @@ import {StvPoolFactory} from "src/factories/StvPoolFactory.sol";
 import {StvStETHPoolFactory} from "src/factories/StvStETHPoolFactory.sol";
 import {TimelockFactory} from "src/factories/TimelockFactory.sol";
 import {WithdrawalQueueFactory} from "src/factories/WithdrawalQueueFactory.sol";
+import {ILidoLocator} from "src/interfaces/ILidoLocator.sol";
 
 contract DeployFactory is Script {
-    // function _readCore(address locatorAddress) internal view returns (CoreRefs memory c) {
-    //     ILidoLocator locator = ILidoLocator(locatorAddress);
-    //     c.vaultFactory = locator.vaultFactory();
-    //     c.steth = address(locator.lido());
-    //     c.wsteth = address(locator.wstETH());
-    //     c.lazyOracle = locator.lazyOracle();
-    // }
 
-    function _deployImplFactories(address ggvTeller, address ggvBoringQueue)
+    function _deployImplFactories(address ggvTeller, address ggvBoringQueue, address steth, address wsteth)
         internal
         returns (Factory.SubFactories memory f)
     {
@@ -28,7 +22,7 @@ contract DeployFactory is Script {
         f.stvStETHPoolFactory = address(new StvStETHPoolFactory());
         f.withdrawalQueueFactory = address(new WithdrawalQueueFactory());
         f.distributorFactory = address(new DistributorFactory());
-        f.ggvStrategyFactory = address(new GGVStrategyFactory(ggvTeller, ggvBoringQueue));
+        f.ggvStrategyFactory = address(new GGVStrategyFactory(ggvTeller, ggvBoringQueue, steth, wsteth));
         f.timelockFactory = address(new TimelockFactory());
     }
 
@@ -92,10 +86,14 @@ contract DeployFactory is Script {
 
         (address ggvTeller, address ggvBoringQueue) = _readGGVStrategyAddresses(paramsJsonPath);
 
+        ILidoLocator locator = ILidoLocator(locatorAddress);
+        address steth = address(locator.lido());
+        address wsteth = address(locator.wstETH());
+
         vm.startBroadcast();
 
         // Deploy implementation factories and proxy stub
-        Factory.SubFactories memory subFactories = _deployImplFactories(ggvTeller, ggvBoringQueue);
+        Factory.SubFactories memory subFactories = _deployImplFactories(ggvTeller, ggvBoringQueue, steth, wsteth);
 
         Factory factory = new Factory(locatorAddress, subFactories);
 

@@ -70,7 +70,8 @@ contract FactoryIntegrationTest is StvPoolHarness {
             commonPoolConfig,
             auxiliaryConfig,
             timelockConfig,
-            strategyFactory
+            strategyFactory,
+            ""
         );
         Factory.PoolDeployment memory deployment = factory.createPoolFinish(intermediate);
         vm.stopPrank();
@@ -100,7 +101,8 @@ contract FactoryIntegrationTest is StvPoolHarness {
             commonPoolConfig,
             auxiliaryConfig,
             timelockConfig,
-            strategyFactory
+            strategyFactory,
+            ""
         );
         vm.stopPrank();
     }
@@ -187,7 +189,8 @@ contract FactoryIntegrationTest is StvPoolHarness {
             commonPoolConfig,
             auxiliaryConfig,
             timelockConfig,
-            strategyFactory
+            strategyFactory,
+            ""
         );
 
         // Tamper with the intermediate before finishing to ensure the deployment hash is checked.
@@ -214,7 +217,8 @@ contract FactoryIntegrationTest is StvPoolHarness {
             commonPoolConfig,
             auxiliaryConfig,
             timelockConfig,
-            strategyFactory
+            strategyFactory,
+            ""
         );
         vm.stopPrank();
 
@@ -240,7 +244,8 @@ contract FactoryIntegrationTest is StvPoolHarness {
             commonPoolConfig,
             auxiliaryConfig,
             timelockConfig,
-            strategyFactory
+            strategyFactory,
+            ""
         );
 
         factory.createPoolFinish(intermediate);
@@ -266,7 +271,7 @@ contract FactoryIntegrationTest is StvPoolHarness {
 
         Vm.Log[] memory entries = vm.getRecordedLogs();
         bytes32 expectedTopic = keccak256(
-            "PoolCreationStarted((address,address,address))"
+            "PoolCreationStarted((address,address,address,bytes))"
         );
 
         bool found;
@@ -279,6 +284,7 @@ contract FactoryIntegrationTest is StvPoolHarness {
             assertEq(emitted.pool, intermediate.pool, "pool address should match");
             assertEq(emitted.timelock, intermediate.timelock, "timelock should match");
             assertEq(emitted.strategyFactory, intermediate.strategyFactory, "strategy factory should match");
+            assertEq(emitted.strategyDeployBytes, intermediate.strategyDeployBytes, "strategy deploy bytes should match");
             found = true;
             break;
         }

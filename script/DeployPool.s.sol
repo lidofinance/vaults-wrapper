@@ -112,6 +112,7 @@ contract DeployPool is Script {
         json = vm.serializeAddress("_intermediate", "pool", intermediate.pool);
         json = vm.serializeAddress("_intermediate", "timelock", intermediate.timelock);
         json = vm.serializeAddress("_intermediate", "strategyFactory", intermediate.strategyFactory);
+        json = vm.serializeBytes("_intermediate", "strategyDeployBytes", intermediate.strategyDeployBytes);
     }
 
     function _serializeDeployment(Factory.PoolDeployment memory deployment) internal returns (string memory json) {
@@ -177,7 +178,8 @@ contract DeployPool is Script {
         return Factory.PoolIntermediate({
             pool: vm.parseJsonAddress(json, "$.intermediate.pool"),
             timelock: vm.parseJsonAddress(json, "$.intermediate.timelock"),
-            strategyFactory: vm.parseJsonAddress(json, "$.intermediate.strategyFactory")
+            strategyFactory: vm.parseJsonAddress(json, "$.intermediate.strategyFactory"),
+            strategyDeployBytes: vm.parseJsonBytes(json, "$.intermediate.strategyDeployBytes")
         });
     }
 
@@ -251,7 +253,7 @@ contract DeployPool is Script {
         vm.startBroadcast();
 
         Factory.PoolIntermediate memory intermediate = factory.createPoolStart{value: p.connectDepositWei}(
-            p.vaultConfig, p.commonPoolConfig, p.auxiliaryPoolConfig, p.timelockConfig, p.strategyFactory
+            p.vaultConfig, p.commonPoolConfig, p.auxiliaryPoolConfig, p.timelockConfig, p.strategyFactory, ""
         );
 
         vm.stopBroadcast();

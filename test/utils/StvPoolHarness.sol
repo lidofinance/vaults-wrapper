@@ -147,7 +147,8 @@ contract StvPoolHarness is Test {
             commonPoolConfig,
             auxiliaryConfig,
             timelockConfig,
-            strategyFactoryAddress
+            strategyFactoryAddress,
+            ""
         );
         Factory.PoolDeployment memory deployment = factory.createPoolFinish(intermediate);
         vm.stopPrank();
