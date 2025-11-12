@@ -7,7 +7,7 @@ import {IVaultHub} from "./core/IVaultHub.sol";
 
 interface IStvStETHPool is IBasePool {
     function totalExceedingMintedSteth() external view returns (uint256);
-    function rebalanceMintedStethShares(uint256 _stethShares, uint256 _maxStvToBurn)
+    function rebalanceMintedStethSharesForWithdrawalQueue(uint256 _stethShares, uint256 _maxStvToBurn)
         external
         returns (uint256 stvBurned);
     function transferFromWithLiabilityForWithdrawalQueue(address _from, uint256 _stv, uint256 _stethShares) external;
