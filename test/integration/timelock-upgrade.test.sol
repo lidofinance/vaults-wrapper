@@ -18,7 +18,6 @@ contract TimelockUpgradeIntegrationTest is Test {
         // Deploy a fresh Factory using core addresses discovered from the locator
         string memory locatorAddressStr = vm.envString("CORE_LOCATOR_ADDRESS");
         address locatorAddress = vm.parseAddress(locatorAddressStr);
-        ILidoLocator locator = ILidoLocator(locatorAddress);
 
         FactoryHelper helper = new FactoryHelper();
         factory = helper.deployMainFactory(locatorAddress);

@@ -81,7 +81,7 @@ contract FactoryIntegrationTest is StvPoolHarness {
 
         vm.startPrank(vaultConfig.nodeOperator);
         vm.expectRevert(
-            abi.encodeWithSelector(Factory.InsufficientConnectDeposit.selector, CONNECT_DEPOSIT, CONNECT_DEPOSIT - 1)
+            abi.encodeWithSelector(Factory.InsufficientConnectDeposit.selector, CONNECT_DEPOSIT - 1, CONNECT_DEPOSIT)
         );
         factory.createPoolStart{value: CONNECT_DEPOSIT - 1}(
             vaultConfig, commonPoolConfig, auxiliaryConfig, timelockConfig, strategyFactory, ""
@@ -98,7 +98,7 @@ contract FactoryIntegrationTest is StvPoolHarness {
         ) = _buildConfigs(false, false, 0, "Factory No Mint", "FNM");
         address strategyFactory = address(0);
 
-        (Factory.PoolIntermediate memory intermediate, Factory.PoolDeployment memory deployment) =
+        (, Factory.PoolDeployment memory deployment) =
             _deployThroughFactory(vaultConfig, commonPoolConfig, auxiliaryConfig, timelockConfig, strategyFactory);
 
         assertEq(deployment.strategy, address(0), "strategy should not be deployed");
@@ -124,7 +124,7 @@ contract FactoryIntegrationTest is StvPoolHarness {
         ) = _buildConfigs(false, true, 0, "Factory Mint Pool", "FMP");
         address strategyFactory = address(0);
 
-        (Factory.PoolIntermediate memory intermediate, Factory.PoolDeployment memory deployment) =
+        (, Factory.PoolDeployment memory deployment) =
             _deployThroughFactory(vaultConfig, commonPoolConfig, auxiliaryConfig, timelockConfig, strategyFactory);
 
         IDashboard dashboard = IDashboard(payable(deployment.dashboard));
@@ -142,7 +142,7 @@ contract FactoryIntegrationTest is StvPoolHarness {
         ) = _buildConfigs(true, true, 500, "Factory Strategy Pool", "FSP");
         address strategyFactory = address(factory.GGV_STRATEGY_FACTORY());
 
-        (Factory.PoolIntermediate memory intermediate, Factory.PoolDeployment memory deployment) =
+        (, Factory.PoolDeployment memory deployment) =
             _deployThroughFactory(vaultConfig, commonPoolConfig, auxiliaryConfig, timelockConfig, strategyFactory);
 
         assertTrue(deployment.strategy != address(0), "strategy should be deployed");
@@ -234,7 +234,7 @@ contract FactoryIntegrationTest is StvPoolHarness {
             _deployThroughFactory(vaultConfig, commonPoolConfig, auxiliaryConfig, timelockConfig, strategyFactory);
 
         Vm.Log[] memory entries = vm.getRecordedLogs();
-        bytes32 expectedTopic = keccak256("PoolCreationStarted((address,address,address,bytes))");
+        bytes32 expectedTopic = keccak256("PoolCreationStarted((address,address,address,bytes),uint256)");
 
         bool found;
         for (uint256 i = 0; i < entries.length; i++) {

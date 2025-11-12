@@ -380,14 +380,6 @@ contract FactoryTest is Test {
 
     function test_revertFinishWithoutStart() public {
         // Test that calling finish without start reverts
-        (
-            Factory.VaultConfig memory vaultConfig,
-            Factory.CommonPoolConfig memory commonPoolConfig,
-            Factory.AuxiliaryPoolConfig memory auxiliaryConfig
-        ) = _buildConfigs(false, false, 0, "Deadline Test Pool", "DTP");
-
-        Factory.TimelockConfig memory timelockConfig = _defaultTimelockConfig();
-        address strategyFactory = address(0);
 
         // Create an intermediate struct but don't call createPoolStart
         Factory.PoolIntermediate memory fakeIntermediate = Factory.PoolIntermediate({

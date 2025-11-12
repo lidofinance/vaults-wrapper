@@ -6,13 +6,14 @@ import {TimelockController} from "@openzeppelin/contracts/governance/TimelockCon
 contract TimelockFactory {
     function deploy(uint256 _minDelaySeconds, address _proposer, address _executor)
         external
-        returns (address _timelock)
+        returns (address timelock)
     {
         address[] memory proposers = new address[](1);
         proposers[0] = _proposer;
+
         address[] memory executors = new address[](1);
         executors[0] = _executor;
-        TimelockController tl = new TimelockController(_minDelaySeconds, proposers, executors, address(0));
-        _timelock = address(tl);
+
+        timelock = address(new TimelockController(_minDelaySeconds, proposers, executors, address(0)));
     }
 }
