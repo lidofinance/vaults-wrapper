@@ -8,5 +8,5 @@ interface IStrategyCallForwarder {
         external
         payable
         returns (bytes memory);
-    function sendValue(address payable _recipient, uint256 _amount) external payable;
+    function sendValue(address payable _recipient, uint256 _amount) external;
 }

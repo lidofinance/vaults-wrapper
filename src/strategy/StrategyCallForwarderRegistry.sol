@@ -38,11 +38,11 @@ abstract contract StrategyCallForwarderRegistry {
 
     /**
      * @notice Returns the address of the strategy call forwarder for a given user
-     * @param user The user for which to get the strategy call forwarder address
+     * @param _user The user for which to get the strategy call forwarder address
      * @return callForwarder The address of the strategy call forwarder
      */
-    function getStrategyCallForwarderAddress(address user) public view returns (address callForwarder) {
-        bytes32 salt = _generateSalt(user);
+    function getStrategyCallForwarderAddress(address _user) public view returns (address callForwarder) {
+        bytes32 salt = _generateSalt(_user);
         callForwarder = Clones.predictDeterministicAddress(STRATEGY_CALL_FORWARDER_IMPL, salt);
     }
 

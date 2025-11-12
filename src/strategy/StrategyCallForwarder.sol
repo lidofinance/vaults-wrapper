@@ -58,7 +58,7 @@ contract StrategyCallForwarder is
      * @param _recipient The address to send the value to
      * @param _amount The amount of value to send
      */
-    function sendValue(address payable _recipient, uint256 _amount) external payable onlyOwner nonReentrant {
+    function sendValue(address payable _recipient, uint256 _amount) external onlyOwner nonReentrant {
         Address.sendValue(_recipient, _amount);
     }
 }

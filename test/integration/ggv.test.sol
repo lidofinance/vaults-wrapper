@@ -192,7 +192,7 @@ contract GGVTest is StvStrategyPoolHarness {
             GGVStrategy.GGVParamsRequestExit({discount: uint16(ggvDiscount), secondsToDeadline: type(uint24).max});
 
         vm.prank(USER1);
-        bytes32 requestId = ggvStrategy.requestExitByStETH(withdrawalStethAmount, abi.encode(params));
+        bytes32 requestId = ggvStrategy.requestExitByWsteth(withdrawalStethAmount, abi.encode(params));
         assertNotEq(requestId, 0);
 
         // Apply 1% increase to core (stETH share ratio)
@@ -238,7 +238,7 @@ contract GGVTest is StvStrategyPoolHarness {
 
         vm.startPrank(USER1);
         ggvStrategy.burnWsteth(wstethToBurn);
-        ggvStrategy.requestWithdrawalFromPool(stvToWithdraw, stethSharesToRebalance, USER1);
+        ggvStrategy.requestWithdrawalFromPool(USER1, stvToWithdraw, stethSharesToRebalance);
         vm.stopPrank();
 
         _log.printUsers("After User Finalizes Wrapper", logUsers, ggvDiscount);
@@ -318,7 +318,7 @@ contract GGVTest is StvStrategyPoolHarness {
         vm.startPrank(USER1);
         ggvStrategy.burnWsteth(mintedSharesBefore);
         uint256 leftoverWsteth = ggvStrategy.wstethOf(USER1);
-        ggvStrategy.requestWithdrawalFromPool(stvBalance, 0, USER1);
+        ggvStrategy.requestWithdrawalFromPool(USER1, stvBalance, 0);
         vm.stopPrank();
 
         assertGt(leftoverWsteth, 0, "surplus wstETH expected after covering liability");
