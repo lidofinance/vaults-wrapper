@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: MIT
-pragma solidity >=0.8.25;
+pragma solidity 0.8.30;
 
+import {IStakingVault} from "../../src/interfaces/core/IStakingVault.sol";
 import {MockStETH} from "./MockStETH.sol";
 import {IVaultHub} from "src/interfaces/core/IVaultHub.sol";
-import {IStakingVault} from "../../src/interfaces/core/IStakingVault.sol";
 
 contract MockVaultHub {
     // TODO: maybe inherit IVaultHub
-
 
     uint256 public immutable RESERVE_RATIO_BP = 25_00;
     uint256 internal immutable TOTAL_BASIS_POINTS = 100_00;
@@ -45,6 +44,7 @@ contract MockVaultHub {
     }
 
     event VaultHubFunded(address sender, address vault, uint256 amount);
+
     function fund(address _vault) external payable {
         emit VaultHubFunded(msg.sender, _vault, msg.value);
         vaultBalances[_vault] += msg.value;
@@ -67,7 +67,13 @@ contract MockVaultHub {
         return vaultBalances[_vault];
     }
 
-    function withdrawableValue(address /* _vault */) external pure returns (uint256) {
+    function withdrawableValue(
+        address /* _vault */
+    )
+        external
+        pure
+        returns (uint256)
+    {
         return 0; // Dummy implementation - returns 0 for testing
     }
 
@@ -75,7 +81,12 @@ contract MockVaultHub {
         return vaultLiabilityShares[_vault];
     }
 
-    function requestValidatorExit(address /* _vault */, bytes calldata /* _pubkeys */) external {
+    function requestValidatorExit(
+        address,
+        /* _vault */
+        bytes calldata /* _pubkeys */
+    )
+        external {
         // Mock implementation - just emit an event or do nothing
         // In real implementation, this would request node operators to exit validators
     }
@@ -100,38 +111,48 @@ contract MockVaultHub {
     }
 
     function triggerValidatorWithdrawals(
-        address /* _vault */,
-        bytes calldata /* _pubkeys */,
-        uint64[] calldata /* _amountsInGwei */,
+        address,
+        /* _vault */
+        bytes calldata,
+        /* _pubkeys */
+        uint64[] calldata,
+        /* _amountsInGwei */
         address /* _refundRecipient */
-    ) external payable {
-    //     // Mock implementation - simulate validator withdrawals
-    //     // In real implementation, this would trigger EIP-7002 withdrawals
+    )
+        external
+        payable {
+        //     // Mock implementation - simulate validator withdrawals
+        //     // In real implementation, this would trigger EIP-7002 withdrawals
 
-    //     // For testing, we can simulate that validators were exited and funds are now available
-    //     uint256 totalWithdrawn = 0;
-    //     for (uint256 i = 0; i < _amountsInGwei.length; i++) {
-    //         if (_amountsInGwei[i] == 0) {
-    //             // Full withdrawal (32 ETH per validator)
-    //             totalWithdrawn += 32 ether;
-    //         } else {
-    //             totalWithdrawn += _amountsInGwei[i];
-    //         }
-    //     }
+        //     // For testing, we can simulate that validators were exited and funds are now available
+        //     uint256 totalWithdrawn = 0;
+        //     for (uint256 i = 0; i < _amountsInGwei.length; i++) {
+        //         if (_amountsInGwei[i] == 0) {
+        //             // Full withdrawal (32 ETH per validator)
+        //             totalWithdrawn += 32 ether;
+        //         } else {
+        //             totalWithdrawn += _amountsInGwei[i];
+        //         }
+        //     }
 
-    //     // Add withdrawn funds to withdrawable balance
-    //     vaultWithdrawableBalances[_vault] += totalWithdrawn;
+        //     // Add withdrawn funds to withdrawable balance
+        //     vaultWithdrawableBalances[_vault] += totalWithdrawn;
 
-    //     // Refund excess fee
-    //     if (msg.value > 0 && _refundRecipient != address(0)) {
-    //         payable(_refundRecipient).transfer(msg.value);
-    //     }
+        //     // Refund excess fee
+        //     if (msg.value > 0 && _refundRecipient != address(0)) {
+        //         payable(_refundRecipient).transfer(msg.value);
+        //     }
     }
 
     /**
      * @notice Test-only function to simulate validator exits making funds withdrawable
      */
-    function simulateValidatorExits(address /* _vault */, uint256 /* _amount */) external {
+    function simulateValidatorExits(
+        address,
+        /* _vault */
+        uint256 /* _amount */
+    )
+        external {
         // vaultWithdrawableBalances[_vault] += _amount;
         // // Also increase the contract's actual balance to allow for withdrawals
         // payable(address(this)).transfer(_amount);
@@ -141,7 +162,14 @@ contract MockVaultHub {
         return 1 ether;
     }
 
-    function transferVaultOwnership(address /* _vault */, address /* _newOwner */) external pure {
+    function transferVaultOwnership(
+        address,
+        /* _vault */
+        address /* _newOwner */
+    )
+        external
+        pure
+    {
         revert("Not implemented");
     }
 

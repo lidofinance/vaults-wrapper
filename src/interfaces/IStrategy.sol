@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity >=0.8.25;
+pragma solidity 0.8.30;
 
 interface IStrategy {
     event StrategySupplied(address indexed user, uint256 stv, uint256 stethShares, uint256 stethAmount, bytes data);

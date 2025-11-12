@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity >=0.8.25;
+pragma solidity 0.8.30;
 
 import {IDashboard} from "./core/IDashboard.sol";
 import {IVaultHub} from "./core/IVaultHub.sol";

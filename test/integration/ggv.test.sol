@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity >=0.8.25;
+pragma solidity 0.8.30;
 
 import {console} from "forge-std/Test.sol";
 
@@ -274,9 +274,7 @@ contract GGVTest is StvStrategyPoolHarness {
         vm.deal(address(pool.VAULT()), 1 ether);
 
         vm.warp(block.timestamp + 1 days);
-        core.applyVaultReport(
-            address(pool.VAULT()), pool.totalAssets(), 0, pool.DASHBOARD().liabilityShares(), 0
-        );
+        core.applyVaultReport(address(pool.VAULT()), pool.totalAssets(), 0, pool.DASHBOARD().liabilityShares(), 0);
 
         if (vaultProfit != 0) {
             vm.startPrank(NODE_OPERATOR);

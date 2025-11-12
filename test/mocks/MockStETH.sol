@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity >=0.8.25;
+pragma solidity 0.8.30;
 
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
@@ -8,7 +8,6 @@ contract MockStETH is ERC20 {
     uint256 private totalShares;
     uint256 private totalPooledEth;
     mapping(address => uint256) private shares;
-
 
     constructor() ERC20("Mock stETH", "stETH") {
         totalShares = 1e18;
@@ -20,16 +19,12 @@ contract MockStETH is ERC20 {
     //
 
     function getSharesByPooledEth(uint256 _ethAmount) public view returns (uint256) {
-        return _ethAmount
-            * totalShares // denominator in shares
+        return _ethAmount * totalShares // denominator in shares
             / totalPooledEth; // numerator in ether
     }
 
-
     function getPooledEthByShares(uint256 _sharesAmount) public view returns (uint256) {
-
-        return _sharesAmount
-            * totalPooledEth // numerator in ether
+        return _sharesAmount * totalPooledEth // numerator in ether
             / totalShares; // denominator in shares
     }
 
@@ -44,7 +39,6 @@ contract MockStETH is ERC20 {
         uint256 allowance = allowance(from, msg.sender);
         require(allowance >= steth, "Not enough allowance");
         _approve(from, msg.sender, allowance - steth);
-
 
         shares[from] -= amount;
         shares[to] += amount;
@@ -112,7 +106,4 @@ contract MockStETH is ERC20 {
         totalPooledEth = _pooledEthAmount;
         totalShares = _sharesAmount;
     }
-
-
-
 }

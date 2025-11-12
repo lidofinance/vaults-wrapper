@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity >=0.8.25;
+pragma solidity 0.8.30;
 
 import {IBasePool} from "./IBasePool.sol";
 import {IDashboard} from "./core/IDashboard.sol";

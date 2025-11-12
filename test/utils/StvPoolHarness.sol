@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity >=0.8.25;
+pragma solidity 0.8.30;
 
 import {Test, console} from "forge-std/Test.sol";
 
@@ -119,9 +119,7 @@ contract StvPoolHarness is Test {
         });
 
         Factory.CommonPoolConfig memory commonPoolConfig = Factory.CommonPoolConfig({
-            minWithdrawalDelayTime: config.minWithdrawalDelayTime,
-            name: config.name,
-            symbol: config.symbol
+            minWithdrawalDelayTime: config.minWithdrawalDelayTime, name: config.name, symbol: config.symbol
         });
 
         Factory.AuxiliaryPoolConfig memory auxiliaryConfig = Factory.AuxiliaryPoolConfig({
@@ -144,12 +142,7 @@ contract StvPoolHarness is Test {
 
         vm.startPrank(config.nodeOperator);
         Factory.PoolIntermediate memory intermediate = factory.createPoolStart{value: CONNECT_DEPOSIT}(
-            vaultConfig,
-            commonPoolConfig,
-            auxiliaryConfig,
-            timelockConfig,
-            strategyFactoryAddress,
-            ""
+            vaultConfig, commonPoolConfig, auxiliaryConfig, timelockConfig, strategyFactoryAddress, ""
         );
         Factory.PoolDeployment memory deployment = factory.createPoolFinish(intermediate);
         vm.stopPrank();
