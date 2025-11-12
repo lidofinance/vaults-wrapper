@@ -32,7 +32,7 @@ contract StrategyCallForwarder is
      * @param _data The call data
      * @return data The raw returned data.
      */
-    function call(address _target, bytes calldata _data) external onlyOwner returns (bytes memory data) {
+    function doCall(address _target, bytes calldata _data) external onlyOwner returns (bytes memory data) {
         data = Address.functionCall(_target, _data);
     }
 
@@ -44,7 +44,7 @@ contract StrategyCallForwarder is
      * @param _value The value to send with the call
      * @return Returns the raw returned data.
      */
-    function callWithValue(address _target, bytes calldata _data, uint256 _value)
+    function doCallWithValue(address _target, bytes calldata _data, uint256 _value)
         external
         onlyOwner
         returns (bytes memory)
