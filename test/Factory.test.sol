@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity >=0.8.25;
+pragma solidity 0.8.30;
 
 import {Test} from "forge-std/Test.sol";
 
@@ -60,8 +60,7 @@ contract FactoryTest is Test {
         subFactories.distributorFactory = address(new DistributorFactory());
         address dummyTeller = address(new DummyImplementation());
         address dummyQueue = address(new DummyImplementation());
-        subFactories.ggvStrategyFactory =
-            address(new GGVStrategyFactory(dummyTeller, dummyQueue, address(stETH), address(wstETH)));
+        subFactories.ggvStrategyFactory = address(new GGVStrategyFactory(dummyTeller, dummyQueue));
         subFactories.timelockFactory = address(new TimelockFactory());
 
         wrapperFactory = new Factory(address(locator), subFactories);

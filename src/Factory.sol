@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity >=0.8.25;
+pragma solidity 0.8.30;
 
 import {StvPool} from "./StvPool.sol";
 import {WithdrawalQueue} from "./WithdrawalQueue.sol";
@@ -9,6 +9,7 @@ import {StvPoolFactory} from "./factories/StvPoolFactory.sol";
 import {StvStETHPoolFactory} from "./factories/StvStETHPoolFactory.sol";
 import {TimelockFactory} from "./factories/TimelockFactory.sol";
 import {WithdrawalQueueFactory} from "./factories/WithdrawalQueueFactory.sol";
+import {IStrategy} from "./interfaces/IStrategy.sol";
 import {IStrategyFactory} from "./interfaces/IStrategyFactory.sol";
 import {ILidoLocator} from "./interfaces/core/ILidoLocator.sol";
 import {IVaultHub} from "./interfaces/core/IVaultHub.sol";
@@ -130,9 +131,26 @@ contract Factory {
     //
 
     /// @notice Emitted when pool deployment is initiated in the start phase
+    /// @param sender Address that initiated the deployment (msg.sender)
+    /// @param vaultConfig Configuration for the vault
+    /// @param commonPoolConfig Common pool parameters
+    /// @param auxiliaryConfig Additional pool configuration
+    /// @param timelockConfig Configuration for the timelock controller
+    /// @param strategyFactory Address of strategy factory (zero if not using strategies)
+    /// @param strategyDeployBytes ABI-encoded parameters for strategy deployment (empty if no strategy)
     /// @param intermediate Contains addresses of deployed components (dashboard, pool proxy, withdrawal queue proxy, timelock) needed for finish phase
     /// @param finishDeadline Timestamp by which createPoolFinish must be called (inclusive)
-    event PoolCreationStarted(PoolIntermediate intermediate, uint256 finishDeadline);
+    event PoolCreationStarted(
+        address indexed sender,
+        VaultConfig vaultConfig,
+        CommonPoolConfig commonPoolConfig,
+        AuxiliaryPoolConfig auxiliaryConfig,
+        TimelockConfig timelockConfig,
+        address indexed strategyFactory,
+        bytes strategyDeployBytes,
+        PoolIntermediate intermediate,
+        uint256 finishDeadline
+    );
 
     /// @notice Emitted when pool deployment is completed in the finish phase
     /// @param vault Address of the deployed vault
@@ -411,7 +429,17 @@ contract Factory {
         uint256 finishDeadline = block.timestamp + DEPLOY_START_FINISH_SPAN_SECONDS;
         intermediateState[deploymentHash] = finishDeadline;
 
-        emit PoolCreationStarted(intermediate, finishDeadline);
+        emit PoolCreationStarted(
+            msg.sender,
+            _vaultConfig,
+            _commonPoolConfig,
+            _auxiliaryConfig,
+            _timelockConfig,
+            _strategyFactory,
+            _strategyDeployBytes,
+            intermediate,
+            finishDeadline
+        );
     }
 
     /// @notice Completes pool deployment (second phase)
@@ -509,10 +537,15 @@ contract Factory {
         IDashboard dashboard = IDashboard(payable(_intermediate.dashboard));
         WithdrawalQueue withdrawalQueue = WithdrawalQueue(payable(_intermediate.withdrawalQueueProxy));
 
-        address strategy = address(0);
+        address strategyProxy = address(0);
         if (_strategyFactory != address(0)) {
-            strategy = IStrategyFactory(_strategyFactory).deploy(address(pool), _strategyDeployBytes);
-            pool.addToAllowList(strategy);
+            address strategyImpl = IStrategyFactory(_strategyFactory).deploy(address(pool), _strategyDeployBytes);
+            strategyProxy = address(
+                new OssifiableProxy(
+                    strategyImpl, _intermediate.timelock, abi.encodeCall(IStrategy.initialize, (_intermediate.timelock))
+                )
+            );
+            pool.addToAllowList(strategyProxy);
         }
 
         pool.grantRole(DEFAULT_ADMIN_ROLE, _intermediate.timelock);
@@ -526,7 +559,7 @@ contract Factory {
             withdrawalQueue: address(withdrawalQueue),
             distributor: address(pool.DISTRIBUTOR()),
             timelock: _intermediate.timelock,
-            strategy: strategy
+            strategy: strategyProxy
         });
 
         emit PoolCreated(

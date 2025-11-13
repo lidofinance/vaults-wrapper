@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity >=0.8.25;
+pragma solidity 0.8.30;
 
 import {StvStETHPool} from "src/StvStETHPool.sol";
 import {IVaultHub} from "src/interfaces/core/IVaultHub.sol";

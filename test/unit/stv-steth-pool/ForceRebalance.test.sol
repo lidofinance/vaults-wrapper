@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity >=0.8.25;
+pragma solidity 0.8.30;
 
 import {SetupStvStETHPool} from "./SetupStvStETHPool.sol";
 import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {Test} from "forge-std/Test.sol";
+import {StvPool} from "src/StvPool.sol";
 import {StvStETHPool} from "src/StvStETHPool.sol";
 import {MockVaultHub} from "test/mocks/MockVaultHub.sol";
 
@@ -54,7 +55,7 @@ contract ForceRebalanceTest is Test, SetupStvStETHPool {
     function test_ForceRebalance_RevertWhenReportStale() public {
         dashboard.VAULT_HUB().mock_setReportFreshness(dashboard.stakingVault(), false);
 
-        vm.expectRevert(StvStETHPool.VaultReportStale.selector);
+        vm.expectRevert(StvPool.VaultReportStale.selector);
         pool.forceRebalance(userAlice);
     }
 

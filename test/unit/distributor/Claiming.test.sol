@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity >=0.8.25;
+pragma solidity 0.8.30;
 
 import {SetupDistributor} from "./SetupDistributor.sol";
 import {Test} from "forge-std/Test.sol";

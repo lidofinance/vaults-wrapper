@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
-pragma solidity >=0.8.25;
+pragma solidity 0.8.30;
 
-import {MockStETH} from "./MockStETH.sol";
-import {MockWstETH} from "./MockWstETH.sol";
-import {MockVaultHub} from "./MockVaultHub.sol";
-import {MockStakingVault} from "./MockStakingVault.sol";
-import {AccessControlEnumerable} from "@openzeppelin/contracts/access/extensions/AccessControlEnumerable.sol";
 import {IVaultHub} from "../../src/interfaces/core/IVaultHub.sol";
+import {MockStETH} from "./MockStETH.sol";
+import {MockStakingVault} from "./MockStakingVault.sol";
+import {MockVaultHub} from "./MockVaultHub.sol";
+import {MockWstETH} from "./MockWstETH.sol";
+import {AccessControlEnumerable} from "@openzeppelin/contracts/access/extensions/AccessControlEnumerable.sol";
 
 contract MockDashboard is AccessControlEnumerable {
     MockStETH public immutable STETH;
@@ -107,7 +107,13 @@ contract MockDashboard is AccessControlEnumerable {
         VAULT_HUB.burnShares(VAULT, amount);
     }
 
-    function remainingMintingCapacityShares(uint256 /* vaultId */) external pure returns (uint256) {
+    function remainingMintingCapacityShares(
+        uint256 /* vaultId */
+    )
+        external
+        pure
+        returns (uint256)
+    {
         return 1000 ether; // Mock large capacity
     }
 
@@ -160,13 +166,8 @@ contract MockDashboardFactory {
 
         steth.mock_setTotalPooled(1000 ether, 800 * 10 ** 18);
 
-        MockDashboard dashboard = new MockDashboard(
-            address(steth),
-            address(wsteth),
-            address(vaultHub),
-            address(stakingVault),
-            _owner
-        );
+        MockDashboard dashboard =
+            new MockDashboard(address(steth), address(wsteth), address(vaultHub), address(stakingVault), _owner);
 
         dashboard.initialize();
 

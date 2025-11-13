@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: 2025 Lido <info@lido.fi>
 // SPDX-License-Identifier: GPL-3.0
-pragma solidity >=0.8.25;
+pragma solidity 0.8.30;
 
 /// @dev There's no leaves sorting for simplicity.
 contract MerkleTree {
@@ -13,9 +13,7 @@ contract MerkleTree {
         return tree.length == 0 ? bytes32(0) : tree[0];
     }
 
-    function getProof(
-        uint256 index
-    ) public view returns (bytes32[] memory proof) {
+    function getProof(uint256 index) public view returns (bytes32[] memory proof) {
         if (tree.length == 1) {
             return proof;
         }
@@ -38,9 +36,11 @@ contract MerkleTree {
         return proof;
     }
 
-    function getMultiProof(
-        uint256[] memory indicies
-    ) public view returns (bytes32[] memory proof, bool[] memory proofFlags) {
+    function getMultiProof(uint256[] memory indicies)
+        public
+        view
+        returns (bytes32[] memory proof, bool[] memory proofFlags)
+    {
         uint256[] memory stack = new uint256[](BUFFER_SIZE);
         for (uint256 i; i < indicies.length; ++i) {
             stack[i] = tree.length - 1 - indicies[i];
@@ -99,7 +99,7 @@ contract MerkleTree {
             tree[tree.length - 1 - i] = leaves[i];
         }
 
-        for (uint256 i = tree.length - 1 - leaves.length; ; --i) {
+        for (uint256 i = tree.length - 1 - leaves.length;; --i) {
             tree[i] = _hashPair(tree[2 * i + 1], tree[2 * i + 2]);
 
             if (i == 0) {
@@ -122,9 +122,6 @@ contract MerkleTree {
     }
 
     function _hashPair(bytes32 a, bytes32 b) private pure returns (bytes32) {
-        return
-            a < b
-                ? keccak256(bytes.concat(a, b))
-                : keccak256(bytes.concat(b, a));
+        return a < b ? keccak256(bytes.concat(a, b)) : keccak256(bytes.concat(b, a));
     }
 }

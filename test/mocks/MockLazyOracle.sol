@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity >=0.8.25;
+pragma solidity 0.8.30;
 
 import {ILazyOracle} from "../../src/interfaces/core/ILazyOracle.sol";
 
@@ -50,11 +50,7 @@ contract MockLazyOracle is ILazyOracle {
     }
 
     function vaultQuarantine(address) external pure returns (QuarantineInfo memory) {
-        return QuarantineInfo({
-            startTimestamp: 0,
-            totalValueBeforeQuarantine: 0,
-            totalValueDuringQuarantine: 0
-        });
+        return QuarantineInfo({startTimestamp: 0, totalValueBeforeQuarantine: 0, totalValueDuringQuarantine: 0});
     }
 
     function vaultsCount() external pure returns (uint256) {

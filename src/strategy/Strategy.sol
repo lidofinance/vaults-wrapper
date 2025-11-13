@@ -46,7 +46,7 @@ abstract contract Strategy is IStrategy {
         address proxy = getStrategyCallForwarderAddress(msg.sender);
 
         IStrategyCallForwarder(proxy)
-            .call(address(STETH), abi.encodeWithSelector(IERC20.transfer.selector, _recipient, _amount));
+            .doCall(address(STETH), abi.encodeWithSelector(IERC20.transfer.selector, _recipient, _amount));
     }
 
     /// @notice Returns the address of the strategy proxy for a given user
@@ -67,7 +67,7 @@ abstract contract Strategy is IStrategy {
         callForwarder = Clones.cloneDeterministic(STRATEGY_CALL_FORWARDER_IMPL, salt);
         IStrategyCallForwarder(callForwarder).initialize(address(this));
         IStrategyCallForwarder(callForwarder)
-            .call(address(STETH), abi.encodeWithSelector(STETH.approve.selector, address(POOL_), type(uint256).max));
+            .doCall(address(STETH), abi.encodeWithSelector(STETH.approve.selector, address(POOL_), type(uint256).max));
         userStrategyCallForwarder[salt] = callForwarder;
     }
 

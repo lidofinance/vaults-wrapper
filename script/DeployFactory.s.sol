@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity >=0.8.25;
+pragma solidity 0.8.30;
 
 import "forge-std/Script.sol";
 
@@ -13,7 +13,7 @@ import {WithdrawalQueueFactory} from "src/factories/WithdrawalQueueFactory.sol";
 import {ILidoLocator} from "src/interfaces/core/ILidoLocator.sol";
 
 contract DeployFactory is Script {
-    function _deployImplFactories(address _ggvTeller, address _ggvBoringQueue, address _steth, address _wsteth)
+    function _deployImplFactories(address _ggvTeller, address _ggvBoringQueue, address _steth)
         internal
         returns (Factory.SubFactories memory f)
     {
@@ -21,7 +21,7 @@ contract DeployFactory is Script {
         f.stvStETHPoolFactory = address(new StvStETHPoolFactory());
         f.withdrawalQueueFactory = address(new WithdrawalQueueFactory());
         f.distributorFactory = address(new DistributorFactory());
-        f.ggvStrategyFactory = address(new GGVStrategyFactory(_ggvTeller, _ggvBoringQueue, _steth, _wsteth));
+        f.ggvStrategyFactory = address(new GGVStrategyFactory(_ggvTeller, _ggvBoringQueue));
         f.timelockFactory = address(new TimelockFactory());
     }
 
@@ -88,12 +88,11 @@ contract DeployFactory is Script {
 
         ILidoLocator locator = ILidoLocator(locatorAddress);
         address steth = address(locator.lido());
-        address wsteth = address(locator.wstETH());
 
         vm.startBroadcast();
 
         // Deploy implementation factories and proxy stub
-        Factory.SubFactories memory subFactories = _deployImplFactories(ggvTeller, ggvBoringQueue, steth, wsteth);
+        Factory.SubFactories memory subFactories = _deployImplFactories(ggvTeller, ggvBoringQueue, steth);
 
         Factory factory = new Factory(locatorAddress, subFactories);
 

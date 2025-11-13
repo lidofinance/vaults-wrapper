@@ -1,12 +1,22 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity >=0.8.25;
+pragma solidity 0.8.30;
 
 import {Test} from "forge-std/Test.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
 import {OssifiableProxy} from "src/proxy/OssifiableProxy.sol";
+import {StvStETHPool} from "src/StvStETHPool.sol";
+import {MockLazyOracle} from "test/mocks/MockLazyOracle.sol";
+import {MockDashboard, MockDashboardFactory} from "test/mocks/MockDashboard.sol";
+import {MockVaultHub} from "test/mocks/MockVaultHub.sol";
+import {MockStETH} from "test/mocks/MockStETH.sol";
 
 contract RebalancingDisabledTest is Test {
-    WithdrawalQueue internal withdrawalQueue;
+    WithdrawalQueue public withdrawalQueue;
+    StvStETHPool public pool;
+    MockLazyOracle public lazyOracle;
+    MockDashboard public dashboard;
+    MockVaultHub public vaultHub;
+    MockStETH public steth;
 
     address internal owner;
     address internal finalizeRoleHolder;
@@ -15,13 +25,19 @@ contract RebalancingDisabledTest is Test {
         owner = makeAddr("owner");
         finalizeRoleHolder = makeAddr("finalizeRoleHolder");
 
+        // Deploy mocks
+        dashboard = new MockDashboardFactory().createMockDashboard(owner);
+        lazyOracle = new MockLazyOracle();
+        steth = dashboard.STETH();
+        vaultHub = dashboard.VAULT_HUB();
+
         WithdrawalQueue impl = new WithdrawalQueue(
-            makeAddr("pool"),
-            makeAddr("dashboard"),
-            makeAddr("vaultHub"),
-            makeAddr("steth"),
-            makeAddr("stakingVault"),
-            makeAddr("lazyOracle"),
+            address(pool),
+            address(dashboard),
+            address(vaultHub),
+            address(steth),
+            address(dashboard.VAULT()),
+            address(lazyOracle),
             1 days,
             false
         );

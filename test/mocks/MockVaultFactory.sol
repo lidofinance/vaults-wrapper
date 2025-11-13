@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity >=0.8.25;
+pragma solidity 0.8.30;
 
 import {IVaultFactory} from "../../src/interfaces/core/IVaultFactory.sol";
 import {MockDashboard} from "./MockDashboard.sol";
@@ -58,7 +58,7 @@ contract MockVaultFactory is IVaultFactory {
         MockDashboard(payable(dashboard)).revokeRole(0x00, address(this));
 
         // Send the connect deposit to the vault to simulate the real factory behavior
-        (bool success, ) = vault.call{value: msg.value}("");
+        (bool success,) = vault.call{value: msg.value}("");
         require(success, "Transfer to vault failed");
 
         return (vault, dashboard);
@@ -66,10 +66,10 @@ contract MockVaultFactory is IVaultFactory {
 
     function createVaultWithDashboardWithoutConnectingToVaultHub(
         address _admin,
-        address /* _nodeOperator */,
-        address /* _nodeOperatorManager */,
-        uint256 /* _nodeOperatorFeeBP */,
-        uint256 /* _confirmExpiry */,
+        address, /* _nodeOperator */
+        address, /* _nodeOperatorManager */
+        uint256, /* _nodeOperatorFeeBP */
+        uint256, /* _confirmExpiry */
         RoleAssignment[] calldata /* _roleAssignments */
     ) external payable returns (address vault, address dashboard) {
         require(msg.value == 0 ether, "invalid value sent");
