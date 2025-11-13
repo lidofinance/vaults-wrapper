@@ -47,7 +47,244 @@ $ anvil
 
 ### Deployment
 
-The Factory orchestrates deployment of the entire pool system (Vault, Dashboard, Wrapper, Withdrawal Queue, and optionally a Strategy) via dedicated implementation factories and proxies.
+The Factory orchestrates deployment of the entire pool system (Vault, Dashboard, Pool, Withdrawal Queue, Distributor, Timelock, and optionally a Strategy) via dedicated implementation factories and proxies.
+
+#### Overview: Three Pool Types
+
+The system supports three pool types, each with different capabilities:
+
+| Pool Type | Minting | Strategy | Allowlist | Reserve Ratio Gap | Use Case |
+|-----------|---------|----------|-----------|-------------------|----------|
+| **StvPool** | ❌ No | ❌ No | Optional | N/A | Basic staking pool |
+| **StvStETHPool** | ✅ Yes | ❌ No | Optional | Required | Advanced pool with stETH minting |
+| **StvStrategyPool** (GGV) | ✅ Yes | ✅ Yes | ✅ Required | Required | Pool with external strategy integration |
+
+#### Two-Phase Deployment Process
+
+All pool deployments use a two-phase approach for security and gas optimization:
+
+1. **Start Phase** (`createPoolStart`): Deploys core components and emits `PoolCreationStarted` with deployment parameters
+2. **Finish Phase** (`createPoolFinish`): Completes initialization, wires roles, and validates deployment integrity
+
+The two-phase design ensures:
+- Configuration parameters are cryptographically committed in the start phase
+- No parameter tampering between start and finish
+- Same sender must complete both phases
+- Completion must occur within `DEPLOY_START_FINISH_SPAN_SECONDS` (1 day)
+
+#### Deployment Using Justfile
+
+##### 1. Deploy Factory
+
+```bash
+# Deploy factory and all implementation factories for given env
+just -E .env.hoodi.local deploy-factory
+```
+
+**Underlying contract calls:**
+```solidity
+// 1. Deploy sub-factories
+StvPoolFactory stvPoolFactory = new StvPoolFactory();
+StvStETHPoolFactory stvStETHPoolFactory = new StvStETHPoolFactory();
+WithdrawalQueueFactory wqFactory = new WithdrawalQueueFactory();
+DistributorFactory distributorFactory = new DistributorFactory();
+GGVStrategyFactory ggvStrategyFactory = new GGVStrategyFactory(teller, boringQueue);
+TimelockFactory timelockFactory = new TimelockFactory();
+
+// 2. Deploy main Factory
+Factory factory = new Factory(
+    locatorAddress,
+    Factory.SubFactories({
+        stvPoolFactory: address(stvPoolFactory),
+        stvStETHPoolFactory: address(stvStETHPoolFactory),
+        withdrawalQueueFactory: address(wqFactory),
+        distributorFactory: address(distributorFactory),
+        ggvStrategyFactory: address(ggvStrategyFactory),
+        timelockFactory: address(timelockFactory)
+    })
+);
+```
+
+**Output:** `deployments/pool-factory-latest.json`
+
+##### 2. Deploy Individual Pools
+
+**Option A: Deploy Single Pool (Two-Phase)**
+
+```bash
+# Phase 1: Start deployment
+just deploy-pool-start $FACTORY_ADDRESS config/hoodi-stv.json
+
+# Phase 2: Finish deployment (using intermediate JSON from phase 1)
+just deploy-pool-finish $FACTORY_ADDRESS deployments/intermediate-<timestamp>.json
+```
+
+**Option B: Deploy All Three Pool Types**
+
+```bash
+# Deploys all three pool types in sequence
+just deploy-all .env.hoodi.local
+```
+
+This executes:
+1. Factory deployment
+2. StvPool deployment (start + finish)
+3. StvStETHPool deployment (start + finish)
+4. StvStrategyPool with GGV strategy (start + finish)
+
+#### Pool Type Configuration Examples
+
+##### Type 1: Basic StvPool (No Minting, No Strategy)
+
+**Config:** `config/hoodi-stv.json`
+```json
+{
+  "auxiliaryPoolConfig": {
+    "allowlistEnabled": false,
+    "mintingEnabled": false,      // ← No minting
+    "reserveRatioGapBP": 0
+  },
+  "strategyFactory": "0x0000000000000000000000000000000000000000"  // ← No strategy
+}
+```
+
+**Deployment calls:**
+```solidity
+// START PHASE
+Factory.PoolIntermediate memory intermediate = factory.createPoolStart{value: 1 ether}(
+    vaultConfig,
+    commonPoolConfig,
+    auxiliaryConfig,     // mintingEnabled: false
+    timelockConfig,
+    address(0),          // strategyFactory: none
+    ""                   // strategyDeployBytes: empty
+);
+
+// FINISH PHASE
+Factory.PoolDeployment memory deployment = factory.createPoolFinish(
+    vaultConfig,
+    commonPoolConfig,
+    auxiliaryConfig,
+    timelockConfig,
+    address(0),
+    "",
+    intermediate
+);
+```
+
+**What gets deployed:**
+1. **Vault + Dashboard** (via `VaultFactory.createVaultWithDashboard`)
+2. **Timelock** (via `TimelockFactory`)
+3. **Pool Proxy** (OssifiableProxy with temp admin)
+4. **Withdrawal Queue** (proxy + implementation)
+5. **Distributor** (for fee distribution)
+6. **StvPool Implementation** (via `StvPoolFactory.deploy`)
+
+**Roles granted:**
+- Dashboard: `FUND_ROLE`, `REBALANCE_ROLE` → Pool; `WITHDRAW_ROLE` → Withdrawal Queue
+- Pool: `DEFAULT_ADMIN_ROLE` → Timelock
+- Withdrawal Queue: `FINALIZE_ROLE` → Node Operator
+- Distributor: `MANAGER_ROLE` → Node Operator Manager
+
+##### Type 2: StvStETHPool (With Minting, No Strategy)
+
+**Config:** `config/hoodi-stv-steth.json`
+```json
+{
+  "auxiliaryPoolConfig": {
+    "allowlistEnabled": false,
+    "mintingEnabled": true,       // ← Minting enabled
+    "reserveRatioGapBP": 250      // ← 2.5% gap on top of vault reserve ratio
+  },
+  "strategyFactory": "0x0000000000000000000000000000000000000000"  // ← No strategy
+}
+```
+
+**Deployment calls:**
+```solidity
+// START PHASE  
+Factory.PoolIntermediate memory intermediate = factory.createPoolStart{value: 1 ether}(
+    vaultConfig,
+    commonPoolConfig,
+    auxiliaryConfig,     // mintingEnabled: true, reserveRatioGapBP: 250
+    timelockConfig,
+    address(0),          // strategyFactory: none
+    ""
+);
+
+// FINISH PHASE
+Factory.PoolDeployment memory deployment = factory.createPoolFinish(
+    vaultConfig,
+    commonPoolConfig,
+    auxiliaryConfig,
+    timelockConfig,
+    address(0),
+    "",
+    intermediate
+);
+```
+
+**What gets deployed:**
+1-5. Same as StvPool
+6. **StvStETHPool Implementation** (via `StvStETHPoolFactory.deploy`)
+
+**Additional roles (vs Type 1):**
+- Dashboard: `MINT_ROLE`, `BURN_ROLE` → Pool (for stETH minting/burning)
+
+**Key difference:** Pool can mint/burn stETH shares for advanced liquidity management
+
+##### Type 3: StvStrategyPool with GGV (With Minting + Strategy)
+
+**Config:** `config/hoodi-stv-ggv.json`
+```json
+{
+  "auxiliaryPoolConfig": {
+    "allowlistEnabled": true,     // ← Allowlist required for strategy
+    "mintingEnabled": true,       // ← Minting required for strategy
+    "reserveRatioGapBP": 250
+  },
+  "strategyFactory": "0x3a2E87c2aC5f34F48a832Ed0205c2630B951e1F6"  // ← GGV strategy factory
+}
+```
+
+**Deployment calls:**
+```solidity
+// START PHASE
+Factory.PoolIntermediate memory intermediate = factory.createPoolStart{value: 1 ether}(
+    vaultConfig,
+    commonPoolConfig,
+    auxiliaryConfig,     // mintingEnabled: true, allowlistEnabled: true
+    timelockConfig,
+    ggvStrategyFactory,  // ← GGV strategy factory address
+    ""                   // strategyDeployBytes (empty for GGV)
+);
+
+// FINISH PHASE  
+Factory.PoolDeployment memory deployment = factory.createPoolFinish(
+    vaultConfig,
+    commonPoolConfig,
+    auxiliaryConfig,
+    timelockConfig,
+    ggvStrategyFactory,
+    "",
+    intermediate
+);
+```
+
+**What gets deployed:**
+1-5. Same as StvStETHPool
+6. **GGV Strategy Implementation** (via `GGVStrategyFactory.deploy`)
+7. **Strategy Proxy** (OssifiableProxy wrapping strategy implementation)
+8. **StvStETHPool Implementation** (via `StvStETHPoolFactory.deploy`)
+
+**Additional setup (vs Type 2):**
+- Strategy proxy initialized with timelock as admin
+- Strategy address added to pool's allowlist
+- Pool can only accept deposits from allowlisted addresses (including the strategy)
+
+**Key difference:** Pool integrates with external GGV strategy for yield optimization
+
+#### Underlying Factory Contract Calls (Detailed)
 
 - Prerequisites (addresses required to deploy `Factory`):
   - **Core (auto-discovered from Locator)**: `IVaultFactory`, `stETH`, `wstETH`, `lazyOracle`
