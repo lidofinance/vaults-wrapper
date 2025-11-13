@@ -13,7 +13,7 @@
   "auxiliaryPoolConfig": {
     "allowlistEnabled": true,
     "mintingEnabled": true,
-    "reserveRatioGapBP": 1000
+    "reserveRatioGapBP": 250
   },
   "timelockConfig": {
     "minDelaySeconds": 60,

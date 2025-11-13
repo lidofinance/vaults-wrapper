@@ -1,14 +1,13 @@
 {
   "deployment": {
-    "factory": "0xc3EfA8DD49404abd747a4e4995ea622E260E07D4",
+    "factory": "0x8F321485403a961741FcF1977483A2543aB0911a",
     "network": "560048"
   },
   "factories": {
-    "ggvStrategyFactory": "0x1FD72F10e96e77962e2D0f4C7d316eAd9e33648E",
-    "loopStrategyFactory": "0x85a1FBcfDDE7A760D65021f6530c5F3bB22C2ae6",
-    "stvPoolFactory": "0x5467d7FeE87A4786da9f6658A4f9815b36e41827",
-    "stvStETHPoolFactory": "0x1444d1ce0637bDc64bDdeD76Dc98f8E3eBfA12a4",
-    "timelockFactory": "0x2BEE5f2107cDC31C132c2CbdCc436254AB2e22D9",
-    "withdrawalQueueFactory": "0x48C84E008FcAe8C807600Ff8C5883A3304fB910A"
+    "ggvStrategyFactory": "0x3a2E87c2aC5f34F48a832Ed0205c2630B951e1F6",
+    "stvPoolFactory": "0xa731123a86E8aaaB7B457A614d490c4BEBf8D166",
+    "stvStETHPoolFactory": "0x3fE7E1B0AD6c328f121b95E181C1995FFf988fdE",
+    "timelockFactory": "0xE3AF9912F5aA5716e63468d1205416fFB0FF86C9",
+    "withdrawalQueueFactory": "0xD6f858fF961F6Ed34B6D499C3522C16A8fb281FA"
   }
 }
