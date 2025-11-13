@@ -207,6 +207,36 @@ contract FactoryIntegrationTest is StvPoolHarness {
         vm.stopPrank();
     }
 
+    function test_createPoolFinish_reverts_with_modified_config() public {
+        (
+            Factory.VaultConfig memory vaultConfig,
+            Factory.CommonPoolConfig memory commonPoolConfig,
+            Factory.AuxiliaryPoolConfig memory auxiliaryConfig,
+            Factory.TimelockConfig memory timelockConfig
+        ) = _buildConfigs(false, false, 0, "Factory Tamper Config", "FTCFG");
+
+        address strategyFactory = address(0);
+
+        vm.startPrank(vaultConfig.nodeOperator);
+        Factory.PoolIntermediate memory intermediate = factory.createPoolStart{value: CONNECT_DEPOSIT}(
+            vaultConfig,
+            commonPoolConfig,
+            auxiliaryConfig,
+            timelockConfig,
+            strategyFactory,
+            ""
+        );
+
+        // Tamper with the configuration before finishing
+        vaultConfig.nodeOperatorFeeBP = 999;
+
+        vm.expectRevert(abi.encodeWithSelector(Factory.InvalidConfiguration.selector, "deploy not started"));
+        factory.createPoolFinish(
+            vaultConfig, commonPoolConfig, auxiliaryConfig, timelockConfig, strategyFactory, "", intermediate
+        );
+        vm.stopPrank();
+    }
+
     function test_createPoolFinish_reverts_with_different_sender() public {
         (
             Factory.VaultConfig memory vaultConfig,
@@ -304,248 +334,186 @@ contract FactoryIntegrationTest is StvPoolHarness {
         assertTrue(found, "PoolIntermediateCreated event should be emitted");
     }
 
-    function test_initial_acl_configuration_without_minting() public {
-        (
-            Factory.VaultConfig memory vaultConfig,
-            Factory.CommonPoolConfig memory commonPoolConfig,
-            Factory.AuxiliaryPoolConfig memory auxiliaryConfig,
-            Factory.TimelockConfig memory timelockConfig
-        ) = _buildConfigs(false, false, 0, "Factory ACL Pool", "FAP");
-        address strategyFactory = address(0);
+    function test_initial_acl_configuration() public {
+        // Test all three pool types: StvPool (no minting), StvStETHPool (minting), and StvStrategyPool (strategy)
+        for (uint256 i = 0; i < 3; i++) {
+            bool allowlistEnabled = (i == 2);
+            bool mintingEnabled = (i >= 1);
+            uint256 reserveRatioGapBP = (i == 2) ? 500 : 0;
+            address strategyFactory = (i == 2) ? address(factory.GGV_STRATEGY_FACTORY()) : address(0);
 
-        (, Factory.PoolDeployment memory deployment) =
-            _deployThroughFactory(vaultConfig, commonPoolConfig, auxiliaryConfig, timelockConfig, strategyFactory);
+            string memory poolName = i == 0 ? "Factory StvPool" : i == 1 ? "Factory StvStETHPool" : "Factory StrategyPool";
+            string memory poolSymbol = i == 0 ? "FSTV" : i == 1 ? "FSTETH" : "FSTRAT";
 
-        IDashboard dashboard = IDashboard(payable(deployment.dashboard));
-        StvPool pool = StvPool(payable(deployment.pool));
-        address timelock = deployment.timelock;
+            (
+                Factory.VaultConfig memory vaultConfig,
+                Factory.CommonPoolConfig memory commonPoolConfig,
+                Factory.AuxiliaryPoolConfig memory auxiliaryConfig,
+                Factory.TimelockConfig memory timelockConfig
+            ) = _buildConfigs(allowlistEnabled, mintingEnabled, reserveRatioGapBP, poolName, poolSymbol);
 
-        // === Dashboard AccessControl Roles ===
-        // Pool should have FUND_ROLE to fund the vault
-        assertTrue(
-            dashboard.hasRole(dashboard.FUND_ROLE(), deployment.pool),
-            "pool should have FUND_ROLE on dashboard"
-        );
+            (, Factory.PoolDeployment memory deployment) =
+                _deployThroughFactory(vaultConfig, commonPoolConfig, auxiliaryConfig, timelockConfig, strategyFactory);
 
-        // Pool should have REBALANCE_ROLE to rebalance the vault
-        assertTrue(
-            dashboard.hasRole(dashboard.REBALANCE_ROLE(), deployment.pool),
-            "pool should have REBALANCE_ROLE on dashboard"
-        );
+            bytes32 poolType = factory.derivePoolType(auxiliaryConfig, strategyFactory);
 
-        // Withdrawal queue should have WITHDRAW_ROLE to withdraw from vault
-        assertTrue(
-            dashboard.hasRole(dashboard.WITHDRAW_ROLE(), deployment.withdrawalQueue),
-            "withdrawal queue should have WITHDRAW_ROLE on dashboard"
-        );
+            IDashboard dashboard = IDashboard(payable(deployment.dashboard));
+            StvPool pool = StvPool(payable(deployment.pool));
+            WithdrawalQueue wq = WithdrawalQueue(payable(deployment.withdrawalQueue));
+            address timelock = deployment.timelock;
+            address deployer = vaultConfig.nodeOperator;
 
-        // Without minting enabled, MINT_ROLE should not be granted
-        assertFalse(
-            dashboard.hasRole(dashboard.MINT_ROLE(), deployment.pool),
-            "pool should not have MINT_ROLE when minting disabled"
-        );
+            // === Verify pool type ===
+            assertEq(deployment.poolType, poolType, "deployment pool type should match derived pool type");
 
-        // Without minting enabled, BURN_ROLE should not be granted
-        assertFalse(
-            dashboard.hasRole(dashboard.BURN_ROLE(), deployment.pool),
-            "pool should not have BURN_ROLE when minting disabled"
-        );
+            if (poolType == factory.STV_POOL_TYPE()) {
+                assertEq(poolType, factory.STV_POOL_TYPE(), "pool type should be STV_POOL_TYPE");
+            } else if (poolType == factory.STV_STETH_POOL_TYPE()) {
+                assertEq(poolType, factory.STV_STETH_POOL_TYPE(), "pool type should be STV_STETH_POOL_TYPE");
+            } else if (poolType == factory.STRATEGY_POOL_TYPE()) {
+                assertEq(poolType, factory.STRATEGY_POOL_TYPE(), "pool type should be STRATEGY_POOL_TYPE");
+            }
 
-        // Timelock should have DEFAULT_ADMIN_ROLE on dashboard (set by VaultFactory)
-        assertTrue(
-            dashboard.hasRole(dashboard.DEFAULT_ADMIN_ROLE(), timelock),
-            "timelock should have DEFAULT_ADMIN_ROLE on dashboard"
-        );
+            // === Dashboard AccessControl Roles ===
+            assertTrue(
+                dashboard.hasRole(dashboard.FUND_ROLE(), deployment.pool),
+                "pool should have FUND_ROLE on dashboard"
+            );
+            assertTrue(
+                dashboard.hasRole(dashboard.REBALANCE_ROLE(), deployment.pool),
+                "pool should have REBALANCE_ROLE on dashboard"
+            );
+            assertTrue(
+                dashboard.hasRole(dashboard.WITHDRAW_ROLE(), deployment.withdrawalQueue),
+                "withdrawal queue should have WITHDRAW_ROLE on dashboard"
+            );
 
-        // === Pool (StvPool) AccessControl Roles ===
-        // Timelock should have DEFAULT_ADMIN_ROLE on pool
-        assertTrue(
-            pool.hasRole(pool.DEFAULT_ADMIN_ROLE(), timelock),
-            "timelock should have DEFAULT_ADMIN_ROLE on pool"
-        );
+            // Check minting roles based on pool type
+            if (mintingEnabled) {
+                assertTrue(
+                    dashboard.hasRole(dashboard.MINT_ROLE(), deployment.pool),
+                    "pool should have MINT_ROLE when minting enabled"
+                );
+                assertTrue(
+                    dashboard.hasRole(dashboard.BURN_ROLE(), deployment.pool),
+                    "pool should have BURN_ROLE when minting enabled"
+                );
+            } else {
+                assertFalse(
+                    dashboard.hasRole(dashboard.MINT_ROLE(), deployment.pool),
+                    "pool should not have MINT_ROLE when minting disabled"
+                );
+                assertFalse(
+                    dashboard.hasRole(dashboard.BURN_ROLE(), deployment.pool),
+                    "pool should not have BURN_ROLE when minting disabled"
+                );
+            }
 
-        // Factory should not retain admin role on pool
-        assertFalse(
-            pool.hasRole(pool.DEFAULT_ADMIN_ROLE(), address(factory)),
-            "factory should not have DEFAULT_ADMIN_ROLE on pool"
-        );
+            assertTrue(
+                dashboard.hasRole(dashboard.DEFAULT_ADMIN_ROLE(), timelock),
+                "timelock should have DEFAULT_ADMIN_ROLE on dashboard"
+            );
 
-        // === Proxy Ownership (OssifiableProxy) ===
-        // Pool proxy should be owned by timelock
-        assertEq(
-            IOssifiableProxy(deployment.pool).proxy__getAdmin(),
-            timelock,
-            "pool proxy should be owned by timelock"
-        );
+            // === Pool (StvPool) AccessControl Roles ===
+            assertTrue(
+                pool.hasRole(pool.DEFAULT_ADMIN_ROLE(), timelock),
+                "timelock should have DEFAULT_ADMIN_ROLE on pool"
+            );
+            assertFalse(
+                pool.hasRole(pool.DEFAULT_ADMIN_ROLE(), address(factory)),
+                "factory should not have DEFAULT_ADMIN_ROLE on pool"
+            );
+            assertFalse(
+                pool.hasRole(pool.DEFAULT_ADMIN_ROLE(), deployer),
+                "deployer should not have DEFAULT_ADMIN_ROLE on pool"
+            );
 
-        // Withdrawal queue proxy should be owned by timelock
-        assertEq(
-            IOssifiableProxy(deployment.withdrawalQueue).proxy__getAdmin(),
-            timelock,
-            "withdrawal queue proxy should be owned by timelock"
-        );
+            // === WithdrawalQueue AccessControl Roles ===
+            assertTrue(
+                wq.hasRole(wq.DEFAULT_ADMIN_ROLE(), timelock),
+                "timelock should have DEFAULT_ADMIN_ROLE on withdrawal queue"
+            );
+            assertTrue(
+                wq.hasRole(wq.FINALIZE_ROLE(), vaultConfig.nodeOperator),
+                "node operator should have FINALIZE_ROLE on withdrawal queue"
+            );
+            assertFalse(
+                wq.hasRole(wq.DEFAULT_ADMIN_ROLE(), address(factory)),
+                "factory should not have DEFAULT_ADMIN_ROLE on withdrawal queue"
+            );
+            assertFalse(
+                wq.hasRole(wq.DEFAULT_ADMIN_ROLE(), deployer),
+                "deployer should not have DEFAULT_ADMIN_ROLE on withdrawal queue"
+            );
 
-        // === Distributor AccessControl Roles ===
-        // Distributor should have timelock as DEFAULT_ADMIN_ROLE
-        assertTrue(
-            pool.DISTRIBUTOR().hasRole(pool.DISTRIBUTOR().DEFAULT_ADMIN_ROLE(), timelock),
-            "timelock should have DEFAULT_ADMIN_ROLE on distributor"
-        );
+            // === Proxy Ownership (OssifiableProxy) ===
+            assertEq(
+                IOssifiableProxy(deployment.pool).proxy__getAdmin(),
+                timelock,
+                "pool proxy should be owned by timelock"
+            );
+            assertNotEq(
+                IOssifiableProxy(deployment.pool).proxy__getAdmin(),
+                address(factory),
+                "pool proxy should not be owned by factory"
+            );
+            assertNotEq(
+                IOssifiableProxy(deployment.pool).proxy__getAdmin(),
+                deployer,
+                "pool proxy should not be owned by deployer"
+            );
 
-        // Node operator manager should have MANAGER_ROLE on distributor
-        assertTrue(
-            pool.DISTRIBUTOR().hasRole(pool.DISTRIBUTOR().MANAGER_ROLE(), vaultConfig.nodeOperatorManager),
-            "node operator manager should have MANAGER_ROLE on distributor"
-        );
+            assertEq(
+                IOssifiableProxy(deployment.withdrawalQueue).proxy__getAdmin(),
+                timelock,
+                "withdrawal queue proxy should be owned by timelock"
+            );
+            assertNotEq(
+                IOssifiableProxy(deployment.withdrawalQueue).proxy__getAdmin(),
+                address(factory),
+                "withdrawal queue proxy should not be owned by factory"
+            );
+            assertNotEq(
+                IOssifiableProxy(deployment.withdrawalQueue).proxy__getAdmin(),
+                deployer,
+                "withdrawal queue proxy should not be owned by deployer"
+            );
 
-        // === Vault Ownership ===
-        // Dashboard should be the owner of the vault (via VaultHub connection)
-        // Note: Vault ownership is managed through VaultHub.vaultConnection(vault).owner
-        assertEq(
-            core.vaultHub().vaultConnection(address(pool.VAULT())).owner,
-            deployment.dashboard,
-            "dashboard should be the owner of the vault via VaultHub connection"
-        );
+            // === Distributor AccessControl Roles ===
+            assertTrue(
+                pool.DISTRIBUTOR().hasRole(pool.DISTRIBUTOR().DEFAULT_ADMIN_ROLE(), timelock),
+                "timelock should have DEFAULT_ADMIN_ROLE on distributor"
+            );
+            assertTrue(
+                pool.DISTRIBUTOR().hasRole(pool.DISTRIBUTOR().MANAGER_ROLE(), vaultConfig.nodeOperatorManager),
+                "node operator manager should have MANAGER_ROLE on distributor"
+            );
+            assertFalse(
+                pool.DISTRIBUTOR().hasRole(pool.DISTRIBUTOR().DEFAULT_ADMIN_ROLE(), address(factory)),
+                "factory should not have DEFAULT_ADMIN_ROLE on distributor"
+            );
+            assertFalse(
+                pool.DISTRIBUTOR().hasRole(pool.DISTRIBUTOR().DEFAULT_ADMIN_ROLE(), deployer),
+                "deployer should not have DEFAULT_ADMIN_ROLE on distributor"
+            );
+
+            // === Vault Ownership ===
+            assertEq(
+                core.vaultHub().vaultConnection(address(pool.VAULT())).owner,
+                deployment.dashboard,
+                "dashboard should be the owner of the vault via VaultHub connection"
+            );
+
+            // === Strategy-specific checks ===
+            if (poolType == factory.STRATEGY_POOL_TYPE()) {
+                assertTrue(deployment.strategy != address(0), "strategy should be deployed");
+                assertTrue(pool.isAllowListed(deployment.strategy), "strategy should be allowlisted on pool");
+                assertTrue(pool.ALLOW_LIST_ENABLED(), "allowlist should be enabled for strategy pools");
+            } else {
+                assertEq(deployment.strategy, address(0), "strategy should not be deployed for non-strategy pools");
+            }
+        }
     }
 
-    function test_initial_acl_configuration_with_minting() public {
-        (
-            Factory.VaultConfig memory vaultConfig,
-            Factory.CommonPoolConfig memory commonPoolConfig,
-            Factory.AuxiliaryPoolConfig memory auxiliaryConfig,
-            Factory.TimelockConfig memory timelockConfig
-        ) = _buildConfigs(false, true, 0, "Factory ACL Mint Pool", "FAMP");
-        address strategyFactory = address(0);
 
-        (, Factory.PoolDeployment memory deployment) =
-            _deployThroughFactory(vaultConfig, commonPoolConfig, auxiliaryConfig, timelockConfig, strategyFactory);
-
-        IDashboard dashboard = IDashboard(payable(deployment.dashboard));
-
-        // === Dashboard Minting Roles ===
-        // With minting enabled, pool should have MINT_ROLE
-        assertTrue(
-            dashboard.hasRole(dashboard.MINT_ROLE(), deployment.pool),
-            "pool should have MINT_ROLE when minting enabled"
-        );
-
-        // With minting enabled, pool should have BURN_ROLE
-        assertTrue(
-            dashboard.hasRole(dashboard.BURN_ROLE(), deployment.pool),
-            "pool should have BURN_ROLE when minting enabled"
-        );
-
-        // Other roles should still be set correctly
-        assertTrue(
-            dashboard.hasRole(dashboard.FUND_ROLE(), deployment.pool),
-            "pool should have FUND_ROLE on dashboard"
-        );
-        assertTrue(
-            dashboard.hasRole(dashboard.REBALANCE_ROLE(), deployment.pool),
-            "pool should have REBALANCE_ROLE on dashboard"
-        );
-        assertTrue(
-            dashboard.hasRole(dashboard.WITHDRAW_ROLE(), deployment.withdrawalQueue),
-            "withdrawal queue should have WITHDRAW_ROLE on dashboard"
-        );
-    }
-
-    function test_initial_acl_configuration_with_strategy() public {
-        (
-            Factory.VaultConfig memory vaultConfig,
-            Factory.CommonPoolConfig memory commonPoolConfig,
-            Factory.AuxiliaryPoolConfig memory auxiliaryConfig,
-            Factory.TimelockConfig memory timelockConfig
-        ) = _buildConfigs(true, true, 500, "Factory ACL Strategy Pool", "FASP");
-        address strategyFactory = address(factory.GGV_STRATEGY_FACTORY());
-
-        (, Factory.PoolDeployment memory deployment) =
-            _deployThroughFactory(vaultConfig, commonPoolConfig, auxiliaryConfig, timelockConfig, strategyFactory);
-
-        IDashboard dashboard = IDashboard(payable(deployment.dashboard));
-        StvPool pool = StvPool(payable(deployment.pool));
-        address timelock = deployment.timelock;
-
-        // === Strategy-specific checks ===
-        // Strategy should be deployed
-        assertTrue(deployment.strategy != address(0), "strategy should be deployed");
-
-        // Strategy should be allowlisted on the pool
-        assertTrue(pool.isAllowListed(deployment.strategy), "strategy should be allowlisted on pool");
-
-        // Allowlist should be enabled
-        assertTrue(pool.ALLOW_LIST_ENABLED(), "allowlist should be enabled for strategy pools");
-
-        // === All standard ACL should still be in place ===
-        assertTrue(
-            dashboard.hasRole(dashboard.FUND_ROLE(), deployment.pool),
-            "pool should have FUND_ROLE on dashboard"
-        );
-        assertTrue(
-            dashboard.hasRole(dashboard.REBALANCE_ROLE(), deployment.pool),
-            "pool should have REBALANCE_ROLE on dashboard"
-        );
-        assertTrue(
-            dashboard.hasRole(dashboard.WITHDRAW_ROLE(), deployment.withdrawalQueue),
-            "withdrawal queue should have WITHDRAW_ROLE on dashboard"
-        );
-        assertTrue(
-            dashboard.hasRole(dashboard.MINT_ROLE(), deployment.pool),
-            "pool should have MINT_ROLE when strategy enabled"
-        );
-        assertTrue(
-            dashboard.hasRole(dashboard.BURN_ROLE(), deployment.pool),
-            "pool should have BURN_ROLE when strategy enabled"
-        );
-        assertTrue(
-            pool.hasRole(pool.DEFAULT_ADMIN_ROLE(), timelock),
-            "timelock should have DEFAULT_ADMIN_ROLE on pool"
-        );
-        assertTrue(
-            dashboard.hasRole(dashboard.DEFAULT_ADMIN_ROLE(), timelock),
-            "timelock should have DEFAULT_ADMIN_ROLE on dashboard"
-        );
-    }
-
-    function test_withdrawal_queue_acl_configuration() public {
-        (
-            Factory.VaultConfig memory vaultConfig,
-            Factory.CommonPoolConfig memory commonPoolConfig,
-            Factory.AuxiliaryPoolConfig memory auxiliaryConfig,
-            Factory.TimelockConfig memory timelockConfig
-        ) = _buildConfigs(false, false, 0, "Factory WQ ACL", "FWQACL");
-        address strategyFactory = address(0);
-
-        (, Factory.PoolDeployment memory deployment) =
-            _deployThroughFactory(vaultConfig, commonPoolConfig, auxiliaryConfig, timelockConfig, strategyFactory);
-
-        WithdrawalQueue wq = WithdrawalQueue(payable(deployment.withdrawalQueue));
-        address timelock = deployment.timelock;
-
-        // === WithdrawalQueue AccessControl Roles ===
-        // Timelock should have DEFAULT_ADMIN_ROLE
-        assertTrue(
-            wq.hasRole(wq.DEFAULT_ADMIN_ROLE(), timelock),
-            "timelock should have DEFAULT_ADMIN_ROLE on withdrawal queue"
-        );
-
-        // Node operator should have FINALIZE_ROLE
-        assertTrue(
-            wq.hasRole(wq.FINALIZE_ROLE(), vaultConfig.nodeOperator),
-            "node operator should have FINALIZE_ROLE on withdrawal queue"
-        );
-
-        // Factory should not retain any roles
-        assertFalse(
-            wq.hasRole(wq.DEFAULT_ADMIN_ROLE(), address(factory)),
-            "factory should not have DEFAULT_ADMIN_ROLE on withdrawal queue"
-        );
-
-        // === WithdrawalQueue Proxy Ownership ===
-        assertEq(
-            IOssifiableProxy(deployment.withdrawalQueue).proxy__getAdmin(),
-            timelock,
-            "withdrawal queue proxy should be owned by timelock"
-        );
-    }
 }

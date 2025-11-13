@@ -31,7 +31,7 @@ deploy-pool-start FACTORY_ADDRESS POOL_PARAMS_JSON:
   FACTORY_ADDRESS={{FACTORY_ADDRESS}} \
   forge script script/DeployPool.s.sol:DeployPool \
     {{common_script_flags}} \
-    --gas-estimate-multiplier 100 \
+    --gas-estimate-multiplier 110 \
     --sig 'run()'
 
 deploy-pool-finish FACTORY_ADDRESS INTERMEDIATE_JSON:
