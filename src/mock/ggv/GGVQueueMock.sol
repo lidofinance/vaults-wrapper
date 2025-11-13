@@ -13,10 +13,11 @@ contract GGVQueueMock is IBoringOnChainQueue {
     using EnumerableSet for EnumerableSet.Bytes32Set;
 
     uint256 internal immutable ONE_SHARE;
-    address public immutable _owner;
     GGVVaultMock public immutable _vault;
     IStETH public immutable steth;
     IWstETH public immutable wsteth;
+
+    address public  _owner;
 
     EnumerableSet.Bytes32Set private _withdrawRequests;
     uint96 public nonce = 1;
@@ -45,6 +46,13 @@ contract GGVQueueMock is IBoringOnChainQueue {
         // allow withdraws for steth by default
         _updateWithdrawAsset(_steth, 0, 0, 0, 500, 100);
         _updateWithdrawAsset(_wsteth, 0, 0, 0, 500, 100);
+    }
+
+    function changeOwner(address newOwner) external {
+        if (msg.sender != _owner) {
+            revert("Sender is not an owner");
+        }
+        _owner = newOwner;
     }
 
     function owner() external view returns (address) {

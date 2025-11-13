@@ -13,7 +13,7 @@ import {WithdrawalQueueFactory} from "src/factories/WithdrawalQueueFactory.sol";
 import {ILidoLocator} from "src/interfaces/core/ILidoLocator.sol";
 
 contract DeployFactory is Script {
-    function _deployImplFactories(address _ggvTeller, address _ggvBoringQueue, address _steth)
+    function _deployImplFactories(address _ggvTeller, address _ggvBoringQueue)
         internal
         returns (Factory.SubFactories memory f)
     {
@@ -49,10 +49,10 @@ contract DeployFactory is Script {
         vm.writeJson(json, "deployments/pool-factory-latest.json");
     }
 
-    function _readGGVStrategyAddresses(string memory _paramsPath)
+    function _readFactoryConfig(string memory _paramsPath)
         internal
         view
-        returns (address teller, address boringQueue)
+        returns (address locator, address teller, address boringQueue)
     {
         require(
             vm.isFile(_paramsPath),
@@ -60,20 +60,19 @@ contract DeployFactory is Script {
         );
         string memory json = vm.readFile(_paramsPath);
 
+        locator = vm.parseJsonAddress(json, "$.lidoLocator");
         teller = vm.parseJsonAddress(json, "$.strategies.ggv.teller");
         boringQueue = vm.parseJsonAddress(json, "$.strategies.ggv.boringOnChainQueue");
 
+        require(locator != address(0), "lidoLocator missing");
         require(teller != address(0), "strategies.ggv.teller missing");
         require(boringQueue != address(0), "strategies.ggv.boringOnChainQueue missing");
     }
 
     function run() external {
-        // Expect environment variables for non-interactive deploys
-        // REQUIRED: CORE_LOCATOR_ADDRESS (address of Lido Locator proxy)
-        // REQUIRED: FACTORY_PARAMS_JSON (path to config with timelock params)
-        string memory locatorAddressStr = vm.envString("CORE_LOCATOR_ADDRESS");
+        // Expect environment variable for non-interactive deploys
+        // REQUIRED: FACTORY_PARAMS_JSON (path to config with factory deployment params)
         string memory paramsJsonPath = vm.envString("FACTORY_PARAMS_JSON");
-        require(bytes(locatorAddressStr).length != 0, "CORE_LOCATOR_ADDRESS env var must be set and non-empty");
         require(bytes(paramsJsonPath).length != 0, "FACTORY_PARAMS_JSON env var must be set and non-empty");
 
         string memory outputJsonPath = string(
@@ -82,17 +81,13 @@ contract DeployFactory is Script {
             )
         );
 
-        address locatorAddress = vm.parseAddress(locatorAddressStr);
-
-        (address ggvTeller, address ggvBoringQueue) = _readGGVStrategyAddresses(paramsJsonPath);
-
-        ILidoLocator locator = ILidoLocator(locatorAddress);
-        address steth = address(locator.lido());
+        // Read all factory configuration from JSON file
+        (address locatorAddress, address ggvTeller, address ggvBoringQueue) = _readFactoryConfig(paramsJsonPath);
 
         vm.startBroadcast();
 
         // Deploy implementation factories and proxy stub
-        Factory.SubFactories memory subFactories = _deployImplFactories(ggvTeller, ggvBoringQueue, steth);
+        Factory.SubFactories memory subFactories = _deployImplFactories(ggvTeller, ggvBoringQueue);
 
         Factory factory = new Factory(locatorAddress, subFactories);
 

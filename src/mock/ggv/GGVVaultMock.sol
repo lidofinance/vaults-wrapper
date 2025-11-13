@@ -11,7 +11,8 @@ import {IWstETH} from "src/interfaces/core/IWstETH.sol";
 import {ITellerWithMultiAssetSupport} from "src/interfaces/ggv/ITellerWithMultiAssetSupport.sol";
 
 contract GGVVaultMock is ERC20 {
-    address public immutable owner;
+    address public owner;
+
     ITellerWithMultiAssetSupport public immutable TELLER;
     GGVQueueMock public immutable BORING_QUEUE;
     IStETH public immutable steth;
@@ -35,6 +36,13 @@ contract GGVVaultMock is ERC20 {
         // Mint some initial tokens to the dead address to avoid zero totalSupply issues
         _mint(address(0xdead), 1e18);
         _totalAssets = 1e18;
+    }
+
+    function changeOwner(address newOwner) external {
+        if (msg.sender != owner) {
+            revert("Sender is not an owner");
+        }
+        owner = newOwner;
     }
 
     function _onlyOwner() internal view {

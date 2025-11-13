@@ -70,6 +70,7 @@ deploy-all env_file:
 deploy-ggv-mocks:
   STETH={{env('STETH')}} \
   WSTETH={{env('WSTETH')}} \
+  GGV_OWNER={{env('GGV_OWNER')}} \
   forge script script/DeployGGVMocks.s.sol:DeployGGVMocks \
     {{common_script_flags}} \
     --gas-limit {{fusaka_tx_gas_limit}} \
