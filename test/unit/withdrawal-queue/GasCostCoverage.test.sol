@@ -3,7 +3,6 @@ pragma solidity >=0.8.25;
 
 import {SetupWithdrawalQueue} from "./SetupWithdrawalQueue.sol";
 import {Test} from "forge-std/Test.sol";
-import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
 
 contract GasCostCoverageTest is Test, SetupWithdrawalQueue {
     function setUp() public override {

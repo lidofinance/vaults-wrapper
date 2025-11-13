@@ -2,7 +2,6 @@
 pragma solidity >=0.8.25;
 
 import {SetupStvStETHPool} from "./SetupStvStETHPool.sol";
-import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {Test} from "forge-std/Test.sol";
 
 contract MintingCapacityTest is Test, SetupStvStETHPool {

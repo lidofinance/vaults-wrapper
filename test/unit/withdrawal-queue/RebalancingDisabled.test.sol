@@ -2,12 +2,8 @@
 pragma solidity >=0.8.25;
 
 import {Test} from "forge-std/Test.sol";
-import {StvStETHPool} from "src/StvStETHPool.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
 import {OssifiableProxy} from "src/proxy/OssifiableProxy.sol";
-import {MockDashboard, MockDashboardFactory} from "test/mocks/MockDashboard.sol";
-import {MockLazyOracle} from "test/mocks/MockLazyOracle.sol";
-import {MockStETH} from "test/mocks/MockStETH.sol";
 
 contract RebalancingDisabledTest is Test {
     WithdrawalQueue internal withdrawalQueue;

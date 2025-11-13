@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >=0.8.25;
 
-import {Distributor} from "./Distributor.sol";
 import {StvPool} from "./StvPool.sol";
 import {WithdrawalQueue} from "./WithdrawalQueue.sol";
 import {DistributorFactory} from "./factories/DistributorFactory.sol";

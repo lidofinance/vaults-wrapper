@@ -8,7 +8,6 @@ import {StvPool} from "src/StvPool.sol";
 import {StvStETHPool} from "src/StvStETHPool.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
 import {IOssifiableProxy} from "src/interfaces/core/IOssifiableProxy.sol";
-import {IStETH} from "src/interfaces/core/IStETH.sol";
 import {OssifiableProxy} from "src/proxy/OssifiableProxy.sol";
 
 contract DeployPool is Script {

@@ -9,8 +9,6 @@ import {IStETH} from "src/interfaces/core/IStETH.sol";
 import {IWstETH} from "src/interfaces/core/IWstETH.sol";
 import {IBoringOnChainQueue} from "src/interfaces/ggv/IBoringOnChainQueue.sol";
 
-import {console} from "forge-std/console.sol";
-
 contract GGVQueueMock is IBoringOnChainQueue {
     using EnumerableSet for EnumerableSet.Bytes32Set;
 
