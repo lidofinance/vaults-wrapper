@@ -184,14 +184,11 @@ contract GGVTest is StvStrategyPoolHarness {
 
         //         3. Request withdrawal (full amount, based on appreciated value)
         uint256 totalGgvShares = boringVault.balanceOf(user1StrategyCallForwarder);
-        assertLe(totalGgvShares, type(uint128).max, "totalGgvShares exceeds uint128 max");
-        assertLe(ggvDiscount, type(uint16).max, "ggvDiscount exceeds uint16 max");
         uint256 withdrawalWstethAmount =
             boringOnChainQueue.previewAssetsOut(address(wsteth), totalGgvShares.toUint128(), ggvDiscount.toUint16());
 
         console.log("\n[SCENARIO] Requesting withdrawal based on new appreciated assets:", withdrawalWstethAmount);
 
-        assertLe(ggvDiscount, type(uint16).max, "ggvDiscount exceeds uint16 max");
         GGVStrategy.GGVParamsRequestExit memory params =
             GGVStrategy.GGVParamsRequestExit({discount: ggvDiscount.toUint16(), secondsToDeadline: type(uint24).max});
 
