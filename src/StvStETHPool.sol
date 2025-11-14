@@ -27,6 +27,7 @@ contract StvStETHPool is StvPool {
     error InsufficientStv();
     error ZeroArgument();
     error ArraysLengthMismatch(uint256 firstArrayLength, uint256 secondArrayLength);
+    error CannotRebalanceWithdrawalQueue();
     error UndercollateralizedAccount();
     error CollateralizedAccount();
     error ExcessiveLossSocialization();
@@ -559,6 +560,7 @@ contract StvStETHPool is StvPool {
         _checkFreshReport();
 
         (uint256 stethShares, uint256 stv, bool isUndercollateralized) = previewForceRebalance(_account);
+        if (_account == address(WITHDRAWAL_QUEUE)) revert CannotRebalanceWithdrawalQueue();
         if (isUndercollateralized) revert UndercollateralizedAccount();
 
         stvBurned = _rebalanceMintedStethShares(_account, stethShares, stv);
@@ -575,6 +577,7 @@ contract StvStETHPool is StvPool {
         _checkFreshReport();
 
         (uint256 stethShares, uint256 stv, bool isUndercollateralized) = previewForceRebalance(_account);
+        if (_account == address(WITHDRAWAL_QUEUE)) revert CannotRebalanceWithdrawalQueue();
         if (!isUndercollateralized) revert CollateralizedAccount();
 
         stvBurned = _rebalanceMintedStethShares(_account, stethShares, stv);
