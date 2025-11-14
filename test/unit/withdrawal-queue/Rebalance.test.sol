@@ -6,7 +6,7 @@ import {Test} from "forge-std/Test.sol";
 import {StvStETHPool} from "src/StvStETHPool.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
 
-contract FinalizationTest is Test, SetupWithdrawalQueue {
+contract RebalanceTest is Test, SetupWithdrawalQueue {
     function setUp() public override {
         super.setUp();
         pool.depositETH{value: 100_000 ether}(address(this), address(0));
