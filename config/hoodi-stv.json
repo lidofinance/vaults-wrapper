@@ -8,7 +8,8 @@
   "commonPoolConfig": {
     "minWithdrawalDelayTime": 3600,
     "name": "Staked ETH Pool",
-    "symbol": "STV"
+    "symbol": "STV",
+    "emergencyCommittee": "0xcc95b0Dbe1519AfaC58d954444839A80700380a2"
   },
   "auxiliaryPoolConfig": {
     "allowlistEnabled": false,

@@ -32,18 +32,18 @@ contract InitializationTest is Test {
 
     function test_Initialize_RevertOnImplementation() public {
         vm.expectRevert(Initializable.InvalidInitialization.selector);
-        withdrawalQueueImpl.initialize(address(0), finalizeRoleHolder);
+        withdrawalQueueImpl.initialize(address(0), finalizeRoleHolder, address(0), address(0));
     }
 
     function test_Initialize_RevertWhenAdminZero() public {
         vm.expectRevert(WithdrawalQueue.ZeroAddress.selector);
-        withdrawalQueueProxy.initialize(address(0), finalizeRoleHolder);
+        withdrawalQueueProxy.initialize(address(0), finalizeRoleHolder, address(0), address(0));
     }
 
     function test_Initialize_RevertWhenCalledTwice() public {
-        withdrawalQueueProxy.initialize(owner, finalizeRoleHolder);
+        withdrawalQueueProxy.initialize(owner, finalizeRoleHolder, owner, owner);
 
         vm.expectRevert(Initializable.InvalidInitialization.selector);
-        withdrawalQueueProxy.initialize(owner, finalizeRoleHolder);
+        withdrawalQueueProxy.initialize(owner, finalizeRoleHolder, owner, owner);
     }
 }

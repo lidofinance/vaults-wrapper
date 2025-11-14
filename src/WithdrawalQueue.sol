@@ -229,15 +229,23 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, FeaturePausable 
      * @notice Initialize the contract storage explicitly
      * @param _admin Admin address that can change every role
      * @param _finalizer Address that will be granted FINALIZE_ROLE
+     * @param _withdrawalsPauser Address that will be granted WITHDRAWALS_PAUSE_ROLE (zero address for none)
+     * @param _finalizePauser Address that will be granted FINALIZE_PAUSE_ROLE (zero address for none)
      * @dev Reverts if `_admin` equals to `address(0)`
      */
-    function initialize(address _admin, address _finalizer) external initializer {
+    function initialize(address _admin, address _finalizer, address _withdrawalsPauser, address _finalizePauser) external initializer {
         if (_admin == address(0)) revert ZeroAddress();
 
         __AccessControlEnumerable_init();
 
         _grantRole(DEFAULT_ADMIN_ROLE, _admin);
         _grantRole(FINALIZE_ROLE, _finalizer);
+        if (_withdrawalsPauser != address(0)) {
+            _grantRole(WITHDRAWALS_PAUSE_ROLE, _withdrawalsPauser);
+        }
+        if (_finalizePauser != address(0)) {
+            _grantRole(FINALIZE_PAUSE_ROLE, _finalizePauser);
+        }
 
         _getWithdrawalQueueStorage().requests[0] = WithdrawalRequest({
             cumulativeStv: 0,

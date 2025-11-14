@@ -32,7 +32,8 @@ contract DeployPool is Script {
         p.commonPoolConfig = Factory.CommonPoolConfig({
             minWithdrawalDelayTime: vm.parseJsonUint(json, "$.commonPoolConfig.minWithdrawalDelayTime"),
             name: vm.parseJsonString(json, "$.commonPoolConfig.name"),
-            symbol: vm.parseJsonString(json, "$.commonPoolConfig.symbol")
+            symbol: vm.parseJsonString(json, "$.commonPoolConfig.symbol"),
+            emergencyCommittee: vm.parseJsonAddress(json, "$.commonPoolConfig.emergencyCommittee")
         });
 
         p.auxiliaryPoolConfig = Factory.AuxiliaryPoolConfig({
@@ -75,6 +76,7 @@ contract DeployPool is Script {
         json = vm.serializeUint("_commonPoolConfig", "minWithdrawalDelayTime", _cfg.minWithdrawalDelayTime);
         json = vm.serializeString("_commonPoolConfig", "name", _cfg.name);
         json = vm.serializeString("_commonPoolConfig", "symbol", _cfg.symbol);
+        json = vm.serializeAddress("_commonPoolConfig", "emergencyCommittee", _cfg.emergencyCommittee);
     }
 
     function _serializeAuxiliaryPoolConfig(Factory.AuxiliaryPoolConfig memory _cfg)
@@ -130,6 +132,7 @@ contract DeployPool is Script {
         Factory _factory,
         Factory.PoolIntermediate memory _intermediate,
         Factory.VaultConfig memory _vaultConfig,
+        Factory.CommonPoolConfig memory _commonPoolConfig,
         Factory.AuxiliaryPoolConfig memory _auxiliaryConfig,
         bytes32 _poolType
     ) internal returns (string memory json) {
@@ -165,7 +168,7 @@ contract DeployPool is Script {
 
         address withdrawalImpl = IOssifiableProxy(withdrawalQueue).proxy__getImplementation();
         bytes memory withdrawalInitData =
-            abi.encodeCall(WithdrawalQueue.initialize, (_vaultConfig.nodeOperatorManager, _vaultConfig.nodeOperator));
+            abi.encodeCall(WithdrawalQueue.initialize, (_vaultConfig.nodeOperatorManager, _vaultConfig.nodeOperator, _commonPoolConfig.emergencyCommittee, _commonPoolConfig.emergencyCommittee));
         bytes memory withdrawalCtorBytecode = abi.encodePacked(
             type(OssifiableProxy).creationCode, abi.encode(withdrawalImpl, _intermediate.timelock, withdrawalInitData)
         );
@@ -197,7 +200,8 @@ contract DeployPool is Script {
             commonPoolConfig: Factory.CommonPoolConfig({
                 minWithdrawalDelayTime: vm.parseJsonUint(json, "$.config.commonPoolConfig.minWithdrawalDelayTime"),
                 name: vm.parseJsonString(json, "$.config.commonPoolConfig.name"),
-                symbol: vm.parseJsonString(json, "$.config.commonPoolConfig.symbol")
+                symbol: vm.parseJsonString(json, "$.config.commonPoolConfig.symbol"),
+                emergencyCommittee: vm.parseJsonAddress(json, "$.config.commonPoolConfig.emergencyCommittee")
             }),
             auxiliaryPoolConfig: Factory.AuxiliaryPoolConfig({
                 allowlistEnabled: vm.parseJsonBool(json, "$.config.auxiliaryPoolConfig.allowlistEnabled"),
@@ -256,7 +260,7 @@ contract DeployPool is Script {
         vm.startBroadcast();
 
         Factory.PoolIntermediate memory intermediate = _factory.createPoolStart{value: p.connectDepositWei}(
-            p.vaultConfig, p.commonPoolConfig, p.auxiliaryPoolConfig, p.timelockConfig, p.strategyFactory, ""
+            p.vaultConfig, p.timelockConfig, p.commonPoolConfig, p.auxiliaryPoolConfig, p.strategyFactory, ""
         );
 
         vm.stopBroadcast();
@@ -291,9 +295,9 @@ contract DeployPool is Script {
 
         _factory.createPoolFinish(
             p.vaultConfig,
+            p.timelockConfig,
             p.commonPoolConfig,
             p.auxiliaryPoolConfig,
-            p.timelockConfig,
             p.strategyFactory,
             "",
             intermediate
@@ -329,7 +333,7 @@ contract DeployPool is Script {
         // string memory configJson = _serializeConfig(p);
         // string memory intermediateJson = _serializeIntermediate(intermediate);
         // string memory deploymentJson = _serializeDeployment(deployment);
-        // string memory ctorJson = _serializeCtorBytecode(_factory, intermediate, p.vaultConfig, p.auxiliaryPoolConfig, poolType);
+        // string memory ctorJson = _serializeCtorBytecode(_factory, intermediate, p.vaultConfig, p.commonPoolConfig, p.auxiliaryPoolConfig, poolType);
 
         // string memory rootJson = vm.serializeString("_deploy", "config", configJson);
         // rootJson = vm.serializeString("_deploy", "intermediate", intermediateJson);

@@ -82,7 +82,7 @@ abstract contract SetupWithdrawalQueue is Test {
         withdrawalQueue = WithdrawalQueue(payable(wqProxy));
 
         // Initialize WithdrawalQueue
-        withdrawalQueue.initialize(owner, finalizeRoleHolder);
+        withdrawalQueue.initialize(owner, finalizeRoleHolder, owner, owner);
 
         // Grant additional roles
         vm.startPrank(owner);

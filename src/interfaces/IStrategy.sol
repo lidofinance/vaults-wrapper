@@ -8,11 +8,14 @@ interface IStrategy {
     event StrategyExitRequested(address indexed user, bytes32 requestId, uint256 wsteth, bytes data);
     event StrategyExitFinalized(address indexed user, bytes32 requestId, uint256 wsteth);
 
+    function SUPPLY_PAUSE_ROLE() external pure returns (bytes32);
+
     /**
      * @notice Initializes the strategy
      * @param _admin The admin address
+     * @param _supplyPauser The supply pauser address (zero for none)
      */
-    function initialize(address _admin) external;
+    function initialize(address _admin, address _supplyPauser) external;
 
     /**
      * @notice Returns the address of the pool

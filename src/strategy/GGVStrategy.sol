@@ -77,14 +77,18 @@ contract GGVStrategy is IStrategy, AccessControlEnumerableUpgradeable, FeaturePa
     /**
      * @notice Initialize the contract storage explicitly
      * @param _admin Admin address that can change every role
+     * @param _supplyPauser Address that can pause supply (zero for none)
      * @dev Reverts if `_admin` equals to `address(0)`
      */
-    function initialize(address _admin) external initializer {
+    function initialize(address _admin, address _supplyPauser) external initializer {
         if (_admin == address(0)) revert ZeroArgument("_admin");
 
         __AccessControlEnumerable_init();
 
         _grantRole(DEFAULT_ADMIN_ROLE, _admin);
+        if (address(0) != _supplyPauser) {
+            _grantRole(SUPPLY_PAUSE_ROLE, _supplyPauser);
+        }
     }
 
     /**
