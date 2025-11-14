@@ -19,6 +19,11 @@ contract OssifiableProxy is ERC1967Proxy {
     /// @dev Validates that proxy is not ossified and that method is called by the admin
     ///     of the proxy
     modifier onlyAdmin() {
+        _onlyAdmin();
+        _;
+    }
+
+    function _onlyAdmin() internal view {
         address admin = ERC1967Utils.getAdmin();
         if (admin == address(0)) {
             revert ProxyIsOssified();
@@ -26,7 +31,6 @@ contract OssifiableProxy is ERC1967Proxy {
         if (admin != msg.sender) {
             revert NotAdmin();
         }
-        _;
     }
 
     /// @dev Initializes the upgradeable proxy with the initial implementation and admin

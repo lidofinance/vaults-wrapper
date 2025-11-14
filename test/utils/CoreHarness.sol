@@ -4,6 +4,7 @@ pragma solidity 0.8.30;
 import {Test, console} from "forge-std/Test.sol";
 
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 
 import {IWstETH} from "../../src/interfaces/core/IWstETH.sol";
 import {IDashboard} from "src/interfaces/core/IDashboard.sol";
@@ -45,6 +46,9 @@ interface IVaultHub is IVaultHubIntact {
 }
 
 contract CoreHarness is Test {
+    using SafeCast for uint256;
+    using SafeCast for int256;
+
     ILidoLocator public locator;
     IDashboard public dashboard;
     ILido public steth;
@@ -255,12 +259,11 @@ contract CoreHarness is Test {
         uint256 a = Math.mulDiv(totalSupply, 1 ether, _shareRatioE18, Math.Rounding.Floor);
         assertLe(a, type(uint128).max, "a exceeds uint128 max");
         assertLe(totalShares, type(uint128).max, "totalShares exceeds uint128 max");
-        int128 sharesDiff = int128(uint128(a)) - int128(uint128(totalShares));
+        int256 sharesDiff = a.toInt256() - totalShares.toInt256();
 
         if (sharesDiff > 0) {
-            assertLe(uint128(sharesDiff), type(uint128).max, "sharesDiff exceeds uint128 max");
             vm.prank(locator.accounting());
-            steth.mintShares(address(this), uint256(uint128(sharesDiff)));
+            steth.mintShares(address(this), sharesDiff.toUint256());
         } else if (sharesDiff < 0) {
             // On pre-deployed cores we may lack permission/balance to burn; skip decreasing in that case
         }

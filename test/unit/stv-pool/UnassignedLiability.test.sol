@@ -52,6 +52,8 @@ contract UnassignedLiabilityTest is Test, SetupStvPool {
 
         vm.prank(userAlice);
         vm.expectRevert(StvPool.UnassignedLiabilityOnVault.selector);
+        /// No return since it reverts
+        /// forge-lint: disable-next-line(erc20-unchecked-transfer)
         pool.transfer(userBob, 1);
     }
 

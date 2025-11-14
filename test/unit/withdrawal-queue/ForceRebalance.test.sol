@@ -2,10 +2,13 @@
 pragma solidity >=0.8.25;
 
 import {SetupWithdrawalQueue} from "./SetupWithdrawalQueue.sol";
+import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import {Test} from "forge-std/Test.sol";
 import {StvStETHPool} from "src/StvStETHPool.sol";
 
 contract ForceRebalanceTest is Test, SetupWithdrawalQueue {
+    using SafeCast for uint256;
+
     address socializer;
 
     function setUp() public override {
@@ -28,7 +31,7 @@ contract ForceRebalanceTest is Test, SetupWithdrawalQueue {
     }
 
     function _simulateLoss(uint256 _loss) internal {
-        dashboard.mock_simulateRewards(-int256(_loss));
+        dashboard.mock_simulateRewards(-_loss.toInt256());
     }
 
     function _calcLossToBreachThreshold(address _account) internal view returns (uint256 lossToBreachThreshold) {

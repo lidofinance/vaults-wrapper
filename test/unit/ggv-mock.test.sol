@@ -3,6 +3,7 @@ pragma solidity 0.8.30;
 
 import {Test} from "forge-std/Test.sol";
 
+import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import {GGVMockTeller} from "src/mock/ggv/GGVMockTeller.sol";
 import {GGVQueueMock} from "src/mock/ggv/GGVQueueMock.sol";
 import {GGVVaultMock} from "src/mock/ggv/GGVVaultMock.sol";
@@ -10,6 +11,8 @@ import {MockStETH} from "test/mocks/MockStETH.sol";
 import {MockWstETH} from "test/mocks/MockWstETH.sol";
 
 contract GGVMockTest is Test {
+    using SafeCast for uint256;
+
     GGVVaultMock public vault;
     GGVMockTeller public teller;
     GGVQueueMock public queue;
@@ -73,14 +76,12 @@ contract GGVMockTest is Test {
 
         // withdraw from ggv
         GGVQueueMock.WithdrawAsset memory wa = queue.withdrawAssets(address(steth));
-        assertLe(userGgvShares, type(uint128).max, "userGgvShares exceeds uint128 max");
         uint256 previewAmountAssetsStethShares =
-            queue.previewAssetsOut(address(steth), uint128(userGgvShares), wa.minDiscount);
+            queue.previewAssetsOut(address(steth), userGgvShares.toUint128(), wa.minDiscount);
 
         vault.approve(address(queue), userGgvShares);
-        assertLe(userGgvShares, type(uint128).max, "userGgvShares exceeds uint128 max");
         bytes32 requestId =
-            queue.requestOnChainWithdraw(address(steth), uint128(userGgvShares), wa.minDiscount, type(uint24).max);
+            queue.requestOnChainWithdraw(address(steth), userGgvShares.toUint128(), wa.minDiscount, type(uint24).max);
         GGVQueueMock.OnChainWithdraw memory req = queue.mockGetRequestById(requestId);
 
         GGVQueueMock.OnChainWithdraw[] memory requests = new GGVQueueMock.OnChainWithdraw[](1);

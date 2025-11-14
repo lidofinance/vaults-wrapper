@@ -337,7 +337,8 @@ contract StvStETHPool is StvPool {
         uint256 unwrappedStethShares = _getSharesByPooledEth(unwrappedSteth);
         _decreaseMintedStethShares(msg.sender, unwrappedStethShares);
 
-        WSTETH.transferFrom(msg.sender, address(this), _wsteth);
+        // Transfer on WSTETH contract always return true or revert
+        assert(WSTETH.transferFrom(msg.sender, address(this), _wsteth));
         DASHBOARD.burnWstETH(_wsteth);
     }
 

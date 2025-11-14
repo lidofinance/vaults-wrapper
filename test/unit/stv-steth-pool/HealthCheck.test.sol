@@ -2,9 +2,12 @@
 pragma solidity 0.8.30;
 
 import {SetupStvStETHPool} from "./SetupStvStETHPool.sol";
+import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import {Test} from "forge-std/Test.sol";
 
 contract HealthCheckTest is Test, SetupStvStETHPool {
+    using SafeCast for uint256;
+
     uint256 ethToDeposit = 10 ether;
 
     function setUp() public override {
@@ -36,8 +39,7 @@ contract HealthCheckTest is Test, SetupStvStETHPool {
 
         // Simulate loss to breach threshold
         uint256 lossToBreachThreshold = _calcLossToBreachThreshold(address(this));
-        assertLe(lossToBreachThreshold, uint256(type(int256).max), "lossToBreachThreshold exceeds int256 max");
-        dashboard.mock_simulateRewards(-int256(lossToBreachThreshold));
+        dashboard.mock_simulateRewards(-1 * lossToBreachThreshold.toInt256());
 
         assertFalse(pool.isHealthyOf(address(this)));
     }
@@ -49,14 +51,11 @@ contract HealthCheckTest is Test, SetupStvStETHPool {
 
         // Simulate loss to breach threshold
         uint256 lossToBreachThreshold = _calcLossToBreachThreshold(address(this));
-        assertLe(lossToBreachThreshold, uint256(type(int256).max), "lossToBreachThreshold exceeds int256 max");
-        dashboard.mock_simulateRewards(-int256(lossToBreachThreshold));
-
+        dashboard.mock_simulateRewards(-lossToBreachThreshold.toInt256());
         assertFalse(pool.isHealthyOf(address(this)));
 
         // New rewards restore health
-        assertLe(lossToBreachThreshold, uint256(type(int256).max), "lossToBreachThreshold exceeds int256 max");
-        dashboard.mock_simulateRewards(int256(lossToBreachThreshold));
+        dashboard.mock_simulateRewards(lossToBreachThreshold.toInt256());
 
         assertTrue(pool.isHealthyOf(address(this)));
     }
@@ -68,8 +67,7 @@ contract HealthCheckTest is Test, SetupStvStETHPool {
 
         // Simulate loss exactly at threshold (just before breach)
         uint256 lossToBreachThreshold = _calcLossToBreachThreshold(address(this));
-        assertLe(lossToBreachThreshold - 1, uint256(type(int256).max), "lossToBreachThreshold - 1 exceeds int256 max");
-        dashboard.mock_simulateRewards(-int256(lossToBreachThreshold - 1));
+        dashboard.mock_simulateRewards(-(lossToBreachThreshold - 1).toInt256());
 
         assertTrue(pool.isHealthyOf(address(this)));
 

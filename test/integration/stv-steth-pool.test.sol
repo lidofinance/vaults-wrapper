@@ -767,6 +767,8 @@ contract StvStETHPoolTest is StvStETHPoolHarness {
 
         vm.startPrank(USER1);
         vm.expectRevert(StvStETHPool.InsufficientReservedBalance.selector);
+        /// No return since it reverts
+        /// forge-lint: disable-next-line(erc20-unchecked-transfer)
         w.transfer(USER2, user1RemainingStv);
         vm.stopPrank();
 
@@ -820,6 +822,8 @@ contract StvStETHPoolTest is StvStETHPoolHarness {
 
         vm.startPrank(USER1);
         vm.expectRevert(StvStETHPool.InsufficientReservedBalance.selector);
+        /// No return since it reverts
+        /// forge-lint: disable-next-line(erc20-unchecked-transfer)
         w.transfer(USER2, 1);
         vm.stopPrank();
     }
@@ -872,6 +876,8 @@ contract StvStETHPoolTest is StvStETHPoolHarness {
         // Regular transfer fails - insufficient collateral
         vm.startPrank(USER1);
         vm.expectRevert(StvStETHPool.InsufficientReservedBalance.selector);
+        /// No return since it reverts
+        /// forge-lint: disable-next-line(erc20-unchecked-transfer)
         w.transfer(USER2, 1);
         vm.stopPrank();
 
@@ -918,6 +924,8 @@ contract StvStETHPoolTest is StvStETHPoolHarness {
         // Transfer fails
         vm.startPrank(USER1);
         vm.expectRevert(StvStETHPool.InsufficientReservedBalance.selector);
+        /// No return since it reverts
+        /// forge-lint: disable-next-line(erc20-unchecked-transfer)
         w.transfer(USER2, 1 ether);
 
         // Burn enough shares to restore ratio
@@ -949,6 +957,8 @@ contract StvStETHPoolTest is StvStETHPoolHarness {
         // Initially can't transfer - at exact reserve ratio
         vm.startPrank(USER1);
         vm.expectRevert(StvStETHPool.InsufficientReservedBalance.selector);
+        /// No return since it reverts
+        /// forge-lint: disable-next-line(erc20-unchecked-transfer)
         w.transfer(USER2, 1);
         vm.stopPrank();
 

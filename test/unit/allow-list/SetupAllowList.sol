@@ -2,6 +2,7 @@
 pragma solidity 0.8.30;
 
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
+import {ShortString, ShortStrings} from "@openzeppelin/contracts/utils/ShortStrings.sol";
 import {Test} from "forge-std/Test.sol";
 import {StvPool} from "src/StvPool.sol";
 import {MockDashboard, MockDashboardFactory} from "test/mocks/MockDashboard.sol";
@@ -45,10 +46,8 @@ abstract contract SetupAllowList is Test {
             _allowListEnabled: false,
             _withdrawalQueue: address(0),
             _distributor: address(0),
-            _poolType: bytes32("TestPool")
+            _poolType: ShortString.unwrap(ShortStrings.toShortString("TestPool"))
         });
-        address implWithoutAllowListAddr = address(implWithoutAllowList);
-        assertLe(uint160(implWithoutAllowListAddr), type(uint160).max, "implWithoutAllowList address exceeds uint160 max");
         ERC1967Proxy poolProxyWithoutAllowList = new ERC1967Proxy(address(implWithoutAllowList), "");
         poolWithoutAllowList = StvPool(payable(poolProxyWithoutAllowList));
         poolWithoutAllowList.initialize(owner, "Test", "stvETH");
@@ -59,10 +58,8 @@ abstract contract SetupAllowList is Test {
             _allowListEnabled: true,
             _withdrawalQueue: address(0),
             _distributor: address(0),
-            _poolType: bytes32("TestPool")
+            _poolType: ShortString.unwrap(ShortStrings.toShortString("TestPool"))
         });
-        address implWithAllowListAddr = address(implWithAllowList);
-        assertLe(uint160(implWithAllowListAddr), type(uint160).max, "implWithAllowList address exceeds uint160 max");
         ERC1967Proxy poolProxyWithAllowList = new ERC1967Proxy(address(implWithAllowList), "");
         poolWithAllowList = StvPool(payable(poolProxyWithAllowList));
         poolWithAllowList.initialize(owner, "Test", "stvETH");
