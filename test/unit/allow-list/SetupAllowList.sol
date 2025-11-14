@@ -18,7 +18,7 @@ abstract contract SetupAllowList is Test {
     address public userNotAllowListed;
     address public userAny;
 
-    uint256 public constant initialDeposit = 1 ether;
+    uint256 public constant INITIAL_DEPOSIT = 1 ether;
 
     function setUp() public virtual {
         owner = makeAddr("owner");
@@ -37,7 +37,7 @@ abstract contract SetupAllowList is Test {
         steth = dashboard.STETH();
 
         // Fund the dashboard with 1 ETH
-        dashboard.fund{value: initialDeposit}();
+        dashboard.fund{value: INITIAL_DEPOSIT}();
 
         // Deploy pool without allow list
         StvPool implWithoutAllowList = new StvPool({
@@ -47,6 +47,8 @@ abstract contract SetupAllowList is Test {
             _distributor: address(0),
             _poolType: bytes32("TestPool")
         });
+        address implWithoutAllowListAddr = address(implWithoutAllowList);
+        assertLe(uint160(implWithoutAllowListAddr), type(uint160).max, "implWithoutAllowList address exceeds uint160 max");
         ERC1967Proxy poolProxyWithoutAllowList = new ERC1967Proxy(address(implWithoutAllowList), "");
         poolWithoutAllowList = StvPool(payable(poolProxyWithoutAllowList));
         poolWithoutAllowList.initialize(owner, "Test", "stvETH");
@@ -59,6 +61,8 @@ abstract contract SetupAllowList is Test {
             _distributor: address(0),
             _poolType: bytes32("TestPool")
         });
+        address implWithAllowListAddr = address(implWithAllowList);
+        assertLe(uint160(implWithAllowListAddr), type(uint160).max, "implWithAllowList address exceeds uint160 max");
         ERC1967Proxy poolProxyWithAllowList = new ERC1967Proxy(address(implWithAllowList), "");
         poolWithAllowList = StvPool(payable(poolProxyWithAllowList));
         poolWithAllowList.initialize(owner, "Test", "stvETH");

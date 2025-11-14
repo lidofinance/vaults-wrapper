@@ -40,7 +40,7 @@ contract FactoryTest is Test {
     address public nodeOperatorManager = address(0x3);
 
     uint256 public connectDeposit = 1 ether;
-    uint256 internal immutable fusakaTxGasLimit = 16_777_216;
+    uint256 internal immutable FUSAKA_TX_GAS_LIMIT = 16_777_216;
 
     function setUp() public {
         vaultHub = new MockVaultHub();
@@ -244,8 +244,8 @@ contract FactoryTest is Test {
 
         emit log_named_uint("createPoolStart gas", gasUsedStart);
         emit log_named_uint("createPoolFinish gas", gasUsedFinish);
-        assertLt(gasUsedStart, fusakaTxGasLimit, "createPoolStart gas exceeds Fusaka limit");
-        assertLt(gasUsedFinish, fusakaTxGasLimit, "createPoolFinish gas exceeds Fusaka limit");
+        assertLt(gasUsedStart, FUSAKA_TX_GAS_LIMIT, "createPoolStart gas exceeds Fusaka limit");
+        assertLt(gasUsedFinish, FUSAKA_TX_GAS_LIMIT, "createPoolFinish gas exceeds Fusaka limit");
     }
 
     function test_createPoolStartGasConsumptionBelowFusakaLimitForStvSteth() public {
@@ -274,8 +274,8 @@ contract FactoryTest is Test {
 
         emit log_named_uint("createPoolStart stv steth gas", gasUsedStart);
         emit log_named_uint("createPoolFinish stv steth gas", gasUsedFinish);
-        assertLt(gasUsedStart, fusakaTxGasLimit, "createPoolStart stv steth gas exceeds Fusaka limit");
-        assertLt(gasUsedFinish, fusakaTxGasLimit, "createPoolFinish stv steth gas exceeds Fusaka limit");
+        assertLt(gasUsedStart, FUSAKA_TX_GAS_LIMIT, "createPoolStart stv steth gas exceeds Fusaka limit");
+        assertLt(gasUsedFinish, FUSAKA_TX_GAS_LIMIT, "createPoolFinish stv steth gas exceeds Fusaka limit");
     }
 
     function test_createPoolStartGasConsumptionBelowFusakaLimitForStvGgv() public {
@@ -304,8 +304,8 @@ contract FactoryTest is Test {
 
         emit log_named_uint("createPoolStart stv ggv gas", gasUsedStart);
         emit log_named_uint("createPoolFinish stv ggv gas", gasUsedFinish);
-        assertLt(gasUsedStart, fusakaTxGasLimit, "createPoolStart stv ggv gas exceeds Fusaka limit");
-        assertLt(gasUsedFinish, fusakaTxGasLimit, "createPoolFinish stv ggv gas exceeds Fusaka limit");
+        assertLt(gasUsedStart, FUSAKA_TX_GAS_LIMIT, "createPoolStart stv ggv gas exceeds Fusaka limit");
+        assertLt(gasUsedFinish, FUSAKA_TX_GAS_LIMIT, "createPoolFinish stv ggv gas exceeds Fusaka limit");
     }
 
     // ============ Finish Deadline Tests ============

@@ -20,7 +20,7 @@ abstract contract SetupStvPool is Test {
 
     address public withdrawalQueue;
 
-    uint256 public constant initialDeposit = 1 ether;
+    uint256 public constant INITIAL_DEPOSIT = 1 ether;
 
     function setUp() public virtual {
         owner = makeAddr("owner");
@@ -40,7 +40,7 @@ abstract contract SetupStvPool is Test {
         vaultHub = dashboard.VAULT_HUB();
 
         // Fund the dashboard with 1 ETH
-        dashboard.fund{value: initialDeposit}();
+        dashboard.fund{value: INITIAL_DEPOSIT}();
 
         // Deploy the pool
         StvPool poolImpl = new StvPool({
@@ -50,6 +50,8 @@ abstract contract SetupStvPool is Test {
             _distributor: address(0),
             _poolType: bytes32("TestPool")
         });
+        address poolImplAddr = address(poolImpl);
+        assertLe(uint160(poolImplAddr), type(uint160).max, "poolImpl address exceeds uint160 max");
         ERC1967Proxy poolProxy = new ERC1967Proxy(address(poolImpl), "");
 
         pool = StvPool(payable(poolProxy));

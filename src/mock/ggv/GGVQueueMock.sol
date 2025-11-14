@@ -17,7 +17,7 @@ contract GGVQueueMock is IBoringOnChainQueue {
     IStETH public immutable steth;
     IWstETH public immutable wsteth;
 
-    address public  _owner;
+    address public _owner;
 
     EnumerableSet.Bytes32Set private _withdrawRequests;
     uint96 public nonce = 1;
@@ -276,14 +276,14 @@ contract GGVQueueMock is IBoringOnChainQueue {
         uint16 maxDiscount,
         uint96 minimumShares
     ) internal {
-        _withdrawAssets[assetOut] = WithdrawAsset(
-            true,
-            secondsToMaturity,
-            minimumSecondsToDeadline,
-            minDiscount,
-            maxDiscount,
-            minimumShares,
-            type(uint256).max
-        );
+        _withdrawAssets[assetOut] = WithdrawAsset({
+            allowWithdraws: true,
+            secondsToMaturity: secondsToMaturity,
+            minimumSecondsToDeadline: minimumSecondsToDeadline,
+            minDiscount: minDiscount,
+            maxDiscount: maxDiscount,
+            minimumShares: minimumShares,
+            withdrawCapacity: type(uint256).max
+        });
     }
 }

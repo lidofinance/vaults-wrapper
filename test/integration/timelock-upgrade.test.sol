@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity 0.8.30;
 
-import {TimelockController} from "@openzeppelin/contracts/governance/TimelockController.sol";
 import {Test} from "forge-std/Test.sol";
 import {Factory} from "src/Factory.sol";
 import {FactoryHelper} from "test/utils/FactoryHelper.sol";
@@ -257,4 +256,3 @@ contract TimelockUpgradeIntegrationTest is Test {
     //     impl = abi.decode(ret, (address));
     // }
 }
-

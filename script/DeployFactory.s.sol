@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.30;
 
-import "forge-std/Script.sol";
+import {Script} from "forge-std/Script.sol";
+import {console2} from "forge-std/console2.sol";
 
 import {Factory} from "src/Factory.sol";
 import {DistributorFactory} from "src/factories/DistributorFactory.sol";
@@ -10,7 +11,6 @@ import {StvPoolFactory} from "src/factories/StvPoolFactory.sol";
 import {StvStETHPoolFactory} from "src/factories/StvStETHPoolFactory.sol";
 import {TimelockFactory} from "src/factories/TimelockFactory.sol";
 import {WithdrawalQueueFactory} from "src/factories/WithdrawalQueueFactory.sol";
-import {ILidoLocator} from "src/interfaces/core/ILidoLocator.sol";
 
 contract DeployFactory is Script {
     function _deployImplFactories(address _ggvTeller, address _ggvBoringQueue)

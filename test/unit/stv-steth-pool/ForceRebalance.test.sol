@@ -35,6 +35,7 @@ contract ForceRebalanceTest is Test, SetupStvStETHPool {
     }
 
     function _simulateLoss(uint256 _loss) internal {
+        assertLe(_loss, uint256(type(int256).max), "loss exceeds int256 max");
         dashboard.mock_simulateRewards(-int256(_loss));
     }
 

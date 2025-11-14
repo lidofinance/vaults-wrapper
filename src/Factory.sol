@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.30;
 
+import {ShortString, ShortStrings} from "@openzeppelin/contracts/utils/ShortStrings.sol";
+
 import {StvPool} from "./StvPool.sol";
 import {WithdrawalQueue} from "./WithdrawalQueue.sol";
 import {DistributorFactory} from "./factories/DistributorFactory.sol";
@@ -276,9 +278,9 @@ contract Factory {
 
         DUMMY_IMPLEMENTATION = address(new DummyImplementation());
 
-        STV_POOL_TYPE = _toBytes32("StvPool");
-        STV_STETH_POOL_TYPE = _toBytes32("StvStETHPool");
-        STRATEGY_POOL_TYPE = _toBytes32("StvStrategyPool");
+        STV_POOL_TYPE = ShortString.unwrap(ShortStrings.toShortString("StvPool"));
+        STV_STETH_POOL_TYPE = ShortString.unwrap(ShortStrings.toShortString("StvStETHPool"));
+        STRATEGY_POOL_TYPE = ShortString.unwrap(ShortStrings.toShortString("StvStrategyPool"));
     }
 
     /// @notice Initiates deployment of a basic StvPool (first phase)
@@ -608,18 +610,6 @@ contract Factory {
                 abi.encode(_intermediate)
             )
         );
-    }
-
-    /// @notice Encodes a string into bytes32 format for storage efficiency
-    /// @param _str The string to encode (must be 31 bytes or less)
-    /// @return Encoded bytes32 value with length encoded in the least significant byte
-    /// @dev Reverts with StringTooLong if the string length exceeds 31 bytes
-    function _toBytes32(string memory _str) internal pure returns (bytes32) {
-        bytes memory bstr = bytes(_str);
-        if (bstr.length > 31) {
-            revert StringTooLong(_str);
-        }
-        return bytes32(uint256(bytes32(bstr)) | bstr.length);
     }
 
     function derivePoolType(AuxiliaryPoolConfig memory _auxiliaryConfig, address _strategyFactory)
