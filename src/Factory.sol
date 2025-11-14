@@ -18,7 +18,6 @@ import {ILidoLocator} from "./interfaces/core/ILidoLocator.sol";
 import {IVaultHub} from "./interfaces/core/IVaultHub.sol";
 import {DummyImplementation} from "./proxy/DummyImplementation.sol";
 import {OssifiableProxy} from "./proxy/OssifiableProxy.sol";
-import {GGVStrategy} from "./strategy/GGVStrategy.sol";
 
 import {WithdrawalQueue} from "./WithdrawalQueue.sol";
 import {IDashboard} from "./interfaces/core/IDashboard.sol";

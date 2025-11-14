@@ -12,6 +12,7 @@ import {
     AccessControlEnumerableUpgradeable
 } from "@openzeppelin/contracts-upgradeable/access/extensions/AccessControlEnumerableUpgradeable.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 
 /**
@@ -21,6 +22,7 @@ import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet
  * and discount mechanisms
  */
 contract WithdrawalQueue is AccessControlEnumerableUpgradeable, FeaturePausable {
+    using SafeCast for uint256;
     using EnumerableSet for EnumerableSet.UintSet;
 
     /// @notice Min delay between withdrawal request and finalization
@@ -374,7 +376,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, FeaturePausable 
         WithdrawalRequest memory lastRequest = $.requests[lastRequestId];
 
         requestId = lastRequestId + 1;
-        $.lastRequestId = uint96(requestId);
+        $.lastRequestId = requestId.toUint128();
 
         uint256 cumulativeStv = lastRequest.cumulativeStv + _stvToWithdraw;
         uint256 cumulativeStethShares = lastRequest.cumulativeStethShares + _stethSharesToRebalance;
@@ -382,8 +384,8 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, FeaturePausable 
 
         $.requests[requestId] = WithdrawalRequest({
             cumulativeStv: cumulativeStv,
-            cumulativeStethShares: uint128(cumulativeStethShares),
-            cumulativeAssets: uint128(cumulativeAssets),
+            cumulativeStethShares: cumulativeStethShares.toUint128(),
+            cumulativeAssets: cumulativeAssets.toUint128(),
             owner: _owner,
             timestamp: uint40(block.timestamp),
             isClaimed: false
@@ -426,7 +428,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, FeaturePausable 
     function _setFinalizationGasCostCoverage(uint256 _coverage) internal {
         if (_coverage > MAX_GAS_COST_COVERAGE) revert GasCostCoverageTooLarge(_coverage);
 
-        _getWithdrawalQueueStorage().gasCostCoverage = uint64(_coverage);
+        _getWithdrawalQueueStorage().gasCostCoverage = _coverage.toUint64();
         emit GasCostCoverageSet(_coverage);
     }
 
@@ -487,7 +489,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, FeaturePausable 
         Checkpoint memory checkpoint = Checkpoint({
             fromRequestId: firstRequestIdToFinalize,
             stvRate: currentStvRate,
-            stethShareRate: uint128(currentStethShareRate),
+            stethShareRate: currentStethShareRate.toUint128(),
             gasCostCoverage: $.gasCostCoverage
         });
 
@@ -597,12 +599,12 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, FeaturePausable 
         lastFinalizedRequestId = lastFinalizedRequestId + finalizedRequests;
 
         // Store checkpoint with current stvRate, stethShareRate and gasCostCoverage
-        uint256 lastCheckpointIndex = $.lastCheckpointIndex + 1;
+        uint96 lastCheckpointIndex = $.lastCheckpointIndex + 1;
         $.checkpoints[lastCheckpointIndex] = checkpoint;
-        $.lastCheckpointIndex = uint96(lastCheckpointIndex);
+        $.lastCheckpointIndex = lastCheckpointIndex;
 
-        $.lastFinalizedRequestId = uint96(lastFinalizedRequestId);
-        $.totalLockedAssets += uint96(totalEthToClaim);
+        $.lastFinalizedRequestId = lastFinalizedRequestId.toUint128();
+        $.totalLockedAssets += totalEthToClaim.toUint96();
 
         // Send gas coverage to the caller
         if (totalGasCoverage > 0) {
@@ -714,7 +716,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, FeaturePausable 
 
         ethWithDiscount = _calcClaimableEther(request, _requestId, _hint);
         // Because of the rounding issue some dust could be accumulated upon claiming on the contract
-        $.totalLockedAssets -= uint96(ethWithDiscount);
+        $.totalLockedAssets -= ethWithDiscount.toUint96();
 
         (bool success,) = _recipient.call{value: ethWithDiscount}("");
         if (!success) revert CantSendValueRecipientMayHaveReverted();
