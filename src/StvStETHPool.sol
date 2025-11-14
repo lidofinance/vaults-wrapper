@@ -295,7 +295,11 @@ contract StvStETHPool is StvPool {
         view
         returns (uint256 stethShares)
     {
-        uint256 stethSharesForAssets = calcStethSharesToMintForAssets(assetsOf(_account) + _ethToFund);
+        // Simulate depositing ETH to account for rounded down assets after conversion
+        uint256 stvForAssets = _convertToStv(_ethToFund, Math.Rounding.Floor);
+        uint256 ethRoundedDown = _convertToAssets(stvForAssets);
+
+        uint256 stethSharesForAssets = calcStethSharesToMintForAssets(assetsOf(_account) + ethRoundedDown);
         stethShares = Math.saturatingSub(stethSharesForAssets, mintedStethSharesOf(_account));
     }
 

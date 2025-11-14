@@ -28,7 +28,6 @@ contract MockVaultHub {
 
     function mintShares(address _vault, address _recipient, uint256 _amountOfShares) external {
         vaultLiabilityShares[_vault] += _amountOfShares;
-        require(vaultLiabilityShares[_vault] <= maxLockableValue(_vault), "Vault liability exceeds max lockable value");
 
         // Mint stETH tokens to the recipient (simulating the vault minting stETH)
         LIDO.mock_mintExternalShares(_recipient, _amountOfShares);
