@@ -4,7 +4,6 @@ pragma solidity >=0.8.25;
 import {SetupWithdrawalQueue} from "./SetupWithdrawalQueue.sol";
 import {Test} from "forge-std/Test.sol";
 import {StvStETHPool} from "src/StvStETHPool.sol";
-import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
 
 contract ForceRebalanceTest is Test, SetupWithdrawalQueue {
     address socializer;
