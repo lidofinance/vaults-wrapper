@@ -2,7 +2,6 @@
 pragma solidity 0.8.30;
 
 import {SetupStvStETHPool} from "./SetupStvStETHPool.sol";
-import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {Test} from "forge-std/Test.sol";
 
 contract MintingCapacityTest is Test, SetupStvStETHPool {
@@ -93,7 +92,7 @@ contract MintingCapacityTest is Test, SetupStvStETHPool {
         uint256 transferAmount = pool.balanceOf(address(this)) / 2;
         uint256 aliceCapacityBefore = pool.remainingMintingCapacitySharesOf(userAlice, 0);
 
-        pool.transfer(userAlice, transferAmount);
+        assertTrue(pool.transfer(userAlice, transferAmount));
 
         uint256 aliceCapacityAfter = pool.remainingMintingCapacitySharesOf(userAlice, 0);
         assertGt(aliceCapacityAfter, aliceCapacityBefore);

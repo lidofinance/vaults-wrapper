@@ -90,7 +90,7 @@ contract MockDashboard is AccessControlEnumerable {
         VAULT_HUB.mintShares(VAULT, address(this), amount);
         uint256 mintedStETH = STETH.getPooledEthBySharesRoundUp(amount);
         uint256 wrappedWstETH = WSTETH.wrap(mintedStETH);
-        WSTETH.transfer(to, wrappedWstETH);
+        require(WSTETH.transfer(to, wrappedWstETH), "transfer failed");
     }
 
     function burnShares(uint256 amount) external {
@@ -99,7 +99,7 @@ contract MockDashboard is AccessControlEnumerable {
     }
 
     function burnWstETH(uint256 amount) external {
-        WSTETH.transferFrom(msg.sender, address(this), amount);
+        require(WSTETH.transferFrom(msg.sender, address(this), amount), "transferFrom failed");
         uint256 unwrappedStETH = WSTETH.unwrap(amount);
         uint256 unwrappedShares = STETH.getSharesByPooledEth(unwrappedStETH);
 

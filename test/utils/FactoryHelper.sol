@@ -8,7 +8,6 @@ import {StvPoolFactory} from "src/factories/StvPoolFactory.sol";
 import {StvStETHPoolFactory} from "src/factories/StvStETHPoolFactory.sol";
 import {TimelockFactory} from "src/factories/TimelockFactory.sol";
 import {WithdrawalQueueFactory} from "src/factories/WithdrawalQueueFactory.sol";
-import {ILidoLocator} from "src/interfaces/core/ILidoLocator.sol";
 import {DummyImplementation} from "src/proxy/DummyImplementation.sol";
 
 contract FactoryHelper {

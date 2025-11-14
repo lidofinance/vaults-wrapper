@@ -31,7 +31,7 @@ deploy-pool-start FACTORY_ADDRESS POOL_PARAMS_JSON:
   FACTORY_ADDRESS={{FACTORY_ADDRESS}} \
   forge script script/DeployPool.s.sol:DeployPool \
     {{common_script_flags}} \
-    --gas-estimate-multiplier 100 \
+    --gas-estimate-multiplier 110 \
     --sig 'run()'
 
 deploy-pool-finish FACTORY_ADDRESS INTERMEDIATE_JSON:
@@ -70,6 +70,7 @@ deploy-all env_file:
 deploy-ggv-mocks:
   STETH={{env('STETH')}} \
   WSTETH={{env('WSTETH')}} \
+  GGV_OWNER={{env('GGV_OWNER')}} \
   forge script script/DeployGGVMocks.s.sol:DeployGGVMocks \
     {{common_script_flags}} \
     --gas-limit {{fusaka_tx_gas_limit}} \

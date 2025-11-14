@@ -15,7 +15,7 @@ contract GGVMockTeller is ITellerWithMultiAssetSupport {
         uint16 sharePremium;
     }
 
-    address public immutable owner;
+    address public owner;
     GGVVaultMock public immutable _vault;
     uint256 internal immutable ONE_SHARE;
     IStETH public immutable steth;
@@ -36,6 +36,13 @@ contract GGVMockTeller is ITellerWithMultiAssetSupport {
 
         _updateAssetData(ERC20(_steth), true, false, 0);
         _updateAssetData(ERC20(_wsteth), true, true, 0);
+    }
+
+    function changeOwner(address newOwner) external {
+        if (msg.sender != owner) {
+            revert("Sender is not an owner");
+        }
+        owner = newOwner;
     }
 
     function deposit(ERC20 depositAsset, uint256 depositAmount, uint256 minimumMint, address referralAddress)

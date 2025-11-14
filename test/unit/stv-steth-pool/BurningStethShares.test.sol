@@ -137,7 +137,7 @@ contract BurningStethSharesTest is Test, SetupStvStETHPool {
 
     function test_BurnStethShares_RevertOnInsufficientStethBalance() public {
         // Transfer away stETH so user doesn't have enough
-        steth.transfer(userAlice, steth.balanceOf(address(this)));
+        assertTrue(steth.transfer(userAlice, steth.balanceOf(address(this))));
 
         vm.expectRevert(); // Should revert on transferSharesFrom
         pool.burnStethShares(stethSharesToMint);

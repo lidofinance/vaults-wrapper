@@ -28,8 +28,8 @@ abstract contract SetupWithdrawalQueue is Test {
     address public userBob;
 
     uint256 public constant MIN_WITHDRAWAL_DELAY_TIME = 1 days;
-    uint256 public constant initialDeposit = 1 ether;
-    uint256 public constant reserveRatioGapBP = 5_00; // 5%
+    uint256 public constant INITIAL_DEPOSIT = 1 ether;
+    uint256 public constant RESERVE_RATIO_GAP_BP = 5_00; // 5%
 
     uint256 public constant STV_DECIMALS = 27;
     uint256 public constant ASSETS_DECIMALS = 18;
@@ -57,11 +57,11 @@ abstract contract SetupWithdrawalQueue is Test {
         vaultHub = dashboard.VAULT_HUB();
 
         // Fund dashboard
-        dashboard.fund{value: initialDeposit}();
+        dashboard.fund{value: INITIAL_DEPOSIT}();
 
         // Deploy StvStETHPool proxy with temporary implementation
         StvStETHPool tempImpl = new StvStETHPool(
-            address(dashboard), false, reserveRatioGapBP, address(0), address(0), keccak256("test.wq.pool")
+            address(dashboard), false, RESERVE_RATIO_GAP_BP, address(0), address(0), keccak256("test.wq.pool")
         );
         OssifiableProxy poolProxy = new OssifiableProxy(address(tempImpl), owner, "");
         pool = StvStETHPool(payable(poolProxy));
@@ -99,7 +99,7 @@ abstract contract SetupWithdrawalQueue is Test {
         StvStETHPool poolImpl = new StvStETHPool(
             address(dashboard),
             false,
-            reserveRatioGapBP,
+            RESERVE_RATIO_GAP_BP,
             address(withdrawalQueue),
             address(0),
             keccak256("test.wq.pool")

@@ -4,9 +4,13 @@ pragma solidity 0.8.30;
 import {Vm} from "forge-std/Vm.sol";
 import {Factory} from "src/Factory.sol";
 import {StvPool} from "src/StvPool.sol";
-import {IDashboard} from "src/interfaces/core/IDashboard.sol";
-import {FactoryHelper} from "test/utils/FactoryHelper.sol";
+import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
 import {StvPoolHarness} from "test/utils/StvPoolHarness.sol";
+import {FactoryHelper} from "test/utils/FactoryHelper.sol";
+import {Factory} from "src/Factory.sol";
+import {IDashboard} from "src/interfaces/core/IDashboard.sol";
+import {IOssifiableProxy} from "src/interfaces/core/IOssifiableProxy.sol";
+import {Vm} from "forge-std/Vm.sol";
 
 contract FactoryIntegrationTest is StvPoolHarness {
     Factory internal factory;
@@ -62,7 +66,9 @@ contract FactoryIntegrationTest is StvPoolHarness {
         Factory.PoolIntermediate memory intermediate = factory.createPoolStart{value: CONNECT_DEPOSIT}(
             vaultConfig, commonPoolConfig, auxiliaryConfig, timelockConfig, strategyFactory, ""
         );
-        Factory.PoolDeployment memory deployment = factory.createPoolFinish(intermediate);
+        Factory.PoolDeployment memory deployment = factory.createPoolFinish(
+            vaultConfig, commonPoolConfig, auxiliaryConfig, timelockConfig, strategyFactory, "", intermediate
+        );
         vm.stopPrank();
 
         return (intermediate, deployment);
@@ -150,6 +156,18 @@ contract FactoryIntegrationTest is StvPoolHarness {
         StvPool pool = StvPool(payable(deployment.pool));
         assertTrue(pool.ALLOW_LIST_ENABLED(), "allowlist should be enabled");
         assertTrue(pool.isAllowListed(deployment.strategy), "strategy should be allowlisted");
+
+        // Verify strategy is behind a proxy owned by timelock
+        assertEq(
+            IOssifiableProxy(deployment.strategy).proxy__getAdmin(),
+            deployment.timelock,
+            "strategy proxy should be owned by timelock"
+        );
+
+        // Verify the implementation exists
+        address strategyImpl = IOssifiableProxy(deployment.strategy).proxy__getImplementation();
+        assertTrue(strategyImpl != address(0), "strategy implementation should exist");
+        assertGt(strategyImpl.code.length, 0, "strategy implementation should have code");
     }
 
     function test_createPoolFinish_reverts_with_modified_intermediate() public {
@@ -168,10 +186,42 @@ contract FactoryIntegrationTest is StvPoolHarness {
         );
 
         // Tamper with the intermediate before finishing to ensure the deployment hash is checked.
-        intermediate.pool = address(0xdead);
+        intermediate.poolProxy = address(0xdead);
 
         vm.expectRevert(abi.encodeWithSelector(Factory.InvalidConfiguration.selector, "deploy not started"));
-        factory.createPoolFinish(intermediate);
+        factory.createPoolFinish(
+            vaultConfig, commonPoolConfig, auxiliaryConfig, timelockConfig, strategyFactory, "", intermediate
+        );
+        vm.stopPrank();
+    }
+
+    function test_createPoolFinish_reverts_with_modified_config() public {
+        (
+            Factory.VaultConfig memory vaultConfig,
+            Factory.CommonPoolConfig memory commonPoolConfig,
+            Factory.AuxiliaryPoolConfig memory auxiliaryConfig,
+            Factory.TimelockConfig memory timelockConfig
+        ) = _buildConfigs(false, false, 0, "Factory Tamper Config", "FTCFG");
+
+        address strategyFactory = address(0);
+
+        vm.startPrank(vaultConfig.nodeOperator);
+        Factory.PoolIntermediate memory intermediate = factory.createPoolStart{value: CONNECT_DEPOSIT}(
+            vaultConfig,
+            commonPoolConfig,
+            auxiliaryConfig,
+            timelockConfig,
+            strategyFactory,
+            ""
+        );
+
+        // Tamper with the configuration before finishing
+        vaultConfig.nodeOperatorFeeBP = 999;
+
+        vm.expectRevert(abi.encodeWithSelector(Factory.InvalidConfiguration.selector, "deploy not started"));
+        factory.createPoolFinish(
+            vaultConfig, commonPoolConfig, auxiliaryConfig, timelockConfig, strategyFactory, "", intermediate
+        );
         vm.stopPrank();
     }
 
@@ -194,7 +244,9 @@ contract FactoryIntegrationTest is StvPoolHarness {
         address otherSender = address(0xbeef);
         vm.expectRevert(abi.encodeWithSelector(Factory.InvalidConfiguration.selector, "deploy not started"));
         vm.prank(otherSender);
-        factory.createPoolFinish(intermediate);
+        factory.createPoolFinish(
+            vaultConfig, commonPoolConfig, auxiliaryConfig, timelockConfig, strategyFactory, "", intermediate
+        );
     }
 
     function test_createPoolFinish_reverts_when_called_twice() public {
@@ -212,15 +264,19 @@ contract FactoryIntegrationTest is StvPoolHarness {
             vaultConfig, commonPoolConfig, auxiliaryConfig, timelockConfig, strategyFactory, ""
         );
 
-        factory.createPoolFinish(intermediate);
+        factory.createPoolFinish(
+            vaultConfig, commonPoolConfig, auxiliaryConfig, timelockConfig, strategyFactory, "", intermediate
+        );
 
         // The intermediate hash is set to DEPLOY_COMPLETE after the first successful call; the second should fail.
         vm.expectRevert(abi.encodeWithSelector(Factory.InvalidConfiguration.selector, "deploy already finished"));
-        factory.createPoolFinish(intermediate);
+        factory.createPoolFinish(
+            vaultConfig, commonPoolConfig, auxiliaryConfig, timelockConfig, strategyFactory, "", intermediate
+        );
         vm.stopPrank();
     }
 
-    function test_emits_pool_intermediate_created_event() public {
+    function test_emits_pool_creation_started_event() public {
         (
             Factory.VaultConfig memory vaultConfig,
             Factory.CommonPoolConfig memory commonPoolConfig,
@@ -234,24 +290,279 @@ contract FactoryIntegrationTest is StvPoolHarness {
             _deployThroughFactory(vaultConfig, commonPoolConfig, auxiliaryConfig, timelockConfig, strategyFactory);
 
         Vm.Log[] memory entries = vm.getRecordedLogs();
-        bytes32 expectedTopic = keccak256("PoolCreationStarted((address,address,address,bytes),uint256)");
+        bytes32 expectedTopic = keccak256(
+            "PoolCreationStarted(address,(address,address,uint256,uint256),(uint256,string,string),(bool,bool,uint256),(uint256,address,address),address,bytes,(address,address,address,address),uint256)"
+        );
 
         bool found;
         for (uint256 i = 0; i < entries.length; i++) {
             if (entries[i].emitter != address(factory)) continue;
             if (entries[i].topics.length == 0 || entries[i].topics[0] != expectedTopic) continue;
 
-            Factory.PoolIntermediate memory emitted = abi.decode(entries[i].data, (Factory.PoolIntermediate));
-            assertEq(emitted.pool, intermediate.pool, "pool address should match");
-            assertEq(emitted.timelock, intermediate.timelock, "timelock should match");
-            assertEq(emitted.strategyFactory, intermediate.strategyFactory, "strategy factory should match");
-            assertEq(
-                emitted.strategyDeployBytes, intermediate.strategyDeployBytes, "strategy deploy bytes should match"
+            // Extract indexed parameters from topics
+            address sender = address(uint160(uint256(entries[i].topics[1])));
+            address emittedStrategyFactory = address(uint160(uint256(entries[i].topics[2])));
+
+            // Decode non-indexed event data
+            (
+                Factory.VaultConfig memory emittedVaultConfig,
+                Factory.CommonPoolConfig memory emittedCommonPoolConfig,
+                Factory.AuxiliaryPoolConfig memory emittedAuxiliaryConfig,
+                Factory.TimelockConfig memory emittedTimelockConfig,
+                bytes memory emittedStrategyDeployBytes,
+                Factory.PoolIntermediate memory emittedIntermediate,
+                uint256 emittedFinishDeadline
+            ) = abi.decode(
+                entries[i].data,
+                (
+                    Factory.VaultConfig,
+                    Factory.CommonPoolConfig,
+                    Factory.AuxiliaryPoolConfig,
+                    Factory.TimelockConfig,
+                    bytes,
+                    Factory.PoolIntermediate,
+                    uint256
+                )
             );
+
+            // Verify all the emitted values match the inputs
+            assertEq(sender, vaultConfig.nodeOperator, "sender should match node operator");
+            assertEq(emittedVaultConfig.nodeOperator, vaultConfig.nodeOperator, "nodeOperator should match");
+            assertEq(emittedVaultConfig.nodeOperatorManager, vaultConfig.nodeOperatorManager, "nodeOperatorManager should match");
+            assertEq(emittedVaultConfig.nodeOperatorFeeBP, vaultConfig.nodeOperatorFeeBP, "nodeOperatorFeeBP should match");
+            assertEq(emittedVaultConfig.confirmExpiry, vaultConfig.confirmExpiry, "confirmExpiry should match");
+
+            assertEq(emittedCommonPoolConfig.minWithdrawalDelayTime, commonPoolConfig.minWithdrawalDelayTime, "minWithdrawalDelayTime should match");
+            assertEq(emittedCommonPoolConfig.name, commonPoolConfig.name, "name should match");
+            assertEq(emittedCommonPoolConfig.symbol, commonPoolConfig.symbol, "symbol should match");
+
+            assertEq(emittedAuxiliaryConfig.allowlistEnabled, auxiliaryConfig.allowlistEnabled, "allowlistEnabled should match");
+            assertEq(emittedAuxiliaryConfig.mintingEnabled, auxiliaryConfig.mintingEnabled, "mintingEnabled should match");
+            assertEq(emittedAuxiliaryConfig.reserveRatioGapBP, auxiliaryConfig.reserveRatioGapBP, "reserveRatioGapBP should match");
+
+            assertEq(emittedTimelockConfig.minDelaySeconds, timelockConfig.minDelaySeconds, "minDelaySeconds should match");
+            assertEq(emittedTimelockConfig.proposer, timelockConfig.proposer, "proposer should match");
+            assertEq(emittedTimelockConfig.executor, timelockConfig.executor, "executor should match");
+
+            assertEq(emittedStrategyFactory, strategyFactory, "strategyFactory should match");
+            assertEq(emittedStrategyDeployBytes, "", "strategyDeployBytes should be empty");
+
+            assertEq(emittedIntermediate.dashboard, intermediate.dashboard, "dashboard address should match");
+            assertEq(emittedIntermediate.poolProxy, intermediate.poolProxy, "poolProxy address should match");
+            assertEq(emittedIntermediate.withdrawalQueueProxy, intermediate.withdrawalQueueProxy, "withdrawalQueueProxy should match");
+            assertEq(emittedIntermediate.timelock, intermediate.timelock, "timelock should match");
+
+            assertGt(emittedFinishDeadline, block.timestamp, "finish deadline should be in the future");
+
             found = true;
             break;
         }
 
-        assertTrue(found, "PoolIntermediateCreated event should be emitted");
+        assertTrue(found, "PoolCreationStarted event should be emitted");
     }
+
+    function test_initial_acl_configuration() public {
+        // Test all three pool types: StvPool (no minting), StvStETHPool (minting), and StvStrategyPool (strategy)
+        for (uint256 i = 0; i < 3; i++) {
+            bool allowlistEnabled = (i == 2);
+            bool mintingEnabled = (i >= 1);
+            uint256 reserveRatioGapBP = (i == 2) ? 500 : 0;
+            address strategyFactory = (i == 2) ? address(factory.GGV_STRATEGY_FACTORY()) : address(0);
+
+            string memory poolName = i == 0 ? "Factory StvPool" : i == 1 ? "Factory StvStETHPool" : "Factory StrategyPool";
+            string memory poolSymbol = i == 0 ? "FSTV" : i == 1 ? "FSTETH" : "FSTRAT";
+
+            (
+                Factory.VaultConfig memory vaultConfig,
+                Factory.CommonPoolConfig memory commonPoolConfig,
+                Factory.AuxiliaryPoolConfig memory auxiliaryConfig,
+                Factory.TimelockConfig memory timelockConfig
+            ) = _buildConfigs(allowlistEnabled, mintingEnabled, reserveRatioGapBP, poolName, poolSymbol);
+
+            (, Factory.PoolDeployment memory deployment) =
+                _deployThroughFactory(vaultConfig, commonPoolConfig, auxiliaryConfig, timelockConfig, strategyFactory);
+
+            bytes32 poolType = factory.derivePoolType(auxiliaryConfig, strategyFactory);
+
+            IDashboard dashboard = IDashboard(payable(deployment.dashboard));
+            StvPool pool = StvPool(payable(deployment.pool));
+            WithdrawalQueue wq = WithdrawalQueue(payable(deployment.withdrawalQueue));
+            address timelock = deployment.timelock;
+            address deployer = vaultConfig.nodeOperator;
+
+            // === Verify pool type ===
+            assertEq(deployment.poolType, poolType, "deployment pool type should match derived pool type");
+
+            if (poolType == factory.STV_POOL_TYPE()) {
+                assertEq(poolType, factory.STV_POOL_TYPE(), "pool type should be STV_POOL_TYPE");
+            } else if (poolType == factory.STV_STETH_POOL_TYPE()) {
+                assertEq(poolType, factory.STV_STETH_POOL_TYPE(), "pool type should be STV_STETH_POOL_TYPE");
+            } else if (poolType == factory.STRATEGY_POOL_TYPE()) {
+                assertEq(poolType, factory.STRATEGY_POOL_TYPE(), "pool type should be STRATEGY_POOL_TYPE");
+            }
+
+            // === Dashboard AccessControl Roles ===
+            assertTrue(
+                dashboard.hasRole(dashboard.FUND_ROLE(), deployment.pool),
+                "pool should have FUND_ROLE on dashboard"
+            );
+            assertTrue(
+                dashboard.hasRole(dashboard.REBALANCE_ROLE(), deployment.pool),
+                "pool should have REBALANCE_ROLE on dashboard"
+            );
+            assertTrue(
+                dashboard.hasRole(dashboard.WITHDRAW_ROLE(), deployment.withdrawalQueue),
+                "withdrawal queue should have WITHDRAW_ROLE on dashboard"
+            );
+
+            // Check minting roles based on pool type
+            if (mintingEnabled) {
+                assertTrue(
+                    dashboard.hasRole(dashboard.MINT_ROLE(), deployment.pool),
+                    "pool should have MINT_ROLE when minting enabled"
+                );
+                assertTrue(
+                    dashboard.hasRole(dashboard.BURN_ROLE(), deployment.pool),
+                    "pool should have BURN_ROLE when minting enabled"
+                );
+            } else {
+                assertFalse(
+                    dashboard.hasRole(dashboard.MINT_ROLE(), deployment.pool),
+                    "pool should not have MINT_ROLE when minting disabled"
+                );
+                assertFalse(
+                    dashboard.hasRole(dashboard.BURN_ROLE(), deployment.pool),
+                    "pool should not have BURN_ROLE when minting disabled"
+                );
+            }
+
+            assertTrue(
+                dashboard.hasRole(dashboard.DEFAULT_ADMIN_ROLE(), timelock),
+                "timelock should have DEFAULT_ADMIN_ROLE on dashboard"
+            );
+
+            // === Pool (StvPool) AccessControl Roles ===
+            assertTrue(
+                pool.hasRole(pool.DEFAULT_ADMIN_ROLE(), timelock),
+                "timelock should have DEFAULT_ADMIN_ROLE on pool"
+            );
+            assertFalse(
+                pool.hasRole(pool.DEFAULT_ADMIN_ROLE(), address(factory)),
+                "factory should not have DEFAULT_ADMIN_ROLE on pool"
+            );
+            assertFalse(
+                pool.hasRole(pool.DEFAULT_ADMIN_ROLE(), deployer),
+                "deployer should not have DEFAULT_ADMIN_ROLE on pool"
+            );
+
+            // === WithdrawalQueue AccessControl Roles ===
+            assertTrue(
+                wq.hasRole(wq.DEFAULT_ADMIN_ROLE(), timelock),
+                "timelock should have DEFAULT_ADMIN_ROLE on withdrawal queue"
+            );
+            assertTrue(
+                wq.hasRole(wq.FINALIZE_ROLE(), vaultConfig.nodeOperator),
+                "node operator should have FINALIZE_ROLE on withdrawal queue"
+            );
+            assertFalse(
+                wq.hasRole(wq.DEFAULT_ADMIN_ROLE(), address(factory)),
+                "factory should not have DEFAULT_ADMIN_ROLE on withdrawal queue"
+            );
+            assertFalse(
+                wq.hasRole(wq.DEFAULT_ADMIN_ROLE(), deployer),
+                "deployer should not have DEFAULT_ADMIN_ROLE on withdrawal queue"
+            );
+
+            // === Proxy Ownership (OssifiableProxy) ===
+            assertEq(
+                IOssifiableProxy(deployment.pool).proxy__getAdmin(),
+                timelock,
+                "pool proxy should be owned by timelock"
+            );
+            assertNotEq(
+                IOssifiableProxy(deployment.pool).proxy__getAdmin(),
+                address(factory),
+                "pool proxy should not be owned by factory"
+            );
+            assertNotEq(
+                IOssifiableProxy(deployment.pool).proxy__getAdmin(),
+                deployer,
+                "pool proxy should not be owned by deployer"
+            );
+
+            assertEq(
+                IOssifiableProxy(deployment.withdrawalQueue).proxy__getAdmin(),
+                timelock,
+                "withdrawal queue proxy should be owned by timelock"
+            );
+            assertNotEq(
+                IOssifiableProxy(deployment.withdrawalQueue).proxy__getAdmin(),
+                address(factory),
+                "withdrawal queue proxy should not be owned by factory"
+            );
+            assertNotEq(
+                IOssifiableProxy(deployment.withdrawalQueue).proxy__getAdmin(),
+                deployer,
+                "withdrawal queue proxy should not be owned by deployer"
+            );
+
+            // === Distributor AccessControl Roles ===
+            assertTrue(
+                pool.DISTRIBUTOR().hasRole(pool.DISTRIBUTOR().DEFAULT_ADMIN_ROLE(), timelock),
+                "timelock should have DEFAULT_ADMIN_ROLE on distributor"
+            );
+            assertTrue(
+                pool.DISTRIBUTOR().hasRole(pool.DISTRIBUTOR().MANAGER_ROLE(), vaultConfig.nodeOperatorManager),
+                "node operator manager should have MANAGER_ROLE on distributor"
+            );
+            assertFalse(
+                pool.DISTRIBUTOR().hasRole(pool.DISTRIBUTOR().DEFAULT_ADMIN_ROLE(), address(factory)),
+                "factory should not have DEFAULT_ADMIN_ROLE on distributor"
+            );
+            assertFalse(
+                pool.DISTRIBUTOR().hasRole(pool.DISTRIBUTOR().DEFAULT_ADMIN_ROLE(), deployer),
+                "deployer should not have DEFAULT_ADMIN_ROLE on distributor"
+            );
+
+            // === Vault Ownership ===
+            assertEq(
+                core.vaultHub().vaultConnection(address(pool.VAULT())).owner,
+                deployment.dashboard,
+                "dashboard should be the owner of the vault via VaultHub connection"
+            );
+
+            // === Strategy-specific checks ===
+            if (poolType == factory.STRATEGY_POOL_TYPE()) {
+                assertTrue(deployment.strategy != address(0), "strategy should be deployed");
+                assertTrue(pool.isAllowListed(deployment.strategy), "strategy should be allowlisted on pool");
+                assertTrue(pool.ALLOW_LIST_ENABLED(), "allowlist should be enabled for strategy pools");
+
+                // Strategy proxy ownership checks
+                assertEq(
+                    IOssifiableProxy(deployment.strategy).proxy__getAdmin(),
+                    timelock,
+                    "strategy proxy should be owned by timelock"
+                );
+                assertNotEq(
+                    IOssifiableProxy(deployment.strategy).proxy__getAdmin(),
+                    address(factory),
+                    "strategy proxy should not be owned by factory"
+                );
+                assertNotEq(
+                    IOssifiableProxy(deployment.strategy).proxy__getAdmin(),
+                    deployer,
+                    "strategy proxy should not be owned by deployer"
+                );
+
+                // Verify strategy implementation exists
+                address strategyImpl = IOssifiableProxy(deployment.strategy).proxy__getImplementation();
+                assertTrue(strategyImpl != address(0), "strategy implementation should exist");
+                assertGt(strategyImpl.code.length, 0, "strategy implementation should have code");
+            } else {
+                assertEq(deployment.strategy, address(0), "strategy should not be deployed for non-strategy pools");
+            }
+        }
+    }
+
+
 }

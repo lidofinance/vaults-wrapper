@@ -8,10 +8,10 @@ contract StvTest is Test, SetupStvPool {
     uint8 supplyDecimals = 27;
 
     function test_InitialState_CorrectSupplyAndAssets() public view {
-        assertEq(pool.totalAssets(), initialDeposit);
+        assertEq(pool.totalAssets(), INITIAL_DEPOSIT);
         assertEq(pool.totalSupply(), 10 ** supplyDecimals);
 
-        assertEq(pool.nominalAssetsOf(address(pool)), initialDeposit);
+        assertEq(pool.nominalAssetsOf(address(pool)), INITIAL_DEPOSIT);
         assertEq(pool.balanceOf(address(pool)), 10 ** supplyDecimals);
     }
 
@@ -64,6 +64,7 @@ contract StvTest is Test, SetupStvPool {
     function test_Rewards_IncreasesTotalAssets() public {
         uint256 rewards = 1 ether;
         uint256 totalAssetsBefore = pool.totalAssets();
+        assertLe(rewards, uint256(type(int256).max), "rewards exceeds int256 max");
         dashboard.mock_simulateRewards(int256(rewards));
 
         assertEq(pool.totalAssets(), totalAssetsBefore + rewards);
@@ -74,6 +75,7 @@ contract StvTest is Test, SetupStvPool {
         pool.depositETH{value: 2 ether}(userBob, address(0));
 
         uint256 rewards = 333;
+        assertLe(rewards, uint256(type(int256).max), "rewards exceeds int256 max");
         dashboard.mock_simulateRewards(int256(rewards));
 
         assertEq(pool.nominalAssetsOf(address(pool)), 1 ether + (rewards / 4));

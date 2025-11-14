@@ -3,7 +3,6 @@ pragma solidity 0.8.30;
 
 import {SetupWithdrawalQueue} from "./SetupWithdrawalQueue.sol";
 import {Test} from "forge-std/Test.sol";
-import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
 
 contract GasCostCoverageTest is Test, SetupWithdrawalQueue {
     function setUp() public override {
@@ -89,7 +88,7 @@ contract GasCostCoverageTest is Test, SetupWithdrawalQueue {
         uint256 minValue = withdrawalQueue.MIN_WITHDRAWAL_VALUE();
         _setGasCostCoverage(coverage);
 
-        uint256 stvToRequest = (10 ** STV_DECIMALS / 1 ether) * minValue;
+        uint256 stvToRequest = (10 ** STV_DECIMALS * minValue) / 1 ether;
         uint256 totalAssets = pool.previewRedeem(stvToRequest);
         assertEq(totalAssets, minValue);
 

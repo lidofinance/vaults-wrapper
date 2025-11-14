@@ -253,9 +253,12 @@ contract CoreHarness is Test {
         uint256 totalShares = steth.getTotalShares();
 
         uint256 a = Math.mulDiv(totalSupply, 1 ether, _shareRatioE18, Math.Rounding.Floor);
+        assertLe(a, type(uint128).max, "a exceeds uint128 max");
+        assertLe(totalShares, type(uint128).max, "totalShares exceeds uint128 max");
         int128 sharesDiff = int128(uint128(a)) - int128(uint128(totalShares));
 
         if (sharesDiff > 0) {
+            assertLe(uint128(sharesDiff), type(uint128).max, "sharesDiff exceeds uint128 max");
             vm.prank(locator.accounting());
             steth.mintShares(address(this), uint256(uint128(sharesDiff)));
         } else if (sharesDiff < 0) {

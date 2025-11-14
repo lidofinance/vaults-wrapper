@@ -19,7 +19,7 @@ interface IWrapper {
 }
 
 library TableUtils {
-    Vm private constant vm = Vm(address(uint160(uint256(keccak256("hevm cheat code")))));
+    Vm private constant VM = Vm(address(uint160(uint256(keccak256("hevm cheat code")))));
 
     struct Context {
         IWrapper pool;
@@ -106,19 +106,21 @@ library TableUtils {
         uint256 assets = self.pool.previewRedeem(stv);
         uint256 debtSteth = self.pool.mintedStethSharesOf(_user);
         uint256 ggv = self.boringVault.balanceOf(_user);
+        require(ggv <= type(uint128).max, "ggv exceeds uint128 max");
+        require(_discount <= type(uint16).max, "discount exceeds uint16 max");
         uint256 ggvStethOut = self.boringQueue.previewAssetsOut(address(self.wsteth), uint128(ggv), uint16(_discount));
         uint256 wsteth = self.wsteth.balanceOf(_user);
 
         console.log(
             string.concat(
                 padRight(userName, 16),
-                padLeft(vm.toString(balance), 24),
+                padLeft(VM.toString(balance), 24),
                 padLeft(formatETH(stv), 20),
                 padLeft(formatETH(assets), 20),
-                padLeft(vm.toString(debtSteth), 20),
-                padLeft(vm.toString(ggv), 20),
-                padLeft(vm.toString(ggvStethOut), 20),
-                padLeft(vm.toString(wsteth), 20)
+                padLeft(VM.toString(debtSteth), 20),
+                padLeft(VM.toString(ggv), 20),
+                padLeft(VM.toString(ggvStethOut), 20),
+                padLeft(VM.toString(wsteth), 20)
             )
         );
     }
@@ -136,7 +138,7 @@ library TableUtils {
 
         uint256 scaledFractional = fractionalPart / (divisor / 100);
 
-        return string.concat(vm.toString(integerPart), ".", padWithZeros(vm.toString(scaledFractional), 2));
+        return string.concat(VM.toString(integerPart), ".", padWithZeros(VM.toString(scaledFractional), 2));
     }
 
     function padWithZeros(string memory str, uint256 length) internal pure returns (string memory) {

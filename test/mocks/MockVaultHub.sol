@@ -188,6 +188,8 @@ contract MockVaultHub {
     function mock_setConnectionParameters(address _vault, uint16 _reserveRatioBP, uint16 _forcedRebalanceThresholdBP)
         external
     {
+        require(_reserveRatioBP <= type(uint16).max, "reserveRatioBP exceeds uint16 max");
+        require(_forcedRebalanceThresholdBP <= type(uint16).max, "forcedRebalanceThresholdBP exceeds uint16 max");
         IVaultHub.VaultConnection storage connection = connections[_vault];
         connection.reserveRatioBP = _reserveRatioBP;
         connection.forcedRebalanceThresholdBP = _forcedRebalanceThresholdBP;

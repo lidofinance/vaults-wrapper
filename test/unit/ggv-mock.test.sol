@@ -20,12 +20,12 @@ contract GGVMockTest is Test {
     address public user2 = address(0x2);
     address public admin = address(0x3);
 
-    uint256 public constant initialBalance = 100 ether;
+    uint256 public constant INITIAL_BALANCE = 100 ether;
 
     function setUp() public {
-        vm.deal(user1, initialBalance);
-        vm.deal(user2, initialBalance);
-        vm.deal(admin, initialBalance);
+        vm.deal(user1, INITIAL_BALANCE);
+        vm.deal(user2, INITIAL_BALANCE);
+        vm.deal(admin, INITIAL_BALANCE);
 
         steth = new MockStETH();
         wsteth = new MockWstETH(address(steth));
@@ -73,10 +73,12 @@ contract GGVMockTest is Test {
 
         // withdraw from ggv
         GGVQueueMock.WithdrawAsset memory wa = queue.withdrawAssets(address(steth));
+        assertLe(userGgvShares, type(uint128).max, "userGgvShares exceeds uint128 max");
         uint256 previewAmountAssetsStethShares =
             queue.previewAssetsOut(address(steth), uint128(userGgvShares), wa.minDiscount);
 
         vault.approve(address(queue), userGgvShares);
+        assertLe(userGgvShares, type(uint128).max, "userGgvShares exceeds uint128 max");
         bytes32 requestId =
             queue.requestOnChainWithdraw(address(steth), uint128(userGgvShares), wa.minDiscount, type(uint24).max);
         GGVQueueMock.OnChainWithdraw memory req = queue.mockGetRequestById(requestId);

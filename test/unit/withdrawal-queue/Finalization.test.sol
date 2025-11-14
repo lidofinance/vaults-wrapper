@@ -471,14 +471,14 @@ contract FinalizationTest is Test, SetupWithdrawalQueue {
 }
 
 contract RevertingFinalizer {
-    WithdrawalQueue public immutable withdrawalQueue;
+    WithdrawalQueue public immutable WITHDRAWAL_QUEUE;
 
     constructor(WithdrawalQueue _withdrawalQueue) {
-        withdrawalQueue = _withdrawalQueue;
+        WITHDRAWAL_QUEUE = _withdrawalQueue;
     }
 
     function callFinalize(uint256 maxRequests) external {
-        withdrawalQueue.finalize(maxRequests, address(0));
+        WITHDRAWAL_QUEUE.finalize(maxRequests, address(0));
     }
 
     receive() external payable {

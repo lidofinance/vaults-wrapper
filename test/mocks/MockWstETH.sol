@@ -29,7 +29,7 @@ contract MockWstETH is ERC20 {
         require(_stETHAmount > 0, "wstETH: can't wrap zero stETH");
         uint256 wstETHAmount = stETH.getSharesByPooledEth(_stETHAmount);
         _mint(msg.sender, wstETHAmount);
-        stETH.transferFrom(msg.sender, address(this), _stETHAmount);
+        require(stETH.transferFrom(msg.sender, address(this), _stETHAmount), "transferFrom failed");
         return wstETHAmount;
     }
 
@@ -45,7 +45,7 @@ contract MockWstETH is ERC20 {
         require(_wstETHAmount > 0, "wstETH: zero amount unwrap not allowed");
         uint256 stETHAmount = stETH.getPooledEthByShares(_wstETHAmount);
         _burn(msg.sender, _wstETHAmount);
-        stETH.transfer(msg.sender, stETHAmount);
+        require(stETH.transfer(msg.sender, stETHAmount), "transfer failed");
         return stETHAmount;
     }
 

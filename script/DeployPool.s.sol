@@ -1,14 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.30;
 
-import "forge-std/Script.sol";
-import "forge-std/console2.sol";
+import {Script} from "forge-std/Script.sol";
+import {console2} from "forge-std/console2.sol";
 import {Factory} from "src/Factory.sol";
 import {StvPool} from "src/StvPool.sol";
 import {StvStETHPool} from "src/StvStETHPool.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
 import {IOssifiableProxy} from "src/interfaces/core/IOssifiableProxy.sol";
-import {IStETH} from "src/interfaces/core/IStETH.sol";
 import {OssifiableProxy} from "src/proxy/OssifiableProxy.sol";
 
 contract DeployPool is Script {
@@ -111,10 +110,10 @@ contract DeployPool is Script {
         internal
         returns (string memory json)
     {
-        json = vm.serializeAddress("_intermediate", "pool", _intermediate.pool);
+        json = vm.serializeAddress("_intermediate", "dashboard", _intermediate.dashboard);
+        json = vm.serializeAddress("_intermediate", "poolProxy", _intermediate.poolProxy);
+        json = vm.serializeAddress("_intermediate", "withdrawalQueueProxy", _intermediate.withdrawalQueueProxy);
         json = vm.serializeAddress("_intermediate", "timelock", _intermediate.timelock);
-        json = vm.serializeAddress("_intermediate", "strategyFactory", _intermediate.strategyFactory);
-        json = vm.serializeBytes("_intermediate", "strategyDeployBytes", _intermediate.strategyDeployBytes);
     }
 
     function _serializeDeployment(Factory.PoolDeployment memory _deployment) internal returns (string memory json) {
@@ -134,9 +133,9 @@ contract DeployPool is Script {
         Factory.AuxiliaryPoolConfig memory _auxiliaryConfig,
         bytes32 _poolType
     ) internal returns (string memory json) {
-        StvPool pool = StvPool(payable(_intermediate.pool));
-        address dashboard = address(pool.DASHBOARD());
-        address withdrawalQueue = address(pool.WITHDRAWAL_QUEUE());
+        StvPool pool = StvPool(payable(_intermediate.poolProxy));
+        address dashboard = _intermediate.dashboard;
+        address withdrawalQueue = _intermediate.withdrawalQueueProxy;
         address distributor = address(pool.DISTRIBUTOR());
 
         bytes memory poolCtorBytecode = abi.encodePacked(
@@ -179,10 +178,10 @@ contract DeployPool is Script {
     function _loadIntermediate(string memory _path) internal view returns (Factory.PoolIntermediate memory) {
         string memory json = vm.readFile(_path);
         return Factory.PoolIntermediate({
-            pool: vm.parseJsonAddress(json, "$.intermediate.pool"),
-            timelock: vm.parseJsonAddress(json, "$.intermediate.timelock"),
-            strategyFactory: vm.parseJsonAddress(json, "$.intermediate.strategyFactory"),
-            strategyDeployBytes: vm.parseJsonBytes(json, "$.intermediate.strategyDeployBytes")
+            dashboard: vm.parseJsonAddress(json, "$.intermediate.dashboard"),
+            poolProxy: vm.parseJsonAddress(json, "$.intermediate.poolProxy"),
+            withdrawalQueueProxy: vm.parseJsonAddress(json, "$.intermediate.withdrawalQueueProxy"),
+            timelock: vm.parseJsonAddress(json, "$.intermediate.timelock")
         });
     }
 
@@ -263,9 +262,10 @@ contract DeployPool is Script {
         vm.stopBroadcast();
 
         console2.log("Intermediate:");
-        console2.log("  pool:", intermediate.pool);
+        console2.log("  dashboard:", intermediate.dashboard);
+        console2.log("  poolProxy:", intermediate.poolProxy);
+        console2.log("  withdrawalQueueProxy:", intermediate.withdrawalQueueProxy);
         console2.log("  timelock:", intermediate.timelock);
-        console2.log("  strategyFactory:", intermediate.strategyFactory);
 
         // Save config and intermediate to output file
         string memory configJson = _serializeConfig(p);
@@ -289,7 +289,15 @@ contract DeployPool is Script {
 
         vm.startBroadcast();
 
-        _factory.createPoolFinish(intermediate);
+        _factory.createPoolFinish(
+            p.vaultConfig,
+            p.commonPoolConfig,
+            p.auxiliaryPoolConfig,
+            p.timelockConfig,
+            p.strategyFactory,
+            "",
+            intermediate
+        );
 
         vm.stopBroadcast();
 

@@ -112,7 +112,7 @@ contract GGVTest is StvStrategyPoolHarness {
         uint256 solverSteth = steth.submit{value: 2 ether}(SOLVER);
         steth.approve(address(wsteth), type(uint256).max);
         uint256 solverWsteth = wsteth.wrap(solverSteth);
-        wsteth.transfer(address(boringVault), solverWsteth);
+        assertTrue(wsteth.transfer(address(boringVault), solverWsteth));
         vm.stopPrank();
 
         withdrawalQueue = pool.WITHDRAWAL_QUEUE();
@@ -184,11 +184,14 @@ contract GGVTest is StvStrategyPoolHarness {
 
         //         3. Request withdrawal (full amount, based on appreciated value)
         uint256 totalGgvShares = boringVault.balanceOf(user1StrategyCallForwarder);
+        assertLe(totalGgvShares, type(uint128).max, "totalGgvShares exceeds uint128 max");
+        assertLe(ggvDiscount, type(uint16).max, "ggvDiscount exceeds uint16 max");
         uint256 withdrawalWstethAmount =
             boringOnChainQueue.previewAssetsOut(address(wsteth), uint128(totalGgvShares), uint16(ggvDiscount));
 
         console.log("\n[SCENARIO] Requesting withdrawal based on new appreciated assets:", withdrawalWstethAmount);
 
+        assertLe(ggvDiscount, type(uint16).max, "ggvDiscount exceeds uint16 max");
         GGVStrategy.GGVParamsRequestExit memory params =
             GGVStrategy.GGVParamsRequestExit({discount: uint16(ggvDiscount), secondsToDeadline: type(uint24).max});
 
@@ -297,6 +300,7 @@ contract GGVTest is StvStrategyPoolHarness {
         boringVault.rebaseWsteth(rebaseWstethAmount);
         vm.stopPrank();
 
+        assertLe(totalGGVShares, type(uint128).max, "totalGGVShares exceeds uint128 max");
         uint128 withdrawSharesPreview =
             boringOnChainQueue.previewAssetsOut(address(wsteth), uint128(totalGGVShares), discount);
 

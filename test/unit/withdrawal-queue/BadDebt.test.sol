@@ -26,6 +26,7 @@ contract BadDebtTest is Test, SetupWithdrawalQueue {
         uint256 liabilitySteth = steth.getPooledEthBySharesRoundUp(pool.totalLiabilityShares());
         uint256 value = totalAssets - liabilitySteth;
 
+        assertLe(value, uint256(type(int256).max), "value exceeds int256 max");
         dashboard.mock_simulateRewards(int256(value) * -1 - 10 wei);
 
         _assertBadDebt();

@@ -144,7 +144,9 @@ contract StvPoolHarness is Test {
         Factory.PoolIntermediate memory intermediate = factory.createPoolStart{value: CONNECT_DEPOSIT}(
             vaultConfig, commonPoolConfig, auxiliaryConfig, timelockConfig, strategyFactoryAddress, ""
         );
-        Factory.PoolDeployment memory deployment = factory.createPoolFinish(intermediate);
+        Factory.PoolDeployment memory deployment = factory.createPoolFinish(
+            vaultConfig, commonPoolConfig, auxiliaryConfig, timelockConfig, strategyFactoryAddress, "", intermediate
+        );
         vm.stopPrank();
 
         IDashboard dashboard = IDashboard(payable(deployment.dashboard));

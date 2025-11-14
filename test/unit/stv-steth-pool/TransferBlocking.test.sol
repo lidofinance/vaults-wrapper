@@ -20,7 +20,7 @@ contract TransferBlockingTest is Test, SetupStvStETHPool {
         uint256 balance = pool.balanceOf(address(this));
         uint256 transferAmount = balance / 2;
 
-        pool.transfer(userAlice, transferAmount);
+        assertTrue(pool.transfer(userAlice, transferAmount));
 
         assertEq(pool.balanceOf(userAlice), transferAmount);
         assertEq(pool.balanceOf(address(this)), balance - transferAmount);
@@ -28,14 +28,14 @@ contract TransferBlockingTest is Test, SetupStvStETHPool {
 
     function test_Transfer_ZeroAmountAlwaysAllowed() public {
         // Zero transfer should work without any minting
-        pool.transfer(userAlice, 0);
+        assertTrue(pool.transfer(userAlice, 0));
         assertEq(pool.balanceOf(userAlice), 0);
 
         // Zero transfer should also work with maximum debt
         uint256 mintCapacity = pool.remainingMintingCapacitySharesOf(address(this), 0);
         pool.mintStethShares(mintCapacity);
 
-        pool.transfer(userAlice, 0);
+        assertTrue(pool.transfer(userAlice, 0));
         assertEq(pool.balanceOf(userAlice), 0);
     }
 
@@ -69,7 +69,7 @@ contract TransferBlockingTest is Test, SetupStvStETHPool {
         uint256 requiredLocked = pool.calcStvToLockForStethShares(sharesToMint);
         uint256 safeTransfer = balance - requiredLocked;
 
-        pool.transfer(userAlice, safeTransfer);
+        assertTrue(pool.transfer(userAlice, safeTransfer));
 
         assertEq(pool.balanceOf(address(this)), requiredLocked);
     }
@@ -102,7 +102,7 @@ contract TransferBlockingTest is Test, SetupStvStETHPool {
         pool.approve(userAlice, safeTransfer);
 
         vm.prank(userAlice);
-        pool.transferFrom(address(this), userBob, safeTransfer);
+        assertTrue(pool.transferFrom(address(this), userBob, safeTransfer));
 
         assertEq(pool.balanceOf(address(this)), requiredLocked);
     }
@@ -126,7 +126,7 @@ contract TransferBlockingTest is Test, SetupStvStETHPool {
 
         // Bob should be able to transfer his entire balance (no restrictions)
         vm.prank(userBob);
-        pool.transfer(userAlice, bobBalance);
+        assertTrue(pool.transfer(userAlice, bobBalance));
 
         assertEq(pool.balanceOf(userBob), 0);
 
@@ -157,7 +157,7 @@ contract TransferBlockingTest is Test, SetupStvStETHPool {
         uint256 transferAmount = pool.balanceOf(address(this)) / 4;
         uint256 aliceBalanceBefore = pool.balanceOf(userAlice);
 
-        pool.transfer(userAlice, transferAmount);
+        assertTrue(pool.transfer(userAlice, transferAmount));
 
         // Alice should receive the transfer despite having debt
         assertEq(pool.balanceOf(userAlice), aliceBalanceBefore + transferAmount);
@@ -209,7 +209,7 @@ contract TransferBlockingTest is Test, SetupStvStETHPool {
         // Should be able to transfer more now
         uint256 currentBalance = pool.balanceOf(address(this));
         uint256 newMaxTransfer = currentBalance - newRequiredLocked - 100;
-        pool.transfer(userAlice, newMaxTransfer);
+        assertTrue(pool.transfer(userAlice, newMaxTransfer));
         // This should succeed without revert
     }
 
@@ -227,7 +227,7 @@ contract TransferBlockingTest is Test, SetupStvStETHPool {
 
         // Should be able to transfer exactly (balance - requiredLocked)
         uint256 maxTransfer = balance - requiredLocked;
-        pool.transfer(userAlice, maxTransfer);
+        assertTrue(pool.transfer(userAlice, maxTransfer));
 
         // Should have exactly requiredLocked left
         assertEq(pool.balanceOf(address(this)), requiredLocked);

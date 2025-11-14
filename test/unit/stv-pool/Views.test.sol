@@ -30,6 +30,7 @@ contract ViewsTest is Test, SetupStvPool {
         uint256 totalBefore = pool.totalAssets();
         uint256 rewards = 2 ether;
 
+        assertLe(rewards, uint256(type(int256).max), "rewards exceeds int256 max");
         dashboard.mock_simulateRewards(int256(rewards));
 
         assertEq(pool.totalAssets(), totalBefore + rewards);
