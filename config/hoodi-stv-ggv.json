@@ -21,6 +21,6 @@
     "proposer": "0xcc95b0Dbe1519AfaC58d954444839A80700380a2",
     "executor": "0xcc95b0Dbe1519AfaC58d954444839A80700380a2"
   },
-  "strategyFactory": "0x3a2E87c2aC5f34F48a832Ed0205c2630B951e1F6",
+  "strategyFactory": "GGV",
   "connectDepositWei": 1000000000000000000
 }

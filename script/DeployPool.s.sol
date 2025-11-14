@@ -20,43 +20,6 @@ contract DeployPool is Script {
         uint256 connectDepositWei;
     }
 
-    function _readPoolParams(string memory _path) internal view returns (PoolParams memory p) {
-        string memory json = vm.readFile(_path);
-        p.vaultConfig = Factory.VaultConfig({
-            nodeOperator: vm.parseJsonAddress(json, "$.vaultConfig.nodeOperator"),
-            nodeOperatorManager: vm.parseJsonAddress(json, "$.vaultConfig.nodeOperatorManager"),
-            nodeOperatorFeeBP: vm.parseJsonUint(json, "$.vaultConfig.nodeOperatorFeeBP"),
-            confirmExpiry: vm.parseJsonUint(json, "$.vaultConfig.confirmExpiry")
-        });
-
-        p.commonPoolConfig = Factory.CommonPoolConfig({
-            minWithdrawalDelayTime: vm.parseJsonUint(json, "$.commonPoolConfig.minWithdrawalDelayTime"),
-            name: vm.parseJsonString(json, "$.commonPoolConfig.name"),
-            symbol: vm.parseJsonString(json, "$.commonPoolConfig.symbol"),
-            emergencyCommittee: vm.parseJsonAddress(json, "$.commonPoolConfig.emergencyCommittee")
-        });
-
-        p.auxiliaryPoolConfig = Factory.AuxiliaryPoolConfig({
-            allowlistEnabled: vm.parseJsonBool(json, "$.auxiliaryPoolConfig.allowlistEnabled"),
-            mintingEnabled: vm.parseJsonBool(json, "$.auxiliaryPoolConfig.mintingEnabled"),
-            reserveRatioGapBP: vm.parseJsonUint(json, "$.auxiliaryPoolConfig.reserveRatioGapBP")
-        });
-
-        p.timelockConfig = Factory.TimelockConfig({
-            minDelaySeconds: vm.parseJsonUint(json, "$.timelockConfig.minDelaySeconds"),
-            proposer: vm.parseJsonAddress(json, "$.timelockConfig.proposer"),
-            executor: vm.parseJsonAddress(json, "$.timelockConfig.executor")
-        });
-
-        p.connectDepositWei = vm.parseJsonUint(json, "$.connectDepositWei");
-
-        try vm.parseJsonAddress(json, "$.strategyFactory") returns (address addr) {
-            p.strategyFactory = addr;
-        } catch {
-            // Leave p.strategyFactory as default (address(0))
-        }
-    }
-
     function _buildOutputPath() internal view returns (string memory) {
         return string(
             abi.encodePacked(
@@ -167,8 +130,15 @@ contract DeployPool is Script {
         }
 
         address withdrawalImpl = IOssifiableProxy(withdrawalQueue).proxy__getImplementation();
-        bytes memory withdrawalInitData =
-            abi.encodeCall(WithdrawalQueue.initialize, (_vaultConfig.nodeOperatorManager, _vaultConfig.nodeOperator, _commonPoolConfig.emergencyCommittee, _commonPoolConfig.emergencyCommittee));
+        bytes memory withdrawalInitData = abi.encodeCall(
+            WithdrawalQueue.initialize,
+            (
+                _vaultConfig.nodeOperatorManager,
+                _vaultConfig.nodeOperator,
+                _commonPoolConfig.emergencyCommittee,
+                _commonPoolConfig.emergencyCommittee
+            )
+        );
         bytes memory withdrawalCtorBytecode = abi.encodePacked(
             type(OssifiableProxy).creationCode, abi.encode(withdrawalImpl, _intermediate.timelock, withdrawalInitData)
         );
@@ -176,6 +146,48 @@ contract DeployPool is Script {
         json = vm.serializeBytes("_ctorBytecode", "poolProxy", poolCtorBytecode);
         json = vm.serializeBytes("_ctorBytecode", "poolImplementation", poolImplementationCtorBytecode);
         json = vm.serializeBytes("_ctorBytecode", "withdrawalQueueProxy", withdrawalCtorBytecode);
+    }
+
+    function _readPoolParams(string memory _path, address _ggvFactory) internal view returns (PoolParams memory p) {
+        string memory json = vm.readFile(_path);
+        p.vaultConfig = Factory.VaultConfig({
+            nodeOperator: vm.parseJsonAddress(json, "$.vaultConfig.nodeOperator"),
+            nodeOperatorManager: vm.parseJsonAddress(json, "$.vaultConfig.nodeOperatorManager"),
+            nodeOperatorFeeBP: vm.parseJsonUint(json, "$.vaultConfig.nodeOperatorFeeBP"),
+            confirmExpiry: vm.parseJsonUint(json, "$.vaultConfig.confirmExpiry")
+        });
+
+        p.commonPoolConfig = Factory.CommonPoolConfig({
+            minWithdrawalDelayTime: vm.parseJsonUint(json, "$.commonPoolConfig.minWithdrawalDelayTime"),
+            name: vm.parseJsonString(json, "$.commonPoolConfig.name"),
+            symbol: vm.parseJsonString(json, "$.commonPoolConfig.symbol"),
+            emergencyCommittee: vm.parseJsonAddress(json, "$.commonPoolConfig.emergencyCommittee")
+        });
+
+        p.auxiliaryPoolConfig = Factory.AuxiliaryPoolConfig({
+            allowlistEnabled: vm.parseJsonBool(json, "$.auxiliaryPoolConfig.allowlistEnabled"),
+            mintingEnabled: vm.parseJsonBool(json, "$.auxiliaryPoolConfig.mintingEnabled"),
+            reserveRatioGapBP: vm.parseJsonUint(json, "$.auxiliaryPoolConfig.reserveRatioGapBP")
+        });
+
+        p.timelockConfig = Factory.TimelockConfig({
+            minDelaySeconds: vm.parseJsonUint(json, "$.timelockConfig.minDelaySeconds"),
+            proposer: vm.parseJsonAddress(json, "$.timelockConfig.proposer"),
+            executor: vm.parseJsonAddress(json, "$.timelockConfig.executor")
+        });
+
+        p.connectDepositWei = vm.parseJsonUint(json, "$.connectDepositWei");
+
+        try vm.parseJsonAddress(json, "$.strategyFactory") returns (address addr) {
+            p.strategyFactory = addr;
+        } catch {
+            string memory strategyFactoryString = vm.parseJsonString(json, "$.strategyFactory");
+            if (keccak256(bytes(strategyFactoryString)) == keccak256(bytes("GGV"))) {
+                p.strategyFactory = _ggvFactory;
+            } else {
+                revert("Invalid strategy factory: must be either address or 'GGV'");
+            }
+        }
     }
 
     function _loadIntermediate(string memory _path) internal view returns (Factory.PoolIntermediate memory) {
@@ -188,7 +200,7 @@ contract DeployPool is Script {
         });
     }
 
-    function _loadPoolParams(string memory _path) internal view returns (PoolParams memory) {
+    function _readIntermediateDeployParams(string memory _path) internal view returns (PoolParams memory) {
         string memory json = vm.readFile(_path);
         return PoolParams({
             vaultConfig: Factory.VaultConfig({
@@ -251,7 +263,7 @@ contract DeployPool is Script {
 
         require(msg.sender.balance > 1 ether, "msg.sender balance must be above 1 ether");
 
-        PoolParams memory p = _readPoolParams(paramsJsonPath);
+        PoolParams memory p = _readPoolParams(paramsJsonPath, address(_factory.GGV_STRATEGY_FACTORY()));
 
         require(bytes(p.commonPoolConfig.name).length != 0, "commonPoolConfig.name missing");
         require(bytes(p.commonPoolConfig.symbol).length != 0, "commonPoolConfig.symbol missing");
@@ -289,7 +301,7 @@ contract DeployPool is Script {
         }
 
         Factory.PoolIntermediate memory intermediate = _loadIntermediate(_intermediateJsonPath);
-        PoolParams memory p = _loadPoolParams(_intermediateJsonPath);
+        PoolParams memory p = _readIntermediateDeployParams(_intermediateJsonPath);
 
         vm.startBroadcast();
 

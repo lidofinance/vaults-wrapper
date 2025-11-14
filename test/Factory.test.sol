@@ -90,7 +90,9 @@ contract FactoryTest is Test {
             confirmExpiry: 3600
         });
 
-        commonPoolConfig = Factory.CommonPoolConfig({minWithdrawalDelayTime: 1 days, name: name, symbol: symbol, emergencyCommittee: address(0)});
+        commonPoolConfig = Factory.CommonPoolConfig({
+            minWithdrawalDelayTime: 1 days, name: name, symbol: symbol, emergencyCommittee: address(0)
+        });
 
         auxiliaryConfig = Factory.AuxiliaryPoolConfig({
             allowlistEnabled: allowlistEnabled, mintingEnabled: mintingEnabled, reserveRatioGapBP: reserveRatioGapBP

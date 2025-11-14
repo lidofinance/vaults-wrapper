@@ -233,7 +233,10 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, FeaturePausable 
      * @param _finalizePauser Address that will be granted FINALIZE_PAUSE_ROLE (zero address for none)
      * @dev Reverts if `_admin` equals to `address(0)`
      */
-    function initialize(address _admin, address _finalizer, address _withdrawalsPauser, address _finalizePauser) external initializer {
+    function initialize(address _admin, address _finalizer, address _withdrawalsPauser, address _finalizePauser)
+        external
+        initializer
+    {
         if (_admin == address(0)) revert ZeroAddress();
 
         __AccessControlEnumerable_init();

@@ -14,11 +14,11 @@ import {TimelockFactory} from "./factories/TimelockFactory.sol";
 import {WithdrawalQueueFactory} from "./factories/WithdrawalQueueFactory.sol";
 import {IStrategy} from "./interfaces/IStrategy.sol";
 import {IStrategyFactory} from "./interfaces/IStrategyFactory.sol";
-import {GGVStrategy} from "./strategy/GGVStrategy.sol";
 import {ILidoLocator} from "./interfaces/core/ILidoLocator.sol";
 import {IVaultHub} from "./interfaces/core/IVaultHub.sol";
 import {DummyImplementation} from "./proxy/DummyImplementation.sol";
 import {OssifiableProxy} from "./proxy/OssifiableProxy.sol";
+import {GGVStrategy} from "./strategy/GGVStrategy.sol";
 
 import {WithdrawalQueue} from "./WithdrawalQueue.sol";
 import {IDashboard} from "./interfaces/core/IDashboard.sol";
@@ -372,18 +372,10 @@ contract Factory {
         bool _allowListEnabled
     ) external payable returns (PoolIntermediate memory intermediate) {
         AuxiliaryPoolConfig memory _auxiliaryPoolConfig = AuxiliaryPoolConfig({
-            allowlistEnabled: _allowListEnabled,
-            mintingEnabled: false,
-            reserveRatioGapBP: 0
+            allowlistEnabled: _allowListEnabled, mintingEnabled: false, reserveRatioGapBP: 0
         });
-        intermediate = createPoolStart(
-            _vaultConfig,
-            _timelockConfig,
-            _commonPoolConfig,
-            _auxiliaryPoolConfig,
-            address(0),
-            ""
-        );
+        intermediate =
+            createPoolStart(_vaultConfig, _timelockConfig, _commonPoolConfig, _auxiliaryPoolConfig, address(0), "");
     }
 
     /**
@@ -403,21 +395,12 @@ contract Factory {
         bool _allowListEnabled,
         uint256 _reserveRatioGapBP
     ) external payable returns (PoolIntermediate memory intermediate) {
-
         AuxiliaryPoolConfig memory _auxiliaryPoolConfig = AuxiliaryPoolConfig({
-            allowlistEnabled: _allowListEnabled,
-            mintingEnabled: true,
-            reserveRatioGapBP: _reserveRatioGapBP
+            allowlistEnabled: _allowListEnabled, mintingEnabled: true, reserveRatioGapBP: _reserveRatioGapBP
         });
 
-        intermediate = createPoolStart(
-            _vaultConfig,
-            _timelockConfig,
-            _commonPoolConfig,
-            _auxiliaryPoolConfig,
-            address(0),
-            ""
-        );
+        intermediate =
+            createPoolStart(_vaultConfig, _timelockConfig, _commonPoolConfig, _auxiliaryPoolConfig, address(0), "");
     }
 
     /**
@@ -436,14 +419,11 @@ contract Factory {
         CommonPoolConfig memory _commonPoolConfig,
         uint256 _reserveRatioGapBP
     ) external payable returns (PoolIntermediate memory intermediate) {
-        AuxiliaryPoolConfig memory auxiliaryConfig = AuxiliaryPoolConfig({allowlistEnabled: true, mintingEnabled: true, reserveRatioGapBP: _reserveRatioGapBP});
+        AuxiliaryPoolConfig memory auxiliaryConfig = AuxiliaryPoolConfig({
+            allowlistEnabled: true, mintingEnabled: true, reserveRatioGapBP: _reserveRatioGapBP
+        });
         intermediate = createPoolStart(
-            _vaultConfig,
-            _timelockConfig,
-            _commonPoolConfig,
-            auxiliaryConfig,
-            address(GGV_STRATEGY_FACTORY),
-            ""
+            _vaultConfig, _timelockConfig, _commonPoolConfig, auxiliaryConfig, address(GGV_STRATEGY_FACTORY), ""
         );
     }
 
@@ -492,7 +472,9 @@ contract Factory {
         roleAssignments[0] = IVaultFactory.RoleAssignment({account: poolProxy, role: dashboardImpl.FUND_ROLE()});
         roleAssignments[1] = IVaultFactory.RoleAssignment({account: poolProxy, role: dashboardImpl.REBALANCE_ROLE()});
         roleAssignments[2] = IVaultFactory.RoleAssignment({account: wqProxy, role: dashboardImpl.WITHDRAW_ROLE()});
-        roleAssignments[3] = IVaultFactory.RoleAssignment({account: _commonPoolConfig.emergencyCommittee, role: dashboardImpl.PAUSE_BEACON_CHAIN_DEPOSITS_ROLE()});
+        roleAssignments[3] = IVaultFactory.RoleAssignment({
+            account: _commonPoolConfig.emergencyCommittee, role: dashboardImpl.PAUSE_BEACON_CHAIN_DEPOSITS_ROLE()
+        });
         if (_auxiliaryConfig.mintingEnabled) {
             roleAssignments[4] = IVaultFactory.RoleAssignment({account: poolProxy, role: dashboardImpl.MINT_ROLE()});
             roleAssignments[5] = IVaultFactory.RoleAssignment({account: poolProxy, role: dashboardImpl.BURN_ROLE()});
@@ -626,7 +608,16 @@ contract Factory {
 
         OssifiableProxy(payable(_intermediate.withdrawalQueueProxy))
             .proxy__upgradeToAndCall(
-                wqImpl, abi.encodeCall(WithdrawalQueue.initialize, (_intermediate.timelock, _vaultConfig.nodeOperator, _commonPoolConfig.emergencyCommittee, _commonPoolConfig.emergencyCommittee))
+                wqImpl,
+                abi.encodeCall(
+                    WithdrawalQueue.initialize,
+                    (
+                        _intermediate.timelock,
+                        _vaultConfig.nodeOperator,
+                        _commonPoolConfig.emergencyCommittee,
+                        _commonPoolConfig.emergencyCommittee
+                    )
+                )
             );
         OssifiableProxy(payable(_intermediate.withdrawalQueueProxy)).proxy__changeAdmin(_intermediate.timelock);
 
@@ -639,7 +630,9 @@ contract Factory {
             address strategyImpl = IStrategyFactory(_strategyFactory).deploy(address(pool), _strategyDeployBytes);
             strategyProxy = address(
                 new OssifiableProxy(
-                    strategyImpl, _intermediate.timelock, abi.encodeCall(IStrategy.initialize, (_intermediate.timelock, _commonPoolConfig.emergencyCommittee))
+                    strategyImpl,
+                    _intermediate.timelock,
+                    abi.encodeCall(IStrategy.initialize, (_intermediate.timelock, _commonPoolConfig.emergencyCommittee))
                 )
             );
             pool.addToAllowList(strategyProxy);
