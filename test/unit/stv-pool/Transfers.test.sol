@@ -85,6 +85,8 @@ contract TransfersTest is Test, SetupStvPool {
         vm.expectRevert(
             abi.encodeWithSelector(IERC20Errors.ERC20InsufficientAllowance.selector, address(this), 0, amount)
         );
+        /// No return since it reverts
+        /// forge-lint: disable-next-line(erc20-unchecked-transfer)
         pool.transferFrom(userAlice, userBob, amount);
     }
 
@@ -100,6 +102,8 @@ contract TransfersTest is Test, SetupStvPool {
                 IERC20Errors.ERC20InsufficientAllowance.selector, address(this), approvedAmount, transferAmount
             )
         );
+        /// No return since it reverts
+        /// forge-lint: disable-next-line(erc20-unchecked-transfer)
         pool.transferFrom(userAlice, userBob, transferAmount);
     }
 
@@ -123,6 +127,8 @@ contract TransfersTest is Test, SetupStvPool {
 
         vm.prank(userAlice);
         vm.expectRevert(abi.encodeWithSelector(StvPool.VaultInBadDebt.selector));
+        /// No return since it reverts
+        /// forge-lint: disable-next-line(erc20-unchecked-transfer)
         pool.transfer(userBob, 1);
     }
 }

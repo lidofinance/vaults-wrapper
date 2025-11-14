@@ -58,6 +58,8 @@ contract TransferBlockingTest is Test, SetupStvStETHPool {
         uint256 excessiveTransfer = balance - requiredLocked + 1;
 
         vm.expectRevert(StvStETHPool.InsufficientReservedBalance.selector);
+        /// No return since it reverts
+        /// forge-lint: disable-next-line(erc20-unchecked-transfer)
         pool.transfer(userAlice, excessiveTransfer);
     }
 
@@ -88,6 +90,8 @@ contract TransferBlockingTest is Test, SetupStvStETHPool {
 
         vm.prank(userAlice);
         vm.expectRevert(StvStETHPool.InsufficientReservedBalance.selector);
+        /// No return since it reverts
+        /// forge-lint: disable-next-line(erc20-unchecked-transfer)
         pool.transferFrom(address(this), userBob, excessiveTransfer);
     }
 
@@ -139,6 +143,8 @@ contract TransferBlockingTest is Test, SetupStvStETHPool {
 
         vm.prank(userAlice);
         vm.expectRevert(StvStETHPool.InsufficientReservedBalance.selector);
+        /// No return since it reverts
+        /// forge-lint: disable-next-line(erc20-unchecked-transfer)
         pool.transfer(userBob, excessiveTransfer);
     }
 
@@ -182,6 +188,8 @@ contract TransferBlockingTest is Test, SetupStvStETHPool {
 
         // Now the previous safe transfer amount should be blocked due to increased debt
         vm.expectRevert(StvStETHPool.InsufficientReservedBalance.selector);
+        /// No return since it reverts
+        /// forge-lint: disable-next-line(erc20-unchecked-transfer)
         pool.transfer(userAlice, initialMaxTransfer);
     }
 

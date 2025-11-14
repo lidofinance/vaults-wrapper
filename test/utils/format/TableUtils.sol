@@ -5,6 +5,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {console} from "forge-std/console.sol";
 
+import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import {IStETH} from "src/interfaces/core/IStETH.sol";
 import {IWstETH} from "src/interfaces/core/IWstETH.sol";
 import {IBoringOnChainQueue} from "src/interfaces/ggv/IBoringOnChainQueue.sol";
@@ -19,6 +20,7 @@ interface IWrapper {
 }
 
 library TableUtils {
+    using SafeCast for uint256;
     Vm private constant VM = Vm(address(uint160(uint256(keccak256("hevm cheat code")))));
 
     struct Context {
@@ -106,9 +108,8 @@ library TableUtils {
         uint256 assets = self.pool.previewRedeem(stv);
         uint256 debtSteth = self.pool.mintedStethSharesOf(_user);
         uint256 ggv = self.boringVault.balanceOf(_user);
-        require(ggv <= type(uint128).max, "ggv exceeds uint128 max");
-        require(_discount <= type(uint16).max, "discount exceeds uint16 max");
-        uint256 ggvStethOut = self.boringQueue.previewAssetsOut(address(self.wsteth), uint128(ggv), uint16(_discount));
+        uint256 ggvStethOut =
+            self.boringQueue.previewAssetsOut(address(self.wsteth), ggv.toUint128(), _discount.toUint16());
         uint256 wsteth = self.wsteth.balanceOf(_user);
 
         console.log(

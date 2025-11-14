@@ -3,9 +3,12 @@ pragma solidity 0.8.30;
 
 import {IStakingVault} from "../../src/interfaces/core/IStakingVault.sol";
 import {MockStETH} from "./MockStETH.sol";
+import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import {IVaultHub} from "src/interfaces/core/IVaultHub.sol";
 
 contract MockVaultHub {
+    using SafeCast for int256;
+
     // TODO: maybe inherit IVaultHub
 
     uint256 public immutable RESERVE_RATIO_BP = 25_00;
@@ -93,10 +96,10 @@ contract MockVaultHub {
 
     function mock_simulateRewards(address _vault, int256 _rewardAmount) external {
         if (_rewardAmount > 0) {
-            vaultBalances[_vault] += uint256(_rewardAmount);
+            vaultBalances[_vault] += _rewardAmount.toUint256();
         } else {
             // Handle slashing (negative rewards)
-            uint256 loss = uint256(-_rewardAmount);
+            uint256 loss = (-_rewardAmount).toUint256();
             if (loss > vaultBalances[_vault]) {
                 vaultBalances[_vault] = 0;
             } else {

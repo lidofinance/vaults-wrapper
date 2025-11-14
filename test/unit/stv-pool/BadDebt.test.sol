@@ -40,6 +40,8 @@ contract BadDebtTest is Test, SetupStvPool {
         _simulateBadDebt();
 
         vm.expectRevert(StvPool.VaultInBadDebt.selector);
+        /// No return since it reverts
+        /// forge-lint: disable-next-line(erc20-unchecked-transfer)
         pool.transfer(address(1), 1 ether);
     }
 
