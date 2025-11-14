@@ -23,6 +23,7 @@ contract MockDashboard is AccessControlEnumerable {
     bytes32 public constant FUND_ROLE = keccak256("FUND_ROLE");
     bytes32 public constant WITHDRAW_ROLE = keccak256("WITHDRAW_ROLE");
     bytes32 public constant REBALANCE_ROLE = keccak256("REBALANCE_ROLE");
+    bytes32 public constant PAUSE_BEACON_CHAIN_DEPOSITS_ROLE = keccak256("PAUSE_BEACON_CHAIN_DEPOSITS_ROLE");
 
     constructor(address _steth, address _wsteth, address _vaultHub, address _stakingVault, address _admin) {
         STETH = MockStETH(_steth);
@@ -90,7 +91,7 @@ contract MockDashboard is AccessControlEnumerable {
         VAULT_HUB.mintShares(VAULT, address(this), amount);
         uint256 mintedStETH = STETH.getPooledEthBySharesRoundUp(amount);
         uint256 wrappedWstETH = WSTETH.wrap(mintedStETH);
-        WSTETH.transfer(to, wrappedWstETH);
+        require(WSTETH.transfer(to, wrappedWstETH), "transfer failed");
     }
 
     function burnShares(uint256 amount) external {
@@ -99,7 +100,7 @@ contract MockDashboard is AccessControlEnumerable {
     }
 
     function burnWstETH(uint256 amount) external {
-        WSTETH.transferFrom(msg.sender, address(this), amount);
+        require(WSTETH.transferFrom(msg.sender, address(this), amount), "transferFrom failed");
         uint256 unwrappedStETH = WSTETH.unwrap(amount);
         uint256 unwrappedShares = STETH.getSharesByPooledEth(unwrappedStETH);
 
@@ -152,6 +153,11 @@ contract MockDashboard is AccessControlEnumerable {
 
     function voluntaryDisconnect() external {
         // Mock implementation
+    }
+
+    function connectToVaultHub() external payable {
+        // Mock implementation - just accept the ETH for connection deposit
+        VAULT_HUB.fund{value: msg.value}(VAULT);
     }
 
     receive() external payable {}

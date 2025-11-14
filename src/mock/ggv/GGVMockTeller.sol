@@ -15,11 +15,11 @@ contract GGVMockTeller is ITellerWithMultiAssetSupport {
         uint16 sharePremium;
     }
 
-    address public immutable owner;
-    GGVVaultMock public immutable _vault;
+    address public owner;
+    GGVVaultMock internal immutable _VAULT;
     uint256 internal immutable ONE_SHARE;
-    IStETH public immutable steth;
-    IWstETH public immutable wsteth;
+    IStETH public immutable STETH;
+    IWstETH public immutable WSTETH;
 
     mapping(ERC20 asset => Asset) public assets;
 
@@ -27,15 +27,22 @@ contract GGVMockTeller is ITellerWithMultiAssetSupport {
 
     constructor(address _owner, address __vault, address _steth, address _wsteth) {
         owner = _owner;
-        _vault = GGVVaultMock(__vault);
-        steth = IStETH(_steth);
-        wsteth = IWstETH(_wsteth);
+        _VAULT = GGVVaultMock(__vault);
+        STETH = IStETH(_steth);
+        WSTETH = IWstETH(_wsteth);
 
         // eq to 10 ** vault.decimals()
         ONE_SHARE = 10 ** 18;
 
         _updateAssetData(ERC20(_steth), true, false, 0);
         _updateAssetData(ERC20(_wsteth), true, true, 0);
+    }
+
+    function changeOwner(address newOwner) external {
+        if (msg.sender != owner) {
+            revert("Sender is not an owner");
+        }
+        owner = newOwner;
     }
 
     function deposit(ERC20 depositAsset, uint256 depositAmount, uint256 minimumMint, address referralAddress)
@@ -51,19 +58,19 @@ contract GGVMockTeller is ITellerWithMultiAssetSupport {
         }
 
         uint256 stethShares;
-        if (address(depositAsset) == address(steth)) {
-            stethShares = steth.getSharesByPooledEth(depositAmount);
-        } else if (address(depositAsset) == address(wsteth)) {
+        if (address(depositAsset) == address(STETH)) {
+            stethShares = STETH.getSharesByPooledEth(depositAmount);
+        } else if (address(depositAsset) == address(WSTETH)) {
             stethShares = depositAmount;
         } else {
             revert("Unsupported asset");
         }
 
         // hardcode share calculation for only steth
-        shares = _vault.getSharesByAssets(stethShares);
+        shares = _VAULT.getSharesByAssets(stethShares);
         if (shares < minimumMint) revert("Minted shares less than minimumMint");
 
-        _vault.depositByTeller(address(depositAsset), shares, stethShares, msg.sender);
+        _VAULT.depositByTeller(address(depositAsset), shares, stethShares, msg.sender);
 
         emit ReferralAddress(referralAddress);
     }
@@ -83,7 +90,7 @@ contract GGVMockTeller is ITellerWithMultiAssetSupport {
     }
 
     function vault() external view returns (address) {
-        return address(_vault);
+        return address(_VAULT);
     }
 
     // STUBS

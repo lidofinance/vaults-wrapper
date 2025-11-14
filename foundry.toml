@@ -47,4 +47,5 @@ ignore = [
 ]
 
 [lint]
-lint_on_build = false # TODO: enable later
+lint_on_build = true
+exclude_lints = ["mixed-case-variable", "mixed-case-function", "pascal-case-struct", "unsafe-cheatcode"]

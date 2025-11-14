@@ -169,7 +169,7 @@ contract BurningWstethTest is Test, SetupStvStETHPool {
 
     function test_BurnWsteth_RevertOnInsufficientWstethBalance() public {
         // Transfer away wstETH so user doesn't have enough
-        wsteth.transfer(userAlice, wsteth.balanceOf(address(this)));
+        assertTrue(wsteth.transfer(userAlice, wsteth.balanceOf(address(this))));
 
         vm.expectRevert(); // Should revert on transfer
         pool.burnWsteth(wstethToMint);

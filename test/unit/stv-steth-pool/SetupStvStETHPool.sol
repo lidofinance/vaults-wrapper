@@ -22,8 +22,8 @@ abstract contract SetupStvStETHPool is Test {
     address public userAlice;
     address public userBob;
 
-    uint256 public constant initialDeposit = 1 ether;
-    uint256 public constant reserveRatioGapBP = 5_00; // 5%
+    uint256 public constant INITIAL_DEPOSIT = 1 ether;
+    uint256 public constant RESERVE_RATIO_GAP_BP = 5_00; // 5%
 
     function setUp() public virtual {
         owner = makeAddr("owner");
@@ -43,11 +43,11 @@ abstract contract SetupStvStETHPool is Test {
         vaultHub = dashboard.VAULT_HUB();
 
         // Fund the dashboard with 1 ETH
-        dashboard.fund{value: initialDeposit}();
+        dashboard.fund{value: INITIAL_DEPOSIT}();
 
         // Deploy the pool with mock withdrawal queue
         StvStETHPool poolImpl = new StvStETHPool(
-            address(dashboard), false, reserveRatioGapBP, withdrawalQueue, address(0), keccak256("test.stv.steth.pool")
+            address(dashboard), false, RESERVE_RATIO_GAP_BP, withdrawalQueue, address(0), keccak256("test.stv.steth.pool")
         );
         ERC1967Proxy poolProxy = new ERC1967Proxy(address(poolImpl), "");
 

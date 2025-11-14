@@ -34,8 +34,8 @@ contract StvPool is Initializable, ERC20Upgradeable, AllowList, FeaturePausable 
 
     uint256 public constant TOTAL_BASIS_POINTS = 100_00;
 
-    uint256 private constant DECIMALS = 27;
-    uint256 private constant ASSET_DECIMALS = 18;
+    uint8 private constant DECIMALS = 27;
+    uint8 private constant ASSET_DECIMALS = 18;
 
     IStETH public immutable STETH;
     IDashboard public immutable DASHBOARD;

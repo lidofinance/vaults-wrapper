@@ -2,9 +2,12 @@
 pragma solidity 0.8.30;
 
 import {SetupStvPool} from "./SetupStvPool.sol";
+import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import {Test} from "forge-std/Test.sol";
 
 contract ViewsTest is Test, SetupStvPool {
+    using SafeCast for uint256;
+
     function setUp() public override {
         super.setUp();
 
@@ -30,7 +33,7 @@ contract ViewsTest is Test, SetupStvPool {
         uint256 totalBefore = pool.totalAssets();
         uint256 rewards = 2 ether;
 
-        dashboard.mock_simulateRewards(int256(rewards));
+        dashboard.mock_simulateRewards(rewards.toInt256());
 
         assertEq(pool.totalAssets(), totalBefore + rewards);
     }

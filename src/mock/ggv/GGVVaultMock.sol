@@ -8,15 +8,15 @@ import {GGVMockTeller} from "./GGVMockTeller.sol";
 import {GGVQueueMock} from "./GGVQueueMock.sol";
 import {IStETH} from "src/interfaces/core/IStETH.sol";
 import {IWstETH} from "src/interfaces/core/IWstETH.sol";
-import {IBoringOnChainQueue} from "src/interfaces/ggv/IBoringOnChainQueue.sol";
 import {ITellerWithMultiAssetSupport} from "src/interfaces/ggv/ITellerWithMultiAssetSupport.sol";
 
 contract GGVVaultMock is ERC20 {
-    address public immutable owner;
+    address public owner;
+
     ITellerWithMultiAssetSupport public immutable TELLER;
     GGVQueueMock public immutable BORING_QUEUE;
-    IStETH public immutable steth;
-    IWstETH public immutable wsteth;
+    IStETH public immutable STETH;
+    IWstETH public immutable WSTETH;
 
     // steth shares as base vault asset
     // real ggv uses weth but it should be okay to peg it to steth shares for mock
@@ -30,12 +30,19 @@ contract GGVVaultMock is ERC20 {
         owner = _owner;
         TELLER = ITellerWithMultiAssetSupport(address(new GGVMockTeller(_owner, address(this), _steth, _wsteth)));
         BORING_QUEUE = new GGVQueueMock(address(this), _steth, _wsteth, _owner);
-        steth = IStETH(_steth);
-        wsteth = IWstETH(_wsteth);
+        STETH = IStETH(_steth);
+        WSTETH = IWstETH(_wsteth);
 
         // Mint some initial tokens to the dead address to avoid zero totalSupply issues
         _mint(address(0xdead), 1e18);
         _totalAssets = 1e18;
+    }
+
+    function changeOwner(address newOwner) external {
+        if (msg.sender != owner) {
+            revert("Sender is not an owner");
+        }
+        owner = newOwner;
     }
 
     function _onlyOwner() internal view {
@@ -52,25 +59,25 @@ contract GGVVaultMock is ERC20 {
 
     function rebaseSteth(uint256 _stethShares) external {
         _onlyOwner();
-        steth.transferSharesFrom(msg.sender, address(this), _stethShares);
+        STETH.transferSharesFrom(msg.sender, address(this), _stethShares);
         _totalAssets += _stethShares;
     }
 
     function negativeRebaseSteth(uint256 stethSharesToRebaseWith) external {
         _onlyOwner();
-        steth.transferShares(msg.sender, stethSharesToRebaseWith);
+        STETH.transferShares(msg.sender, stethSharesToRebaseWith);
         _totalAssets -= stethSharesToRebaseWith;
     }
 
     function rebaseWsteth(uint256 wstethAmount) external {
         _onlyOwner();
-        wsteth.transferFrom(msg.sender, address(this), wstethAmount);
+        require(WSTETH.transferFrom(msg.sender, address(this), wstethAmount), "Transfer failed");
         _totalAssets += wstethAmount;
     }
 
     function negativeRebaseWsteth(uint256 wstethAmount) external {
         _onlyOwner();
-        wsteth.transfer(msg.sender, wstethAmount);
+        require(WSTETH.transfer(msg.sender, wstethAmount), "Transfer failed");
         _totalAssets -= wstethAmount;
     }
 
@@ -92,10 +99,10 @@ contract GGVVaultMock is ERC20 {
     function depositByTeller(address asset, uint256 shares, uint256 assets, address user) external {
         _onlyTeller();
 
-        if (asset == address(steth)) {
-            steth.transferSharesFrom(user, address(this), assets);
-        } else if (asset == address(wsteth)) {
-            wsteth.transferFrom(user, address(this), assets);
+        if (asset == address(STETH)) {
+            STETH.transferSharesFrom(user, address(this), assets);
+        } else if (asset == address(WSTETH)) {
+            require(WSTETH.transferFrom(user, address(this), assets), "Transfer failed");
         } else {
             revert("Unsupported asset");
         }
@@ -108,7 +115,7 @@ contract GGVVaultMock is ERC20 {
         _onlyQueue();
         _burn(address(BORING_QUEUE), shares);
         _totalAssets -= assets;
-        assetOut.transfer(user, assets);
+        require(assetOut.transfer(user, assets), "Transfer failed");
     }
 
     function totalAssets() public view returns (uint256) {

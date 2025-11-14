@@ -8,11 +8,11 @@ contract AssetsTest is Test, SetupStvStETHPool {
     uint8 supplyDecimals = 27;
 
     function test_InitialState_CorrectAssets() public view {
-        assertEq(pool.totalAssets(), initialDeposit);
-        assertEq(pool.totalNominalAssets(), initialDeposit);
+        assertEq(pool.totalAssets(), INITIAL_DEPOSIT);
+        assertEq(pool.totalNominalAssets(), INITIAL_DEPOSIT);
 
-        assertEq(pool.nominalAssetsOf(address(pool)), initialDeposit);
-        assertEq(pool.assetsOf(address(pool)), initialDeposit);
+        assertEq(pool.nominalAssetsOf(address(pool)), INITIAL_DEPOSIT);
+        assertEq(pool.assetsOf(address(pool)), INITIAL_DEPOSIT);
     }
 
     function test_Deposit_IncreasesAssets() public {

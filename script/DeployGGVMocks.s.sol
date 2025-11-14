@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.30;
 
-import "forge-std/Script.sol";
+import {Script} from "forge-std/Script.sol";
+import {console2} from "forge-std/console2.sol";
 
 import {GGVVaultMock} from "src/mock/ggv/GGVVaultMock.sol";
 
@@ -49,4 +50,3 @@ contract DeployGGVMocks is Script {
         return string(abi.encodePacked("deployments/ggv-mocks-", network, ".json"));
     }
 }
-

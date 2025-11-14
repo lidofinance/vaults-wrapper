@@ -2,11 +2,9 @@
 pragma solidity 0.8.30;
 
 import {StvPool} from "./StvPool.sol";
-import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
-
-import {IStETH} from "./interfaces/core/IStETH.sol";
 import {IVaultHub} from "./interfaces/core/IVaultHub.sol";
 import {IWstETH} from "./interfaces/core/IWstETH.sol";
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
 /**
  * @title StvStETHPool
@@ -29,6 +27,7 @@ contract StvStETHPool is StvPool {
     error InsufficientStv();
     error ZeroArgument();
     error ArraysLengthMismatch(uint256 firstArrayLength, uint256 secondArrayLength);
+    error CannotRebalanceWithdrawalQueue();
     error UndercollateralizedAccount();
     error CollateralizedAccount();
     error ExcessiveLossSocialization();
@@ -296,7 +295,11 @@ contract StvStETHPool is StvPool {
         view
         returns (uint256 stethShares)
     {
-        uint256 stethSharesForAssets = calcStethSharesToMintForAssets(assetsOf(_account) + _ethToFund);
+        // Simulate depositing ETH to account for rounded down assets after conversion
+        uint256 stvForAssets = _convertToStv(_ethToFund, Math.Rounding.Floor);
+        uint256 ethRoundedDown = _convertToAssets(stvForAssets);
+
+        uint256 stethSharesForAssets = calcStethSharesToMintForAssets(assetsOf(_account) + ethRoundedDown);
         stethShares = Math.saturatingSub(stethSharesForAssets, mintedStethSharesOf(_account));
     }
 
@@ -338,7 +341,8 @@ contract StvStETHPool is StvPool {
         uint256 unwrappedStethShares = _getSharesByPooledEth(unwrappedSteth);
         _decreaseMintedStethShares(msg.sender, unwrappedStethShares);
 
-        WSTETH.transferFrom(msg.sender, address(this), _wsteth);
+        // Transfer on WSTETH contract always return true or revert
+        assert(WSTETH.transferFrom(msg.sender, address(this), _wsteth));
         DASHBOARD.burnWstETH(_wsteth);
     }
 
@@ -561,6 +565,7 @@ contract StvStETHPool is StvPool {
         _checkFreshReport();
 
         (uint256 stethShares, uint256 stv, bool isUndercollateralized) = previewForceRebalance(_account);
+        if (_account == address(WITHDRAWAL_QUEUE)) revert CannotRebalanceWithdrawalQueue();
         if (isUndercollateralized) revert UndercollateralizedAccount();
 
         stvBurned = _rebalanceMintedStethShares(_account, stethShares, stv);
@@ -577,6 +582,7 @@ contract StvStETHPool is StvPool {
         _checkFreshReport();
 
         (uint256 stethShares, uint256 stv, bool isUndercollateralized) = previewForceRebalance(_account);
+        if (_account == address(WITHDRAWAL_QUEUE)) revert CannotRebalanceWithdrawalQueue();
         if (!isUndercollateralized) revert CollateralizedAccount();
 
         stvBurned = _rebalanceMintedStethShares(_account, stethShares, stv);

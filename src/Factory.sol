@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.30;
 
-import {Distributor} from "./Distributor.sol";
+import {ShortString, ShortStrings} from "@openzeppelin/contracts/utils/ShortStrings.sol";
+
 import {StvPool} from "./StvPool.sol";
+import {StvStETHPool} from "./StvStETHPool.sol";
 import {WithdrawalQueue} from "./WithdrawalQueue.sol";
 import {DistributorFactory} from "./factories/DistributorFactory.sol";
 import {GGVStrategyFactory} from "./factories/GGVStrategyFactory.sol";
@@ -17,25 +19,28 @@ import {IVaultHub} from "./interfaces/core/IVaultHub.sol";
 import {DummyImplementation} from "./proxy/DummyImplementation.sol";
 import {OssifiableProxy} from "./proxy/OssifiableProxy.sol";
 
-import {WithdrawalQueue} from "./WithdrawalQueue.sol";
 import {IDashboard} from "./interfaces/core/IDashboard.sol";
 import {IVaultFactory} from "./interfaces/core/IVaultFactory.sol";
 
-/// @title Factory
-/// @notice Main factory contract for deploying complete pool ecosystems with vaults, withdrawal queues, distributors, etc
-/// @dev Implements a two-phase deployment process (start/finish) to ensure robust setup of all components and roles
+/**
+ * @title Factory
+ * @notice Main factory contract for deploying complete pool ecosystems with vaults, withdrawal queues, distributors, etc
+ * @dev Implements a two-phase deployment process (start/finish) to ensure robust setup of all components and roles
+ */
 contract Factory {
     //
     // Structs
     //
 
-    /// @notice Addresses of all sub-factory contracts used for deploying components
-    /// @param stvPoolFactory Factory for deploying StvPool implementations
-    /// @param stvStETHPoolFactory Factory for deploying StvStETHPool implementations
-    /// @param withdrawalQueueFactory Factory for deploying WithdrawalQueue implementations
-    /// @param distributorFactory Factory for deploying Distributor implementations
-    /// @param ggvStrategyFactory Factory for deploying GGV strategy implementations
-    /// @param timelockFactory Factory for deploying Timelock controllers
+    /**
+     * @notice Addresses of all sub-factory contracts used for deploying components
+     * @param stvPoolFactory Factory for deploying StvPool implementations
+     * @param stvStETHPoolFactory Factory for deploying StvStETHPool implementations
+     * @param withdrawalQueueFactory Factory for deploying WithdrawalQueue implementations
+     * @param distributorFactory Factory for deploying Distributor implementations
+     * @param ggvStrategyFactory Factory for deploying GGV strategy implementations
+     * @param timelockFactory Factory for deploying Timelock controllers
+     */
     struct SubFactories {
         address stvPoolFactory;
         address stvStETHPoolFactory;
@@ -45,11 +50,13 @@ contract Factory {
         address timelockFactory;
     }
 
-    /// @notice Configuration parameters for vault creation
-    /// @param nodeOperator Address of the node operator managing the vault
-    /// @param nodeOperatorManager Address authorized to manage node operator settings
-    /// @param nodeOperatorFeeBP Node operator fee in basis points (1 BP = 0.01%)
-    /// @param confirmExpiry Time period for confirmation expiry
+    /**
+     * @notice Configuration parameters for vault creation
+     * @param nodeOperator Address of the node operator managing the vault
+     * @param nodeOperatorManager Address authorized to manage node operator settings
+     * @param nodeOperatorFeeBP Node operator fee in basis points (1 BP = 0.01%)
+     * @param confirmExpiry Time period for confirmation expiry
+     */
     struct VaultConfig {
         address nodeOperator;
         address nodeOperatorManager;
@@ -57,65 +64,80 @@ contract Factory {
         uint256 confirmExpiry;
     }
 
-    /// @notice Configuration for timelock controller deployment
-    /// @param minDelaySeconds Minimum delay before executing queued operations
-    /// @param proposer Address authorized to propose operations
-    /// @param executor Address authorized to execute operations
+    /**
+     * @notice Configuration for timelock controller deployment
+     * @param minDelaySeconds Minimum delay before executing queued operations
+     * @param proposer Address authorized to propose operations
+     * @param executor Address authorized to execute operations
+     */
     struct TimelockConfig {
         uint256 minDelaySeconds;
         address proposer;
         address executor;
     }
 
-    /// @notice Common configuration shared across all pool types
-    /// @param minWithdrawalDelayTime Minimum delay time for processing withdrawals
-    /// @param name ERC20 token name for the pool shares
-    /// @param symbol ERC20 token symbol for the pool shares
+    /**
+     * @notice Common configuration shared across all pool types
+     * @param minWithdrawalDelayTime Minimum delay time for processing withdrawals
+     * @param name ERC20 token name for the pool shares
+     * @param symbol ERC20 token symbol for the pool shares
+     */
     struct CommonPoolConfig {
         uint256 minWithdrawalDelayTime;
         string name;
         string symbol;
+        address emergencyCommittee;
     }
 
-    /// @notice Configuration specific to StvStETH pools (deprecated, kept for compatibility)
-    /// @param allowlistEnabled Whether the pool requires allowlist for deposits
-    /// @param reserveRatioGapBP Maximum allowed gap in reserve ratio in basis points
+    /**
+     * @notice Configuration specific to StvStETH pools (deprecated, kept for compatibility)
+     * @param allowlistEnabled Whether the pool requires allowlist for deposits
+     * @param reserveRatioGapBP Maximum allowed gap in reserve ratio in basis points
+     */
     struct StvStETHPoolConfig {
         bool allowlistEnabled;
         uint256 reserveRatioGapBP;
     }
 
-    /// @notice Extended configuration for pools with minting or strategy capabilities
-    /// @param allowlistEnabled Whether the pool requires allowlist for deposits
-    /// @param mintingEnabled Whether the pool can mint stETH tokens
-    /// @param reserveRatioGapBP Maximum allowed gap in reserve ratio in basis points
+    /**
+     * @notice Extended configuration for pools with minting or strategy capabilities
+     * @param allowlistEnabled Whether the pool requires allowlist for deposits
+     * @param mintingEnabled Whether the pool can mint stETH tokens
+     * @param reserveRatioGapBP Maximum allowed gap in reserve ratio in basis points
+     */
     struct AuxiliaryPoolConfig {
         bool allowlistEnabled;
         bool mintingEnabled;
         uint256 reserveRatioGapBP;
     }
 
-    /// @notice Intermediate state returned by deployment start functions
-    /// @param pool Address of the deployed pool proxy
-    /// @param timelock Address of the deployed timelock controller
-    /// @param strategyFactory Address of the strategy factory (zero if not using strategies)
-    /// @param strategyDeployBytes ABI-encoded parameters for strategy deployment
+    /**
+     * @notice Intermediate state returned by deployment start functions
+     * @param dashboard Address of the deployed dashboard
+     * @param poolProxy Address of the deployed pool proxy (not yet initialized)
+     * @param withdrawalQueueProxy Address of the deployed withdrawal queue proxy (not yet initialized)
+     * @param timelock Address of the deployed timelock controller
+     */
     struct PoolIntermediate {
-        address pool;
+        address dashboard;
+        address poolProxy;
+        address poolImpl;
+        address withdrawalQueueProxy;
+        address wqImpl;
         address timelock;
-        address strategyFactory;
-        bytes strategyDeployBytes;
     }
 
-    /// @notice Complete deployment result returned by finish function
-    /// @param poolType Type identifier for the pool (StvPool, StvStETHPool, or StvStrategyPool)
-    /// @param vault Address of the deployed vault
-    /// @param dashboard Address of the deployed dashboard
-    /// @param pool Address of the deployed pool
-    /// @param withdrawalQueue Address of the deployed withdrawal queue
-    /// @param distributor Address of the deployed distributor
-    /// @param timelock Address of the deployed timelock controller
-    /// @param strategy Address of the deployed strategy (zero if not using strategies)
+    /**
+     * @notice Complete deployment result returned by createPoolFinish
+     * @param poolType Type identifier for the pool (StvPool, StvStETHPool, or StvStrategyPool)
+     * @param vault Address of the deployed vault (staking vault)
+     * @param dashboard Address of the deployed dashboard (manages vault roles and interactions)
+     * @param pool Address of the deployed pool (initialized with ERC20 token functionality)
+     * @param withdrawalQueue Address of the deployed withdrawal queue (handles withdrawal requests)
+     * @param distributor Address of the deployed distributor (handles fee distribution)
+     * @param timelock Address of the deployed timelock controller (admin for all components)
+     * @param strategy Address of the deployed strategy (zero if not using strategies)
+     */
     struct PoolDeployment {
         bytes32 poolType;
         address vault;
@@ -131,19 +153,40 @@ contract Factory {
     // Events
     //
 
-    /// @notice Emitted when pool deployment is initiated in the start phase
-    /// @param intermediate Contains addresses of deployed components needed for finish phase
-    /// @param finishDeadline Timestamp by which createPoolFinish must be called (inclusive)
-    event PoolCreationStarted(PoolIntermediate intermediate, uint256 finishDeadline);
+    /**
+     * @notice Emitted when pool deployment is initiated in the start phase
+     * @param sender Address that initiated the deployment (msg.sender)
+     * @param vaultConfig Configuration for the vault
+     * @param commonPoolConfig Common pool parameters
+     * @param auxiliaryConfig Additional pool configuration
+     * @param timelockConfig Configuration for the timelock controller
+     * @param strategyFactory Address of strategy factory (zero if not using strategies)
+     * @param strategyDeployBytes ABI-encoded parameters for strategy deployment (empty if no strategy)
+     * @param intermediate Contains addresses of deployed components (dashboard, pool proxy, withdrawal queue proxy, timelock) needed for finish phase
+     * @param finishDeadline Timestamp by which createPoolFinish must be called (inclusive)
+     */
+    event PoolCreationStarted(
+        address indexed sender,
+        VaultConfig vaultConfig,
+        CommonPoolConfig commonPoolConfig,
+        AuxiliaryPoolConfig auxiliaryConfig,
+        TimelockConfig timelockConfig,
+        address indexed strategyFactory,
+        bytes strategyDeployBytes,
+        PoolIntermediate intermediate,
+        uint256 finishDeadline
+    );
 
-    /// @notice Emitted when pool deployment is completed in the finish phase
-    /// @param vault Address of the deployed vault
-    /// @param pool Address of the deployed pool
-    /// @param poolType Type identifier for the pool
-    /// @param withdrawalQueue Address of the deployed withdrawal queue
-    /// @param strategyFactory Address of the strategy factory used (zero if none)
-    /// @param strategyDeployBytes ABI-encoded parameters used for strategy deployment
-    /// @param strategy Address of the deployed strategy (zero if not using strategies)
+    /**
+     * @notice Emitted when pool deployment is completed in the finish phase
+     * @param vault Address of the deployed vault
+     * @param pool Address of the deployed pool
+     * @param poolType Type identifier for the pool (StvPool, StvStETHPool, or StvStrategyPool)
+     * @param withdrawalQueue Address of the deployed withdrawal queue
+     * @param strategyFactory Address of the strategy factory used (zero if none)
+     * @param strategyDeployBytes ABI-encoded parameters used for strategy deployment (empty if no strategy)
+     * @param strategy Address of the deployed strategy (zero if not using strategies)
+     */
     event PoolCreated(
         address vault,
         address pool,
@@ -158,91 +201,139 @@ contract Factory {
     // Custom errors
     //
 
-    /// @notice Thrown when configuration parameters are invalid or inconsistent
-    /// @param reason Human-readable description of the configuration error
+    /**
+     * @notice Thrown when configuration parameters are invalid or inconsistent
+     * @param reason Human-readable description of the configuration error
+     */
     error InvalidConfiguration(string reason);
 
-    /// @notice Thrown when insufficient ETH is sent for the vault connection deposit
-    /// @param provided Amount of ETH provided in msg.value
-    /// @param required Required amount for VAULT_HUB.CONNECT_DEPOSIT()
+    /**
+     * @notice Thrown when insufficient ETH is sent for the vault connection deposit
+     * @param provided Amount of ETH provided in msg.value
+     * @param required Required amount for VAULT_HUB.CONNECT_DEPOSIT()
+     */
     error InsufficientConnectDeposit(uint256 provided, uint256 required);
 
-    /// @notice Thrown when a string exceeds the maximum length for encoding to bytes32
-    /// @param str The string that is too long
+    /**
+     * @notice Thrown when a string exceeds the maximum length for encoding to bytes32
+     * @param str The string that is too long
+     */
     error StringTooLong(string str);
 
     //
     // Constants and immutables
     //
 
-    /// @notice Lido vault factory for creating vaults and dashboards
+    /**
+     * @notice Lido vault factory for creating vaults and dashboards
+     */
     IVaultFactory public immutable VAULT_FACTORY;
 
-    /// @notice Lido V3 VaultHub (cached from LidoLocator for gas cost reduction)
+    /**
+     * @notice Lido V3 VaultHub (cached from LidoLocator for gas cost reduction)
+     */
     IVaultHub public immutable VAULT_HUB;
 
-    /// @notice Lido stETH token address (cached from LidoLocator for gas cost reduction)
+    /**
+     * @notice Lido stETH token address (cached from LidoLocator for gas cost reduction)
+     */
     address public immutable STETH;
 
-    /// @notice Lido wstETH token address (cached from LidoLocator for gas cost reduction)
+    /**
+     * @notice Lido wstETH token address (cached from LidoLocator for gas cost reduction)
+     */
     address public immutable WSTETH;
 
-    /// @notice Lido V3 LazyOracle (cached from LidoLocator for gas cost reduction)
+    /**
+     * @notice Lido V3 LazyOracle (cached from LidoLocator for gas cost reduction)
+     */
     address public immutable LAZY_ORACLE;
 
-    /// @notice Pool type identifier for basic StvPool
+    /**
+     * @notice Pool type identifier for basic StvPool
+     */
     bytes32 public immutable STV_POOL_TYPE;
 
-    /// @notice Pool type identifier for StvStETHPool with minting capabilities
+    /**
+     * @notice Pool type identifier for StvStETHPool with minting capabilities
+     */
     bytes32 public immutable STV_STETH_POOL_TYPE;
 
-    /// @notice Pool type identifier for StvStrategyPool with strategy integration
+    /**
+     * @notice Pool type identifier for StvStrategyPool with strategy integration
+     */
     bytes32 public immutable STRATEGY_POOL_TYPE;
 
-    /// @notice Factory for deploying StvPool implementations
+    /**
+     * @notice Factory for deploying StvPool implementations
+     */
     StvPoolFactory public immutable STV_POOL_FACTORY;
 
-    /// @notice Factory for deploying StvStETHPool implementations
+    /**
+     * @notice Factory for deploying StvStETHPool implementations
+     */
     StvStETHPoolFactory public immutable STV_STETH_POOL_FACTORY;
 
-    /// @notice Factory for deploying WithdrawalQueue implementations
+    /**
+     * @notice Factory for deploying WithdrawalQueue implementations
+     */
     WithdrawalQueueFactory public immutable WITHDRAWAL_QUEUE_FACTORY;
 
-    /// @notice Factory for deploying Distributor implementations
+    /**
+     * @notice Factory for deploying Distributor implementations
+     */
     DistributorFactory public immutable DISTRIBUTOR_FACTORY;
 
-    /// @notice Factory for deploying GGV strategy implementations
+    /**
+     * @notice Factory for deploying GGV strategy implementations
+     */
     GGVStrategyFactory public immutable GGV_STRATEGY_FACTORY;
 
-    /// @notice Factory for deploying Timelock controllers
+    /**
+     * @notice Factory for deploying Timelock controllers
+     */
     TimelockFactory public immutable TIMELOCK_FACTORY;
 
-    /// @notice Dummy implementation used for temporary proxy initialization
+    /**
+     * @notice Dummy implementation used for temporary proxy initialization
+     */
     address public immutable DUMMY_IMPLEMENTATION;
 
-    /// @notice Default admin role identifier (keccak256("") = 0x00)
+    /**
+     * @notice Default admin role identifier (keccak256("") = 0x00)
+     */
     bytes32 public immutable DEFAULT_ADMIN_ROLE = 0x00;
 
-    /// @notice Total basis points constant (100.00%)
+    /**
+     * @notice Total basis points constant (100.00%)
+     */
     uint256 public constant TOTAL_BASIS_POINTS = 100_00;
 
-    /// @notice Maximum time allowed between start and finish deployment phases
+    /**
+     * @notice Maximum time allowed between start and finish deployment phases
+     */
     uint256 public constant DEPLOY_START_FINISH_SPAN_SECONDS = 1 days;
 
-    /// @notice Sentinel value marking a deployment as complete
+    /**
+     * @notice Sentinel value marking a deployment as complete
+     */
     uint256 public constant DEPLOY_FINISHED = type(uint256).max;
 
     //
     // Structured storage
     //
 
-    /// @notice Tracks deployment state by hash of intermediate state and sender
-    /// @dev Maps deployment hash to finish deadline (0 = not started, DEPLOY_FINISHED = finished)
+    /**
+     * @notice Tracks deployment state by hash of intermediate state and sender
+     * @dev Maps deployment hash to finish deadline (0 = not started, DEPLOY_FINISHED = finished)
+     */
     mapping(bytes32 => uint256) public intermediateState;
 
-    /// @notice Initializes the factory with Lido locator and sub-factory addresses
-    /// @param _locatorAddress Address of the Lido locator contract containing core protocol addresses
-    /// @param _subFactories Struct containing addresses of all required sub-factory contracts
+    /**
+     * @notice Initializes the factory with Lido locator and sub-factory addresses
+     * @param _locatorAddress Address of the Lido locator contract containing core protocol addresses
+     * @param _subFactories Struct containing addresses of all required sub-factory contracts
+     */
     constructor(address _locatorAddress, SubFactories memory _subFactories) {
         ILidoLocator locator = ILidoLocator(_locatorAddress);
         VAULT_FACTORY = IVaultFactory(locator.vaultFactory());
@@ -260,119 +351,103 @@ contract Factory {
 
         DUMMY_IMPLEMENTATION = address(new DummyImplementation());
 
-        STV_POOL_TYPE = _toBytes32("StvPool");
-        STV_STETH_POOL_TYPE = _toBytes32("StvStETHPool");
-        STRATEGY_POOL_TYPE = _toBytes32("StvStrategyPool");
+        STV_POOL_TYPE = ShortString.unwrap(ShortStrings.toShortString("StvPool"));
+        STV_STETH_POOL_TYPE = ShortString.unwrap(ShortStrings.toShortString("StvStETHPool"));
+        STRATEGY_POOL_TYPE = ShortString.unwrap(ShortStrings.toShortString("StvStrategyPool"));
     }
 
-    /// @notice Initiates deployment of a basic StvPool (first phase)
-    /// @param _vaultConfig Configuration for the vault
-    /// @param _timelockConfig Configuration for the timelock controller
-    /// @param _commonPoolConfig Common pool parameters (name, symbol, withdrawal delay)
-    /// @param _allowListEnabled Whether to enable allowlist for deposits
-    /// @return intermediate Deployment state needed for finish phase
-    /// @dev Requires msg.value >= VAULT_HUB.CONNECT_DEPOSIT() for vault connection
+    /**
+     * @notice Initiates deployment of a basic StvPool (first phase)
+     * @param _vaultConfig Configuration for the vault
+     * @param _timelockConfig Configuration for the timelock controller
+     * @param _commonPoolConfig Common pool parameters (name, symbol, withdrawal delay)
+     * @param _allowListEnabled Whether to enable allowlist for deposits
+     * @return intermediate Deployment state needed for finish phase
+     * @dev ETH for vault connection deposit should be sent in createPoolFinish
+     */
     function createPoolStvStart(
         VaultConfig memory _vaultConfig,
         TimelockConfig memory _timelockConfig,
         CommonPoolConfig memory _commonPoolConfig,
         bool _allowListEnabled
-    ) external payable returns (PoolIntermediate memory intermediate) {
-        intermediate = createPoolStart(
-            _vaultConfig,
-            _commonPoolConfig,
-            AuxiliaryPoolConfig({allowlistEnabled: _allowListEnabled, mintingEnabled: false, reserveRatioGapBP: 0}),
-            _timelockConfig,
-            address(0),
-            ""
-        );
+    ) external returns (PoolIntermediate memory intermediate) {
+        AuxiliaryPoolConfig memory _auxiliaryPoolConfig = AuxiliaryPoolConfig({
+            allowlistEnabled: _allowListEnabled, mintingEnabled: false, reserveRatioGapBP: 0
+        });
+        intermediate =
+            createPoolStart(_vaultConfig, _timelockConfig, _commonPoolConfig, _auxiliaryPoolConfig, address(0), "");
     }
 
-    /// @notice Initiates deployment of an StvStETHPool with minting capabilities (first phase)
-    /// @param _vaultConfig Configuration for the vault
-    /// @param _timelockConfig Configuration for the timelock controller
-    /// @param _commonPoolConfig Common pool parameters (name, symbol, withdrawal delay)
-    /// @param _allowListEnabled Whether to enable allowlist for deposits
-    /// @param _reserveRatioGapBP Maximum allowed reserve ratio gap in basis points
-    /// @return intermediate Deployment state needed for finish phase
-    /// @dev Requires msg.value >= VAULT_HUB.CONNECT_DEPOSIT() for vault connection
+    /**
+     * @notice Initiates deployment of an StvStETHPool with minting capabilities (first phase)
+     * @param _vaultConfig Configuration for the vault
+     * @param _timelockConfig Configuration for the timelock controller
+     * @param _commonPoolConfig Common pool parameters (name, symbol, withdrawal delay)
+     * @param _allowListEnabled Whether to enable allowlist for deposits
+     * @param _reserveRatioGapBP Maximum allowed reserve ratio gap in basis points
+     * @return intermediate Deployment state needed for finish phase
+     * @dev ETH for vault connection deposit should be sent in createPoolFinish
+     */
     function createPoolStvStETHStart(
         VaultConfig memory _vaultConfig,
         TimelockConfig memory _timelockConfig,
         CommonPoolConfig memory _commonPoolConfig,
         bool _allowListEnabled,
         uint256 _reserveRatioGapBP
-    ) external payable returns (PoolIntermediate memory intermediate) {
-        intermediate = createPoolStart(
-            _vaultConfig,
-            _commonPoolConfig,
-            AuxiliaryPoolConfig({
-                allowlistEnabled: _allowListEnabled, mintingEnabled: true, reserveRatioGapBP: _reserveRatioGapBP
-            }),
-            _timelockConfig,
-            address(0),
-            ""
-        );
+    ) external returns (PoolIntermediate memory intermediate) {
+        AuxiliaryPoolConfig memory _auxiliaryPoolConfig = AuxiliaryPoolConfig({
+            allowlistEnabled: _allowListEnabled, mintingEnabled: true, reserveRatioGapBP: _reserveRatioGapBP
+        });
+
+        intermediate =
+            createPoolStart(_vaultConfig, _timelockConfig, _commonPoolConfig, _auxiliaryPoolConfig, address(0), "");
     }
 
-    /// @notice Initiates deployment of a GGV strategy pool (first phase)
-    /// @param _vaultConfig Configuration for the vault
-    /// @param _timelockConfig Configuration for the timelock controller
-    /// @param _commonPoolConfig Common pool parameters (name, symbol, withdrawal delay)
-    /// @param _reserveRatioGapBP Maximum allowed reserve ratio gap in basis points
-    /// @return intermediate Deployment state needed for finish phase
-    /// @dev Requires msg.value >= VAULT_HUB.CONNECT_DEPOSIT() for vault connection
-    /// @dev Automatically enables allowlist and minting for GGV pools
+    /**
+     * @notice Initiates deployment of a GGV strategy pool (first phase)
+     * @param _vaultConfig Configuration for the vault
+     * @param _timelockConfig Configuration for the timelock controller
+     * @param _commonPoolConfig Common pool parameters (name, symbol, withdrawal delay)
+     * @param _reserveRatioGapBP Maximum allowed reserve ratio gap in basis points
+     * @return intermediate Deployment state needed for finish phase
+     * @dev ETH for vault connection deposit should be sent in createPoolFinish
+     * @dev Automatically enables allowlist and minting for GGV pools
+     */
     function createPoolGGVStart(
         VaultConfig memory _vaultConfig,
         TimelockConfig memory _timelockConfig,
         CommonPoolConfig memory _commonPoolConfig,
         uint256 _reserveRatioGapBP
-    ) external payable returns (PoolIntermediate memory intermediate) {
+    ) external returns (PoolIntermediate memory intermediate) {
+        AuxiliaryPoolConfig memory auxiliaryConfig = AuxiliaryPoolConfig({
+            allowlistEnabled: true, mintingEnabled: true, reserveRatioGapBP: _reserveRatioGapBP
+        });
         intermediate = createPoolStart(
-            _vaultConfig,
-            _commonPoolConfig,
-            AuxiliaryPoolConfig({allowlistEnabled: true, mintingEnabled: true, reserveRatioGapBP: _reserveRatioGapBP}),
-            _timelockConfig,
-            address(GGV_STRATEGY_FACTORY),
-            ""
+            _vaultConfig, _timelockConfig, _commonPoolConfig, auxiliaryConfig, address(GGV_STRATEGY_FACTORY), ""
         );
     }
 
-    /// @notice Generic pool deployment start function (first phase)
-    /// @param _vaultConfig Configuration for the vault
-    /// @param _commonPoolConfig Common pool parameters (name, symbol, withdrawal delay)
-    /// @param _auxiliaryConfig Additional pool configuration (allowlist, minting, reserve ratio)
-    /// @param _timelockConfig Configuration for the timelock controller
-    /// @param _strategyFactory Address of strategy factory (zero for pools without strategy)
-    /// @param _strategyDeployBytes ABI-encoded parameters for strategy deployment
-    /// @return intermediate Deployment state needed for finish phase
-    /// @dev This is the main deployment function called by all pool-specific start functions
-    /// @dev Validates configuration, deploys components, and records deployment state
-    /// @dev Requires msg.value >= VAULT_HUB.CONNECT_DEPOSIT() for vault connection
-    /// @dev Must be followed by createPoolFinish within DEPLOY_START_FINISH_SPAN_SECONDS
+    /**
+     * @notice Generic pool deployment start function (first phase)
+     * @param _vaultConfig Configuration for the vault
+     * @param _timelockConfig Configuration for the timelock controller
+     * @param _commonPoolConfig Common pool parameters
+     * @param _auxiliaryConfig Additional pool configuration
+     * @param _strategyFactory Address of strategy factory (zero for pools without strategy)
+     * @param _strategyDeployBytes ABI-encoded parameters for strategy deployment
+     * @return intermediate Deployment state required to finish deployment createPoolFinish call
+     * @dev This is the main deployment function called by all pool-specific start functions
+     * @dev ETH for vault connection deposit should be sent in createPoolFinish
+     * @dev Must be followed by createPoolFinish within DEPLOY_START_FINISH_SPAN_SECONDS
+     */
     function createPoolStart(
         VaultConfig memory _vaultConfig,
+        TimelockConfig memory _timelockConfig,
         CommonPoolConfig memory _commonPoolConfig,
         AuxiliaryPoolConfig memory _auxiliaryConfig,
-        TimelockConfig memory _timelockConfig,
         address _strategyFactory,
         bytes memory _strategyDeployBytes
-    ) public payable returns (PoolIntermediate memory intermediate) {
-        if (msg.value < VAULT_HUB.CONNECT_DEPOSIT()) {
-            revert InsufficientConnectDeposit(msg.value, VAULT_HUB.CONNECT_DEPOSIT());
-        }
-
-        bytes32 poolType = STV_POOL_TYPE;
-        if (_strategyFactory != address(0)) {
-            poolType = STRATEGY_POOL_TYPE;
-            if (!_auxiliaryConfig.allowlistEnabled) {
-                revert InvalidConfiguration("allowlistEnabled must be true if strategy factory is set");
-            }
-        } else if (_auxiliaryConfig.mintingEnabled) {
-            poolType = STV_STETH_POOL_TYPE;
-        }
-
+    ) public returns (PoolIntermediate memory intermediate) {
         if (bytes(_commonPoolConfig.name).length == 0 || bytes(_commonPoolConfig.symbol).length == 0) {
             revert InvalidConfiguration("name and symbol must be set");
         }
@@ -383,16 +458,17 @@ contract Factory {
 
         address tempAdmin = address(this);
 
-        (, address dashboardAddress) = VAULT_FACTORY.createVaultWithDashboard{value: msg.value}(
+        address poolProxy = payable(address(new OssifiableProxy(DUMMY_IMPLEMENTATION, tempAdmin, bytes(""))));
+        address wqProxy = payable(address(new OssifiableProxy(DUMMY_IMPLEMENTATION, tempAdmin, bytes(""))));
+
+        (, address dashboardAddress) = VAULT_FACTORY.createVaultWithDashboardWithoutConnectingToVaultHub(
             tempAdmin,
             _vaultConfig.nodeOperator,
             _vaultConfig.nodeOperatorManager,
             _vaultConfig.nodeOperatorFeeBP,
             _vaultConfig.confirmExpiry,
-            new IVaultFactory.RoleAssignment[](0) // NB: assigned later because require pool and wq deployed
+            new IVaultFactory.RoleAssignment[](0)
         );
-
-        address poolProxy = payable(address(new OssifiableProxy(DUMMY_IMPLEMENTATION, tempAdmin, bytes(""))));
 
         address wqImpl = WITHDRAWAL_QUEUE_FACTORY.deploy(
             poolProxy,
@@ -405,66 +481,100 @@ contract Factory {
             _auxiliaryConfig.mintingEnabled
         );
 
-        address withdrawalQueueProxy = address(
-            new OssifiableProxy(
-                wqImpl,
-                timelock,
-                abi.encodeCall(
-                    WithdrawalQueue.initialize,
-                    (timelock, _vaultConfig.nodeOperator) // (admin, finalizerRoleHolder)
-                )
-            )
-        );
-
         address distributor = DISTRIBUTOR_FACTORY.deploy(timelock, _vaultConfig.nodeOperatorManager);
 
+        bytes32 poolType = derivePoolType(_auxiliaryConfig, _strategyFactory);
         address poolImpl = address(0);
         if (poolType == STV_POOL_TYPE) {
             poolImpl = STV_POOL_FACTORY.deploy(
-                dashboardAddress, _auxiliaryConfig.allowlistEnabled, withdrawalQueueProxy, distributor, poolType
+                dashboardAddress, _auxiliaryConfig.allowlistEnabled, wqProxy, distributor, poolType
             );
         } else if (poolType == STV_STETH_POOL_TYPE || poolType == STRATEGY_POOL_TYPE) {
             poolImpl = STV_STETH_POOL_FACTORY.deploy(
                 dashboardAddress,
                 _auxiliaryConfig.allowlistEnabled,
                 _auxiliaryConfig.reserveRatioGapBP,
-                withdrawalQueueProxy,
+                wqProxy,
                 distributor,
                 poolType
             );
+        } else {
+            assert(false);
         }
 
-        OssifiableProxy(payable(poolProxy))
-            .proxy__upgradeToAndCall(
-                poolImpl,
-                abi.encodeCall(StvPool.initialize, (tempAdmin, _commonPoolConfig.name, _commonPoolConfig.symbol))
-            );
-        OssifiableProxy(payable(poolProxy)).proxy__changeAdmin(timelock);
-
         intermediate = PoolIntermediate({
-            pool: poolProxy,
-            timelock: timelock,
-            strategyFactory: _strategyFactory,
-            strategyDeployBytes: _strategyDeployBytes
+            dashboard: dashboardAddress,
+            poolProxy: poolProxy,
+            poolImpl: poolImpl,
+            withdrawalQueueProxy: wqProxy,
+            wqImpl: wqImpl,
+            timelock: timelock
         });
 
-        bytes32 deploymentHash = _hashIntermediate(intermediate, msg.sender);
+        bytes32 deploymentHash = _hashDeploymentConfiguration(
+            msg.sender,
+            _vaultConfig,
+            _commonPoolConfig,
+            _auxiliaryConfig,
+            _timelockConfig,
+            _strategyFactory,
+            _strategyDeployBytes,
+            intermediate
+        );
         uint256 finishDeadline = block.timestamp + DEPLOY_START_FINISH_SPAN_SECONDS;
         intermediateState[deploymentHash] = finishDeadline;
 
-        emit PoolCreationStarted(intermediate, finishDeadline);
+        emit PoolCreationStarted(
+            msg.sender,
+            _vaultConfig,
+            _commonPoolConfig,
+            _auxiliaryConfig,
+            _timelockConfig,
+            _strategyFactory,
+            _strategyDeployBytes,
+            intermediate,
+            finishDeadline
+        );
     }
 
-    /// @notice Completes pool deployment (second phase)
-    /// @param _intermediate Deployment state returned by createPoolStart
-    /// @return deployment Complete deployment information with all component addresses
-    /// @dev Must be called by the same address that called createPoolStart
-    /// @dev Must be called within DEPLOY_START_FINISH_SPAN_SECONDS of start
-    function createPoolFinish(PoolIntermediate calldata _intermediate)
-        external
-        returns (PoolDeployment memory deployment)
-    {
-        bytes32 deploymentHash = _hashIntermediate(_intermediate, msg.sender);
+    /**
+     * @notice Completes pool deployment (second phase)
+     * @param _vaultConfig Configuration for the vault (must match createPoolStart)
+     * @param _timelockConfig Configuration for the timelock controller (must match createPoolStart)
+     * @param _commonPoolConfig Common pool parameters (must match createPoolStart)
+     * @param _auxiliaryConfig Additional pool configuration (must match createPoolStart)
+     * @param _strategyFactory Address of strategy factory (must match createPoolStart)
+     * @param _strategyDeployBytes ABI-encoded parameters for strategy deployment (must match createPoolStart)
+     * @param _intermediate Deployment state returned by createPoolStart
+     * @return deployment Complete deployment information with all component addresses
+     * @dev Must be called by the same address that called createPoolStart
+     * @dev Must be called within DEPLOY_START_FINISH_SPAN_SECONDS of start
+     * @dev All parameters must exactly match those used in createPoolStart
+     * @dev Requires msg.value >= VAULT_HUB.CONNECT_DEPOSIT() for vault connection
+     */
+    function createPoolFinish(
+        VaultConfig memory _vaultConfig,
+        TimelockConfig memory _timelockConfig,
+        CommonPoolConfig memory _commonPoolConfig,
+        AuxiliaryPoolConfig memory _auxiliaryConfig,
+        address _strategyFactory,
+        bytes memory _strategyDeployBytes,
+        PoolIntermediate calldata _intermediate
+    ) external payable returns (PoolDeployment memory deployment) {
+        if (msg.value < VAULT_HUB.CONNECT_DEPOSIT()) {
+            revert InsufficientConnectDeposit(msg.value, VAULT_HUB.CONNECT_DEPOSIT());
+        }
+
+        bytes32 deploymentHash = _hashDeploymentConfiguration(
+            msg.sender,
+            _vaultConfig,
+            _commonPoolConfig,
+            _auxiliaryConfig,
+            _timelockConfig,
+            _strategyFactory,
+            _strategyDeployBytes,
+            _intermediate
+        );
         uint256 finishDeadline = intermediateState[deploymentHash];
         if (finishDeadline == 0) {
             revert InvalidConfiguration("deploy not started");
@@ -476,44 +586,85 @@ contract Factory {
         }
         intermediateState[deploymentHash] = DEPLOY_FINISHED;
 
-        StvPool pool = StvPool(payable(_intermediate.pool));
-        IDashboard dashboard = pool.DASHBOARD();
-        WithdrawalQueue withdrawalQueue = pool.WITHDRAWAL_QUEUE();
-        address timelock = _intermediate.timelock;
         address tempAdmin = address(this);
-        bytes32 poolType = pool.poolType();
 
-        dashboard.grantRole(dashboard.FUND_ROLE(), address(pool));
-        dashboard.grantRole(dashboard.REBALANCE_ROLE(), address(pool));
-        dashboard.grantRole(dashboard.WITHDRAW_ROLE(), address(withdrawalQueue));
+        IDashboard dashboard = IDashboard(payable(_intermediate.dashboard));
 
-        if (poolType != STV_POOL_TYPE) {
-            dashboard.grantRole(dashboard.MINT_ROLE(), address(pool));
-            dashboard.grantRole(dashboard.BURN_ROLE(), address(pool));
-        }
+        dashboard.connectToVaultHub{value: msg.value}();
+
+        address wqImpl = _intermediate.wqImpl;
+        address poolImpl = _intermediate.poolImpl;
+
+        OssifiableProxy(payable(_intermediate.poolProxy))
+            .proxy__upgradeToAndCall(
+                poolImpl,
+                abi.encodeCall(StvPool.initialize, (tempAdmin, _commonPoolConfig.name, _commonPoolConfig.symbol))
+            );
+        OssifiableProxy(payable(_intermediate.poolProxy)).proxy__changeAdmin(_intermediate.timelock);
+
+        OssifiableProxy(payable(_intermediate.withdrawalQueueProxy))
+            .proxy__upgradeToAndCall(
+                wqImpl,
+                abi.encodeCall(
+                    WithdrawalQueue.initialize,
+                    (
+                        _intermediate.timelock,
+                        _vaultConfig.nodeOperator,
+                        _commonPoolConfig.emergencyCommittee,
+                        _commonPoolConfig.emergencyCommittee
+                    )
+                )
+            );
+        OssifiableProxy(payable(_intermediate.withdrawalQueueProxy)).proxy__changeAdmin(_intermediate.timelock);
+
+        StvPool pool = StvPool(payable(_intermediate.poolProxy));
+        WithdrawalQueue withdrawalQueue = WithdrawalQueue(payable(_intermediate.withdrawalQueueProxy));
 
         address strategyProxy = address(0);
-        if (_intermediate.strategyFactory != address(0)) {
-            address strategyImpl = IStrategyFactory(_intermediate.strategyFactory)
-                .deploy(address(pool), _intermediate.strategyDeployBytes);
-
-            strategyProxy =
-                address(new OssifiableProxy(strategyImpl, timelock, abi.encodeCall(IStrategy.initialize, (timelock))));
-
+        if (_strategyFactory != address(0)) {
+            address strategyImpl = IStrategyFactory(_strategyFactory).deploy(address(pool), _strategyDeployBytes);
+            strategyProxy = address(
+                new OssifiableProxy(
+                    strategyImpl,
+                    _intermediate.timelock,
+                    abi.encodeCall(IStrategy.initialize, (_intermediate.timelock, _commonPoolConfig.emergencyCommittee))
+                )
+            );
             pool.addToAllowList(strategyProxy);
         }
 
-        pool.grantRole(DEFAULT_ADMIN_ROLE, timelock);
+        if (_commonPoolConfig.emergencyCommittee != address(0)) {
+            pool.grantRole(pool.DEPOSITS_PAUSE_ROLE(), _commonPoolConfig.emergencyCommittee);
+            if (_auxiliaryConfig.mintingEnabled) {
+                StvStETHPool stvStETHPool = StvStETHPool(payable(address(pool)));
+                stvStETHPool.grantRole(stvStETHPool.MINTING_PAUSE_ROLE(), _commonPoolConfig.emergencyCommittee);
+            }
+        }
+
+        pool.grantRole(DEFAULT_ADMIN_ROLE, _intermediate.timelock);
         pool.revokeRole(DEFAULT_ADMIN_ROLE, tempAdmin);
 
-        dashboard.grantRole(DEFAULT_ADMIN_ROLE, timelock);
+        IDashboard dashboardImpl = IDashboard(payable(VAULT_FACTORY.DASHBOARD_IMPL()));
+
+        dashboard.grantRole(dashboardImpl.FUND_ROLE(), _intermediate.poolProxy);
+        dashboard.grantRole(dashboardImpl.REBALANCE_ROLE(), _intermediate.poolProxy);
+        dashboard.grantRole(dashboardImpl.WITHDRAW_ROLE(), _intermediate.withdrawalQueueProxy);
+        if (_auxiliaryConfig.mintingEnabled) {
+            dashboard.grantRole(dashboardImpl.MINT_ROLE(), _intermediate.poolProxy);
+            dashboard.grantRole(dashboardImpl.BURN_ROLE(), _intermediate.poolProxy);
+        }
+        if (address(0) != _commonPoolConfig.emergencyCommittee) {
+            dashboard.grantRole(dashboardImpl.PAUSE_BEACON_CHAIN_DEPOSITS_ROLE(), _commonPoolConfig.emergencyCommittee);
+        }
+
+        dashboard.grantRole(DEFAULT_ADMIN_ROLE, _intermediate.timelock);
         dashboard.revokeRole(DEFAULT_ADMIN_ROLE, tempAdmin);
 
         deployment = PoolDeployment({
-            poolType: poolType,
-            vault: address(pool.VAULT()),
+            poolType: derivePoolType(_auxiliaryConfig, _strategyFactory),
+            vault: address(dashboard.stakingVault()),
             dashboard: address(dashboard),
-            pool: _intermediate.pool,
+            pool: address(pool),
             withdrawalQueue: address(withdrawalQueue),
             distributor: address(pool.DISTRIBUTOR()),
             timelock: _intermediate.timelock,
@@ -525,36 +676,64 @@ contract Factory {
             deployment.pool,
             deployment.poolType,
             deployment.withdrawalQueue,
-            _intermediate.strategyFactory,
-            _intermediate.strategyDeployBytes,
+            _strategyFactory,
+            _strategyDeployBytes,
             deployment.strategy
         );
-
-        // NB: The roles are not granted on purpose:
-        // - LOSS_SOCIALIZER_ROLE (timelock can grant it itself)
     }
 
-    /// @notice Computes a unique hash for tracking deployment state
-    /// @param _intermediate The intermediate deployment state
-    /// @param _sender Address that initiated the deployment
-    /// @return result Keccak256 hash of the sender and intermediate state
-    function _hashIntermediate(PoolIntermediate memory _intermediate, address _sender)
+    function derivePoolType(AuxiliaryPoolConfig memory _auxiliaryConfig, address _strategyFactory)
         public
-        pure
-        returns (bytes32 result)
+        view
+        returns (bytes32 poolType)
     {
-        result = keccak256(abi.encode(_sender, abi.encode(_intermediate)));
+        poolType = STV_POOL_TYPE;
+        if (_strategyFactory != address(0)) {
+            poolType = STRATEGY_POOL_TYPE;
+            if (!_auxiliaryConfig.allowlistEnabled) {
+                revert InvalidConfiguration("allowlistEnabled must be true if strategy factory is set");
+            }
+            if (!_auxiliaryConfig.mintingEnabled) {
+                revert InvalidConfiguration("mintingEnabled must be true if strategy factory is set");
+            }
+        } else if (_auxiliaryConfig.mintingEnabled) {
+            poolType = STV_STETH_POOL_TYPE;
+        }
     }
 
-    /// @notice Encodes a string into bytes32 format for storage efficiency
-    /// @param _str The string to encode (must be 31 bytes or less)
-    /// @return Encoded bytes32 value with length encoded in the least significant byte
-    /// @dev Reverts with StringTooLong if the string length exceeds 31 bytes
-    function _toBytes32(string memory _str) internal pure returns (bytes32) {
-        bytes memory bstr = bytes(_str);
-        if (bstr.length > 31) {
-            revert StringTooLong(_str);
-        }
-        return bytes32(uint256(bytes32(bstr)) | bstr.length);
+    /**
+     * @notice Computes a unique hash for tracking deployment state
+     * @param _sender Address that initiated the deployment
+     * @param _vaultConfig Configuration for the vault
+     * @param _commonPoolConfig Common pool parameters
+     * @param _auxiliaryConfig Additional pool configuration
+     * @param _timelockConfig Configuration for the timelock controller
+     * @param _strategyFactory Address of strategy factory
+     * @param _strategyDeployBytes ABI-encoded parameters for strategy deployment
+     * @param _intermediate The intermediate deployment state
+     * @return result Keccak256 hash of all deployment configuration parameters
+     */
+    function _hashDeploymentConfiguration(
+        address _sender,
+        VaultConfig memory _vaultConfig,
+        CommonPoolConfig memory _commonPoolConfig,
+        AuxiliaryPoolConfig memory _auxiliaryConfig,
+        TimelockConfig memory _timelockConfig,
+        address _strategyFactory,
+        bytes memory _strategyDeployBytes,
+        PoolIntermediate memory _intermediate
+    ) public pure returns (bytes32 result) {
+        result = keccak256(
+            abi.encode(
+                _sender,
+                abi.encode(_vaultConfig),
+                abi.encode(_commonPoolConfig),
+                abi.encode(_auxiliaryConfig),
+                abi.encode(_timelockConfig),
+                _strategyFactory,
+                _strategyDeployBytes,
+                abi.encode(_intermediate)
+            )
+        );
     }
 }

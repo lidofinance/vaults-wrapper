@@ -4,21 +4,22 @@ pragma solidity 0.8.30;
 import {BorrowedMath} from "./BorrowedMath.sol";
 import {GGVVaultMock} from "./GGVVaultMock.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import {IStETH} from "src/interfaces/core/IStETH.sol";
 import {IWstETH} from "src/interfaces/core/IWstETH.sol";
 import {IBoringOnChainQueue} from "src/interfaces/ggv/IBoringOnChainQueue.sol";
 
-import {console} from "forge-std/console.sol";
-
 contract GGVQueueMock is IBoringOnChainQueue {
+    using SafeCast for uint256;
     using EnumerableSet for EnumerableSet.Bytes32Set;
 
     uint256 internal immutable ONE_SHARE;
-    address public immutable _owner;
-    GGVVaultMock public immutable _vault;
-    IStETH public immutable steth;
-    IWstETH public immutable wsteth;
+    GGVVaultMock internal immutable _VAULT;
+    IStETH public immutable STETH;
+    IWstETH public immutable WSTETH;
+
+    address public _owner;
 
     EnumerableSet.Bytes32Set private _withdrawRequests;
     uint96 public nonce = 1;
@@ -39,14 +40,21 @@ contract GGVQueueMock is IBoringOnChainQueue {
 
     constructor(address __vault, address _steth, address _wsteth, address __owner) {
         _owner = __owner;
-        _vault = GGVVaultMock(__vault);
-        steth = IStETH(_steth);
-        wsteth = IWstETH(_wsteth);
+        _VAULT = GGVVaultMock(__vault);
+        STETH = IStETH(_steth);
+        WSTETH = IWstETH(_wsteth);
         ONE_SHARE = 10 ** 18;
 
         // allow withdraws for steth by default
         _updateWithdrawAsset(_steth, 0, 0, 0, 500, 100);
         _updateWithdrawAsset(_wsteth, 0, 0, 0, 500, 100);
+    }
+
+    function changeOwner(address newOwner) external {
+        if (msg.sender != _owner) {
+            revert("Sender is not an owner");
+        }
+        _owner = newOwner;
     }
 
     function owner() external view returns (address) {
@@ -58,7 +66,7 @@ contract GGVQueueMock is IBoringOnChainQueue {
     }
 
     function boringVault() external view returns (address) {
-        return address(_vault);
+        return address(_VAULT);
     }
 
     function accountant() external view returns (address) {
@@ -98,19 +106,19 @@ contract GGVQueueMock is IBoringOnChainQueue {
         _beforeNewRequest(withdrawAsset, amountOfShares, discount, secondsToDeadline);
 
         // hardcode for steth only
-        if (_assetOut != address(steth) && _assetOut != address(wsteth)) {
+        if (_assetOut != address(STETH) && _assetOut != address(WSTETH)) {
             revert("Only steth and wsteth supported");
         }
 
         ERC20 assetOut = ERC20(_assetOut);
 
-        uint128 amountOfAssets = uint128(_vault.getAssetsByShares(amountOfShares));
-        if (amountOfAssets > assetOut.balanceOf(address(_vault))) {
+        uint128 amountOfAssets = uint128(_VAULT.getAssetsByShares(amountOfShares));
+        if (amountOfAssets > assetOut.balanceOf(address(_VAULT))) {
             revert("Not enough assets in vault");
         }
 
         // needs approval
-        _vault.transferFrom(msg.sender, address(this), amountOfShares);
+        require(_VAULT.transferFrom(msg.sender, address(this), amountOfShares), "Transfer failed");
 
         uint96 requestNonce;
         // See nonce definition for unchecked safety.
@@ -181,7 +189,7 @@ contract GGVQueueMock is IBoringOnChainQueue {
             totalShares += requests[i].amountOfShares;
             _dequeueOnChainWithdraw(requests[i]);
             //emit OnChainWithdrawSolved(requestId, requests[i].user, block.timestamp);
-            _vault.burnSharesReturnAssets(
+            _VAULT.burnSharesReturnAssets(
                 solveAsset, requests[i].amountOfShares, requests[i].amountOfAssets, requests[i].user
             );
         }
@@ -191,7 +199,7 @@ contract GGVQueueMock is IBoringOnChainQueue {
         require(msg.sender == request.user, "Only request creator can cancel");
         requestId = _dequeueOnChainWithdraw(request);
         _incrementWithdrawCapacity(request.assetOut, request.amountOfShares);
-        require(_vault.transfer(request.user, request.amountOfShares));
+        require(_VAULT.transfer(request.user, request.amountOfShares));
     }
 
     function previewAssetsOut(address assetOut, uint128 amountOfShares, uint16 discount)
@@ -199,24 +207,24 @@ contract GGVQueueMock is IBoringOnChainQueue {
         view
         returns (uint128 amountOfAssets128)
     {
-        if (assetOut != address(steth) && assetOut != address(wsteth)) {
+        if (assetOut != address(STETH) && assetOut != address(WSTETH)) {
             revert("Only steth and wsteth supported");
         }
 
-        uint256 amountOfAssets = _vault.getAssetsByShares(amountOfShares);
+        uint256 amountOfAssets = _VAULT.getAssetsByShares(amountOfShares);
         // discount
         amountOfAssets = BorrowedMath.mulDivDown(amountOfAssets, 1e4 - discount, 1e4);
 
         uint256 amountOfTokens;
-        if (assetOut == address(steth)) {
-            amountOfTokens = steth.getPooledEthByShares(amountOfAssets);
+        if (assetOut == address(STETH)) {
+            amountOfTokens = STETH.getPooledEthByShares(amountOfAssets);
         } else {
             amountOfTokens = amountOfAssets;
         }
 
         if (amountOfTokens > type(uint128).max) revert("overflow");
 
-        amountOfAssets128 = uint128(amountOfTokens);
+        amountOfAssets128 = amountOfTokens.toUint128();
     }
 
     event NonPure();
@@ -270,14 +278,14 @@ contract GGVQueueMock is IBoringOnChainQueue {
         uint16 maxDiscount,
         uint96 minimumShares
     ) internal {
-        _withdrawAssets[assetOut] = WithdrawAsset(
-            true,
-            secondsToMaturity,
-            minimumSecondsToDeadline,
-            minDiscount,
-            maxDiscount,
-            minimumShares,
-            type(uint256).max
-        );
+        _withdrawAssets[assetOut] = WithdrawAsset({
+            allowWithdraws: true,
+            secondsToMaturity: secondsToMaturity,
+            minimumSecondsToDeadline: minimumSecondsToDeadline,
+            minDiscount: minDiscount,
+            maxDiscount: maxDiscount,
+            minimumShares: minimumShares,
+            withdrawCapacity: type(uint256).max
+        });
     }
 }

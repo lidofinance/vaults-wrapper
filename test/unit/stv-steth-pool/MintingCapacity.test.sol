@@ -2,10 +2,13 @@
 pragma solidity 0.8.30;
 
 import {SetupStvStETHPool} from "./SetupStvStETHPool.sol";
-import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import {Test} from "forge-std/Test.sol";
 
 contract MintingCapacityTest is Test, SetupStvStETHPool {
+    using SafeCast for uint256;
+    using SafeCast for int256;
+
     uint256 ethToDeposit = 4 ether;
 
     function setUp() public override {
@@ -93,9 +96,24 @@ contract MintingCapacityTest is Test, SetupStvStETHPool {
         uint256 transferAmount = pool.balanceOf(address(this)) / 2;
         uint256 aliceCapacityBefore = pool.remainingMintingCapacitySharesOf(userAlice, 0);
 
-        pool.transfer(userAlice, transferAmount);
+        assertTrue(pool.transfer(userAlice, transferAmount));
 
         uint256 aliceCapacityAfter = pool.remainingMintingCapacitySharesOf(userAlice, 0);
         assertGt(aliceCapacityAfter, aliceCapacityBefore);
+    }
+
+    // Fuzz test for remainingMintingCapacitySharesOf with different stv rate
+
+    function testFuzz_RemainingCapacity_CalculatedValueCanBeMinted(uint96 _ethToDeposit, int64 _rewards) public {
+        vm.assume(_rewards > -pool.totalAssets().toInt256().toInt64());
+        vm.assume(_ethToDeposit > 0);
+
+        // Rewards
+        dashboard.mock_simulateRewards(int256(_rewards));
+
+        // Deposit and mint
+        uint256 remainingCapacity = pool.remainingMintingCapacitySharesOf(address(this), _ethToDeposit);
+        vm.deal(address(this), _ethToDeposit);
+        pool.depositETHAndMintStethShares{value: _ethToDeposit}(address(0), remainingCapacity);
     }
 }

@@ -2,6 +2,8 @@
 pragma solidity 0.8.30;
 
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
+import {ShortString, ShortStrings} from "@openzeppelin/contracts/utils/ShortStrings.sol";
+
 import {Test} from "forge-std/Test.sol";
 import {StvPool} from "src/StvPool.sol";
 import {MockDashboard, MockDashboardFactory} from "test/mocks/MockDashboard.sol";
@@ -20,7 +22,7 @@ abstract contract SetupStvPool is Test {
 
     address public withdrawalQueue;
 
-    uint256 public constant initialDeposit = 1 ether;
+    uint256 public constant INITIAL_DEPOSIT = 1 ether;
 
     function setUp() public virtual {
         owner = makeAddr("owner");
@@ -40,7 +42,7 @@ abstract contract SetupStvPool is Test {
         vaultHub = dashboard.VAULT_HUB();
 
         // Fund the dashboard with 1 ETH
-        dashboard.fund{value: initialDeposit}();
+        dashboard.fund{value: INITIAL_DEPOSIT}();
 
         // Deploy the pool
         StvPool poolImpl = new StvPool({
@@ -48,7 +50,7 @@ abstract contract SetupStvPool is Test {
             _allowListEnabled: false,
             _withdrawalQueue: withdrawalQueue,
             _distributor: address(0),
-            _poolType: bytes32("TestPool")
+            _poolType: ShortString.unwrap(ShortStrings.toShortString("TestPool"))
         });
         ERC1967Proxy poolProxy = new ERC1967Proxy(address(poolImpl), "");
 

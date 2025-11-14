@@ -1,12 +1,9 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity 0.8.30;
 
-import {ERC20Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
 import {StvStETHPool} from "src/StvStETHPool.sol";
-import {IOperatorGrid} from "src/interfaces/core/IOperatorGrid.sol";
 import {IVaultHub} from "src/interfaces/core/IVaultHub.sol";
 import {IWstETH} from "src/interfaces/core/IWstETH.sol";
-import {OssifiableProxy} from "src/proxy/OssifiableProxy.sol";
 import {FeaturePausable} from "src/utils/FeaturePausable.sol";
 import {StvStETHPoolHarness} from "test/utils/StvStETHPoolHarness.sol";
 import {TimelockHarness} from "test/utils/TimelockHarness.sol";

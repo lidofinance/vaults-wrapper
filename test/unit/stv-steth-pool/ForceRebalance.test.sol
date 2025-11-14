@@ -4,12 +4,15 @@ pragma solidity 0.8.30;
 import {SetupStvStETHPool} from "./SetupStvStETHPool.sol";
 import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import {Test} from "forge-std/Test.sol";
 import {StvPool} from "src/StvPool.sol";
 import {StvStETHPool} from "src/StvStETHPool.sol";
 import {MockVaultHub} from "test/mocks/MockVaultHub.sol";
 
 contract ForceRebalanceTest is Test, SetupStvStETHPool {
+    using SafeCast for uint256;
+
     uint256 internal constant DEPOSIT_AMOUNT = 20 ether;
     address socializer;
 
@@ -35,7 +38,7 @@ contract ForceRebalanceTest is Test, SetupStvStETHPool {
     }
 
     function _simulateLoss(uint256 _loss) internal {
-        dashboard.mock_simulateRewards(-int256(_loss));
+        dashboard.mock_simulateRewards(-_loss.toInt256());
     }
 
     function _calcLossToBreachThreshold(address _account) internal view returns (uint256 lossToBreachThreshold) {

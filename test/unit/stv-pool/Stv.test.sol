@@ -2,16 +2,19 @@
 pragma solidity 0.8.30;
 
 import {SetupStvPool} from "./SetupStvPool.sol";
+import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import {Test} from "forge-std/Test.sol";
 
 contract StvTest is Test, SetupStvPool {
+    using SafeCast for uint256;
+
     uint8 supplyDecimals = 27;
 
     function test_InitialState_CorrectSupplyAndAssets() public view {
-        assertEq(pool.totalAssets(), initialDeposit);
+        assertEq(pool.totalAssets(), INITIAL_DEPOSIT);
         assertEq(pool.totalSupply(), 10 ** supplyDecimals);
 
-        assertEq(pool.nominalAssetsOf(address(pool)), initialDeposit);
+        assertEq(pool.nominalAssetsOf(address(pool)), INITIAL_DEPOSIT);
         assertEq(pool.balanceOf(address(pool)), 10 ** supplyDecimals);
     }
 
@@ -64,7 +67,7 @@ contract StvTest is Test, SetupStvPool {
     function test_Rewards_IncreasesTotalAssets() public {
         uint256 rewards = 1 ether;
         uint256 totalAssetsBefore = pool.totalAssets();
-        dashboard.mock_simulateRewards(int256(rewards));
+        dashboard.mock_simulateRewards(rewards.toInt256());
 
         assertEq(pool.totalAssets(), totalAssetsBefore + rewards);
     }
@@ -74,7 +77,7 @@ contract StvTest is Test, SetupStvPool {
         pool.depositETH{value: 2 ether}(userBob, address(0));
 
         uint256 rewards = 333;
-        dashboard.mock_simulateRewards(int256(rewards));
+        dashboard.mock_simulateRewards(rewards.toInt256());
 
         assertEq(pool.nominalAssetsOf(address(pool)), 1 ether + (rewards / 4));
         assertEq(pool.nominalAssetsOf(userAlice), 1 ether + (rewards / 4));

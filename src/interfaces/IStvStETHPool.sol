@@ -2,8 +2,6 @@
 pragma solidity 0.8.30;
 
 import {IBasePool} from "./IBasePool.sol";
-import {IDashboard} from "./core/IDashboard.sol";
-import {IVaultHub} from "./core/IVaultHub.sol";
 
 interface IStvStETHPool is IBasePool {
     function totalExceedingMintedSteth() external view returns (uint256);

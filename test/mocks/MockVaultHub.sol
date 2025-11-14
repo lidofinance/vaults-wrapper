@@ -3,9 +3,12 @@ pragma solidity 0.8.30;
 
 import {IStakingVault} from "../../src/interfaces/core/IStakingVault.sol";
 import {MockStETH} from "./MockStETH.sol";
+import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import {IVaultHub} from "src/interfaces/core/IVaultHub.sol";
 
 contract MockVaultHub {
+    using SafeCast for int256;
+
     // TODO: maybe inherit IVaultHub
 
     uint256 public immutable RESERVE_RATIO_BP = 25_00;
@@ -25,7 +28,6 @@ contract MockVaultHub {
 
     function mintShares(address _vault, address _recipient, uint256 _amountOfShares) external {
         vaultLiabilityShares[_vault] += _amountOfShares;
-        require(vaultLiabilityShares[_vault] <= maxLockableValue(_vault), "Vault liability exceeds max lockable value");
 
         // Mint stETH tokens to the recipient (simulating the vault minting stETH)
         LIDO.mock_mintExternalShares(_recipient, _amountOfShares);
@@ -93,10 +95,10 @@ contract MockVaultHub {
 
     function mock_simulateRewards(address _vault, int256 _rewardAmount) external {
         if (_rewardAmount > 0) {
-            vaultBalances[_vault] += uint256(_rewardAmount);
+            vaultBalances[_vault] += _rewardAmount.toUint256();
         } else {
             // Handle slashing (negative rewards)
-            uint256 loss = uint256(-_rewardAmount);
+            uint256 loss = (-_rewardAmount).toUint256();
             if (loss > vaultBalances[_vault]) {
                 vaultBalances[_vault] = 0;
             } else {
@@ -188,6 +190,8 @@ contract MockVaultHub {
     function mock_setConnectionParameters(address _vault, uint16 _reserveRatioBP, uint16 _forcedRebalanceThresholdBP)
         external
     {
+        require(_reserveRatioBP <= type(uint16).max, "reserveRatioBP exceeds uint16 max");
+        require(_forcedRebalanceThresholdBP <= type(uint16).max, "forcedRebalanceThresholdBP exceeds uint16 max");
         IVaultHub.VaultConnection storage connection = connections[_vault];
         connection.reserveRatioBP = _reserveRatioBP;
         connection.forcedRebalanceThresholdBP = _forcedRebalanceThresholdBP;

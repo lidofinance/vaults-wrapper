@@ -767,6 +767,8 @@ contract StvStETHPoolTest is StvStETHPoolHarness {
 
         vm.startPrank(USER1);
         vm.expectRevert(StvStETHPool.InsufficientReservedBalance.selector);
+        /// No return since it reverts
+        /// forge-lint: disable-next-line(erc20-unchecked-transfer)
         w.transfer(USER2, user1RemainingStv);
         vm.stopPrank();
 
@@ -820,6 +822,8 @@ contract StvStETHPoolTest is StvStETHPoolHarness {
 
         vm.startPrank(USER1);
         vm.expectRevert(StvStETHPool.InsufficientReservedBalance.selector);
+        /// No return since it reverts
+        /// forge-lint: disable-next-line(erc20-unchecked-transfer)
         w.transfer(USER2, 1);
         vm.stopPrank();
     }
@@ -872,6 +876,8 @@ contract StvStETHPoolTest is StvStETHPoolHarness {
         // Regular transfer fails - insufficient collateral
         vm.startPrank(USER1);
         vm.expectRevert(StvStETHPool.InsufficientReservedBalance.selector);
+        /// No return since it reverts
+        /// forge-lint: disable-next-line(erc20-unchecked-transfer)
         w.transfer(USER2, 1);
         vm.stopPrank();
 
@@ -918,6 +924,8 @@ contract StvStETHPoolTest is StvStETHPoolHarness {
         // Transfer fails
         vm.startPrank(USER1);
         vm.expectRevert(StvStETHPool.InsufficientReservedBalance.selector);
+        /// No return since it reverts
+        /// forge-lint: disable-next-line(erc20-unchecked-transfer)
         w.transfer(USER2, 1 ether);
 
         // Burn enough shares to restore ratio
@@ -928,7 +936,7 @@ contract StvStETHPoolTest is StvStETHPoolHarness {
         // Now transfer succeeds (if enough collateral freed up)
         uint256 minRequired = w.calcStvToLockForStethShares(w.mintedStethSharesOf(USER1));
         if (w.balanceOf(USER1) > minRequired + 1 ether) {
-            w.transfer(USER2, 1 ether);
+            assertTrue(w.transfer(USER2, 1 ether));
         }
         vm.stopPrank();
     }
@@ -949,6 +957,8 @@ contract StvStETHPoolTest is StvStETHPoolHarness {
         // Initially can't transfer - at exact reserve ratio
         vm.startPrank(USER1);
         vm.expectRevert(StvStETHPool.InsufficientReservedBalance.selector);
+        /// No return since it reverts
+        /// forge-lint: disable-next-line(erc20-unchecked-transfer)
         w.transfer(USER2, 1);
         vm.stopPrank();
 
@@ -961,7 +971,7 @@ contract StvStETHPoolTest is StvStETHPoolHarness {
 
         // Can transfer excess WITHOUT transferring liability
         vm.prank(USER1);
-        w.transfer(USER2, excessStv);
+        assertTrue(w.transfer(USER2, excessStv));
 
         assertEq(w.mintedStethSharesOf(USER1), w.mintedStethSharesOf(USER1), "USER1 liability unchanged");
         assertEq(w.mintedStethSharesOf(USER2), 0, "USER2 has no liability");
@@ -1008,7 +1018,7 @@ contract StvStETHPoolTest is StvStETHPoolHarness {
 
         // Can transfer entire balance
         vm.startPrank(USER1);
-        w.transfer(USER2, w.balanceOf(USER1));
+        assertTrue(w.transfer(USER2, w.balanceOf(USER1)));
         vm.stopPrank();
 
         assertEq(w.balanceOf(USER1), 0, "USER1 transferred everything");

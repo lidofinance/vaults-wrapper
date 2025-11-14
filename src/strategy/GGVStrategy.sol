@@ -6,6 +6,7 @@ import {
 } from "@openzeppelin/contracts-upgradeable/access/extensions/AccessControlEnumerableUpgradeable.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 
 import {StvStETHPool} from "src/StvStETHPool.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
@@ -19,6 +20,8 @@ import {IStrategy} from "src/interfaces/IStrategy.sol";
 import {IWstETH} from "src/interfaces/core/IWstETH.sol";
 
 contract GGVStrategy is IStrategy, AccessControlEnumerableUpgradeable, FeaturePausable, StrategyCallForwarderRegistry {
+    using SafeCast for uint256;
+
     StvStETHPool private immutable POOL_;
     IWstETH public immutable WSTETH;
 
@@ -54,7 +57,6 @@ contract GGVStrategy is IStrategy, AccessControlEnumerableUpgradeable, FeaturePa
     error InvalidSender();
     error InvalidWstethAmount();
     error NothingToExit();
-    error InvalidGGVSharesAmount();
     error NotImplemented();
 
     constructor(
@@ -77,14 +79,18 @@ contract GGVStrategy is IStrategy, AccessControlEnumerableUpgradeable, FeaturePa
     /**
      * @notice Initialize the contract storage explicitly
      * @param _admin Admin address that can change every role
+     * @param _supplyPauser Address that can pause supply (zero for none)
      * @dev Reverts if `_admin` equals to `address(0)`
      */
-    function initialize(address _admin) external initializer {
+    function initialize(address _admin, address _supplyPauser) external initializer {
         if (_admin == address(0)) revert ZeroArgument("_admin");
 
         __AccessControlEnumerable_init();
 
         _grantRole(DEFAULT_ADMIN_ROLE, _admin);
+        if (address(0) != _supplyPauser) {
+            _grantRole(SUPPLY_PAUSE_ROLE, _supplyPauser);
+        }
     }
 
     /**
@@ -164,9 +170,8 @@ contract GGVStrategy is IStrategy, AccessControlEnumerableUpgradeable, FeaturePa
      * @return wsteth The amount of wstETH that can be withdrawn
      */
     function previewWstethByGGV(uint256 _ggvShares, bytes calldata _params) public view returns (uint256 wsteth) {
-        if (_ggvShares > type(uint128).max) revert InvalidGGVSharesAmount();
         GGVParamsRequestExit memory params = abi.decode(_params, (GGVParamsRequestExit));
-        wsteth = BORING_QUEUE.previewAssetsOut(address(WSTETH), uint128(_ggvShares), params.discount);
+        wsteth = BORING_QUEUE.previewAssetsOut(address(WSTETH), _ggvShares.toUint128(), params.discount);
     }
 
     /**
@@ -196,7 +201,7 @@ contract GGVStrategy is IStrategy, AccessControlEnumerableUpgradeable, FeaturePa
             abi.encodeWithSelector(
                 BORING_QUEUE.requestOnChainWithdraw.selector,
                 address(WSTETH),
-                uint128(ggvShares),
+                ggvShares.toInt256(),
                 params.discount,
                 params.secondsToDeadline
             )

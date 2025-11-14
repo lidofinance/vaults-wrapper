@@ -2,7 +2,8 @@
 pragma solidity ^0.8.19;
 
 import {MockERC20} from "../test/mocks/MockERC20.sol";
-import "forge-std/Script.sol";
+import {Script} from "forge-std/Script.sol";
+import {console} from "forge-std/console.sol";
 
 contract MintTokensScript is Script {
     function run() external {

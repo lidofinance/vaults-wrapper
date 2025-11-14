@@ -27,7 +27,7 @@ contract TransfersTest is Test, SetupStvPool {
         uint256 bobBalanceBefore = pool.balanceOf(userBob);
 
         vm.prank(userAlice);
-        pool.transfer(userBob, amount);
+        assertTrue(pool.transfer(userBob, amount));
 
         assertEq(pool.balanceOf(userAlice), aliceBalanceBefore - amount);
         assertEq(pool.balanceOf(userBob), bobBalanceBefore + amount);
@@ -38,7 +38,7 @@ contract TransfersTest is Test, SetupStvPool {
         uint256 balanceBefore = pool.balanceOf(userAlice);
 
         vm.prank(userAlice);
-        pool.transfer(userAlice, amount);
+        assertTrue(pool.transfer(userAlice, amount));
 
         assertEq(pool.balanceOf(userAlice), balanceBefore);
     }
@@ -47,7 +47,7 @@ contract TransfersTest is Test, SetupStvPool {
         uint256 aliceBalance = pool.balanceOf(userAlice);
 
         vm.prank(userAlice);
-        pool.transfer(userBob, aliceBalance);
+        assertTrue(pool.transfer(userBob, aliceBalance));
 
         assertEq(pool.balanceOf(userAlice), 0);
     }
@@ -59,7 +59,7 @@ contract TransfersTest is Test, SetupStvPool {
         emit IERC20.Transfer(userAlice, userBob, amount);
 
         vm.prank(userAlice);
-        pool.transfer(userBob, amount);
+        assertTrue(pool.transfer(userBob, amount));
     }
 
     // TransferFrom
@@ -73,7 +73,7 @@ contract TransfersTest is Test, SetupStvPool {
         uint256 aliceBalanceBefore = pool.balanceOf(userAlice);
         uint256 bobBalanceBefore = pool.balanceOf(userBob);
 
-        pool.transferFrom(userAlice, userBob, amount);
+        assertTrue(pool.transferFrom(userAlice, userBob, amount));
 
         assertEq(pool.balanceOf(userAlice), aliceBalanceBefore - amount);
         assertEq(pool.balanceOf(userBob), bobBalanceBefore + amount);
@@ -85,6 +85,8 @@ contract TransfersTest is Test, SetupStvPool {
         vm.expectRevert(
             abi.encodeWithSelector(IERC20Errors.ERC20InsufficientAllowance.selector, address(this), 0, amount)
         );
+        /// No return since it reverts
+        /// forge-lint: disable-next-line(erc20-unchecked-transfer)
         pool.transferFrom(userAlice, userBob, amount);
     }
 
@@ -100,6 +102,8 @@ contract TransfersTest is Test, SetupStvPool {
                 IERC20Errors.ERC20InsufficientAllowance.selector, address(this), approvedAmount, transferAmount
             )
         );
+        /// No return since it reverts
+        /// forge-lint: disable-next-line(erc20-unchecked-transfer)
         pool.transferFrom(userAlice, userBob, transferAmount);
     }
 
@@ -110,7 +114,7 @@ contract TransfersTest is Test, SetupStvPool {
         vm.prank(userAlice);
         pool.approve(address(this), approvedAmount);
 
-        pool.transferFrom(userAlice, userBob, transferAmount);
+        assertTrue(pool.transferFrom(userAlice, userBob, transferAmount));
 
         assertEq(pool.allowance(userAlice, address(this)), approvedAmount - transferAmount);
     }
@@ -123,6 +127,8 @@ contract TransfersTest is Test, SetupStvPool {
 
         vm.prank(userAlice);
         vm.expectRevert(abi.encodeWithSelector(StvPool.VaultInBadDebt.selector));
+        /// No return since it reverts
+        /// forge-lint: disable-next-line(erc20-unchecked-transfer)
         pool.transfer(userBob, 1);
     }
 }

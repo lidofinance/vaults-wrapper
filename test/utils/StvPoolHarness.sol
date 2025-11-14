@@ -119,7 +119,7 @@ contract StvPoolHarness is Test {
         });
 
         Factory.CommonPoolConfig memory commonPoolConfig = Factory.CommonPoolConfig({
-            minWithdrawalDelayTime: config.minWithdrawalDelayTime, name: config.name, symbol: config.symbol
+            minWithdrawalDelayTime: config.minWithdrawalDelayTime, name: config.name, symbol: config.symbol, emergencyCommittee: address(0)
         });
 
         Factory.AuxiliaryPoolConfig memory auxiliaryConfig = Factory.AuxiliaryPoolConfig({
@@ -141,10 +141,12 @@ contract StvPoolHarness is Test {
         // StrategyKind.NONE: strategyFactoryAddress remains address(0)
 
         vm.startPrank(config.nodeOperator);
-        Factory.PoolIntermediate memory intermediate = factory.createPoolStart{value: CONNECT_DEPOSIT}(
-            vaultConfig, commonPoolConfig, auxiliaryConfig, timelockConfig, strategyFactoryAddress, ""
+        Factory.PoolIntermediate memory intermediate = factory.createPoolStart(
+            vaultConfig, timelockConfig, commonPoolConfig, auxiliaryConfig, strategyFactoryAddress, ""
         );
-        Factory.PoolDeployment memory deployment = factory.createPoolFinish(intermediate);
+        Factory.PoolDeployment memory deployment = factory.createPoolFinish{value: CONNECT_DEPOSIT}(
+            vaultConfig, timelockConfig, commonPoolConfig, auxiliaryConfig, strategyFactoryAddress, "", intermediate
+        );
         vm.stopPrank();
 
         IDashboard dashboard = IDashboard(payable(deployment.dashboard));

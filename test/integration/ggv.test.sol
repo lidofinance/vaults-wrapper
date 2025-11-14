@@ -5,6 +5,7 @@ import {console} from "forge-std/Test.sol";
 
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 
 import {IBoringOnChainQueue} from "src/interfaces/ggv/IBoringOnChainQueue.sol";
 import {IBoringSolver} from "src/interfaces/ggv/IBoringSolver.sol";
@@ -15,16 +16,14 @@ import {StvStrategyPoolHarness} from "test/utils/StvStrategyPoolHarness.sol";
 import {StvStETHPool} from "src/StvStETHPool.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
 import {IStrategy} from "src/interfaces/IStrategy.sol";
-import {GGVStrategy} from "src/strategy/GGVStrategy.sol";
 import {IStrategyCallForwarder} from "src/interfaces/IStrategyCallForwarder.sol";
+import {GGVStrategy} from "src/strategy/GGVStrategy.sol";
 
 import {TableUtils} from "../utils/format/TableUtils.sol";
 import {AllowList} from "src/AllowList.sol";
 import {GGVMockTeller} from "src/mock/ggv/GGVMockTeller.sol";
 import {GGVQueueMock} from "src/mock/ggv/GGVQueueMock.sol";
 import {GGVVaultMock} from "src/mock/ggv/GGVVaultMock.sol";
-
-import {console} from "forge-std/console.sol";
 
 interface IAuthority {
     function setUserRole(address user, uint8 role, bool enabled) external;
@@ -42,6 +41,7 @@ interface IAccountant {
 }
 
 contract GGVTest is StvStrategyPoolHarness {
+    using SafeCast for uint256;
     using TableUtils for TableUtils.Context;
 
     TableUtils.Context private _log;
@@ -112,7 +112,7 @@ contract GGVTest is StvStrategyPoolHarness {
         uint256 solverSteth = steth.submit{value: 2 ether}(SOLVER);
         steth.approve(address(wsteth), type(uint256).max);
         uint256 solverWsteth = wsteth.wrap(solverSteth);
-        wsteth.transfer(address(boringVault), solverWsteth);
+        assertTrue(wsteth.transfer(address(boringVault), solverWsteth));
         vm.stopPrank();
 
         withdrawalQueue = pool.WITHDRAWAL_QUEUE();
@@ -185,12 +185,12 @@ contract GGVTest is StvStrategyPoolHarness {
         //         3. Request withdrawal (full amount, based on appreciated value)
         uint256 totalGgvShares = boringVault.balanceOf(user1StrategyCallForwarder);
         uint256 withdrawalWstethAmount =
-            boringOnChainQueue.previewAssetsOut(address(wsteth), uint128(totalGgvShares), uint16(ggvDiscount));
+            boringOnChainQueue.previewAssetsOut(address(wsteth), totalGgvShares.toUint128(), ggvDiscount.toUint16());
 
         console.log("\n[SCENARIO] Requesting withdrawal based on new appreciated assets:", withdrawalWstethAmount);
 
         GGVStrategy.GGVParamsRequestExit memory params =
-            GGVStrategy.GGVParamsRequestExit({discount: uint16(ggvDiscount), secondsToDeadline: type(uint24).max});
+            GGVStrategy.GGVParamsRequestExit({discount: ggvDiscount.toUint16(), secondsToDeadline: type(uint24).max});
 
         vm.prank(USER1);
         bytes32 requestId = ggvStrategy.requestExitByWsteth(withdrawalWstethAmount, abi.encode(params));
@@ -298,7 +298,7 @@ contract GGVTest is StvStrategyPoolHarness {
         vm.stopPrank();
 
         uint128 withdrawSharesPreview =
-            boringOnChainQueue.previewAssetsOut(address(wsteth), uint128(totalGGVShares), discount);
+            boringOnChainQueue.previewAssetsOut(address(wsteth), totalGGVShares.toUint128(), discount);
 
         GGVStrategy.GGVParamsRequestExit memory params =
             GGVStrategy.GGVParamsRequestExit({discount: discount, secondsToDeadline: type(uint24).max});
