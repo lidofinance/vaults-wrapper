@@ -155,6 +155,11 @@ contract MockDashboard is AccessControlEnumerable {
         // Mock implementation
     }
 
+    function connectToVaultHub() external payable {
+        // Mock implementation - just accept the ETH for connection deposit
+        VAULT_HUB.fund{value: msg.value}(VAULT);
+    }
+
     receive() external payable {}
 }
 

@@ -114,10 +114,10 @@ contract FactoryTest is Test {
         address strategyFactory = address(0);
 
         vm.startPrank(admin);
-        Factory.PoolIntermediate memory intermediate = wrapperFactory.createPoolStart{value: connectDeposit}(
+        Factory.PoolIntermediate memory intermediate = wrapperFactory.createPoolStart(
             vaultConfig, timelockConfig, commonPoolConfig, auxiliaryConfig, strategyFactory, ""
         );
-        Factory.PoolDeployment memory deployment = wrapperFactory.createPoolFinish(
+        Factory.PoolDeployment memory deployment = wrapperFactory.createPoolFinish{value: connectDeposit}(
             vaultConfig, timelockConfig, commonPoolConfig, auxiliaryConfig, strategyFactory, "", intermediate
         );
         vm.stopPrank();
@@ -154,9 +154,12 @@ contract FactoryTest is Test {
         address strategyFactory = address(0);
 
         vm.startPrank(admin);
-        vm.expectRevert();
-        wrapperFactory.createPoolStart(
+        Factory.PoolIntermediate memory intermediate = wrapperFactory.createPoolStart(
             vaultConfig, timelockConfig, commonPoolConfig, auxiliaryConfig, strategyFactory, ""
+        );
+        vm.expectRevert();
+        wrapperFactory.createPoolFinish(
+            vaultConfig, timelockConfig, commonPoolConfig, auxiliaryConfig, strategyFactory, "", intermediate
         );
         vm.stopPrank();
     }
@@ -174,11 +177,11 @@ contract FactoryTest is Test {
         address ggvFactory = address(wrapperFactory.GGV_STRATEGY_FACTORY());
 
         vm.startPrank(admin);
-        Factory.PoolIntermediate memory intermediate = wrapperFactory.createPoolStart{value: connectDeposit}(
+        Factory.PoolIntermediate memory intermediate = wrapperFactory.createPoolStart(
             vaultConfig, timelockConfig, commonPoolConfig, auxiliaryConfig, strategyFactory, ""
         );
         uint256 nonceBefore = vm.getNonce(ggvFactory);
-        Factory.PoolDeployment memory deployment = wrapperFactory.createPoolFinish(
+        Factory.PoolDeployment memory deployment = wrapperFactory.createPoolFinish{value: connectDeposit}(
             vaultConfig, timelockConfig, commonPoolConfig, auxiliaryConfig, strategyFactory, "", intermediate
         );
         vm.stopPrank();
@@ -207,10 +210,10 @@ contract FactoryTest is Test {
         address strategyFactory = address(0);
 
         vm.startPrank(admin);
-        Factory.PoolIntermediate memory intermediate = wrapperFactory.createPoolStart{value: connectDeposit}(
+        Factory.PoolIntermediate memory intermediate = wrapperFactory.createPoolStart(
             vaultConfig, timelockConfig, commonPoolConfig, auxiliaryConfig, strategyFactory, ""
         );
-        Factory.PoolDeployment memory deployment = wrapperFactory.createPoolFinish(
+        Factory.PoolDeployment memory deployment = wrapperFactory.createPoolFinish{value: connectDeposit}(
             vaultConfig, timelockConfig, commonPoolConfig, auxiliaryConfig, strategyFactory, "", intermediate
         );
         vm.stopPrank();
@@ -232,13 +235,13 @@ contract FactoryTest is Test {
 
         vm.startPrank(admin);
         uint256 gasBefore = gasleft();
-        Factory.PoolIntermediate memory intermediate = wrapperFactory.createPoolStart{value: connectDeposit}(
+        Factory.PoolIntermediate memory intermediate = wrapperFactory.createPoolStart(
             vaultConfig, timelockConfig, commonPoolConfig, auxiliaryConfig, strategyFactory, ""
         );
         uint256 gasUsedStart = gasBefore - gasleft();
 
         uint256 gasBeforeFinish = gasleft();
-        wrapperFactory.createPoolFinish(
+        wrapperFactory.createPoolFinish{value: connectDeposit}(
             vaultConfig, timelockConfig, commonPoolConfig, auxiliaryConfig, strategyFactory, "", intermediate
         );
         uint256 gasUsedFinish = gasBeforeFinish - gasleft();
@@ -262,13 +265,13 @@ contract FactoryTest is Test {
 
         vm.startPrank(admin);
         uint256 gasBefore = gasleft();
-        Factory.PoolIntermediate memory intermediate = wrapperFactory.createPoolStart{value: connectDeposit}(
+        Factory.PoolIntermediate memory intermediate = wrapperFactory.createPoolStart(
             vaultConfig, timelockConfig, commonPoolConfig, auxiliaryConfig, strategyFactory, ""
         );
         uint256 gasUsedStart = gasBefore - gasleft();
 
         uint256 gasBeforeFinish = gasleft();
-        wrapperFactory.createPoolFinish(
+        wrapperFactory.createPoolFinish{value: connectDeposit}(
             vaultConfig, timelockConfig, commonPoolConfig, auxiliaryConfig, strategyFactory, "", intermediate
         );
         uint256 gasUsedFinish = gasBeforeFinish - gasleft();
@@ -292,13 +295,13 @@ contract FactoryTest is Test {
 
         vm.startPrank(admin);
         uint256 gasBefore = gasleft();
-        Factory.PoolIntermediate memory intermediate = wrapperFactory.createPoolStart{value: connectDeposit}(
+        Factory.PoolIntermediate memory intermediate = wrapperFactory.createPoolStart(
             vaultConfig, timelockConfig, commonPoolConfig, auxiliaryConfig, strategyFactory, ""
         );
         uint256 gasUsedStart = gasBefore - gasleft();
 
         uint256 gasBeforeFinish = gasleft();
-        wrapperFactory.createPoolFinish(
+        wrapperFactory.createPoolFinish{value: connectDeposit}(
             vaultConfig, timelockConfig, commonPoolConfig, auxiliaryConfig, strategyFactory, "", intermediate
         );
         uint256 gasUsedFinish = gasBeforeFinish - gasleft();
@@ -324,7 +327,7 @@ contract FactoryTest is Test {
         address strategyFactory = address(0);
 
         vm.startPrank(admin);
-        Factory.PoolIntermediate memory intermediate = wrapperFactory.createPoolStart{value: connectDeposit}(
+        Factory.PoolIntermediate memory intermediate = wrapperFactory.createPoolStart(
             vaultConfig, timelockConfig, commonPoolConfig, auxiliaryConfig, strategyFactory, ""
         );
 
@@ -332,7 +335,7 @@ contract FactoryTest is Test {
         vm.warp(block.timestamp + 23 hours);
 
         // Should succeed
-        Factory.PoolDeployment memory deployment = wrapperFactory.createPoolFinish(
+        Factory.PoolDeployment memory deployment = wrapperFactory.createPoolFinish{value: connectDeposit}(
             vaultConfig, timelockConfig, commonPoolConfig, auxiliaryConfig, strategyFactory, "", intermediate
         );
         vm.stopPrank();
@@ -354,7 +357,7 @@ contract FactoryTest is Test {
         address strategyFactory = address(0);
 
         vm.startPrank(admin);
-        Factory.PoolIntermediate memory intermediate = wrapperFactory.createPoolStart{value: connectDeposit}(
+        Factory.PoolIntermediate memory intermediate = wrapperFactory.createPoolStart(
             vaultConfig, timelockConfig, commonPoolConfig, auxiliaryConfig, strategyFactory, ""
         );
 
@@ -362,7 +365,7 @@ contract FactoryTest is Test {
         vm.warp(block.timestamp + wrapperFactory.DEPLOY_START_FINISH_SPAN_SECONDS());
 
         // Should succeed (deadline is inclusive)
-        Factory.PoolDeployment memory deployment = wrapperFactory.createPoolFinish(
+        Factory.PoolDeployment memory deployment = wrapperFactory.createPoolFinish{value: connectDeposit}(
             vaultConfig, timelockConfig, commonPoolConfig, auxiliaryConfig, strategyFactory, "", intermediate
         );
         vm.stopPrank();
@@ -382,7 +385,7 @@ contract FactoryTest is Test {
         address strategyFactory = address(0);
 
         vm.startPrank(admin);
-        Factory.PoolIntermediate memory intermediate = wrapperFactory.createPoolStart{value: connectDeposit}(
+        Factory.PoolIntermediate memory intermediate = wrapperFactory.createPoolStart(
             vaultConfig, timelockConfig, commonPoolConfig, auxiliaryConfig, strategyFactory, ""
         );
 
@@ -391,7 +394,7 @@ contract FactoryTest is Test {
 
         // Should revert with deadline passed error
         vm.expectRevert(abi.encodeWithSignature("InvalidConfiguration(string)", "deploy finish deadline passed"));
-        wrapperFactory.createPoolFinish(
+        wrapperFactory.createPoolFinish{value: connectDeposit}(
             vaultConfig, timelockConfig, commonPoolConfig, auxiliaryConfig, strategyFactory, "", intermediate
         );
         vm.stopPrank();
@@ -412,14 +415,16 @@ contract FactoryTest is Test {
         Factory.PoolIntermediate memory fakeIntermediate = Factory.PoolIntermediate({
             dashboard: address(0x123),
             poolProxy: address(0x456),
+            poolImpl: address(0x111),
             withdrawalQueueProxy: address(0x789),
+            wqImpl: address(0x222),
             timelock: address(0xabc)
         });
 
         vm.startPrank(admin);
         // Should revert with "deploy not started" error
         vm.expectRevert(abi.encodeWithSignature("InvalidConfiguration(string)", "deploy not started"));
-        wrapperFactory.createPoolFinish(
+        wrapperFactory.createPoolFinish{value: connectDeposit}(
             vaultConfig, timelockConfig, commonPoolConfig, auxiliaryConfig, strategyFactory, "", fakeIntermediate
         );
         vm.stopPrank();
@@ -437,18 +442,18 @@ contract FactoryTest is Test {
         address strategyFactory = address(0);
 
         vm.startPrank(admin);
-        Factory.PoolIntermediate memory intermediate = wrapperFactory.createPoolStart{value: connectDeposit}(
+        Factory.PoolIntermediate memory intermediate = wrapperFactory.createPoolStart(
             vaultConfig, timelockConfig, commonPoolConfig, auxiliaryConfig, strategyFactory, ""
         );
 
         // First finish should succeed
-        wrapperFactory.createPoolFinish(
+        wrapperFactory.createPoolFinish{value: connectDeposit}(
             vaultConfig, timelockConfig, commonPoolConfig, auxiliaryConfig, strategyFactory, "", intermediate
         );
 
         // Second finish should revert with "deploy already finished"
         vm.expectRevert(abi.encodeWithSignature("InvalidConfiguration(string)", "deploy already finished"));
-        wrapperFactory.createPoolFinish(
+        wrapperFactory.createPoolFinish{value: connectDeposit}(
             vaultConfig, timelockConfig, commonPoolConfig, auxiliaryConfig, strategyFactory, "", intermediate
         );
         vm.stopPrank();
@@ -472,7 +477,7 @@ contract FactoryTest is Test {
 
         // Deployer 1 starts deployment
         vm.prank(deployer1);
-        Factory.PoolIntermediate memory intermediate1 = wrapperFactory.createPoolStart{value: connectDeposit}(
+        Factory.PoolIntermediate memory intermediate1 = wrapperFactory.createPoolStart(
             vaultConfig, timelockConfig, commonPoolConfig, auxiliaryConfig, strategyFactory, ""
         );
 
@@ -481,7 +486,7 @@ contract FactoryTest is Test {
 
         // Deployer 2 starts deployment
         vm.prank(deployer2);
-        Factory.PoolIntermediate memory intermediate2 = wrapperFactory.createPoolStart{value: connectDeposit}(
+        Factory.PoolIntermediate memory intermediate2 = wrapperFactory.createPoolStart(
             vaultConfig, timelockConfig, commonPoolConfig, auxiliaryConfig, strategyFactory, ""
         );
 
@@ -491,13 +496,13 @@ contract FactoryTest is Test {
         // Deployer 1's finish should fail (past deadline)
         vm.prank(deployer1);
         vm.expectRevert(abi.encodeWithSignature("InvalidConfiguration(string)", "deploy finish deadline passed"));
-        wrapperFactory.createPoolFinish(
+        wrapperFactory.createPoolFinish{value: connectDeposit}(
             vaultConfig, timelockConfig, commonPoolConfig, auxiliaryConfig, strategyFactory, "", intermediate1
         );
 
         // Deployer 2's finish should succeed (within deadline)
         vm.prank(deployer2);
-        Factory.PoolDeployment memory deployment2 = wrapperFactory.createPoolFinish(
+        Factory.PoolDeployment memory deployment2 = wrapperFactory.createPoolFinish{value: connectDeposit}(
             vaultConfig, timelockConfig, commonPoolConfig, auxiliaryConfig, strategyFactory, "", intermediate2
         );
         assertTrue(deployment2.pool != address(0), "Deployer 2 should successfully finish");

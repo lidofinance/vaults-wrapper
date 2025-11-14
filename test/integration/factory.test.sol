@@ -63,10 +63,10 @@ contract FactoryIntegrationTest is StvPoolHarness {
         address strategyFactory
     ) internal returns (Factory.PoolIntermediate memory, Factory.PoolDeployment memory) {
         vm.startPrank(vaultConfig.nodeOperator);
-        Factory.PoolIntermediate memory intermediate = factory.createPoolStart{value: CONNECT_DEPOSIT}(
+        Factory.PoolIntermediate memory intermediate = factory.createPoolStart(
             vaultConfig, timelockConfig, commonPoolConfig, auxiliaryConfig, strategyFactory, ""
         );
-        Factory.PoolDeployment memory deployment = factory.createPoolFinish(
+        Factory.PoolDeployment memory deployment = factory.createPoolFinish{value: CONNECT_DEPOSIT}(
             vaultConfig, timelockConfig, commonPoolConfig, auxiliaryConfig, strategyFactory, "", intermediate
         );
         vm.stopPrank();
@@ -74,7 +74,7 @@ contract FactoryIntegrationTest is StvPoolHarness {
         return (intermediate, deployment);
     }
 
-    function test_createPoolStart_reverts_without_exact_connect_deposit() public {
+    function test_createPoolFinish_reverts_without_exact_connect_deposit() public {
         (
             Factory.VaultConfig memory vaultConfig,
             Factory.CommonPoolConfig memory commonPoolConfig,
@@ -86,11 +86,15 @@ contract FactoryIntegrationTest is StvPoolHarness {
         assertGt(CONNECT_DEPOSIT, 1, "CONNECT_DEPOSIT must be > 1 for this test");
 
         vm.startPrank(vaultConfig.nodeOperator);
+        Factory.PoolIntermediate memory intermediate = factory.createPoolStart(
+            vaultConfig, timelockConfig, commonPoolConfig, auxiliaryConfig, strategyFactory, ""
+        );
+
         vm.expectRevert(
             abi.encodeWithSelector(Factory.InsufficientConnectDeposit.selector, CONNECT_DEPOSIT - 1, CONNECT_DEPOSIT)
         );
-        factory.createPoolStart{value: CONNECT_DEPOSIT - 1}(
-            vaultConfig, timelockConfig, commonPoolConfig, auxiliaryConfig, strategyFactory, ""
+        factory.createPoolFinish{value: CONNECT_DEPOSIT - 1}(
+            vaultConfig, timelockConfig, commonPoolConfig, auxiliaryConfig, strategyFactory, "", intermediate
         );
         vm.stopPrank();
     }
@@ -181,7 +185,7 @@ contract FactoryIntegrationTest is StvPoolHarness {
         address strategyFactory = address(0);
 
         vm.startPrank(vaultConfig.nodeOperator);
-        Factory.PoolIntermediate memory intermediate = factory.createPoolStart{value: CONNECT_DEPOSIT}(
+        Factory.PoolIntermediate memory intermediate = factory.createPoolStart(
             vaultConfig, timelockConfig, commonPoolConfig, auxiliaryConfig, strategyFactory, ""
         );
 
@@ -189,7 +193,7 @@ contract FactoryIntegrationTest is StvPoolHarness {
         intermediate.poolProxy = address(0xdead);
 
         vm.expectRevert(abi.encodeWithSelector(Factory.InvalidConfiguration.selector, "deploy not started"));
-        factory.createPoolFinish(
+        factory.createPoolFinish{value: CONNECT_DEPOSIT}(
             vaultConfig, timelockConfig, commonPoolConfig, auxiliaryConfig, strategyFactory, "", intermediate
         );
         vm.stopPrank();
@@ -206,7 +210,7 @@ contract FactoryIntegrationTest is StvPoolHarness {
         address strategyFactory = address(0);
 
         vm.startPrank(vaultConfig.nodeOperator);
-        Factory.PoolIntermediate memory intermediate = factory.createPoolStart{value: CONNECT_DEPOSIT}(
+        Factory.PoolIntermediate memory intermediate = factory.createPoolStart(
             vaultConfig,
             timelockConfig,
             commonPoolConfig,
@@ -219,7 +223,7 @@ contract FactoryIntegrationTest is StvPoolHarness {
         vaultConfig.nodeOperatorFeeBP = 999;
 
         vm.expectRevert(abi.encodeWithSelector(Factory.InvalidConfiguration.selector, "deploy not started"));
-        factory.createPoolFinish(
+        factory.createPoolFinish{value: CONNECT_DEPOSIT}(
             vaultConfig, timelockConfig, commonPoolConfig, auxiliaryConfig, strategyFactory, "", intermediate
         );
         vm.stopPrank();
@@ -236,17 +240,19 @@ contract FactoryIntegrationTest is StvPoolHarness {
         address strategyFactory = address(0);
 
         vm.startPrank(vaultConfig.nodeOperator);
-        Factory.PoolIntermediate memory intermediate = factory.createPoolStart{value: CONNECT_DEPOSIT}(
+        Factory.PoolIntermediate memory intermediate = factory.createPoolStart(
             vaultConfig, timelockConfig, commonPoolConfig, auxiliaryConfig, strategyFactory, ""
         );
         vm.stopPrank();
 
         address otherSender = address(0xbeef);
+        vm.deal(otherSender, CONNECT_DEPOSIT);
+        vm.startPrank(otherSender);
         vm.expectRevert(abi.encodeWithSelector(Factory.InvalidConfiguration.selector, "deploy not started"));
-        vm.prank(otherSender);
-        factory.createPoolFinish(
+        factory.createPoolFinish{value: CONNECT_DEPOSIT}(
             vaultConfig, timelockConfig, commonPoolConfig, auxiliaryConfig, strategyFactory, "", intermediate
         );
+        vm.stopPrank();
     }
 
     function test_createPoolFinish_reverts_when_called_twice() public {
@@ -260,17 +266,17 @@ contract FactoryIntegrationTest is StvPoolHarness {
         address strategyFactory = address(0);
 
         vm.startPrank(vaultConfig.nodeOperator);
-        Factory.PoolIntermediate memory intermediate = factory.createPoolStart{value: CONNECT_DEPOSIT}(
+        Factory.PoolIntermediate memory intermediate = factory.createPoolStart(
             vaultConfig, timelockConfig, commonPoolConfig, auxiliaryConfig, strategyFactory, ""
         );
 
-        factory.createPoolFinish(
+        factory.createPoolFinish{value: CONNECT_DEPOSIT}(
             vaultConfig, timelockConfig, commonPoolConfig, auxiliaryConfig, strategyFactory, "", intermediate
         );
 
         // The intermediate hash is set to DEPLOY_COMPLETE after the first successful call; the second should fail.
         vm.expectRevert(abi.encodeWithSelector(Factory.InvalidConfiguration.selector, "deploy already finished"));
-        factory.createPoolFinish(
+        factory.createPoolFinish{value: CONNECT_DEPOSIT}(
             vaultConfig, timelockConfig, commonPoolConfig, auxiliaryConfig, strategyFactory, "", intermediate
         );
         vm.stopPrank();
@@ -285,13 +291,16 @@ contract FactoryIntegrationTest is StvPoolHarness {
         ) = _buildConfigs(false, false, 0, "Factory Event Pool", "FEP");
         address strategyFactory = address(0);
 
+        vm.startPrank(vaultConfig.nodeOperator);
         vm.recordLogs();
-        (Factory.PoolIntermediate memory intermediate,) =
-            _deployThroughFactory(vaultConfig, timelockConfig, commonPoolConfig, auxiliaryConfig, strategyFactory);
+        Factory.PoolIntermediate memory intermediate = factory.createPoolStart(
+            vaultConfig, timelockConfig, commonPoolConfig, auxiliaryConfig, strategyFactory, ""
+        );
+        vm.stopPrank();
 
         Vm.Log[] memory entries = vm.getRecordedLogs();
         bytes32 expectedTopic = keccak256(
-            "PoolCreationStarted(address,(address,address,uint256,uint256),(uint256,string,string,address),(bool,bool,uint256),(uint256,address,address),address,bytes,(address,address,address,address),uint256)"
+            "PoolCreationStarted(address,(address,address,uint256,uint256),(uint256,string,string,address),(bool,bool,uint256),(uint256,address,address),address,bytes,(address,address,address,address,address,address),uint256)"
         );
 
         bool found;
@@ -349,7 +358,9 @@ contract FactoryIntegrationTest is StvPoolHarness {
 
             assertEq(emittedIntermediate.dashboard, intermediate.dashboard, "dashboard address should match");
             assertEq(emittedIntermediate.poolProxy, intermediate.poolProxy, "poolProxy address should match");
+            assertEq(emittedIntermediate.poolImpl, intermediate.poolImpl, "poolImpl address should match");
             assertEq(emittedIntermediate.withdrawalQueueProxy, intermediate.withdrawalQueueProxy, "withdrawalQueueProxy should match");
+            assertEq(emittedIntermediate.wqImpl, intermediate.wqImpl, "wqImpl address should match");
             assertEq(emittedIntermediate.timelock, intermediate.timelock, "timelock should match");
 
             assertGt(emittedFinishDeadline, block.timestamp, "finish deadline should be in the future");

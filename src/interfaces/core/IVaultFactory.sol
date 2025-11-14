@@ -41,5 +41,5 @@ interface IVaultFactory {
         uint256 _nodeOperatorFeeBP,
         uint256 _confirmExpiry,
         RoleAssignment[] calldata _roleAssignments
-    ) external payable returns (address vault, address dashboard);
+    ) external returns (address vault, address dashboard);
 }

@@ -71,8 +71,7 @@ contract MockVaultFactory is IVaultFactory {
         uint256, /* _nodeOperatorFeeBP */
         uint256, /* _confirmExpiry */
         RoleAssignment[] calldata /* _roleAssignments */
-    ) external payable returns (address vault, address dashboard) {
-        require(msg.value == 0 ether, "invalid value sent");
+    ) external returns (address vault, address dashboard) {
         vault = address(new MockStakingVault());
         address steth = address(MockVaultHub(payable(VAULT_HUB)).LIDO());
         address wsteth = address(new MockWstETH(steth));

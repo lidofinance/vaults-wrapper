@@ -77,7 +77,9 @@ contract DeployPool is Script {
     {
         json = vm.serializeAddress("_intermediate", "dashboard", _intermediate.dashboard);
         json = vm.serializeAddress("_intermediate", "poolProxy", _intermediate.poolProxy);
+        json = vm.serializeAddress("_intermediate", "poolImpl", _intermediate.poolImpl);
         json = vm.serializeAddress("_intermediate", "withdrawalQueueProxy", _intermediate.withdrawalQueueProxy);
+        json = vm.serializeAddress("_intermediate", "wqImpl", _intermediate.wqImpl);
         json = vm.serializeAddress("_intermediate", "timelock", _intermediate.timelock);
     }
 
@@ -195,7 +197,9 @@ contract DeployPool is Script {
         return Factory.PoolIntermediate({
             dashboard: vm.parseJsonAddress(json, "$.intermediate.dashboard"),
             poolProxy: vm.parseJsonAddress(json, "$.intermediate.poolProxy"),
+            poolImpl: vm.parseJsonAddress(json, "$.intermediate.poolImpl"),
             withdrawalQueueProxy: vm.parseJsonAddress(json, "$.intermediate.withdrawalQueueProxy"),
+            wqImpl: vm.parseJsonAddress(json, "$.intermediate.wqImpl"),
             timelock: vm.parseJsonAddress(json, "$.intermediate.timelock")
         });
     }
@@ -271,7 +275,7 @@ contract DeployPool is Script {
 
         vm.startBroadcast();
 
-        Factory.PoolIntermediate memory intermediate = _factory.createPoolStart{value: p.connectDepositWei}(
+        Factory.PoolIntermediate memory intermediate = _factory.createPoolStart(
             p.vaultConfig, p.timelockConfig, p.commonPoolConfig, p.auxiliaryPoolConfig, p.strategyFactory, ""
         );
 
@@ -305,7 +309,7 @@ contract DeployPool is Script {
 
         vm.startBroadcast();
 
-        _factory.createPoolFinish(
+        _factory.createPoolFinish{value: p.connectDepositWei}(
             p.vaultConfig,
             p.timelockConfig,
             p.commonPoolConfig,

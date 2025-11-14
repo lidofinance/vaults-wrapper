@@ -19,7 +19,6 @@ import {IVaultHub} from "./interfaces/core/IVaultHub.sol";
 import {DummyImplementation} from "./proxy/DummyImplementation.sol";
 import {OssifiableProxy} from "./proxy/OssifiableProxy.sol";
 
-import {WithdrawalQueue} from "./WithdrawalQueue.sol";
 import {IDashboard} from "./interfaces/core/IDashboard.sol";
 import {IVaultFactory} from "./interfaces/core/IVaultFactory.sol";
 
@@ -122,7 +121,9 @@ contract Factory {
     struct PoolIntermediate {
         address dashboard;
         address poolProxy;
+        address poolImpl;
         address withdrawalQueueProxy;
+        address wqImpl;
         address timelock;
     }
 
@@ -362,14 +363,14 @@ contract Factory {
      * @param _commonPoolConfig Common pool parameters (name, symbol, withdrawal delay)
      * @param _allowListEnabled Whether to enable allowlist for deposits
      * @return intermediate Deployment state needed for finish phase
-     * @dev Requires msg.value >= VAULT_HUB.CONNECT_DEPOSIT() for vault connection
+     * @dev ETH for vault connection deposit should be sent in createPoolFinish
      */
     function createPoolStvStart(
         VaultConfig memory _vaultConfig,
         TimelockConfig memory _timelockConfig,
         CommonPoolConfig memory _commonPoolConfig,
         bool _allowListEnabled
-    ) external payable returns (PoolIntermediate memory intermediate) {
+    ) external returns (PoolIntermediate memory intermediate) {
         AuxiliaryPoolConfig memory _auxiliaryPoolConfig = AuxiliaryPoolConfig({
             allowlistEnabled: _allowListEnabled, mintingEnabled: false, reserveRatioGapBP: 0
         });
@@ -385,7 +386,7 @@ contract Factory {
      * @param _allowListEnabled Whether to enable allowlist for deposits
      * @param _reserveRatioGapBP Maximum allowed reserve ratio gap in basis points
      * @return intermediate Deployment state needed for finish phase
-     * @dev Requires msg.value >= VAULT_HUB.CONNECT_DEPOSIT() for vault connection
+     * @dev ETH for vault connection deposit should be sent in createPoolFinish
      */
     function createPoolStvStETHStart(
         VaultConfig memory _vaultConfig,
@@ -393,7 +394,7 @@ contract Factory {
         CommonPoolConfig memory _commonPoolConfig,
         bool _allowListEnabled,
         uint256 _reserveRatioGapBP
-    ) external payable returns (PoolIntermediate memory intermediate) {
+    ) external returns (PoolIntermediate memory intermediate) {
         AuxiliaryPoolConfig memory _auxiliaryPoolConfig = AuxiliaryPoolConfig({
             allowlistEnabled: _allowListEnabled, mintingEnabled: true, reserveRatioGapBP: _reserveRatioGapBP
         });
@@ -409,7 +410,7 @@ contract Factory {
      * @param _commonPoolConfig Common pool parameters (name, symbol, withdrawal delay)
      * @param _reserveRatioGapBP Maximum allowed reserve ratio gap in basis points
      * @return intermediate Deployment state needed for finish phase
-     * @dev Requires msg.value >= VAULT_HUB.CONNECT_DEPOSIT() for vault connection
+     * @dev ETH for vault connection deposit should be sent in createPoolFinish
      * @dev Automatically enables allowlist and minting for GGV pools
      */
     function createPoolGGVStart(
@@ -417,7 +418,7 @@ contract Factory {
         TimelockConfig memory _timelockConfig,
         CommonPoolConfig memory _commonPoolConfig,
         uint256 _reserveRatioGapBP
-    ) external payable returns (PoolIntermediate memory intermediate) {
+    ) external returns (PoolIntermediate memory intermediate) {
         AuxiliaryPoolConfig memory auxiliaryConfig = AuxiliaryPoolConfig({
             allowlistEnabled: true, mintingEnabled: true, reserveRatioGapBP: _reserveRatioGapBP
         });
@@ -429,15 +430,14 @@ contract Factory {
     /**
      * @notice Generic pool deployment start function (first phase)
      * @param _vaultConfig Configuration for the vault
-     * @param _commonPoolConfig Common pool parameters (name, symbol, withdrawal delay)
-     * @param _auxiliaryConfig Additional pool configuration (allowlist, minting, reserve ratio)
      * @param _timelockConfig Configuration for the timelock controller
+     * @param _commonPoolConfig Common pool parameters
+     * @param _auxiliaryConfig Additional pool configuration
      * @param _strategyFactory Address of strategy factory (zero for pools without strategy)
      * @param _strategyDeployBytes ABI-encoded parameters for strategy deployment
-     * @return intermediate Deployment state needed for finish phase
+     * @return intermediate Deployment state required to finish deployment createPoolFinish call
      * @dev This is the main deployment function called by all pool-specific start functions
-     * @dev Validates configuration, deploys components, and records deployment state
-     * @dev Requires msg.value >= VAULT_HUB.CONNECT_DEPOSIT() for vault connection
+     * @dev ETH for vault connection deposit should be sent in createPoolFinish
      * @dev Must be followed by createPoolFinish within DEPLOY_START_FINISH_SPAN_SECONDS
      */
     function createPoolStart(
@@ -447,11 +447,7 @@ contract Factory {
         AuxiliaryPoolConfig memory _auxiliaryConfig,
         address _strategyFactory,
         bytes memory _strategyDeployBytes
-    ) public payable returns (PoolIntermediate memory intermediate) {
-        if (msg.value < VAULT_HUB.CONNECT_DEPOSIT()) {
-            revert InsufficientConnectDeposit(msg.value, VAULT_HUB.CONNECT_DEPOSIT());
-        }
-
+    ) public returns (PoolIntermediate memory intermediate) {
         if (bytes(_commonPoolConfig.name).length == 0 || bytes(_commonPoolConfig.symbol).length == 0) {
             revert InvalidConfiguration("name and symbol must be set");
         }
@@ -465,36 +461,56 @@ contract Factory {
         address poolProxy = payable(address(new OssifiableProxy(DUMMY_IMPLEMENTATION, tempAdmin, bytes(""))));
         address wqProxy = payable(address(new OssifiableProxy(DUMMY_IMPLEMENTATION, tempAdmin, bytes(""))));
 
-        uint256 numDashboardRoles = 3;
-        if (_auxiliaryConfig.mintingEnabled) numDashboardRoles += 2;
-        if (address(0) != _commonPoolConfig.emergencyCommittee) numDashboardRoles += 1;
-
-        IVaultFactory.RoleAssignment[] memory roleAssignments = new IVaultFactory.RoleAssignment[](numDashboardRoles);
-        IDashboard dashboardImpl = IDashboard(payable(VAULT_FACTORY.DASHBOARD_IMPL()));
-        roleAssignments[0] = IVaultFactory.RoleAssignment({account: poolProxy, role: dashboardImpl.FUND_ROLE()});
-        roleAssignments[1] = IVaultFactory.RoleAssignment({account: poolProxy, role: dashboardImpl.REBALANCE_ROLE()});
-        roleAssignments[2] = IVaultFactory.RoleAssignment({account: wqProxy, role: dashboardImpl.WITHDRAW_ROLE()});
-        if (_auxiliaryConfig.mintingEnabled) {
-            roleAssignments[3] = IVaultFactory.RoleAssignment({account: poolProxy, role: dashboardImpl.MINT_ROLE()});
-            roleAssignments[4] = IVaultFactory.RoleAssignment({account: poolProxy, role: dashboardImpl.BURN_ROLE()});
-        }
-        if (address(0) != _commonPoolConfig.emergencyCommittee) {
-            roleAssignments[5] = IVaultFactory.RoleAssignment({
-                account: _commonPoolConfig.emergencyCommittee, role: dashboardImpl.PAUSE_BEACON_CHAIN_DEPOSITS_ROLE()
-            });
-        }
-
-        (, address dashboardAddress) = VAULT_FACTORY.createVaultWithDashboard{value: msg.value}(
-            timelock,
+        (, address dashboardAddress) = VAULT_FACTORY.createVaultWithDashboardWithoutConnectingToVaultHub(
+            tempAdmin,
             _vaultConfig.nodeOperator,
             _vaultConfig.nodeOperatorManager,
             _vaultConfig.nodeOperatorFeeBP,
             _vaultConfig.confirmExpiry,
-            roleAssignments
+            new IVaultFactory.RoleAssignment[](0)
         );
 
+        // address wqImpl = address(0);
+        // address poolImpl = address(0);
+        address wqImpl = WITHDRAWAL_QUEUE_FACTORY.deploy(
+            poolProxy,
+            dashboardAddress,
+            address(VAULT_HUB),
+            STETH,
+            address(IDashboard(payable(dashboardAddress)).stakingVault()),
+            LAZY_ORACLE,
+            _commonPoolConfig.minWithdrawalDelayTime,
+            _auxiliaryConfig.mintingEnabled
+        );
+
+        address distributor = DISTRIBUTOR_FACTORY.deploy(timelock, _vaultConfig.nodeOperatorManager);
+
+        bytes32 poolType = derivePoolType(_auxiliaryConfig, _strategyFactory);
+        address poolImpl = address(0);
+        if (poolType == STV_POOL_TYPE) {
+            poolImpl = STV_POOL_FACTORY.deploy(
+                dashboardAddress, _auxiliaryConfig.allowlistEnabled, wqProxy, distributor, poolType
+            );
+        } else if (poolType == STV_STETH_POOL_TYPE || poolType == STRATEGY_POOL_TYPE) {
+            poolImpl = STV_STETH_POOL_FACTORY.deploy(
+                dashboardAddress,
+                _auxiliaryConfig.allowlistEnabled,
+                _auxiliaryConfig.reserveRatioGapBP,
+                wqProxy,
+                distributor,
+                poolType
+            );
+        } else {
+            assert(false);
+        }
+
         intermediate = PoolIntermediate({
-            dashboard: dashboardAddress, poolProxy: poolProxy, withdrawalQueueProxy: wqProxy, timelock: timelock
+            dashboard: dashboardAddress,
+            poolProxy: poolProxy,
+            poolImpl: poolImpl,
+            withdrawalQueueProxy: wqProxy,
+            wqImpl: wqImpl,
+            timelock: timelock
         });
 
         bytes32 deploymentHash = _hashDeploymentConfiguration(
@@ -526,9 +542,9 @@ contract Factory {
     /**
      * @notice Completes pool deployment (second phase)
      * @param _vaultConfig Configuration for the vault (must match createPoolStart)
+     * @param _timelockConfig Configuration for the timelock controller (must match createPoolStart)
      * @param _commonPoolConfig Common pool parameters (must match createPoolStart)
      * @param _auxiliaryConfig Additional pool configuration (must match createPoolStart)
-     * @param _timelockConfig Configuration for the timelock controller (must match createPoolStart)
      * @param _strategyFactory Address of strategy factory (must match createPoolStart)
      * @param _strategyDeployBytes ABI-encoded parameters for strategy deployment (must match createPoolStart)
      * @param _intermediate Deployment state returned by createPoolStart
@@ -536,6 +552,7 @@ contract Factory {
      * @dev Must be called by the same address that called createPoolStart
      * @dev Must be called within DEPLOY_START_FINISH_SPAN_SECONDS of start
      * @dev All parameters must exactly match those used in createPoolStart
+     * @dev Requires msg.value >= VAULT_HUB.CONNECT_DEPOSIT() for vault connection
      */
     function createPoolFinish(
         VaultConfig memory _vaultConfig,
@@ -545,7 +562,11 @@ contract Factory {
         address _strategyFactory,
         bytes memory _strategyDeployBytes,
         PoolIntermediate calldata _intermediate
-    ) external returns (PoolDeployment memory deployment) {
+    ) external payable returns (PoolDeployment memory deployment) {
+        if (msg.value < VAULT_HUB.CONNECT_DEPOSIT()) {
+            revert InsufficientConnectDeposit(msg.value, VAULT_HUB.CONNECT_DEPOSIT());
+        }
+
         bytes32 deploymentHash = _hashDeploymentConfiguration(
             msg.sender,
             _vaultConfig,
@@ -568,40 +589,13 @@ contract Factory {
         intermediateState[deploymentHash] = DEPLOY_FINISHED;
 
         address tempAdmin = address(this);
-        bytes32 poolType = derivePoolType(_auxiliaryConfig, _strategyFactory);
 
-        address wqImpl = WITHDRAWAL_QUEUE_FACTORY.deploy(
-            _intermediate.poolProxy,
-            _intermediate.dashboard,
-            address(VAULT_HUB),
-            STETH,
-            address(IDashboard(payable(_intermediate.dashboard)).stakingVault()),
-            LAZY_ORACLE,
-            _commonPoolConfig.minWithdrawalDelayTime,
-            _auxiliaryConfig.mintingEnabled
-        );
+        IDashboard dashboard = IDashboard(payable(_intermediate.dashboard));
 
-        address distributor = DISTRIBUTOR_FACTORY.deploy(_intermediate.timelock, _vaultConfig.nodeOperatorManager);
+        dashboard.connectToVaultHub{value: msg.value}();
 
-        address poolImpl = address(0);
-        if (poolType == STV_POOL_TYPE) {
-            poolImpl = STV_POOL_FACTORY.deploy(
-                _intermediate.dashboard,
-                _auxiliaryConfig.allowlistEnabled,
-                _intermediate.withdrawalQueueProxy,
-                distributor,
-                poolType
-            );
-        } else if (poolType == STV_STETH_POOL_TYPE || poolType == STRATEGY_POOL_TYPE) {
-            poolImpl = STV_STETH_POOL_FACTORY.deploy(
-                _intermediate.dashboard,
-                _auxiliaryConfig.allowlistEnabled,
-                _auxiliaryConfig.reserveRatioGapBP,
-                _intermediate.withdrawalQueueProxy,
-                distributor,
-                poolType
-            );
-        }
+        address wqImpl = _intermediate.wqImpl;
+        address poolImpl = _intermediate.poolImpl;
 
         OssifiableProxy(payable(_intermediate.poolProxy))
             .proxy__upgradeToAndCall(
@@ -626,7 +620,6 @@ contract Factory {
         OssifiableProxy(payable(_intermediate.withdrawalQueueProxy)).proxy__changeAdmin(_intermediate.timelock);
 
         StvPool pool = StvPool(payable(_intermediate.poolProxy));
-        IDashboard dashboard = IDashboard(payable(_intermediate.dashboard));
         WithdrawalQueue withdrawalQueue = WithdrawalQueue(payable(_intermediate.withdrawalQueueProxy));
 
         address strategyProxy = address(0);
@@ -653,8 +646,24 @@ contract Factory {
         pool.grantRole(DEFAULT_ADMIN_ROLE, _intermediate.timelock);
         pool.revokeRole(DEFAULT_ADMIN_ROLE, tempAdmin);
 
+        IDashboard dashboardImpl = IDashboard(payable(VAULT_FACTORY.DASHBOARD_IMPL()));
+
+        dashboard.grantRole(dashboardImpl.FUND_ROLE(), _intermediate.poolProxy);
+        dashboard.grantRole(dashboardImpl.REBALANCE_ROLE(), _intermediate.poolProxy);
+        dashboard.grantRole(dashboardImpl.WITHDRAW_ROLE(), _intermediate.withdrawalQueueProxy);
+        if (_auxiliaryConfig.mintingEnabled) {
+            dashboard.grantRole(dashboardImpl.MINT_ROLE(), _intermediate.poolProxy);
+            dashboard.grantRole(dashboardImpl.BURN_ROLE(), _intermediate.poolProxy);
+        }
+        if (address(0) != _commonPoolConfig.emergencyCommittee) {
+            dashboard.grantRole(dashboardImpl.PAUSE_BEACON_CHAIN_DEPOSITS_ROLE(), _commonPoolConfig.emergencyCommittee);
+        }
+
+        dashboard.grantRole(DEFAULT_ADMIN_ROLE, _intermediate.timelock);
+        dashboard.revokeRole(DEFAULT_ADMIN_ROLE, tempAdmin);
+
         deployment = PoolDeployment({
-            poolType: poolType,
+            poolType: derivePoolType(_auxiliaryConfig, _strategyFactory),
             vault: address(dashboard.stakingVault()),
             dashboard: address(dashboard),
             pool: address(pool),
@@ -673,9 +682,25 @@ contract Factory {
             _strategyDeployBytes,
             deployment.strategy
         );
+    }
 
-        // NB: The roles are not granted on purpose:
-        // - LOSS_SOCIALIZER_ROLE (timelock can grant it itself)
+    function derivePoolType(AuxiliaryPoolConfig memory _auxiliaryConfig, address _strategyFactory)
+        public
+        view
+        returns (bytes32 poolType)
+    {
+        poolType = STV_POOL_TYPE;
+        if (_strategyFactory != address(0)) {
+            poolType = STRATEGY_POOL_TYPE;
+            if (!_auxiliaryConfig.allowlistEnabled) {
+                revert InvalidConfiguration("allowlistEnabled must be true if strategy factory is set");
+            }
+            if (!_auxiliaryConfig.mintingEnabled) {
+                revert InvalidConfiguration("mintingEnabled must be true if strategy factory is set");
+            }
+        } else if (_auxiliaryConfig.mintingEnabled) {
+            poolType = STV_STETH_POOL_TYPE;
+        }
     }
 
     /**
@@ -712,24 +737,5 @@ contract Factory {
                 abi.encode(_intermediate)
             )
         );
-    }
-
-    function derivePoolType(AuxiliaryPoolConfig memory _auxiliaryConfig, address _strategyFactory)
-        public
-        view
-        returns (bytes32 poolType)
-    {
-        poolType = STV_POOL_TYPE;
-        if (_strategyFactory != address(0)) {
-            poolType = STRATEGY_POOL_TYPE;
-            if (!_auxiliaryConfig.allowlistEnabled) {
-                revert InvalidConfiguration("allowlistEnabled must be true if strategy factory is set");
-            }
-            if (!_auxiliaryConfig.mintingEnabled) {
-                revert InvalidConfiguration("mintingEnabled must be true if strategy factory is set");
-            }
-        } else if (_auxiliaryConfig.mintingEnabled) {
-            poolType = STV_STETH_POOL_TYPE;
-        }
     }
 }

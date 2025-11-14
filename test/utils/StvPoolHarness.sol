@@ -141,10 +141,10 @@ contract StvPoolHarness is Test {
         // StrategyKind.NONE: strategyFactoryAddress remains address(0)
 
         vm.startPrank(config.nodeOperator);
-        Factory.PoolIntermediate memory intermediate = factory.createPoolStart{value: CONNECT_DEPOSIT}(
+        Factory.PoolIntermediate memory intermediate = factory.createPoolStart(
             vaultConfig, timelockConfig, commonPoolConfig, auxiliaryConfig, strategyFactoryAddress, ""
         );
-        Factory.PoolDeployment memory deployment = factory.createPoolFinish(
+        Factory.PoolDeployment memory deployment = factory.createPoolFinish{value: CONNECT_DEPOSIT}(
             vaultConfig, timelockConfig, commonPoolConfig, auxiliaryConfig, strategyFactoryAddress, "", intermediate
         );
         vm.stopPrank();
