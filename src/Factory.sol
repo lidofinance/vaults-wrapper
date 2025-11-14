@@ -466,18 +466,23 @@ contract Factory {
         address poolProxy = payable(address(new OssifiableProxy(DUMMY_IMPLEMENTATION, tempAdmin, bytes(""))));
         address wqProxy = payable(address(new OssifiableProxy(DUMMY_IMPLEMENTATION, tempAdmin, bytes(""))));
 
-        uint256 numDashboardRoles = _auxiliaryConfig.mintingEnabled ? 6 : 4;
+        uint256 numDashboardRoles = 3;
+        if (_auxiliaryConfig.mintingEnabled) numDashboardRoles += 2;
+        if (address(0) != _commonPoolConfig.emergencyCommittee) numDashboardRoles += 1;
+
         IVaultFactory.RoleAssignment[] memory roleAssignments = new IVaultFactory.RoleAssignment[](numDashboardRoles);
         IDashboard dashboardImpl = IDashboard(payable(VAULT_FACTORY.DASHBOARD_IMPL()));
         roleAssignments[0] = IVaultFactory.RoleAssignment({account: poolProxy, role: dashboardImpl.FUND_ROLE()});
         roleAssignments[1] = IVaultFactory.RoleAssignment({account: poolProxy, role: dashboardImpl.REBALANCE_ROLE()});
         roleAssignments[2] = IVaultFactory.RoleAssignment({account: wqProxy, role: dashboardImpl.WITHDRAW_ROLE()});
-        roleAssignments[3] = IVaultFactory.RoleAssignment({
-            account: _commonPoolConfig.emergencyCommittee, role: dashboardImpl.PAUSE_BEACON_CHAIN_DEPOSITS_ROLE()
-        });
         if (_auxiliaryConfig.mintingEnabled) {
-            roleAssignments[4] = IVaultFactory.RoleAssignment({account: poolProxy, role: dashboardImpl.MINT_ROLE()});
-            roleAssignments[5] = IVaultFactory.RoleAssignment({account: poolProxy, role: dashboardImpl.BURN_ROLE()});
+            roleAssignments[3] = IVaultFactory.RoleAssignment({account: poolProxy, role: dashboardImpl.MINT_ROLE()});
+            roleAssignments[4] = IVaultFactory.RoleAssignment({account: poolProxy, role: dashboardImpl.BURN_ROLE()});
+        }
+        if (address(0) != _commonPoolConfig.emergencyCommittee) {
+            roleAssignments[5] = IVaultFactory.RoleAssignment({
+                account: _commonPoolConfig.emergencyCommittee, role: dashboardImpl.PAUSE_BEACON_CHAIN_DEPOSITS_ROLE()
+            });
         }
 
         (, address dashboardAddress) = VAULT_FACTORY.createVaultWithDashboard{value: msg.value}(
