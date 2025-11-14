@@ -470,8 +470,6 @@ contract Factory {
             new IVaultFactory.RoleAssignment[](0)
         );
 
-        // address wqImpl = address(0);
-        // address poolImpl = address(0);
         address wqImpl = WITHDRAWAL_QUEUE_FACTORY.deploy(
             poolProxy,
             dashboardAddress,

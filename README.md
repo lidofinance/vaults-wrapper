@@ -286,69 +286,229 @@ Factory.PoolDeployment memory deployment = factory.createPoolFinish(
 
 #### Underlying Factory Contract Calls (Detailed)
 
-- Prerequisites (addresses required to deploy `Factory`):
-  - **Core (auto-discovered from Locator)**: `IVaultFactory`, `stETH`, `wstETH`, `lazyOracle`
-  - **Implementation factories**: `StvPoolFactory`, `StvStETHPoolFactory`, `StvStETHPoolFactory`, `WithdrawalQueueFactory`, `LoopStrategyFactory`, `GGVStrategyFactory`
-  - **Proxy stub**: `DummyImplementation` (for `OssifiableProxy` bootstrap)
+##### Prerequisites
 
-- Reusing an existing deployment: export `FACTORY_ADDRESS` (alongside `CORE_LOCATOR_ADDRESS`) before running scripts or integration tests. When the variable is set, the harness logs `Using predeployed factory from FACTORY_ADDRESS ...` and skips deploying a fresh `Factory` instance.
+Addresses required to deploy `Factory`:
+- **Core (auto-discovered from Locator)**: `IVaultFactory`, `IVaultHub`, `stETH`, `wstETH`, `lazyOracle`
+- **Implementation factories**: `StvPoolFactory`, `StvStETHPoolFactory`, `WithdrawalQueueFactory`, `DistributorFactory`, `GGVStrategyFactory`, `TimelockFactory`
+- **Proxy stub**: `DummyImplementation` (for `OssifiableProxy` bootstrap, deployed during Factory construction)
 
-- Deploy `Factory` (either deploy the factories yourself or use `script/DeployFactory.s.sol`):
-  - `DeployFactory` requires `CORE_LOCATOR_ADDRESS` and `FACTORY_PARAMS_JSON`; it derives all core addresses from the Locator and wires the `GGVStrategyFactory` inputs.
-- Constructor shape for reference: `new Factory(locator, SubFactories{ ... })`
+##### Factory Constructor
 
-- Create a complete pool system using one of the specialized entrypoints (send `msg.value == VaultHub.CONNECT_DEPOSIT`):
-  - `createVaultWithNoMintingNoStrategy(nodeOperator, nodeOperatorManager, nodeOperatorFeeBP, confirmExpiry, allowlistEnabled)`
-  - `createVaultWithMintingNoStrategy(nodeOperator, nodeOperatorManager, nodeOperatorFeeBP, confirmExpiry, allowlistEnabled, reserveRatioGapBP)`
-  - `createVaultWithLoopStrategy(nodeOperator, nodeOperatorManager, nodeOperatorFeeBP, confirmExpiry, allowlistEnabled, reserveRatioGapBP, loops)`
-  - `createVaultWithGGVStrategy(nodeOperator, nodeOperatorManager, nodeOperatorFeeBP, confirmExpiry, allowlistEnabled, reserveRatioGapBP, teller, boringQueue)`
+```solidity
+new Factory(locatorAddress, SubFactories({
+    stvPoolFactory: address(stvPoolFactory),
+    stvStETHPoolFactory: address(stvStETHPoolFactory),
+    withdrawalQueueFactory: address(wqFactory),
+    distributorFactory: address(distributorFactory),
+    ggvStrategyFactory: address(ggvStrategyFactory),
+    timelockFactory: address(timelockFactory)
+}))
+```
 
-What gets deployed and by whom
+##### Reusing Existing Deployment
 
-1) Vault + Dashboard
-- By: `Factory` via `IVaultFactory.createVaultWithDashboard{value: msg.value}()`
-- Config: `nodeOperator`, `nodeOperatorManager`, `nodeOperatorFeeBP`, `confirmExpiry`
+Export `FACTORY_ADDRESS` (alongside `CORE_LOCATOR_ADDRESS`) before running scripts or integration tests. When set, the harness logs `Using predeployed factory from FACTORY_ADDRESS ...` and skips deploying a fresh `Factory` instance.
 
-2) Wrapper proxy and Withdrawal Queue proxy
-- By: `Factory`
-- Wrapper proxy: `new OssifiableProxy(DummyImplementation, Factory, "")`
-- Withdrawal Queue: impl via `WithdrawalQueueFactory.deploy(poolProxy, MAX_FINALIZATION_TIME)`, proxied and initialized with `initialize(nodeOperator, nodeOperator)`
+##### Pool Deployment Entry Points
 
-3) Wrapper implementation (selected by configuration)
-- By: `Factory` using the implementation factory
-  - A: `StvPoolFactory.deploy(dashboard, allowlistEnabled, withdrawalQueue)`
-  - B: `StvStETHPoolFactory.deploy(dashboard, stETH, allowlistEnabled, reserveRatioGapBP, withdrawalQueue)`
-  - C (strategy): `StvStETHPoolFactory.deploy(dashboard, stETH, allowlistEnabled, strategy, reserveRatioGapBP, withdrawalQueue)`
+The Factory provides three specialized start functions and one generic start function:
 
-4) Strategy (only for C)
-- Loop: `LoopStrategyFactory.deploy(stETH, poolProxy, loops)` (pool address required)
-- GGV: `GGVStrategyFactory.deploy(stETH, teller, boringQueue)`
+1. **`createPoolStvStart`** - Basic StvPool (no minting, no strategy)
+   ```solidity
+   function createPoolStvStart(
+       VaultConfig memory _vaultConfig,
+       TimelockConfig memory _timelockConfig,
+       CommonPoolConfig memory _commonPoolConfig,
+       bool _allowListEnabled
+   ) external returns (PoolIntermediate memory)
+   ```
 
-5) Initialize pool proxy and wire roles
-- Proxy upgrade + init: `proxy__upgradeToAndCall(poolImpl, abi.encodeCall(StvPool.initialize, (Factory, NAME, SYMBOL)))`
-- Dashboard roles: grant `FUND_ROLE` to pool, `WITHDRAW_ROLE` to withdrawal queue; for B/C also grant `MINT_ROLE` and `BURN_ROLE`
-- Admin handover: transfer `DEFAULT_ADMIN_ROLE` on pool and dashboard from `Factory` to `msg.sender`
-- Event: `VaultWrapperCreated(vault, pool, withdrawalQueue, strategy, configuration)`
+2. **`createPoolStvStETHStart`** - StvStETHPool (with minting, no strategy)
+   ```solidity
+   function createPoolStvStETHStart(
+       VaultConfig memory _vaultConfig,
+       TimelockConfig memory _timelockConfig,
+       CommonPoolConfig memory _commonPoolConfig,
+       bool _allowListEnabled,
+       uint256 _reserveRatioGapBP
+   ) external returns (PoolIntermediate memory)
+   ```
 
-Configuration summary
+3. **`createPoolGGVStart`** - StvStrategyPool with GGV (minting + strategy, allowlist auto-enabled)
+   ```solidity
+   function createPoolGGVStart(
+       VaultConfig memory _vaultConfig,
+       TimelockConfig memory _timelockConfig,
+       CommonPoolConfig memory _commonPoolConfig,
+       uint256 _reserveRatioGapBP
+   ) external returns (PoolIntermediate memory)
+   ```
 
-- Common: `nodeOperator`, `nodeOperatorManager`, `nodeOperatorFeeBP`, `confirmExpiry`, `allowlistEnabled`
-- B/C only: `reserveRatioGapBP` (extra reserve ratio on top of vault RR)
-- Loop strategy: `loops` (leverage cycles); strategy address is auto-deployed and passed to `StvStETHPool`
-- GGV strategy: `teller`, `boringQueue`
-- Funding: `msg.value` must equal `VaultHub.CONNECT_DEPOSIT`
+4. **`createPoolStart`** - Generic pool deployment (called by all specialized functions)
+   ```solidity
+   function createPoolStart(
+       VaultConfig memory _vaultConfig,
+       TimelockConfig memory _timelockConfig,
+       CommonPoolConfig memory _commonPoolConfig,
+       AuxiliaryPoolConfig memory _auxiliaryConfig,
+       address _strategyFactory,
+       bytes memory _strategyDeployBytes
+   ) public returns (PoolIntermediate memory)
+   ```
 
-Note on circular dependencies and gas savings
+All pools are finalized using the same function:
 
-- Wrapper ↔ Withdrawal Queue and StvStETHPool ↔ Strategy have apparent circular dependencies (each needs the other's address).
-- This is solved by pre-deploying proxies first:
-  - Deploy pool proxy upfront (with `DummyImplementation`), obtain its address
-  - Deploy Withdrawal Queue implementation passing the pool proxy address; then proxy + initialize
-  - For Loop strategy, deploy the strategy with the pool proxy address
-  - Finally, deploy pool implementation with concrete dependencies (WQ, strategy) and upgrade the pool proxy to it
-- Because the definitive addresses are known at constructor-time for implementations, contracts store them as `immutable` (e.g., `StvPool` references, `StvStETHPool.STRATEGY`, strategy's `WRAPPER`). This reduces storage reads and saves gas on regular transactions.
+5. **`createPoolFinish`** - Completes deployment (requires `msg.value >= VAULT_HUB.CONNECT_DEPOSIT()`)
+   ```solidity
+   function createPoolFinish(
+       VaultConfig memory _vaultConfig,
+       TimelockConfig memory _timelockConfig,
+       CommonPoolConfig memory _commonPoolConfig,
+       AuxiliaryPoolConfig memory _auxiliaryConfig,
+       address _strategyFactory,
+       bytes memory _strategyDeployBytes,
+       PoolIntermediate calldata _intermediate
+   ) external payable returns (PoolDeployment memory)
+   ```
 
-Dedicated factories for wrappers, withdrawal queue and strategies are required to keep Factory contract bytecode size withing the limit.
+##### Configuration Structures
+
+```solidity
+struct VaultConfig {
+    address nodeOperator;           // Vault node operator
+    address nodeOperatorManager;    // Manager for node operator settings
+    uint256 nodeOperatorFeeBP;      // Fee in basis points
+    uint256 confirmExpiry;          // Confirmation expiry time
+}
+
+struct TimelockConfig {
+    uint256 minDelaySeconds;        // Minimum delay for timelock operations
+    address proposer;               // Address authorized to propose
+    address executor;               // Address authorized to execute
+}
+
+struct CommonPoolConfig {
+    uint256 minWithdrawalDelayTime; // Minimum withdrawal delay
+    string name;                    // ERC20 token name
+    string symbol;                  // ERC20 token symbol
+    address emergencyCommittee;     // Emergency pause authority
+}
+
+struct AuxiliaryPoolConfig {
+    bool allowlistEnabled;          // Require allowlist for deposits
+    bool mintingEnabled;            // Enable stETH minting
+    uint256 reserveRatioGapBP;      // Reserve ratio gap (basis points)
+}
+
+struct PoolIntermediate {
+    address dashboard;              // Deployed dashboard address
+    address poolProxy;              // Pool proxy (uninitialized)
+    address poolImpl;               // Pool implementation
+    address withdrawalQueueProxy;   // WQ proxy (uninitialized)
+    address wqImpl;                 // WQ implementation
+    address timelock;               // Timelock controller
+}
+```
+
+##### Start Phase: What Gets Deployed
+
+The `createPoolStart` function deploys the following components:
+
+1. **Timelock Controller**
+   - Via: `TimelockFactory.deploy(minDelaySeconds, proposer, executor)`
+   - Admin for all system components
+
+2. **Pool Proxy** (uninitialized)
+   - Via: `new OssifiableProxy(DUMMY_IMPLEMENTATION, address(this), "")`
+   - Temporary admin: Factory contract
+
+3. **Withdrawal Queue Proxy** (uninitialized)
+   - Via: `new OssifiableProxy(DUMMY_IMPLEMENTATION, address(this), "")`
+   - Temporary admin: Factory contract
+
+4. **Vault + Dashboard**
+   - Via: `VAULT_FACTORY.createVaultWithDashboardWithoutConnectingToVaultHub(...)`
+   - Note: Does NOT connect to VaultHub yet (no ETH required)
+   - Temporary admin: Factory contract
+
+5. **Withdrawal Queue Implementation**
+   - Via: `WITHDRAWAL_QUEUE_FACTORY.deploy(poolProxy, dashboard, vaultHub, stETH, vault, lazyOracle, minWithdrawalDelayTime, mintingEnabled)`
+
+6. **Distributor**
+   - Via: `DISTRIBUTOR_FACTORY.deploy(timelock, nodeOperatorManager)`
+
+7. **Pool Implementation** (type determined by `derivePoolType`)
+   - Type A (StvPool): `STV_POOL_FACTORY.deploy(dashboard, allowlistEnabled, wqProxy, distributor, poolType)`
+   - Type B/C (StvStETHPool): `STV_STETH_POOL_FACTORY.deploy(dashboard, allowlistEnabled, reserveRatioGapBP, wqProxy, distributor, poolType)`
+
+8. **Deployment Hash Storage**
+   - Computes: `keccak256(abi.encode(sender, vaultConfig, commonPoolConfig, auxiliaryConfig, timelockConfig, strategyFactory, strategyDeployBytes, intermediate))`
+   - Stores: `intermediateState[hash] = block.timestamp + DEPLOY_START_FINISH_SPAN_SECONDS`
+
+9. **Event Emission**
+   - Emits: `PoolCreationStarted` with all parameters and finish deadline
+
+##### Finish Phase: Initialization and Role Wiring
+
+The `createPoolFinish` function completes deployment:
+
+1. **Validates Deployment State**
+   - Recomputes deployment hash from all parameters
+   - Checks: hash exists, not already finished, deadline not passed
+   - Marks: `intermediateState[hash] = DEPLOY_FINISHED`
+
+2. **Connects to VaultHub**
+   - Via: `dashboard.connectToVaultHub{value: msg.value}()`
+   - Requires: `msg.value >= VAULT_HUB.CONNECT_DEPOSIT()`
+
+3. **Initializes Pool Proxy**
+   - Upgrades to implementation: `proxy__upgradeToAndCall(poolImpl, abi.encodeCall(StvPool.initialize, (address(this), name, symbol)))`
+   - Changes admin to timelock: `proxy__changeAdmin(timelock)`
+
+4. **Initializes Withdrawal Queue Proxy**
+   - Upgrades to implementation: `proxy__upgradeToAndCall(wqImpl, abi.encodeCall(WithdrawalQueue.initialize, (timelock, nodeOperator, emergencyCommittee, emergencyCommittee)))`
+   - Changes admin to timelock: `proxy__changeAdmin(timelock)`
+
+5. **Deploys Strategy** (if `_strategyFactory != address(0)`)
+   - Implementation: `IStrategyFactory(_strategyFactory).deploy(address(pool), _strategyDeployBytes)`
+   - Proxy: `new OssifiableProxy(strategyImpl, timelock, abi.encodeCall(IStrategy.initialize, (timelock, emergencyCommittee)))`
+   - Adds strategy to pool allowlist: `pool.addToAllowList(strategyProxy)`
+
+6. **Grants Emergency Committee Roles** (if `emergencyCommittee != address(0)`)
+   - Pool: `DEPOSITS_PAUSE_ROLE` → emergencyCommittee
+   - Pool (if minting): `MINTING_PAUSE_ROLE` → emergencyCommittee
+   - Dashboard: `PAUSE_BEACON_CHAIN_DEPOSITS_ROLE` → emergencyCommittee
+
+7. **Grants Pool Roles**
+   - Pool: `DEFAULT_ADMIN_ROLE` → timelock
+   - Pool: revoke `DEFAULT_ADMIN_ROLE` from Factory
+
+8. **Grants Dashboard Roles**
+   - Dashboard: `FUND_ROLE` → pool
+   - Dashboard: `REBALANCE_ROLE` → pool
+   - Dashboard: `WITHDRAW_ROLE` → withdrawalQueue
+   - Dashboard (if minting): `MINT_ROLE` → pool
+   - Dashboard (if minting): `BURN_ROLE` → pool
+   - Dashboard: `DEFAULT_ADMIN_ROLE` → timelock
+   - Dashboard: revoke `DEFAULT_ADMIN_ROLE` from Factory
+
+9. **Event Emission**
+   - Emits: `PoolCreated(vault, pool, poolType, withdrawalQueue, strategyFactory, strategyDeployBytes, strategy)`
+
+##### Note on Circular Dependencies and Gas Optimization
+
+- **Pool ↔ Withdrawal Queue** and **StvStETHPool ↔ Strategy** have circular dependencies.
+- Solution: Pre-deploy proxies with `DummyImplementation`, then deploy implementations with concrete addresses:
+  1. Deploy pool proxy → get address
+  2. Deploy WQ implementation with pool proxy address
+  3. Deploy pool implementation with WQ proxy address
+  4. Upgrade proxies to real implementations
+- All component addresses are stored as `immutable` variables (e.g., `StvPool.WITHDRAWAL_QUEUE`, `StvStETHPool.DISTRIBUTOR`) to save gas on regular transactions.
+
+##### Dedicated Factories for Bytecode Size
+
+Separate factories (`StvPoolFactory`, `StvStETHPoolFactory`, `WithdrawalQueueFactory`, `DistributorFactory`, `GGVStrategyFactory`, `TimelockFactory`) are required to keep the main Factory contract within the 24KB bytecode limit.
 
 Local deployment (quickstart)
 
