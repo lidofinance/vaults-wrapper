@@ -89,3 +89,31 @@ test-integration path='**/*.test.sol':
 
 test-unit:
   FOUNDRY_PROFILE=test forge test --no-match-path 'test/integration/*' test
+
+# Core deployment recipes
+core-init branch='feat/vaults' subdir='lido-core':
+  #!/usr/bin/env bash
+  set -euxo pipefail
+  rm -rf ./{{subdir}}
+  git clone https://github.com/lidofinance/core.git -b {{branch}} --depth 1 {{subdir}}
+  cd {{subdir}}
+  corepack enable
+  yarn install --frozen-lockfile
+
+core-deploy subdir='lido-core' rpc_port='9123':
+  #!/usr/bin/env bash
+  set -euxo pipefail
+  cd {{subdir}}
+  NETWORK=local \
+  GENESIS_TIME=1639659600 \
+  GAS_PRIORITY_FEE=1 \
+  GAS_MAX_FEE=100 \
+  NETWORK_STATE_FILE="deployed-local.json" \
+  NETWORK_STATE_DEFAULTS_FILE="scripts/defaults/testnet-defaults.json" \
+  RPC_URL=http://localhost:{{rpc_port}} \
+  SKIP_CONTRACT_SIZE=true \
+  SKIP_GAS_REPORT=true \
+  SKIP_INTERFACES_CHECK=true \
+  LOG_LEVEL=warn \
+  DEPLOYER=0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 \
+  bash scripts/dao-deploy.sh
