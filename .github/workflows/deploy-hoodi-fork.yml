@@ -5,6 +5,9 @@ on:
   workflow_dispatch:
 
 jobs:
+  setup_just:
+    uses: ./.github/workflows/setup-just.yml
+
   deploy_all:
     name: Deploy all to Hoodi fork
     runs-on: ubuntu-latest
