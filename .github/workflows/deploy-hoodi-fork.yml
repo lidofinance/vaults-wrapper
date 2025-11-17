@@ -27,7 +27,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Just setup
-        uses: ./.github/workflows/setup/just.yml
+        uses: ./.github/workflows/setup/just
 
       - name: Common setup
         uses: ./.github/workflows/setup

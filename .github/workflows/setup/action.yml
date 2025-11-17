@@ -1,6 +1,5 @@
 name: Common setup
-
-on: workflow_call
+description: Prepare foundry and repo deps
 
 runs:
   using: "composite"
