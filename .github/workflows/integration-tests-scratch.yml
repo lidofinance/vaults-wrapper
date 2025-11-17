@@ -39,4 +39,4 @@ jobs:
         run: just -E .env.local deploy-ggv-mocks
 
       - name: Run integration tests
-        run: just E .env.local test-integration
+        run: just -E .env.local test-integration

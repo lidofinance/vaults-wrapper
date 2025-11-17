@@ -23,9 +23,9 @@ jobs:
       - name: Common setup
         uses: ./.github/workflows/setup
 
-      - name: Run Forge tests
+      - name: Run unit tests
         env:
           RPC_URL: "not used actually but required"
         run: |
-          just test-unit
+          just -E .env.local test-unit
         id: test
