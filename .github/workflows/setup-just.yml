@@ -7,7 +7,7 @@ on:
         description: "just version tag"
         required: false
         type: string
-        default: "1.44.0"
+        default: "1.43.1"
     outputs:
       cache-path:
         description: "Path to cache"
