@@ -9,16 +9,17 @@ inputs:
 outputs:
   cache-path:
     description: "Path to cache"
-    value: ${{ jobs.bootstrap.outputs.cache-path }}
+    value: ${{ steps.cache.outputs.path }}
   cache-key:
     description: "Cache key"
-    value: ${{ jobs.bootstrap.outputs.cache-key }}
+    value: ${{ steps.cache.outputs.key }}
 
 runs:
   using: "composite"
   steps:
     - name: Build cache params
       id: cache
+      shell: bash
       run: |
         echo "path=$CACHE_PATH" >> "$GITHUB_OUTPUT"
         echo "$KEY_INPUT" | md5sum | awk '{print $1}' | xargs -I% echo "key=cargobin-%-${RUNNER_OS}" >> "$GITHUB_OUTPUT"
@@ -26,7 +27,7 @@ runs:
         CACHE_PATH: |
           ~/.cargo/bin/
         KEY_INPUT: |
-          just:${{ env.JUST_TAG }}
+          just:${{ inputs.just-tag }}
 
     - uses: actions/cache@v4
       id: get-cache
@@ -35,5 +36,6 @@ runs:
         key: ${{ steps.cache.outputs.key }}
 
     - name: Install just
-      run: cargo install "just@$JUST_TAG"
+      shell: bash
+      run: cargo install "just@${{ inputs.just-tag }}"
       if: steps.get-cache.outputs.cache-hit != 'true'
