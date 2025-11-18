@@ -1,0 +1,14 @@
+name: Lint
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  lint:
+    name: Check formatting
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: foundry-rs/foundry-toolchain@v1
+      - run: forge fmt --check
