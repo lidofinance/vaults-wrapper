@@ -24,7 +24,3 @@ runs:
       if: steps.just-cache.outputs.cache-hit != 'true'
       shell: bash
       run: cargo install "just@${{ inputs.just-version }}"
-
-    - name: Build contracts
-      shell: bash
-      run: forge build
