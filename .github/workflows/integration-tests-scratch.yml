@@ -11,30 +11,32 @@ jobs:
     timeout-minutes: 10
     env:
       FOUNDRY_PROFILE: test
-      RPC_URL: http://localhost:9123
-      CORE_LOCATOR_ADDRESS: "0x84eA74d481Ee0A5332c457a4d796187F6Ba67fEB"
 
     services:
       hardhat-node:
         image: ghcr.io/lidofinance/hardhat-node:2.26.0-scratch
+        env:
+          HARDFORK: "prague"
         ports:
           - 9123:8545
 
     steps:
       - uses: actions/checkout@v4
 
+      - name: Just setup
+        uses: ./.github/actions/just
+
       - name: Common setup
         uses: ./.github/workflows/setup
 
       - name: Initialize Lido Core
-        run: make core-init
-        env:
-          CORE_BRANCH: "feat/vaults"
+        run: just -E .env.local core-init feat/vaults
 
       - name: Deploy Lido Core
-        run: make core-deploy
-        env:
-          CORE_RPC_PORT: 9123
+        run: just -E .env.local core-deploy lido-core 9123
+
+      - name: Deploy GGV mocks
+        run: just -E .env.local deploy-ggv-mocks
 
       - name: Run integration tests
-        run: make test-integration
+        run: just -E .env.local test-integration

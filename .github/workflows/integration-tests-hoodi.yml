@@ -17,8 +17,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Just setup
+        uses: ./.github/actions/just
+
       - name: Common setup
         uses: ./.github/workflows/setup
 
       - name: Run integration tests
-        run: make test-integration
+        run: just -E .env.hoodi.local test-integration

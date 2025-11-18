@@ -1,0 +1,33 @@
+name: Deploy all on Hoodi fork
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  deploy_all:
+    name: Deploy all to Hoodi fork
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    services:
+      hardhat-node:
+        image: ghcr.io/lidofinance/hardhat-node:2.26.0
+        ports:
+          - 9123:8545
+        env:
+          ETH_RPC_URL: "https://hoodi.drpc.org"
+          DONT_SET_CHAIN_ID: true
+          HARDFORK: "prague"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Just setup
+        uses: ./.github/actions/just
+
+      - name: Common setup
+        uses: ./.github/workflows/setup
+
+      - name: Deploy all to local fork
+        run: just -E .env.hoodi.local deploy-all .env.hoodi.local
