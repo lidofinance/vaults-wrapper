@@ -11,9 +11,13 @@ jobs:
     timeout-minutes: 10
     env:
       FOUNDRY_PROFILE: test
+      RPC_URL: https://hoodi.drpc.org
+      CORE_LOCATOR_ADDRESS: "0x84eA74d481Ee0A5332c457a4d796187F6Ba67fEB"
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
+
       - uses: ./.github/actions/setup
+
       - run: just -E .env.hoodi.local test-integration
