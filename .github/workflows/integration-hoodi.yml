@@ -1,0 +1,19 @@
+name: Integration Tests (Hoodi)
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Run integration tests on Hoodi
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      FOUNDRY_PROFILE: test
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: ./.github/actions/setup
+      - run: just -E .env.hoodi.local test-integration
