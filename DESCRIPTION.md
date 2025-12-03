@@ -9,14 +9,24 @@
 
 ## Scope
 
-## Canonical scenarios TODO
+### Docs
+- for NO
+	- how to deploy a pool
+	- how to maintain a pool
+	- how to deploy UI
+- for strategy developers
 
-- pool deployment: StvPool, StvStETHPool, StvStrategyPool
-- StvStETH: deposit, borrow, rewards accrue, request withdraw, finalize, claim
+### CLI
 
-### Inside
+### Lido alerting
 
-#### Wrapper Layer
+TODO
+
+### On-chian
+
+#### Inside
+
+##### Wrapper Layer
 
 - Factory: Deploys new StvPool / StvStETHPool / StvStETHPool + GGVStrategy / StvStETHPool + arbitrary strategy.
 - StvPool: Base ERC20 token implementation (STV).
@@ -26,18 +36,19 @@
 - AllowList: Manages deposit permissions (optional).
 - TimelockController: Admin of the StvPool and WithdrawalQueue proxies.
 
-### Strategy Layer
+#### Strategy Layer
 
 - GGVStrategy: Specific GGV strategy implementation.
 - Arbitrary strategy (follows `IStrategy`): Generic interface.
 
-### On the edge
+#### On the edge
 
 - Dashboard: The owner/controller of the StakingVault.
 - StakingVault: Holds the ETH and Validator credentials (0x02...).
-- NO's validator lifecycle
+-
+- NO's validator lifecycle ?
 
-### Outside
+#### Outside
 
 - Lido V3 (Vaults)
 - Lido V2
@@ -51,7 +62,6 @@
         - Rewards/Penalties skimming.
 - Points / Rewards:
   - Off-chain or on-chain incentives obtained by NO
-
 
 ## Actors, roles, levers
 
@@ -72,11 +82,7 @@
   - Internal: Burn STV to repay stETH debt.
   - Force Rebalance: Liquidation of unhealthy users (Permissionless).
   - Socialize Loss: Spread bad debt across all users if necessary (Requires Role).
-- Pause/Resume:
-  - Deposits (Circuit breaker)
-  - Withdrawals (Circuit breaker)
-  - Finalization (Circuit breaker)
-  - Minting (Circuit breaker)
+- Pause/Resume
 - SyncVaultParameters: Update Reserve Ratio/Threshold from VaultHub.
 - Disconnect Vault:
   - Voluntary: Initiated by Timelock/Admin. Requires 0 liability.
@@ -233,85 +239,101 @@ These are the things that build up over time and stick around until something ch
 
 This section documents the critical invariants and security properties enforced by the system, organized by pool configuration and with references to integration and unit tests that validate them.
 
-### Any pool
+### Deposits
 
-Properties that apply to all pool types: base `StvPool`, `StvStETHPool` (with or without strategy).
+Deposits (`depositETH`) revert if any of:
+- deposits are paused (`DEPOSITS_PAUSE_ROLE`)
+- allow list is enabled and sender is not allowed
+- vault report is stale
+- the vault has bad debt
+- pool has unassigned liability
 
-#### Vault Report Freshness
+### Deposits with minting
 
-**Property**: Some operations must use fresh vault reports to prevent stale price exploitation.
+TODO
 
-- **Freshness enforcement**: Some operations revert if vault report is stale
-  - **Deposits**: `depositETH` requires fresh report
-  - **Withdrawals**: `requestWithdrawal`, `requestWithdrawalBatch` require fresh report
-  - **Finalization**: `finalize` requires fresh report
-  - **Minting** (if applicable): `mintStethShares`, `mintWsteth` require fresh report
-  - **Burning** (if applicable): `burnStethShares`, `burnWsteth` require fresh report
-  - **Force rebalance** (if applicable): `forceRebalance`, `forceRebalanceAndSocializeLoss` require fresh report
-  - *Tested in*: `test/integration/report-freshness.test.sol` (comprehensive freshness validation)
+### Supplying to GGV strategy
 
-- **Stale oracle protection**: if report stale for long time users must be able to claim their funds somehow TODO
+TODO
 
-
-#### Basic Solvency & Accounting
-
-**Property**: All pools must maintain basic accounting integrity and handle insolvency.
-
-- **STV supply conservation**: `Total STV Supply` accurately reflects `(Total Vault Assets - Total Vault Liability) / exchangeRate`
-  - Deposits mint proportional STV based on vault asset value
-  - Withdrawals burn STV and return proportional assets
-  - *Tested in*: `test/unit/stv-pool/Conversion.test.sol`, `test/unit/stv-pool/Views.test.sol`
-
-- **Vault-level solvency**: System detects and handles vault insolvency (bad debt)
-  - Deposits and transfers blocked when `totalAssets < totalLiabilities`
-  - Withdrawal claims protected during vault insolvency
-  - *Tested in*: `test/unit/stv-pool/BadDebt.test.sol`, `test/unit/withdrawal-queue/BadDebt.test.sol`
-
-- **Unassigned liability tracking**: System debt not owned by users must be tracked
-  - `Unassigned Liability = vault_liability_shares - pool_liability_total`
-  - Acts as a buffer for rounding errors and system-wide adjustments
-  - *Tested in*: `test/unit/stv-pool/UnassignedLiability.test.sol`
-
-- **Unassigned liability rebalancing**: System debt must be cleared via rebalancing
-  - `rebalanceUnassignedWithEther` burns STV to reduce unassigned liability
-  - `rebalanceUnassignedWithShares` uses stETH shares for rebalancing
-  - Unassigned liability must be zero before voluntary disconnect
-  - *Tested in*: `test/unit/stv-pool/RebalanceUnassignedWithEther.test.sol`, `test/unit/stv-pool/RebalanceUnassignedWithShares.test.sol`
-  
 ### STV transfers
 
+With and without liabilities.
+
 STV transfers revert if any of:
-- the vault has bad debt 
+- the vault has bad debt
 - pool has unassigned liability
 - if minting enabled:
   - `LTV > TOTAL_BP - RR` for sender after transfer
   - if transfer with liability:
     - transferred amounts of stv and liability maintain its `LTV > TOTAL_BP - RR`
 
+Properties:
+- **Sender Solvency**: Sender maintains `LTV <= TOTAL_BP - RR` (Reserve Ratio) after transfer
+- **Transferred Solvency**: Transferred STV covers transferred liability with `LTV <= TOTAL_BP - RR` (if transferring liability)
+
+### Minting
+
+Minting (`mintStethShares`, `mintWsteth`) reverts if any of:
+- minting is paused (`MINTING_PAUSE_ROLE`)
+- `remainingMintingCapacitySharesOf` is insufficient (user would become unhealthy or exceed reserve ratio)
+
+Properties:
+- **Guarantee of minted amount**: Minted amount of stETH / wstETH is guaranteed to be exactly (with 1 wei accuracy) to match the `RR`
+- **User Solvency**: User maintains `LTV <= TOTAL_BP - RR` (Reserve Ratio) after minting
+
+### Burning
+
+Burning (`burnStethShares`, `burnWsteth`) reverts if any of:
+- user has insufficient minted shares
+- `WSTETH.transferFrom` fails (for `burnWsteth`)
+
+Properties:
+- **Health Improvement**: Decreases user liability, improving LTV and Health Factor
+
 ### Withdrawal requests
 
 Withdrawal requesting (`stv`, `_stethSharesToRebalance`) reverts if any of:
 1. value (assets - liabilities) < `MIN_WITHDRAWAL_VALUE`
 2. `previewRedeem(stv)` > `MAX_WITHDRAWAL_ASSETS`
-3. transfer of (`stv`, `_stethSharesToRebalance`) from `msg.sender` to `WithdrawalQueue` reverts 
+3. transfer of (`stv`, `_stethSharesToRebalance`) from `msg.sender` to `WithdrawalQueue` reverts
 
 Condition (3) implies that a user cannot request any withdrawal if their position is unhealty.
+
+Properties:
+- **Sender Solvency**: Sender maintains `LTV <= TOTAL_BP - RR` (Reserve Ratio) on remaining position
+- **Request Solvency**: Locked STV covers locked liability (if any) with `LTV <= TOTAL_BP - RR`
+
+### Claiming withdrawals
+
+Claiming (`claimWithdrawal`, `claimWithdrawalBatch`) reverts if any of:
+- `_requestId` is invalid (0 or > last finalized)
+- request is not finalized
+- request is already claimed
+- `msg.sender` is not the owner of the request
+- ETH transfer to recipient fails
+
+Properties:
+- **Finality**: Request marked as claimed, preventing double-spending
 
 ### Rebalancing user position
 
 Rebalancing could be of different types:
-- force rebalance 
+- force rebalance
 - force rebalance with loss socialization
 - special rebalance of `WithdrawalQueue` (callable only by `WithdrawalQueue`)
 
 Force rebalancing (`_account`) reverts if:
-- the vault has bad debt 
+- the vault has bad debt
 - pool has unassigned liability
 - `_account` is `WithdrawalQueue`
 
 No-op if:
 - `isHealtyOf(_account)`
 
+Properties:
+- **Health Restoration**: User position restored to `LTV <= TOTAL_BP - RR` (Reserve Ratio)
+- **Loss Cap**: Socialized loss (if any) limited by `maxLossSocializationBP`
 
 #### Withdrawal Queue Integrity
 
@@ -337,9 +359,10 @@ No-op if:
   - `wq_locked_stv` tracks total STV in pending requests
   - Finalization burns locked STV and unlocks proportional ETH
   - *Tested in*: `test/unit/stv-pool/WithdrawalQueue.test.sol`, `test/unit/withdrawal-queue/Views.test.sol`
+
 #### Factory Deployment Security
 
-**Property**: Pool deployments must be atomic and secure.
+**Property**: Pool deployments must be atomic, secure and prevent locking of the `CONNECT_DEPOSIT` ether.
 
 - **Two-phase deployment**: `createPoolStart` → `createPoolFinish` prevents incomplete setups
   - `createPoolStart`: Deploys proxies, grants temporary Factory admin
@@ -361,7 +384,7 @@ No-op if:
 
 #### Circuit Breakers & Emergency Controls
 
-**Property**: System must be pausable in emergencies without losing user funds.
+**Property**: System parts must be pausable in emergencies.
 
 - **Pause/Resume deposits**: Emergency committee can pause deposits to prevent new entries during crisis
   - `pauseDeposits` / `resumeDeposits` controlled by dedicated roles
@@ -402,7 +425,49 @@ No-op if:
   - Withdrawal queue remains operational after disconnect
   - Final ETH distribution based on vault assets at disconnect
 
----
+### Any pool
+
+Properties that apply to all pool types: base `StvPool`, `StvStETHPool` (with or without strategy).
+
+#### Vault Report Freshness
+
+**Property**: Some operations must use fresh vault reports to prevent stale price exploitation.
+
+- **Freshness enforcement**: Some operations revert if vault report is stale
+  - **Deposits**: `depositETH` requires fresh report
+  - **Withdrawals**: `requestWithdrawal`, `requestWithdrawalBatch` require fresh report
+  - **Finalization**: `finalize` requires fresh report
+  - **Minting** (if applicable): `mintStethShares`, `mintWsteth` require fresh report
+  - **Burning** (if applicable): `burnStethShares`, `burnWsteth` require fresh report
+  - **Force rebalance** (if applicable): `forceRebalance`, `forceRebalanceAndSocializeLoss` require fresh report
+  - *Tested in*: `test/integration/report-freshness.test.sol` (comprehensive freshness validation)
+
+- **Stale oracle protection**: if report stale for long time users must be able to claim their funds somehow TODO
+
+#### Basic Solvency & Accounting
+
+**Property**: All pools must maintain basic accounting integrity and handle insolvency.
+
+- **STV supply conservation**: `Total STV Supply` accurately reflects `(Total Vault Assets - Total Vault Liability) / exchangeRate`
+  - Deposits mint proportional STV based on vault asset value
+  - Withdrawals burn STV and return proportional assets
+  - *Tested in*: `test/unit/stv-pool/Conversion.test.sol`, `test/unit/stv-pool/Views.test.sol`
+
+- **Vault-level solvency**: System detects and handles vault insolvency (bad debt)
+  - Deposits and transfers blocked when `totalAssets < totalLiabilities`
+  - Withdrawal claims protected during vault insolvency
+  - *Tested in*: `test/unit/stv-pool/BadDebt.test.sol`, `test/unit/withdrawal-queue/BadDebt.test.sol`
+
+- **Unassigned liability tracking**: System debt not owned by users must be tracked
+  - `Unassigned Liability = vault_liability_shares - pool_liability_total`
+  - Acts as a buffer for rounding errors and system-wide adjustments
+  - *Tested in*: `test/unit/stv-pool/UnassignedLiability.test.sol`
+
+- **Unassigned liability rebalancing**: System debt must be cleared via rebalancing
+  - `rebalanceUnassignedWithEther` burns STV to reduce unassigned liability
+  - `rebalanceUnassignedWithShares` uses stETH shares for rebalancing
+  - Unassigned liability must be zero before voluntary disconnect
+  - *Tested in*: `test/unit/stv-pool/RebalanceUnassignedWithEther.test.sol`, `test/unit/stv-pool/RebalanceUnassignedWithShares.test.sol`
 
 ### StvStETHPool w/o a strategy
 
@@ -437,8 +502,6 @@ Properties specific to `StvStETHPool` when no external strategy is attached. Use
   - Anyone can trigger `forceRebalance` on undercollateralized accounts
   - Burns user STV to repay outstanding debt and restore system health
   - *Tested in*: `test/unit/stv-steth-pool/ForceRebalance.test.sol`
-
----
 
 ##### Detailed Restriction Conditions for STV Positions
 
@@ -490,8 +553,6 @@ Where `liabilityInStETH = STETH.getPooledEthBySharesRoundUp(mintedStethShares)`
    - ✅ **ALLOWED** to request withdrawal of all assets if all debt is repaid (burn all minted stETH)
    - ⚠️ **Partial withdrawals**: Must maintain health factor on remaining position
 
----
-
 ##### WithdrawalQueue Transfer Mechanics for Requesting Withdrawals
 
 When users request withdrawals via `WithdrawalQueue.requestWithdrawal()` or `requestWithdrawalBatch()`, the system performs specialized transfers to lock STV (and optionally liability) in the queue:
@@ -510,7 +571,7 @@ When users request withdrawals via `WithdrawalQueue.requestWithdrawal()` or `req
 
 **Transfer Requirements for WithdrawalQueue:**
 
-- **Minimum STV enforcement**: 
+- **Minimum STV enforcement**:
   - `_stv >= calcStvToLockForStethShares(_stethShares)` (checked in `_checkMinStvToLock`)
   - Ensures sufficient collateral backs the liability being transferred
   - Uses ceiling rounding to protect the system
@@ -616,8 +677,6 @@ When `WithdrawalQueue.finalize()` is called:
   - Subject to same reserve ratio and health factor checks
   - *Tested in*: `test/unit/stv-steth-pool/DepositAndMint.test.sol`
 
----
-
 ### StvStETHPool w/ or w/o a strategy
 
 Properties that apply to all `StvStETHPool` configurations, regardless of whether an external strategy is attached. These are fundamental to the stETH borrowing mechanics.
@@ -673,8 +732,6 @@ Properties that apply to all `StvStETHPool` configurations, regardless of whethe
   - Accounts for ETH held in vault, staged for deposits, and active in validators
   - Updated based on oracle reports from Lido
   - *Tested in*: `test/unit/stv-steth-pool/Assets.test.sol`
-
----
 
 ### StvStETHPool + GGVStrategy
 
@@ -750,9 +807,64 @@ Properties specific to `StvStETHPool` when integrated with the GGV (presumably "
   - Prevents new supplies while allowing exits
   - *Tested in*: Via Factory integration tests
 
----
+## Regular flows
+
+## Regular feedback loops
+
+### User's LTV breached RR threshold yet not FRR
+
+- user position is still healty
+- minting is blocked
+
+#### Feedback loops
+
+- User improves their LTV
+	- *Incentivized actors*: User (to restore minting capacity for additional leverage); liquidators monitor for further deterioration
+	- *Detection*: `remainingMintingCapacitySharesOf(user)` returns zero; mint operations revert
+	- *Preconditions*: ?
+###
+
+
+- **User's LTV breached RR threshold yet not FRR**: User position healthy but at reserve ratio limit, cannot mint more until burning debt or adding collateral
+  - *Incentivized actors*: User (to restore minting capacity for additional leverage); liquidators monitor for further deterioration
+  - *Detection*: `remainingMintingCapacitySharesOf(user)` returns zero; mint operations revert
+  - *Preconditions*: ?
+
+- **User has bad debt**: User position undercollateralized (assets < liability), requires permissionless force rebalancing to restore health
+  - *Incentivized actors*: Anyone (permissionless `forceRebalance` liquidates position); user (to avoid liquidation by burning debt proactively)
+  - *Detection*: `isHealthyOf(user)` returns false; `assetsOf(user) < calcAssetsToLockForStethShares(mintedStethSharesOf(user))`; user operations (transfer, withdrawal) blocked
+  - *Preconditions*: Oracle report must be fresh; sufficient `exceedingMintedStethShares` available or vault rebalance creates it; force rebalance burns user STV to repay debt; if exceeding insufficient, may require `LOSS_SOCIALIZER_ROLE` to call `forceRebalanceAndSocializeLoss`
+
+- **Withdrawal Queue has unfinalized requests**: Normal operational state where users have queued STV for withdrawal awaiting finalizer processing
+  - *Incentivized actors*: Finalizer bot (receives `gasCostCoverage` per finalized request via `FINALIZE_ROLE`); users waiting for finalization to claim
+  - *Detection*: `WithdrawalQueue.getLastRequestId() > getLastFinalizedRequestId()`; view functions show pending request count; users see "pending" status on withdrawal requests
+  - *Preconditions*: Vault must have sufficient liquid ETH (not locked in CL validators); oracle report must be fresh; finalization not paused; finalizer bot operational with `FINALIZE_ROLE`; requests processed in FIFO order
+
+- **Vault report is not fresh**: Most operations blocked
+  - *Incentivized actors*: Lido oracle operators (protocol-level responsibility to report regularly); users must wait, cannot accelerate
+  - *Detection*: `_requireFreshVaultReport()` checks fail; operations revert with staleness error; time since last `VaultHub.applyVaultReport` exceeds freshness threshold
+  - *Preconditions*: Oracle reporting cycle must complete; typical oracle report frequency defines maximum wait time; no user-level or NO-level mitigation available; only view operations remain available during staleness
 
 ## Extreme states and stabilizing feedback loops
+
+- **NO / NO manager keys** lost:
+  - TODO
+
+- **NO / NO manager keys compromised**:
+  - TODO
+
+- **Large withdrawal queue**:
+  - TODO
+
+- **Liability is transferred to the pooled vault from another vault**
+  - TODO
+
+- **A dangerous action is proposed on TimelockController**:
+  - Examples of such actions:
+    - Minting of stETH shares on the vault bypassing wrapper
+    - Vault disconnection
+    - Malicious / suspicious upgrade of any contract
+  - TODO
 
 - **Vault has bad debt**: `totalAssets < totalLiabilities`, deposits and transfers blocked, withdrawal claims protected
   - *Detection*: `totalAssets()` check on deposits/transfers/minting operations; vault monitoring dashboards
@@ -804,7 +916,6 @@ Properties specific to `StvStETHPool` when integrated with the GGV (presumably "
   - *Incentivized actors*: No specific actor can accelerate (network-level constraint)
   - *Preconditions*: CL must process queue at protocol-defined rate; NO can only queue exits, not accelerate; organic inflow may partially compensate during wait
 
-
 - **Vault validators underperformance relative to stETH validators**
   - TODO
 
@@ -823,11 +934,11 @@ Properties specific to `StvStETHPool` when integrated with the GGV (presumably "
   - *Incentivized actors*: Anyone (permissionless force rebalance using exceeding); unhealthy users benefit from cheaper rebalancing
   - *Preconditions*: Vault must have been rebalanced directly (not through wrapper); exceeding amount must cover user liability; fresh oracle report required
 
-- **Critical yet solvable vulnarability found in Wrapper contracts**: 
+- **Critical yet solvable vulnarability found in Wrapper contracts**:
   - *Detection*: occasional self-review, immunify security report, Lido monitoring
   - *Incentivized actors*: Lido contributors, Emergency committee
   - *Actions*:
-    - Emergency committee: pauses required features of 
+    - Emergency committee: pauses required features of
     - TODO: upgrade
 
 - **Critical yet solvable vulnarability found in Vault contracts**:
@@ -835,14 +946,13 @@ Properties specific to `StvStETHPool` when integrated with the GGV (presumably "
 
 - **Critical yet solvable vulnarability found in Lido Core**:
   - TODO
+  - how the executor committee is insentivised to handle proper and improper proposed timelocked actions?
 
 
 
 ## Upgradability
 
-The system uses a mixed upgradability approach with different proxy patterns for different components:
-
-### Proxy types used
+The system uses a mixed upgradability approach with different proxy patterns for different components. The proxy types used are:
 
 - **OssifiableProxy** is a custom ERC1967-based transparent proxy that extends OpenZeppelin's pattern with "ossification" capability taken from Lido V2 core
     - NB: Ossifiable version of the proxy has been taken due to being already battle-tested in Lido V2, not specificly for the ossification feature
@@ -926,6 +1036,7 @@ TODO
 - Oracle Freshness:
   - Critical for all value calculations.
   - Stale oracle = System freeze (no deposits/withdrawals/rebalancing/minting).
+- attaching multiple strategies
 - Unassigned Liability:
   - "System Debt" that accumulates from rounding errors or socialized losses.
   - Must be cleared before certain operations (e.g., voluntary disconnect).
