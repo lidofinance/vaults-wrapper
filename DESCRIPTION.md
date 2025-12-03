@@ -10,11 +10,29 @@
 ## Scope
 
 ### Docs
-- for NO
+- separate by reader:
+	- actors, roles, levers, ACL
+		- where it goes?
+	- invariants, security properties
+		- to scaffold test plan on top level
+	- test plan
+	- extreme states and mitigations
+		- used for test plan
+		- just put to repo as docs
+	- top-level (for arwer)
+
+
+- for us:
+	- for test plan
+	- SPEC
+- for NO https://github.com/lidofinance/docs/blob/v3-docs-update/run-on-lido/stvaults/building-guides/pooled-staking-product.md
 	- how to deploy a pool
 	- how to maintain a pool
 	- how to deploy UI
-- for strategy developers
+- for partner protocols who build on top of Lido
+	- for strategy developers
+- for security assestors? are anybody 'd like to evaludate wrapper?
+- docs.lido.fi: general description, router for in-depth tutorials
 
 ### CLI
 
@@ -255,6 +273,12 @@ TODO
 ### Supplying to GGV strategy
 
 TODO
+
+edge
+
+### Overall accounting
+
+
 
 ### STV transfers
 
@@ -1023,7 +1047,6 @@ To upgrade a component:
 - **Temporary admin** (Factory) during deployment, then transferred to TimelockController
 - **DEPLOY_START_FINISH_SPAN_SECONDS** (1 day) enforces timely completion
 - **Intermediate state tracking** prevents replay attacks and ensures consistency
-
 
 ## Alerting
 
