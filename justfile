@@ -89,3 +89,12 @@ test-integration path='**/*.test.sol':
 
 test-unit:
   FOUNDRY_PROFILE=test forge test --no-match-path 'test/integration/*' test
+
+setup-distributor-fork:
+  forge script script/SetupDistributorFork.s.sol:SetupDistributorForkScript \
+    --rpc-url {{env('RPC_URL')}} \
+    --broadcast \
+    --sender {{env('DEPLOYER')}} \
+    --unlocked \
+    -vvvv \
+    --sig 'run()'
