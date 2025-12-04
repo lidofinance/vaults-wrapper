@@ -20,6 +20,7 @@
 		- used for test plan
 		- just put to repo as docs
 	- top-level (for arwer)
+  - docs for immunefy (same as in repo)
 
 
 - for us:
