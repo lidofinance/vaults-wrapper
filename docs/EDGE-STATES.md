@@ -1,4 +1,5 @@
 
+
 # States and loops
 
 ### --- description of structure of this level sections ---
@@ -12,44 +13,35 @@
   - actors and incentives
   - correction (actions required to restore system from the state)
 
-### Vault report is stale
-
-Most operations blocked system-wide. The oracle report freshness check fails, preventing deposits, withdrawals, minting, rebalancing, and transfers. Only view operations remain available.
-
-**Conditions**: Time since last `VaultHub.applyVaultReport` exceeds the freshness threshold configured in the system.
-
-**Expected probability**: Low under normal Lido operations; increases during oracle infrastructure issues or consensus layer problems.
-
-**Loops**:
-- Wait for oracle report
-  - **Detection**: `_requireFreshVaultReport()` checks fail; operations revert with staleness error; time since last `VaultHub.applyVaultReport` exceeds freshness threshold
-  - **Actors and incentives**: Lido oracle operators (protocol-level responsibility to report regularly); users must wait, cannot accelerate
-  - **Preconditions**: Oracle reporting cycle must complete; typical oracle report frequency defines maximum wait time; no user-level or NO-level mitigation available
-
 ### User LTV breached RR threshold yet not FRR
 
 User position is still healthy but has breached the reserve ratio.
 
 **Implications**:
 - The user cannot mint more stETH/wstETH until burning debt or adding collateral.
-- Risk of getting the user bad dept is increased
+- Risk of getting the user positoin getting unhealthy
 
 **Conditions**:
 - user has minted stETH shares up to their reserve ratio capacity;
+- TODO
 
 **Expected probability**: TODO
 
 **Loops**:
 - User improves their LTV
-  - **Detection**: `remainingMintingCapacitySharesOf(user)` returns zero; mint operations revert with capacity errors
-  - **Actors and incentives**: User (restore minting capacity for additional leverage); liquidators monitor for further deterioration to force rebalance threshold
-
+  - **Detection**: user sees on UI; mint fails
+	  - TODO: implement it in UI
+  - **Actors and incentives**: to enable minting; to reduce propability of getting unhealthy
 
 ### User position is unhealthy (FRR threshold breached but yet not bad debt)
 
-User position breaches force rebalance threshold (`pool_force_rebalance_rr`) making it eligible for permissionless liquidation, but position still has positive equity (`assets_of[user] >= liability_user[user]`). User operations (transfer, withdrawal) are blocked until health restored. Stocks involved: `liability_user[user]` relative to `assets_of[user]` exceeds force rebalance threshold but remains solvent.
+User position breaches force rebalance threshold (`pool_force_rebalance_rr`) making it eligible for permissionless force rebalance, but position still has positive equity (`assets_of[user] >= liability_user[user]`). User operations (transfer, withdrawal) are blocked until health restored. Stocks involved: `liability_user[user]` relative to `assets_of[user]` exceeds force rebalance threshold but remains solvent.
 
-**Conditions**: User's collateral-to-debt ratio deteriorates beyond force rebalance threshold due to vault underperformance, stETH price increase, or insufficient collateral management; position becomes liquidatable but not yet undercollateralized.
+**Conditions**: 
+- general vault underperformance
+- 
+
+User's collateral-to-debt ratio deteriorates beyond force rebalance threshold due to vault underperformance, stETH price increase, or insufficient collateral management; position becomes liquidatable but not yet undercollateralized.
 
 **Expected probability**: Low under normal operations; increases during vault performance issues or stETH volatility. More common than full undercollateralization due to safety buffer between force rebalance threshold and insolvency.
 
@@ -83,6 +75,24 @@ User position is undercollateralized where `assets_of[user] < liability_user[use
   - **Actors and incentives**: Anyone (permissionless `forceRebalance` liquidates position); user (avoid liquidation by burning debt proactively before breach)
   - **Preconditions**:
     - `LOSS_SOCIALIZER_ROLE` is assigned
+
+### One user has worse "health" others are fine
+
+various fund proportions etc
+
+### Vault report is stale
+
+Most operations blocked system-wide. The oracle report freshness check fails, preventing deposits, withdrawals, minting, rebalancing, and transfers. Only view operations remain available.
+
+**Conditions**: Time since last `VaultHub.applyVaultReport` exceeds the freshness threshold configured in the system.
+
+**Expected probability**: Low under normal Lido operations; increases during oracle infrastructure issues or consensus layer problems.
+
+**Loops**:
+- Wait for oracle report
+  - **Detection**: `_requireFreshVaultReport()` checks fail; operations revert with staleness error; time since last `VaultHub.applyVaultReport` exceeds freshness threshold
+  - **Actors and incentives**: Lido oracle operators (protocol-level responsibility to report regularly); users must wait, cannot accelerate
+  - **Preconditions**: Oracle reporting cycle must complete; typical oracle report frequency defines maximum wait time; no user-level or NO-level mitigation available
 
 ### Multiple unhealthy positions without liquidity
 
@@ -588,19 +598,3 @@ Users request to exit their position from the GGV strategy, but the exit is neve
   - **Detection**: User assets remain in GGV strategy/queue; `finalizeRequestExit` cannot be called.
   - **Actors and incentives**: User ( wants funds); GGV Governance/Solver (operational responsibility).
   - **Preconditions**: GGV system must process the exit. If GGV is permanently stuck, there is no direct recovery path in the Wrapper strategy contract for that specific request ID without GGV cooperation.
-
-### Distributor Stuck Funds due to operational error
-
-Rewards tokens are sent to the `Distributor` contract, but users cannot claim them.
-
-**Conditions**:
-- Merkle root not set by the manager (`root == bytes32(0)`).
-- Token not added to supported list (`tokens` set).
-- `Distributor` contract lacks the actual token balance (underfunded).
-
-**Expected probability**: Low (operational error).
-
-**Loops**:
-- Operational fix
-  - **Detection**: `claim` reverts with `RootNotSet`, `TokenNotSupported`, or transfer failure.
-  - **Actors and incentives**: Manager (must upload root and add token); Admin (ensure funding).
