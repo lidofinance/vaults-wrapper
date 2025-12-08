@@ -54,10 +54,8 @@ contract StrETHStrategy is
     error ZeroArgument(string name);
     error InvalidQueue(string name);
     error SuspiciousReport();
-    error InvalidSender();
     error InvalidWstethAmount();
     error NothingToExit();
-    error NotImplemented();
 
     constructor(
         bytes32 _strategyId,
@@ -78,7 +76,7 @@ contract StrETHStrategy is
             revert InvalidQueue("_depositQueue");
         }
         if (
-            !vault.hasQueue(_redeemQueue) || vault.isDepositQueue(_depositQueue)
+            !vault.hasQueue(_redeemQueue) || vault.isDepositQueue(_redeemQueue)
                 || IQueue(_redeemQueue).asset() != address(WSTETH)
         ) {
             revert InvalidQueue("_redeemQueue");
@@ -334,6 +332,6 @@ contract StrETHStrategy is
         if (_amount == 0) revert ZeroArgument("_amount");
 
         IStrategyCallForwarder callForwarder = _getOrCreateCallForwarder(_msgSender());
-        callForwarder.doCall(_token, abi.encodeWithSelector(IERC20.transfer.selector, _recipient, _amount));
+        callForwarder.doCall(_token, abi.encodeCall(IERC20.transfer, (_recipient, _amount)));
     }
 }
