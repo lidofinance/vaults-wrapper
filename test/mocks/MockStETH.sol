@@ -18,6 +18,10 @@ contract MockStETH is ERC20 {
     // simple shares
     //
 
+    function getTotalShares() external view returns (uint256) {
+        return totalShares;
+    }
+
     function getSharesByPooledEth(uint256 _ethAmount) public view returns (uint256) {
         return _ethAmount * totalShares // denominator in shares
             / totalPooledEth; // numerator in ether
