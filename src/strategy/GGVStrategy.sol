@@ -5,6 +5,7 @@ import {
     AccessControlEnumerableUpgradeable
 } from "@openzeppelin/contracts-upgradeable/access/extensions/AccessControlEnumerableUpgradeable.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 
@@ -21,6 +22,7 @@ import {IWstETH} from "src/interfaces/core/IWstETH.sol";
 
 contract GGVStrategy is IStrategy, AccessControlEnumerableUpgradeable, FeaturePausable, StrategyCallForwarderRegistry {
     using SafeCast for uint256;
+    using SafeERC20 for IERC20;
 
     StvStETHPool private immutable POOL_;
     IWstETH public immutable WSTETH;
@@ -56,7 +58,7 @@ contract GGVStrategy is IStrategy, AccessControlEnumerableUpgradeable, FeaturePa
     error ZeroArgument(string name);
     error InvalidSender();
     error InvalidWstethAmount();
-    error NothingToExit();
+    error ExcessiveWithdrawalRequest();
     error NotImplemented();
 
     constructor(
@@ -187,7 +189,7 @@ contract GGVStrategy is IStrategy, AccessControlEnumerableUpgradeable, FeaturePa
         uint256 totalGGV = boringVault.balanceOf(address(callForwarder));
         uint256 totalWstethFromGGV = previewWstethByGGV(totalGGV, _params);
         if (totalWstethFromGGV == 0) revert InvalidWstethAmount();
-        if (_wsteth > totalWstethFromGGV) revert NothingToExit();
+        if (_wsteth > totalWstethFromGGV) revert ExcessiveWithdrawalRequest();
 
         // Approve GGV shares
         uint256 ggvShares = Math.mulDiv(totalGGV, _wsteth, totalWstethFromGGV, Math.Rounding.Ceil);
@@ -201,7 +203,7 @@ contract GGVStrategy is IStrategy, AccessControlEnumerableUpgradeable, FeaturePa
             abi.encodeWithSelector(
                 BORING_QUEUE.requestOnChainWithdraw.selector,
                 address(WSTETH),
-                ggvShares.toInt256(),
+                ggvShares.toUint128(),
                 params.discount,
                 params.secondsToDeadline
             )
