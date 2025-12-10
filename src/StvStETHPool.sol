@@ -658,9 +658,13 @@ contract StvStETHPool is StvPool {
      * @param _stethShares The amount of stETH shares liability to reduce (18 decimals)
      * @return stvBurned The amount of stv burned (27 decimals)
      * @dev Requires fresh oracle report to price stv accurately
-     * @dev The Pool aims to keep totalMintedStethShares equal to totalLiabilityShares on the Vault
      * @dev When totalMintedStethShares > totalLiabilityShares (exceeding shares exist), users can voluntarily
-     * rebalance their debt directly against their stv within the exceeding amount, helping restore the balance
+     * rebalance their liability directly against their stv within the exceeding amount
+     *
+     * @dev WARNING: Front-running risk. Exceeding shares are a shared pool-wide limit. Multiple users
+     * competing for limited exceeding shares may have transactions revert with `InsufficientExceedingShares`.
+     * This is accepted: scenario is rare (requires vault liability < pool minted shares), no value extraction,
+     * and worst case is transaction revert with option to retry with smaller amount.
      */
     function rebalanceExceedingMintedStethShares(uint256 _stethShares) external returns (uint256 stvBurned) {
         _checkFreshReport();
