@@ -24,6 +24,7 @@ contract StvStETHPool is StvPool {
     error InsufficientBalance();
     error InsufficientReservedBalance();
     error InsufficientMintedShares();
+    error InsufficientExceedingShares();
     error InsufficientStv();
     error ZeroArgument();
     error ArraysLengthMismatch(uint256 firstArrayLength, uint256 secondArrayLength);
@@ -650,6 +651,31 @@ contract StvStETHPool is StvPool {
      */
     function isHealthyOf(address _account) public view returns (bool isHealthy) {
         isHealthy = !_isThresholdBreached(assetsOf(_account), mintedStethSharesOf(_account));
+    }
+
+    /**
+     * @notice Reduce user's stETH shares liability by burning stv when exceeding minted stETH exists
+     * @param _stethShares The amount of stETH shares liability to reduce (18 decimals)
+     * @return stvBurned The amount of stv burned (27 decimals)
+     * @dev Requires fresh oracle report to price stv accurately
+     * @dev The Pool aims to keep totalMintedStethShares equal to totalLiabilityShares on the Vault
+     * @dev When totalMintedStethShares > totalLiabilityShares (exceeding shares exist), users can voluntarily
+     * rebalance their debt directly against their stv within the exceeding amount, helping restore the balance
+     */
+    function rebalanceExceedingMintedStethShares(uint256 _stethShares) external returns (uint256 stvBurned) {
+        _checkFreshReport();
+
+        if (_stethShares == 0) revert ZeroArgument();
+        if (_stethShares > mintedStethSharesOf(msg.sender)) revert InsufficientMintedShares();
+        if (_stethShares > totalExceedingMintedStethShares()) revert InsufficientExceedingShares();
+
+        uint256 stethToRebalance = _getPooledEthBySharesRoundUp(_stethShares);
+        stvBurned = _convertToStv(stethToRebalance, Math.Rounding.Ceil);
+
+        emit StethSharesRebalanced(msg.sender, _stethShares, stvBurned);
+
+        _decreaseMintedStethShares(msg.sender, _stethShares);
+        _burnUnsafe(msg.sender, stvBurned);
     }
 
     /**
