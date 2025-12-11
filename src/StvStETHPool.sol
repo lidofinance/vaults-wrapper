@@ -668,6 +668,7 @@ contract StvStETHPool is StvPool {
         uint256 exceedingStethShares = totalExceedingMintedStethShares();
         uint256 remainingStethShares = Math.saturatingSub(_stethShares, exceedingStethShares);
         uint256 ethToRebalance = _getPooledEthBySharesRoundUp(_stethShares);
+        uint256 ethForMaxStvToBurn = _convertToAssets(_maxStvToBurn);
         stvToBurn = _convertToStv(ethToRebalance, Math.Rounding.Ceil);
 
         if (remainingStethShares > 0) DASHBOARD.rebalanceVaultWithShares(remainingStethShares);
@@ -677,7 +678,7 @@ contract StvStETHPool is StvPool {
 
             emit SocializedLoss(
                 stvToBurn - _maxStvToBurn,
-                ethToRebalance - _convertToAssets(_maxStvToBurn),
+                ethToRebalance - ethForMaxStvToBurn,
                 _getStvStETHPoolStorage().maxLossSocializationBP
             );
             stvToBurn = _maxStvToBurn;
