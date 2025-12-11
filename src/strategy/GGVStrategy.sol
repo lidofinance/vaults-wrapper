@@ -369,6 +369,6 @@ contract GGVStrategy is IStrategy, AccessControlEnumerableUpgradeable, FeaturePa
         if (_amount == 0) revert ZeroArgument("_amount");
 
         IStrategyCallForwarder callForwarder = _getOrCreateCallForwarder(msg.sender);
-        callForwarder.doCall(_token, abi.encodeWithSelector(IERC20.transfer.selector, _recipient, _amount));
+        callForwarder.safeTransferERC20(_token, _recipient, _amount);
     }
 }
