@@ -75,7 +75,7 @@ abstract contract AllowList is Initializable, AccessControlEnumerableUpgradeable
      * @notice Get all allowlisted addresses
      * @return address[] Array of allowlisted addresses
      */
-    function getAllowListAddresses() public view returns (address[] memory) {
+    function getAllowListAddresses() external view returns (address[] memory) {
         return getRoleMembers(DEPOSIT_ROLE);
     }
 

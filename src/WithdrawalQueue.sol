@@ -526,7 +526,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, FeaturePausable 
                 // In this case, the loss is shared among all participants
                 if (stvToRebalance > stv) stvToRebalance = stv;
 
-                // Exceeding minted stETH (if any) are used to cover rebalancing need without withdrawing ETH from the vault
+                // Exceeding minted stETH (if any) is used to cover rebalancing need without withdrawing ETH from the vault
                 // Thus, Exceeding minted stETH aims to be reduced to 0
                 if (exceedingSteth > stethToRebalance) {
                     exceedingSteth -= stethToRebalance;
@@ -1067,7 +1067,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, FeaturePausable 
      * @notice Returns the last request id
      * @return requestId Last request id
      */
-    function getLastRequestId() public view returns (uint256 requestId) {
+    function getLastRequestId() external view returns (uint256 requestId) {
         requestId = _getWithdrawalQueueStorage().lastRequestId;
     }
 
@@ -1075,7 +1075,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, FeaturePausable 
      * @notice Returns the last finalized request id
      * @return requestId Last finalized request id
      */
-    function getLastFinalizedRequestId() public view returns (uint256 requestId) {
+    function getLastFinalizedRequestId() external view returns (uint256 requestId) {
         requestId = _getWithdrawalQueueStorage().lastFinalizedRequestId;
     }
 
