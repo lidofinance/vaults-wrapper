@@ -214,12 +214,6 @@ contract Factory {
      */
     error InsufficientConnectDeposit(uint256 provided, uint256 required);
 
-    /**
-     * @notice Thrown when a string exceeds the maximum length for encoding to bytes32
-     * @param str The string that is too long
-     */
-    error StringTooLong(string str);
-
     //
     // Constants and immutables
     //
@@ -539,6 +533,12 @@ contract Factory {
 
     /**
      * @notice Completes pool deployment (second phase)
+     *         Requires at least `VAULT_HUB.CONNECT_DEPOSIT()` ether sent with the transaction.
+     *
+     *         All ether sent above `CONNECT_DEPOSIT` is used the same way as `CONNECT_DEPOSIT`
+     *         amount: corresponding STV is minted to the pool contract, available for
+     *         retrieval upon pool shutdown. Increased connect deposit value would increase
+     *         vault's health factor sustainability.
      * @param _vaultConfig Configuration for the vault (must match createPoolStart)
      * @param _timelockConfig Configuration for the timelock controller (must match createPoolStart)
      * @param _commonPoolConfig Common pool parameters (must match createPoolStart)
@@ -644,17 +644,15 @@ contract Factory {
         pool.grantRole(DEFAULT_ADMIN_ROLE, _intermediate.timelock);
         pool.revokeRole(DEFAULT_ADMIN_ROLE, tempAdmin);
 
-        IDashboard dashboardImpl = IDashboard(payable(VAULT_FACTORY.DASHBOARD_IMPL()));
-
-        dashboard.grantRole(dashboardImpl.FUND_ROLE(), _intermediate.poolProxy);
-        dashboard.grantRole(dashboardImpl.REBALANCE_ROLE(), _intermediate.poolProxy);
-        dashboard.grantRole(dashboardImpl.WITHDRAW_ROLE(), _intermediate.withdrawalQueueProxy);
+        dashboard.grantRole(dashboard.FUND_ROLE(), _intermediate.poolProxy);
+        dashboard.grantRole(dashboard.REBALANCE_ROLE(), _intermediate.poolProxy);
+        dashboard.grantRole(dashboard.WITHDRAW_ROLE(), _intermediate.withdrawalQueueProxy);
         if (_auxiliaryConfig.mintingEnabled) {
-            dashboard.grantRole(dashboardImpl.MINT_ROLE(), _intermediate.poolProxy);
-            dashboard.grantRole(dashboardImpl.BURN_ROLE(), _intermediate.poolProxy);
+            dashboard.grantRole(dashboard.MINT_ROLE(), _intermediate.poolProxy);
+            dashboard.grantRole(dashboard.BURN_ROLE(), _intermediate.poolProxy);
         }
         if (address(0) != _commonPoolConfig.emergencyCommittee) {
-            dashboard.grantRole(dashboardImpl.PAUSE_BEACON_CHAIN_DEPOSITS_ROLE(), _commonPoolConfig.emergencyCommittee);
+            dashboard.grantRole(dashboard.PAUSE_BEACON_CHAIN_DEPOSITS_ROLE(), _commonPoolConfig.emergencyCommittee);
         }
 
         dashboard.grantRole(DEFAULT_ADMIN_ROLE, _intermediate.timelock);

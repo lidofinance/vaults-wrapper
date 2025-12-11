@@ -45,7 +45,7 @@ contract ForceRebalanceTest is Test, SetupStvStETHPool {
     function _calcLossToBreachThreshold(address _account) internal view returns (uint256 lossToBreachThreshold) {
         uint256 mintedSteth = steth.getPooledEthByShares(pool.mintedStethSharesOf(_account));
         uint256 assets = pool.assetsOf(_account);
-        uint256 threshold = pool.forcedRebalanceThresholdBP();
+        uint256 threshold = pool.poolForcedRebalanceThresholdBP();
 
         // liability / (assets - x) = (1 - threshold)
         // x = assets - liability / (1 - threshold)
@@ -108,7 +108,7 @@ contract ForceRebalanceTest is Test, SetupStvStETHPool {
                 pool.assetsOf(userAlice),
                 Math.Rounding.Floor // greater then or equal due to rounding
             ),
-            pool.TOTAL_BASIS_POINTS() - pool.forcedRebalanceThresholdBP(),
+            pool.TOTAL_BASIS_POINTS() - pool.poolForcedRebalanceThresholdBP(),
             "unexpected pre-rebalance ratio"
         );
 
@@ -123,7 +123,7 @@ contract ForceRebalanceTest is Test, SetupStvStETHPool {
                 pool.assetsOf(userAlice),
                 Math.Rounding.Ceil // less then or equal due to rounding
             ),
-            pool.TOTAL_BASIS_POINTS() - pool.reserveRatioBP(),
+            pool.TOTAL_BASIS_POINTS() - pool.poolReserveRatioBP(),
             "unexpected post-rebalance ratio"
         );
     }

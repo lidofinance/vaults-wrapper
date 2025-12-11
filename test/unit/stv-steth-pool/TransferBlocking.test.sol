@@ -245,7 +245,7 @@ contract TransferBlockingTest is Test, SetupStvStETHPool {
 
     function test_Transfer_ReserveRatioImpactOnCalculations() public view {
         uint256 testShares = 1 ether;
-        uint256 reserveRatio = pool.reserveRatioBP();
+        uint256 reserveRatio = pool.poolReserveRatioBP();
         uint256 totalBasisPoints = pool.TOTAL_BASIS_POINTS();
 
         // Verify reserve ratio is configured correctly
