@@ -17,6 +17,8 @@ contract StrategyCallForwarder is
 {
     using SafeERC20 for IERC20;
 
+    event ERC20Recovered(address indexed _token, address indexed _recipient, uint256 _amount);
+
     constructor() {
         _disableInitializers();
     }
@@ -74,5 +76,6 @@ contract StrategyCallForwarder is
      */
     function safeTransferERC20(address _token, address _recipient, uint256 _amount) external onlyOwner {
         IERC20(_token).safeTransfer(_recipient, _amount);
+        emit ERC20Recovered(_token, _recipient, _amount);
     }
 }
