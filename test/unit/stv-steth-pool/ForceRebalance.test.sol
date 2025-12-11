@@ -8,6 +8,7 @@ import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import {Test} from "forge-std/Test.sol";
 import {StvPool} from "src/StvPool.sol";
 import {StvStETHPool} from "src/StvStETHPool.sol";
+import {IStakingVault} from "src/interfaces/core/IStakingVault.sol";
 import {MockVaultHub} from "test/mocks/MockVaultHub.sol";
 
 contract ForceRebalanceTest is Test, SetupStvStETHPool {
@@ -310,5 +311,86 @@ contract ForceRebalanceTest is Test, SetupStvStETHPool {
         pool.forceRebalanceAndSocializeLoss(userAlice);
 
         assertEq(pool.mintedStethSharesOf(userAlice), 0);
+    }
+
+    function testFuzz_ForceRebalance(uint256 loss, uint256 stethPooledEth) public {
+        _mintMaxStethShares(userAlice);
+
+        // fuzz steth share rate
+        uint256 stethTotalShares = steth.getTotalShares();
+        stethPooledEth = bound(stethPooledEth, stethTotalShares / 10, stethTotalShares * 10);
+        steth.mock_setTotalPooled(stethPooledEth, stethTotalShares); // share rate: 0.1...10
+
+        // fuzz stv rate
+        uint256 nominalAssets = pool.totalNominalAssets();
+        uint256 totalStethLiability = steth.getPooledEthBySharesRoundUp(pool.totalLiabilityShares());
+        vm.assume(nominalAssets > totalStethLiability);
+
+        uint256 vaultValue = nominalAssets - totalStethLiability;
+        loss = bound(loss, 0, vaultValue - 1);
+
+        _simulateLoss(loss);
+
+        (uint256 previewStethShares, uint256 previewStv, bool isUndercollateralized) =
+            pool.previewForceRebalance(userAlice);
+
+        assertGe(pool.mintedStethSharesOf(userAlice), previewStethShares);
+        assertGe(pool.balanceOf(userAlice), previewStv);
+
+        if (isUndercollateralized) {
+            // Account is undercollateralized, so all STV should be burned
+            // Liability is limited by available ETH in the vault for rebalance
+
+            uint256 availableBalance = IStakingVault(dashboard.stakingVault()).availableBalance();
+            uint256 stethSharesLiability = pool.mintedStethSharesOf(userAlice);
+            uint256 stethLiability = steth.getPooledEthBySharesRoundUp(stethSharesLiability);
+            uint256 expectedSteth = Math.min(availableBalance, stethLiability);
+            uint256 expectedShares = Math.min(stethSharesLiability, steth.getSharesByPooledEth(expectedSteth));
+
+            assertEq(previewStv, pool.balanceOf(userAlice)); // Always burn all STV
+            assertEq(previewStethShares, expectedShares); // Liability is limited by available balance
+
+            // Enable loss socialization
+            vm.prank(owner);
+            pool.setMaxLossSocializationBP(100_00); // 100%
+
+            vm.prank(socializer);
+            uint256 stvBurned = pool.forceRebalanceAndSocializeLoss(userAlice);
+
+            assertEq(stvBurned, previewStv);
+
+            if (stethSharesLiability > previewStethShares) {
+                assertGt(pool.mintedStethSharesOf(userAlice), 0); // Some liability remains
+
+                // Increase available balance to cover the rest liability
+                uint256 requiredEth = steth.getPooledEthBySharesRoundUp(stethSharesLiability - previewStethShares);
+                dashboard.mock_simulateRewards(requiredEth.toInt256());
+
+                vm.prank(socializer);
+                uint256 stvBurned2 = pool.forceRebalanceAndSocializeLoss(userAlice);
+
+                assertEq(stvBurned2, 0); // No STV left to burn
+                assertEq(pool.mintedStethSharesOf(userAlice), 0); // All liability cleared
+            }
+
+            return;
+        } else if (previewStethShares > 0) {
+            // Account is unhealthy, but has enough assets to cover liability
+
+            uint256 liabilityBefore = pool.mintedStethSharesOf(userAlice);
+            uint256 stvBurned = pool.forceRebalance(userAlice);
+            uint256 liabilityAfter = pool.mintedStethSharesOf(userAlice);
+
+            assertEq(stvBurned, previewStv);
+            assertEq(liabilityBefore - liabilityAfter, previewStethShares);
+
+            return;
+        } else {
+            // Nothing to rebalance
+
+            assertEq(previewStethShares, 0);
+            assertEq(previewStv, 0);
+            assertFalse(isUndercollateralized);
+        }
     }
 }

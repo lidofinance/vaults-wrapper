@@ -24,6 +24,7 @@ contract StvStETHPool is StvPool {
     error InsufficientBalance();
     error InsufficientReservedBalance();
     error InsufficientMintedShares();
+    error InsufficientExceedingShares();
     error InsufficientStv();
     error ZeroArgument();
     error CannotRebalanceWithdrawalQueue();
@@ -609,35 +610,35 @@ contract StvStETHPool is StvPool {
 
         /// Rebalance (swap steth liability for stv at the current rate) user to the reserve ratio level
         ///
-        /// To calculate how much eth to rebalance to reach the target reserve ratio, we can set up the equation:
-        /// (1 - reserveRatio) = (liability - x) / (assets - x)
+        /// To calculate how much steth shares to rebalance to reach the target reserve ratio, we can set up the equation:
+        /// (1 - reserveRatio) = (liabilityShares - x) / (assetsInStethShares - x)
         ///
         /// Rearranging the equation to solve for x gives us:
-        /// x = (liability - (1 - reserveRatio) * assets) / reserveRatio
+        /// x = (liabilityShares - (1 - reserveRatio) * assetsInStethShares) / reserveRatio
         uint256 reserveRatioBP_ = poolReserveRatioBP();
-        uint256 stethLiability = _getPooledEthBySharesRoundUp(stethSharesLiability);
-        uint256 targetStethToRebalance = Math.ceilDiv(
+        uint256 assetsInStethShares = _getSharesByPooledEth(assets);
+        uint256 targetStethSharesToRebalance = Math.ceilDiv(
             /// Shouldn't underflow as threshold breach is already checked
-            stethLiability * TOTAL_BASIS_POINTS - (TOTAL_BASIS_POINTS - reserveRatioBP_) * assets,
+            stethSharesLiability * TOTAL_BASIS_POINTS - (TOTAL_BASIS_POINTS - reserveRatioBP_) * assetsInStethShares,
             reserveRatioBP_
         );
 
         /// If the target rebalance amount exceeds the liability itself, the user is undercollateralized
-        if (targetStethToRebalance > stethLiability) {
-            targetStethToRebalance = stethLiability;
+        if (targetStethSharesToRebalance > stethSharesLiability) {
+            targetStethSharesToRebalance = stethSharesLiability;
             isUndercollateralized = true;
         }
 
         /// Limit rebalance to available assets
         ///
-        /// First, the rebalancing will use exceeding minted steth, bringing the vault closer to minted steth == liability,
+        /// First, the rebalancing will use exceeding minted steth shares, bringing the vault closer to minted steth == liability,
         /// then the rebalancing mechanism on the vault, which is limited by available balance in the staking vault
-        uint256 stethToRebalance = totalExceedingMintedSteth() + VAULT.availableBalance();
-        stethToRebalance = Math.min(targetStethToRebalance, stethToRebalance);
+        stethShares = totalExceedingMintedStethShares() + _getSharesByPooledEth(VAULT.availableBalance());
+        stethShares = Math.min(targetStethSharesToRebalance, stethShares);
 
+        uint256 stethToRebalance = _getPooledEthBySharesRoundUp(stethShares);
         uint256 stvRequired = _convertToStv(stethToRebalance, Math.Rounding.Ceil);
 
-        stethShares = _getSharesByPooledEth(stethToRebalance);
         stv = Math.min(stvRequired, stvBalance);
         isUndercollateralized = isUndercollateralized || stvRequired > stvBalance;
     }
@@ -649,6 +650,35 @@ contract StvStETHPool is StvPool {
      */
     function isHealthyOf(address _account) external view returns (bool isHealthy) {
         isHealthy = !_isThresholdBreached(assetsOf(_account), mintedStethSharesOf(_account));
+    }
+
+    /**
+     * @notice Reduce user's stETH shares liability by burning stv when exceeding minted stETH exists
+     * @param _stethShares The amount of stETH shares liability to reduce (18 decimals)
+     * @return stvBurned The amount of stv burned (27 decimals)
+     * @dev Requires fresh oracle report to price stv accurately
+     * @dev When totalMintedStethShares > totalLiabilityShares (exceeding shares exist), users can voluntarily
+     * rebalance their liability directly against their stv within the exceeding amount
+     *
+     * @dev WARNING: Front-running risk. Exceeding shares are a shared pool-wide limit. Multiple users
+     * competing for limited exceeding shares may have transactions revert with `InsufficientExceedingShares`.
+     * This is accepted: scenario is rare (requires vault liability < pool minted shares), no value extraction,
+     * and worst case is transaction revert with option to retry with smaller amount.
+     */
+    function rebalanceExceedingMintedStethShares(uint256 _stethShares) external returns (uint256 stvBurned) {
+        _checkFreshReport();
+
+        if (_stethShares == 0) revert ZeroArgument();
+        if (_stethShares > mintedStethSharesOf(msg.sender)) revert InsufficientMintedShares();
+        if (_stethShares > totalExceedingMintedStethShares()) revert InsufficientExceedingShares();
+
+        uint256 stethToRebalance = _getPooledEthBySharesRoundUp(_stethShares);
+        stvBurned = _convertToStv(stethToRebalance, Math.Rounding.Ceil);
+
+        emit StethSharesRebalanced(msg.sender, _stethShares, stvBurned);
+
+        _decreaseMintedStethShares(msg.sender, _stethShares);
+        _burnUnsafe(msg.sender, stvBurned);
     }
 
     /**
@@ -667,6 +697,7 @@ contract StvStETHPool is StvPool {
         uint256 exceedingStethShares = totalExceedingMintedStethShares();
         uint256 remainingStethShares = Math.saturatingSub(_stethShares, exceedingStethShares);
         uint256 ethToRebalance = _getPooledEthBySharesRoundUp(_stethShares);
+        uint256 ethForMaxStvToBurn = _convertToAssets(_maxStvToBurn);
         stvToBurn = _convertToStv(ethToRebalance, Math.Rounding.Ceil);
 
         if (remainingStethShares > 0) DASHBOARD.rebalanceVaultWithShares(remainingStethShares);
@@ -676,7 +707,7 @@ contract StvStETHPool is StvPool {
 
             emit SocializedLoss(
                 stvToBurn - _maxStvToBurn,
-                ethToRebalance - _convertToAssets(_maxStvToBurn),
+                ethToRebalance - ethForMaxStvToBurn,
                 _getStvStETHPoolStorage().maxLossSocializationBP
             );
             stvToBurn = _maxStvToBurn;

@@ -4,6 +4,8 @@ pragma solidity 0.8.30;
 import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {IStrategyCallForwarder} from "src/interfaces/IStrategyCallForwarder.sol";
 
@@ -13,6 +15,10 @@ contract StrategyCallForwarder is
     OwnableUpgradeable,
     IStrategyCallForwarder
 {
+    using SafeERC20 for IERC20;
+
+    event ERC20Recovered(address indexed _token, address indexed _recipient, uint256 _amount);
+
     constructor() {
         _disableInitializers();
     }
@@ -59,5 +65,17 @@ contract StrategyCallForwarder is
      */
     function sendValue(address payable _recipient, uint256 _amount) external onlyOwner nonReentrant {
         Address.sendValue(_recipient, _amount);
+    }
+
+    /**
+     * @notice Executes a safe transfer of ERC20 tokens
+     * @dev Only callable by owner.
+     * @param _token The address of the ERC20 token
+     * @param _recipient The address to send the tokens to
+     * @param _amount The amount of tokens to transfer
+     */
+    function safeTransferERC20(address _token, address _recipient, uint256 _amount) external onlyOwner {
+        IERC20(_token).safeTransfer(_recipient, _amount);
+        emit ERC20Recovered(_token, _recipient, _amount);
     }
 }
