@@ -56,7 +56,7 @@ contract GGVStrategy is IStrategy, AccessControlEnumerableUpgradeable, FeaturePa
     error ZeroArgument(string name);
     error InvalidSender();
     error InvalidWstethAmount();
-    error NothingToExit();
+    error InsufficientWsteth();
     error NotImplemented();
 
     constructor(
@@ -187,7 +187,7 @@ contract GGVStrategy is IStrategy, AccessControlEnumerableUpgradeable, FeaturePa
         uint256 totalGGV = boringVault.balanceOf(address(callForwarder));
         uint256 totalWstethFromGGV = previewWstethByGGV(totalGGV, _params);
         if (totalWstethFromGGV == 0) revert InvalidWstethAmount();
-        if (_wsteth > totalWstethFromGGV) revert NothingToExit();
+        if (_wsteth > totalWstethFromGGV) revert InsufficientWsteth();
 
         // Approve GGV shares
         uint256 ggvShares = Math.mulDiv(totalGGV, _wsteth, totalWstethFromGGV, Math.Rounding.Ceil);
@@ -201,7 +201,7 @@ contract GGVStrategy is IStrategy, AccessControlEnumerableUpgradeable, FeaturePa
             abi.encodeWithSelector(
                 BORING_QUEUE.requestOnChainWithdraw.selector,
                 address(WSTETH),
-                ggvShares.toInt256(),
+                ggvShares.toUint128(),
                 params.discount,
                 params.secondsToDeadline
             )
