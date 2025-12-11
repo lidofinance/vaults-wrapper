@@ -611,35 +611,35 @@ contract StvStETHPool is StvPool {
 
         /// Rebalance (swap steth liability for stv at the current rate) user to the reserve ratio level
         ///
-        /// To calculate how much eth to rebalance to reach the target reserve ratio, we can set up the equation:
-        /// (1 - reserveRatio) = (liability - x) / (assets - x)
+        /// To calculate how much steth shares to rebalance to reach the target reserve ratio, we can set up the equation:
+        /// (1 - reserveRatio) = (liabilityShares - x) / (assetsInStethShares - x)
         ///
         /// Rearranging the equation to solve for x gives us:
-        /// x = (liability - (1 - reserveRatio) * assets) / reserveRatio
+        /// x = (liabilityShares - (1 - reserveRatio) * assetsInStethShares) / reserveRatio
         uint256 reserveRatioBP_ = reserveRatioBP();
-        uint256 stethLiability = _getPooledEthBySharesRoundUp(stethSharesLiability);
-        uint256 targetStethToRebalance = Math.ceilDiv(
+        uint256 assetsInStethShares = _getSharesByPooledEth(assets);
+        uint256 targetStethSharesToRebalance = Math.ceilDiv(
             /// Shouldn't underflow as threshold breach is already checked
-            stethLiability * TOTAL_BASIS_POINTS - (TOTAL_BASIS_POINTS - reserveRatioBP_) * assets,
+            stethSharesLiability * TOTAL_BASIS_POINTS - (TOTAL_BASIS_POINTS - reserveRatioBP_) * assetsInStethShares,
             reserveRatioBP_
         );
 
         /// If the target rebalance amount exceeds the liability itself, the user is undercollateralized
-        if (targetStethToRebalance > stethLiability) {
-            targetStethToRebalance = stethLiability;
+        if (targetStethSharesToRebalance > stethSharesLiability) {
+            targetStethSharesToRebalance = stethSharesLiability;
             isUndercollateralized = true;
         }
 
         /// Limit rebalance to available assets
         ///
-        /// First, the rebalancing will use exceeding minted steth, bringing the vault closer to minted steth == liability,
+        /// First, the rebalancing will use exceeding minted steth shares, bringing the vault closer to minted steth == liability,
         /// then the rebalancing mechanism on the vault, which is limited by available balance in the staking vault
-        uint256 stethToRebalance = totalExceedingMintedSteth() + VAULT.availableBalance();
-        stethToRebalance = Math.min(targetStethToRebalance, stethToRebalance);
+        stethShares = totalExceedingMintedStethShares() + _getSharesByPooledEth(VAULT.availableBalance());
+        stethShares = Math.min(targetStethSharesToRebalance, stethShares);
 
+        uint256 stethToRebalance = _getPooledEthBySharesRoundUp(stethShares);
         uint256 stvRequired = _convertToStv(stethToRebalance, Math.Rounding.Ceil);
 
-        stethShares = _getSharesByPooledEth(stethToRebalance);
         stv = Math.min(stvRequired, stvBalance);
         isUndercollateralized = isUndercollateralized || stvRequired > stvBalance;
     }
