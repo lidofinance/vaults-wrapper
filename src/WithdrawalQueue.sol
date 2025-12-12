@@ -653,7 +653,8 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, FeaturePausable 
 
     /**
      * @notice Calculate current stETH share rate
-     * @return stethShareRate Current stETH share rate (1e27 precision)
+     * @return stethShareRate ETH amount (1e18 precision) per 1e27 stETH shares
+     * @dev Returns the amount of ETH (in wei) that corresponds to 1e27 stETH shares at the current exchange rate
      */
     function calculateCurrentStethShareRate() public view returns (uint256 stethShareRate) {
         stethShareRate = _getPooledEthBySharesRoundUp(E27_PRECISION_BASE);
