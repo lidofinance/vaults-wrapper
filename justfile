@@ -160,9 +160,7 @@ verify-all:
   
   echo ""
   echo "7. Verifying Factory..."
-  # Factory constructor: (address _locatorAddress, SubFactories memory _subFactories)
-  # SubFactories структура: (address,address,address,address,address,address)
-  # Порядок: stvPoolFactory, stvStETHPoolFactory, withdrawalQueueFactory, distributorFactory, ggvStrategyFactory, timelockFactory
+
   FACTORY_ARGS=$(cast abi-encode \
     "constructor(address,(address,address,address,address,address,address))" \
     "$LOCATOR" \
