@@ -756,7 +756,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, FeaturePausable 
     }
 
     /**
-     * @notice View function to find a checkpoint hint to use in `claimWithdrawal`, claimWithdrawalBatch()`, `getClaimableEther()`, and `getClaimableEtherBatch`
+     * @notice View function to find a checkpoint hint to use in `claimWithdrawal()`, claimWithdrawalBatch()`, `getClaimableEther()`, and `getClaimableEtherBatch()`
      * Search will be performed in the range of `[_firstIndex, _lastIndex]`
      * @param _requestId Request id to search the checkpoint for
      * @param _start Index of the left boundary of the search range, should be greater than 0
