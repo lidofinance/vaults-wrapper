@@ -6,7 +6,7 @@ import {StvStETHPool} from "src/StvStETHPool.sol";
 contract StvStETHPoolFactory {
     function deploy(
         address _dashboard,
-        bool _allowlistEnabled,
+        bool _allowListEnabled,
         uint256 _reserveRatioGapBP,
         address _withdrawalQueue,
         address _distributor,
@@ -14,7 +14,7 @@ contract StvStETHPoolFactory {
     ) external returns (address impl) {
         impl = address(
             new StvStETHPool(
-                _dashboard, _allowlistEnabled, _reserveRatioGapBP, _withdrawalQueue, _distributor, _poolType
+                _dashboard, _allowListEnabled, _reserveRatioGapBP, _withdrawalQueue, _distributor, _poolType
             )
         );
     }

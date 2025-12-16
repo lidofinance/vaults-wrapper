@@ -20,7 +20,7 @@ contract StvStrategyPoolHarness is StvStETHPoolHarness {
         address _boringQueue
     ) internal returns (WrapperContext memory) {
         DeploymentConfig memory config = DeploymentConfig({
-            allowlistEnabled: enableAllowlist,
+            allowListEnabled: enableAllowlist,
             mintingEnabled: true,
             owner: NODE_OPERATOR,
             nodeOperator: NODE_OPERATOR,

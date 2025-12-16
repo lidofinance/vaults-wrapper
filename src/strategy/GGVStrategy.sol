@@ -56,7 +56,7 @@ contract GGVStrategy is IStrategy, AccessControlEnumerableUpgradeable, FeaturePa
     error ZeroArgument(string name);
     error InvalidSender();
     error InvalidWstethAmount();
-    error NothingToExit();
+    error InsufficientWsteth();
     error NotImplemented();
 
     constructor(
@@ -187,7 +187,7 @@ contract GGVStrategy is IStrategy, AccessControlEnumerableUpgradeable, FeaturePa
         uint256 totalGGV = boringVault.balanceOf(address(callForwarder));
         uint256 totalWstethFromGGV = previewWstethByGGV(totalGGV, _params);
         if (totalWstethFromGGV == 0) revert InvalidWstethAmount();
-        if (_wsteth > totalWstethFromGGV) revert NothingToExit();
+        if (_wsteth > totalWstethFromGGV) revert InsufficientWsteth();
 
         // Approve GGV shares
         uint256 ggvShares = Math.mulDiv(totalGGV, _wsteth, totalWstethFromGGV, Math.Rounding.Ceil);
@@ -201,7 +201,7 @@ contract GGVStrategy is IStrategy, AccessControlEnumerableUpgradeable, FeaturePa
             abi.encodeWithSelector(
                 BORING_QUEUE.requestOnChainWithdraw.selector,
                 address(WSTETH),
-                ggvShares.toInt256(),
+                ggvShares.toUint128(),
                 params.discount,
                 params.secondsToDeadline
             )
@@ -353,22 +353,18 @@ contract GGVStrategy is IStrategy, AccessControlEnumerableUpgradeable, FeaturePa
         callForwarder.doCall(address(POOL_), abi.encodeWithSelector(StvStETHPool.burnWsteth.selector, _wstethToBurn));
     }
 
-    // =================================================================================
-    // RECOVERY
-    // =================================================================================
-
     /**
-     * @notice Recovers ERC20 tokens from the call forwarder
+     * @notice Transfers ERC20 tokens from the call forwarder
      * @param _token The token to recover
      * @param _recipient The recipient of the tokens
      * @param _amount The amount of tokens to recover
      */
-    function recoverERC20(address _token, address _recipient, uint256 _amount) external {
+    function safeTransferERC20(address _token, address _recipient, uint256 _amount) external {
         if (_token == address(0)) revert ZeroArgument("_token");
         if (_recipient == address(0)) revert ZeroArgument("_recipient");
         if (_amount == 0) revert ZeroArgument("_amount");
 
         IStrategyCallForwarder callForwarder = _getOrCreateCallForwarder(msg.sender);
-        callForwarder.doCall(_token, abi.encodeWithSelector(IERC20.transfer.selector, _recipient, _amount));
+        callForwarder.safeTransferERC20(_token, _recipient, _amount);
     }
 }

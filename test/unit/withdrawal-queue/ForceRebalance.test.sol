@@ -37,7 +37,7 @@ contract ForceRebalanceTest is Test, SetupWithdrawalQueue {
     function _calcLossToBreachThreshold(address _account) internal view returns (uint256 lossToBreachThreshold) {
         uint256 mintedSteth = steth.getPooledEthByShares(pool.mintedStethSharesOf(_account));
         uint256 assets = pool.assetsOf(_account);
-        uint256 threshold = pool.forcedRebalanceThresholdBP();
+        uint256 threshold = pool.poolForcedRebalanceThresholdBP();
 
         // liability / (assets - x) = (1 - threshold)
         // x = assets - liability / (1 - threshold)

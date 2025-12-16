@@ -39,7 +39,7 @@ interface IBoringOnChainQueue {
         uint96 nonce; // read from state, used to make it impossible for request Ids to be repeated.
         address user; // msg.sender
         address assetOut; // input sanitized
-        uint128 amountOfShares; // input transfered in
+        uint128 amountOfShares; // input transferred in
         uint128 amountOfAssets; // derived from amountOfShares and price
         uint40 creationTime; // time withdraw was made
         uint24 secondsToMaturity; // in contract, from withdrawAsset?

@@ -5,14 +5,6 @@ import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol"
 
 uint256 constant DOUBLE_CACHE_LENGTH = 2;
 
-library DoubleRefSlotCache {
-    struct Int104WithCache {
-        int104 value;
-        int104 valueOnRefSlot;
-        uint48 refSlot;
-    }
-}
-
 interface IVaultHub is IAccessControl {
     struct VaultConnection {
         // ### 1st slot

@@ -182,7 +182,7 @@ contract StvPool is Initializable, ERC20Upgradeable, AllowList, FeaturePausable 
      * @param _assets Amount of assets to withdraw (18 decimals)
      * @return stv Amount of stv that would be burned (27 decimals)
      */
-    function previewWithdraw(uint256 _assets) public view returns (uint256 stv) {
+    function previewWithdraw(uint256 _assets) external view returns (uint256 stv) {
         stv = _convertToStv(_assets, Math.Rounding.Ceil);
     }
 

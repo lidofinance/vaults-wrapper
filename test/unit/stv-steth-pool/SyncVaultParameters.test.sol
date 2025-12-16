@@ -25,7 +25,7 @@ contract SyncVaultParametersTest is Test, SetupStvStETHPool {
 
         pool.syncVaultParameters();
 
-        assertEq(pool.reserveRatioBP(), baseReserveRatioBP + RESERVE_RATIO_GAP_BP);
+        assertEq(pool.poolReserveRatioBP(), baseReserveRatioBP + RESERVE_RATIO_GAP_BP);
     }
 
     function test_SyncVaultParameters_AddsGapToThreshold() public {
@@ -36,7 +36,7 @@ contract SyncVaultParametersTest is Test, SetupStvStETHPool {
 
         pool.syncVaultParameters();
 
-        assertEq(pool.forcedRebalanceThresholdBP(), baseForcedThresholdBP + RESERVE_RATIO_GAP_BP);
+        assertEq(pool.poolForcedRebalanceThresholdBP(), baseForcedThresholdBP + RESERVE_RATIO_GAP_BP);
     }
 
     function test_SyncVaultParameters_CapsAtMaximum() public {
@@ -47,8 +47,8 @@ contract SyncVaultParametersTest is Test, SetupStvStETHPool {
 
         pool.syncVaultParameters();
 
-        assertEq(pool.reserveRatioBP(), 9999);
-        assertEq(pool.forcedRebalanceThresholdBP(), 9998);
+        assertEq(pool.poolReserveRatioBP(), 9999);
+        assertEq(pool.poolForcedRebalanceThresholdBP(), 9998);
     }
 
     function test_SyncVaultParameters_AfterVaultUpdate_Syncs() public {
@@ -64,8 +64,8 @@ contract SyncVaultParametersTest is Test, SetupStvStETHPool {
 
         pool.syncVaultParameters();
 
-        assertEq(pool.reserveRatioBP(), newReserveRatioBP + RESERVE_RATIO_GAP_BP);
-        assertEq(pool.forcedRebalanceThresholdBP(), newForcedThresholdBP + RESERVE_RATIO_GAP_BP);
+        assertEq(pool.poolReserveRatioBP(), newReserveRatioBP + RESERVE_RATIO_GAP_BP);
+        assertEq(pool.poolForcedRebalanceThresholdBP(), newForcedThresholdBP + RESERVE_RATIO_GAP_BP);
     }
 
     function test_SyncVaultParameters_AffectsMintingCapacity() public {

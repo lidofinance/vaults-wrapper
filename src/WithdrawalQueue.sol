@@ -526,7 +526,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, FeaturePausable 
                 // In this case, the loss is shared among all participants
                 if (stvToRebalance > stv) stvToRebalance = stv;
 
-                // Exceeding minted stETH (if any) are used to cover rebalancing need without withdrawing ETH from the vault
+                // Exceeding minted stETH (if any) is used to cover rebalancing need without withdrawing ETH from the vault
                 // Thus, Exceeding minted stETH aims to be reduced to 0
                 if (exceedingSteth > stethToRebalance) {
                     exceedingSteth -= stethToRebalance;
@@ -653,7 +653,8 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, FeaturePausable 
 
     /**
      * @notice Calculate current stETH share rate
-     * @return stethShareRate Current stETH share rate (1e27 precision)
+     * @return stethShareRate ETH amount (1e18 precision) per 1e27 stETH shares
+     * @dev Returns the amount of ETH (in wei) that corresponds to 1e27 stETH shares at the current exchange rate
      */
     function calculateCurrentStethShareRate() public view returns (uint256 stethShareRate) {
         stethShareRate = _getPooledEthBySharesRoundUp(E27_PRECISION_BASE);
@@ -755,7 +756,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, FeaturePausable 
     }
 
     /**
-     * @notice View function to find a checkpoint hint to use in `claimWithdrawalBatch()` and `getClaimableEther()`
+     * @notice View function to find a checkpoint hint to use in `claimWithdrawal()`, claimWithdrawalBatch()`, `getClaimableEther()`, and `getClaimableEtherBatch()`
      * Search will be performed in the range of `[_firstIndex, _lastIndex]`
      * @param _requestId Request id to search the checkpoint for
      * @param _start Index of the left boundary of the search range, should be greater than 0
@@ -1067,7 +1068,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, FeaturePausable 
      * @notice Returns the last request id
      * @return requestId Last request id
      */
-    function getLastRequestId() public view returns (uint256 requestId) {
+    function getLastRequestId() external view returns (uint256 requestId) {
         requestId = _getWithdrawalQueueStorage().lastRequestId;
     }
 
@@ -1075,7 +1076,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, FeaturePausable 
      * @notice Returns the last finalized request id
      * @return requestId Last finalized request id
      */
-    function getLastFinalizedRequestId() public view returns (uint256 requestId) {
+    function getLastFinalizedRequestId() external view returns (uint256 requestId) {
         requestId = _getWithdrawalQueueStorage().lastFinalizedRequestId;
     }
 
