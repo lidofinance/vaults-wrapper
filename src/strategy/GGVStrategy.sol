@@ -353,17 +353,13 @@ contract GGVStrategy is IStrategy, AccessControlEnumerableUpgradeable, FeaturePa
         callForwarder.doCall(address(POOL_), abi.encodeWithSelector(StvStETHPool.burnWsteth.selector, _wstethToBurn));
     }
 
-    // =================================================================================
-    // RECOVERY
-    // =================================================================================
-
     /**
-     * @notice Recovers ERC20 tokens from the call forwarder
+     * @notice Transfers ERC20 tokens from the call forwarder
      * @param _token The token to recover
      * @param _recipient The recipient of the tokens
      * @param _amount The amount of tokens to recover
      */
-    function recoverERC20(address _token, address _recipient, uint256 _amount) external {
+    function safeTransferERC20(address _token, address _recipient, uint256 _amount) external {
         if (_token == address(0)) revert ZeroArgument("_token");
         if (_recipient == address(0)) revert ZeroArgument("_recipient");
         if (_amount == 0) revert ZeroArgument("_amount");

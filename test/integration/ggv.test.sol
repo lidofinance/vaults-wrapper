@@ -345,7 +345,7 @@ contract GGVTest is StvStrategyPoolHarness {
         uint256 userWstethBefore = wsteth.balanceOf(USER1);
 
         vm.prank(USER1);
-        ggvStrategy.recoverERC20(address(wsteth), USER1, recoverableWsteth);
+        ggvStrategy.safeTransferERC20(address(wsteth), USER1, recoverableWsteth);
 
         assertEq(ggvStrategy.wstethOf(USER1), 0, "strategy call forwarder should have no wstETH left");
         assertEq(

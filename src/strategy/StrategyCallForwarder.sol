@@ -76,6 +76,5 @@ contract StrategyCallForwarder is
      */
     function safeTransferERC20(address _token, address _recipient, uint256 _amount) external onlyOwner {
         IERC20(_token).safeTransfer(_recipient, _amount);
-        emit ERC20Recovered(_token, _recipient, _amount);
     }
 }

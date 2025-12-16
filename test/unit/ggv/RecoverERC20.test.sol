@@ -92,29 +92,11 @@ contract RecoverERC20Test is Test, SetupGGVStrategy {
 
         // Recover tokens
         vm.prank(userAlice);
-        ggvStrategy.recoverERC20(address(standardToken), recipient, amount);
+        ggvStrategy.safeTransferERC20(address(standardToken), recipient, amount);
 
         // Verify final balances
         assertEq(standardToken.balanceOf(address(callForwarder)), 0);
         assertEq(standardToken.balanceOf(recipient), amount);
-    }
-
-    function test_recoverERC20_EmitsERC20RecoveredEvent() public {
-        uint256 amount = 100 ether;
-
-        // Get user's call forwarder
-        IStrategyCallForwarder callForwarder = ggvStrategy.getStrategyCallForwarderAddress(userAlice);
-
-        // Mint tokens to call forwarder
-        standardToken.mint(address(callForwarder), amount);
-
-        // Expect the ERC20Recovered event to be emitted from the call forwarder
-        // The event is emitted by StrategyCallForwarder.safeTransferERC20
-        vm.expectEmit(true, true, false, true);
-        emit StrategyCallForwarder.ERC20Recovered(address(standardToken), recipient, amount);
-
-        vm.prank(userAlice);
-        ggvStrategy.recoverERC20(address(standardToken), recipient, amount);
     }
 
     function test_recoverERC20_NoReturnToken_Success() public {
@@ -132,7 +114,7 @@ contract RecoverERC20Test is Test, SetupGGVStrategy {
 
         // Recover tokens (should work even though token doesn't return value)
         vm.prank(userAlice);
-        ggvStrategy.recoverERC20(address(noReturnToken), recipient, amount);
+        ggvStrategy.safeTransferERC20(address(noReturnToken), recipient, amount);
 
         // Verify final balances
         assertEq(noReturnToken.balanceOf(address(callForwarder)), 0);
@@ -164,7 +146,7 @@ contract RecoverERC20Test is Test, SetupGGVStrategy {
                 SafeERC20.SafeERC20FailedOperation.selector, address(failToken)
             )
         );
-        ggvStrategy.recoverERC20(address(failToken), recipient, amount);
+        ggvStrategy.safeTransferERC20(address(failToken), recipient, amount);
 
         // Verify balances remain unchanged after revert
         assertEq(failToken.balanceOf(address(callForwarder)), amount, "Tokens should still be in call forwarder");
@@ -174,19 +156,19 @@ contract RecoverERC20Test is Test, SetupGGVStrategy {
     function test_recoverERC20_ZeroToken_Reverts() public {
         vm.prank(userAlice);
         vm.expectRevert(abi.encodeWithSelector(GGVStrategy.ZeroArgument.selector, "_token"));
-        ggvStrategy.recoverERC20(address(0), recipient, 100 ether);
+        ggvStrategy.safeTransferERC20(address(0), recipient, 100 ether);
     }
 
     function test_recoverERC20_ZeroRecipient_Reverts() public {
         vm.prank(userAlice);
         vm.expectRevert(abi.encodeWithSelector(GGVStrategy.ZeroArgument.selector, "_recipient"));
-        ggvStrategy.recoverERC20(address(standardToken), address(0), 100 ether);
+        ggvStrategy.safeTransferERC20(address(standardToken), address(0), 100 ether);
     }
 
     function test_recoverERC20_ZeroAmount_Reverts() public {
         vm.prank(userAlice);
         vm.expectRevert(abi.encodeWithSelector(GGVStrategy.ZeroArgument.selector, "_amount"));
-        ggvStrategy.recoverERC20(address(standardToken), recipient, 0);
+        ggvStrategy.safeTransferERC20(address(standardToken), recipient, 0);
     }
 
     function test_recoverERC20_PartialAmount_Success() public {
@@ -201,7 +183,7 @@ contract RecoverERC20Test is Test, SetupGGVStrategy {
 
         // Recover partial amount
         vm.prank(userAlice);
-        ggvStrategy.recoverERC20(address(standardToken), recipient, recoverAmount);
+        ggvStrategy.safeTransferERC20(address(standardToken), recipient, recoverAmount);
 
         // Verify balances
         assertEq(standardToken.balanceOf(address(callForwarder)), totalAmount - recoverAmount);
@@ -222,7 +204,7 @@ contract RecoverERC20Test is Test, SetupGGVStrategy {
         // ERC20 transfer will revert when balance is insufficient
         vm.prank(userAlice);
         vm.expectRevert();
-        ggvStrategy.recoverERC20(address(standardToken), recipient, amount);
+        ggvStrategy.safeTransferERC20(address(standardToken), recipient, amount);
     }
 
     function test_recoverERC20_OnlyOwnerCanRecover() public {
@@ -238,7 +220,7 @@ contract RecoverERC20Test is Test, SetupGGVStrategy {
         // Should fail because userBob doesn't own userAlice's call forwarder
         vm.prank(userBob);
         vm.expectRevert();
-        ggvStrategy.recoverERC20(address(standardToken), recipient, amount);
+        ggvStrategy.safeTransferERC20(address(standardToken), recipient, amount);
     }
 }
 
