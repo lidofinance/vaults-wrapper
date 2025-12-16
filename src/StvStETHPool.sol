@@ -679,10 +679,10 @@ contract StvStETHPool is StvPool {
         uint256 stethToRebalance = _getPooledEthBySharesRoundUp(_stethShares);
         stvBurned = _convertToStv(stethToRebalance, Math.Rounding.Ceil);
 
-        emit StethSharesRebalanced(msg.sender, _stethShares, stvBurned);
-
         _decreaseMintedStethShares(msg.sender, _stethShares);
         _burnUnsafe(msg.sender, stvBurned);
+
+        emit StethSharesRebalanced(msg.sender, _stethShares, stvBurned);
     }
 
     /**
@@ -717,10 +717,10 @@ contract StvStETHPool is StvPool {
             stvToBurn = _maxStvToBurn;
         }
 
-        emit StethSharesRebalanced(_account, _stethShares, stvToBurn);
-
         _decreaseMintedStethShares(_account, _stethShares);
         _burnUnsafe(_account, stvToBurn);
+
+        emit StethSharesRebalanced(_account, _stethShares, stvToBurn);
     }
 
     function _isThresholdBreached(uint256 _assets, uint256 _stethShares) internal view returns (bool isBreached) {
