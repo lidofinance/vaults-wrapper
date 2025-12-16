@@ -641,6 +641,11 @@ contract Factory {
             }
         }
 
+        if (_auxiliaryConfig.allowlistEnabled) {
+            pool.grantRole(pool.ALLOW_LIST_MANAGER_ROLE(), _intermediate.timelock);
+            pool.revokeRole(pool.ALLOW_LIST_MANAGER_ROLE(), tempAdmin);
+        }
+
         pool.grantRole(DEFAULT_ADMIN_ROLE, _intermediate.timelock);
         pool.revokeRole(DEFAULT_ADMIN_ROLE, tempAdmin);
 

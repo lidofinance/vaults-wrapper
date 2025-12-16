@@ -466,6 +466,22 @@ contract FactoryIntegrationTest is StvPoolHarness {
                 "deployer should not have DEFAULT_ADMIN_ROLE on pool"
             );
 
+            // Check ALLOW_LIST_MANAGER_ROLE based on allowlist configuration
+            if (allowlistEnabled) {
+                assertTrue(
+                    pool.hasRole(pool.ALLOW_LIST_MANAGER_ROLE(), timelock),
+                    "timelock should have ALLOW_LIST_MANAGER_ROLE when allowlist enabled"
+                );
+                assertFalse(
+                    pool.hasRole(pool.ALLOW_LIST_MANAGER_ROLE(), address(factory)),
+                    "factory should not have ALLOW_LIST_MANAGER_ROLE on pool"
+                );
+                assertFalse(
+                    pool.hasRole(pool.ALLOW_LIST_MANAGER_ROLE(), deployer),
+                    "deployer should not have ALLOW_LIST_MANAGER_ROLE on pool"
+                );
+            }
+
             // === WithdrawalQueue AccessControl Roles ===
             assertTrue(
                 wq.hasRole(wq.DEFAULT_ADMIN_ROLE(), timelock),
