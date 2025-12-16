@@ -104,3 +104,69 @@ core-deploy subdir='lido-core' rpc_port='9123':
   LOG_LEVEL=warn \
   DEPLOYER=0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 \
   bash scripts/dao-deploy.sh
+
+verify-all:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  
+  DEPLOYMENT_JSON="deployments/pool-factory-latest.json"
+  FACTORY_CONFIG="config/hoodi-factory.json"
+  
+  FACTORY=$(jq -r '.deployment.factory' "$DEPLOYMENT_JSON")
+  GGV_STRATEGY_FACTORY=$(jq -r '.factories.ggvStrategyFactory' "$DEPLOYMENT_JSON")
+  STV_POOL_FACTORY=$(jq -r '.factories.stvPoolFactory' "$DEPLOYMENT_JSON")
+  STV_STETH_POOL_FACTORY=$(jq -r '.factories.stvStETHPoolFactory' "$DEPLOYMENT_JSON")
+  WITHDRAWAL_QUEUE_FACTORY=$(jq -r '.factories.withdrawalQueueFactory' "$DEPLOYMENT_JSON")
+  TIMELOCK_FACTORY=$(jq -r '.factories.timelockFactory' "$DEPLOYMENT_JSON")
+  DISTRIBUTOR_FACTORY=$(jq -r '.factories.distributorFactory' "$DEPLOYMENT_JSON")
+  
+  LOCATOR=$(jq -r '.lidoLocator' "$FACTORY_CONFIG")
+  TELLER=$(jq -r '.strategies.ggv.teller' "$FACTORY_CONFIG")
+  BORING_QUEUE=$(jq -r '.strategies.ggv.boringOnChainQueue' "$FACTORY_CONFIG")
+  
+  echo "Verifying contracts..."
+  echo "Factory: $FACTORY"
+  echo ""
+  
+  echo "1. Verifying StvPoolFactory..."
+  forge verify-contract "$STV_POOL_FACTORY" src/factories/StvPoolFactory.sol:StvPoolFactory \
+    --verifier etherscan --rpc-url {{env('RPC_URL')}} --watch -vvvv || echo "Failed to verify StvPoolFactory"
+  
+  echo ""
+  echo "2. Verifying StvStETHPoolFactory..."
+  forge verify-contract "$STV_STETH_POOL_FACTORY" src/factories/StvStETHPoolFactory.sol:StvStETHPoolFactory \
+    --verifier etherscan --rpc-url {{env('RPC_URL')}} --watch -vvvv || echo "Failed to verify StvStETHPoolFactory"
+  
+  echo ""
+  echo "3. Verifying WithdrawalQueueFactory..."
+  forge verify-contract "$WITHDRAWAL_QUEUE_FACTORY" src/factories/WithdrawalQueueFactory.sol:WithdrawalQueueFactory \
+    --verifier etherscan --rpc-url {{env('RPC_URL')}} --watch -vvvv || echo "Failed to verify WithdrawalQueueFactory"
+  
+  echo ""
+  echo "4. Verifying TimelockFactory..."
+  forge verify-contract "$TIMELOCK_FACTORY" src/factories/TimelockFactory.sol:TimelockFactory \
+    --verifier etherscan --rpc-url {{env('RPC_URL')}} --watch -vvvv || echo "Failed to verify TimelockFactory"
+  
+  echo ""
+  echo "5. Verifying DistributorFactory..."
+  forge verify-contract "$DISTRIBUTOR_FACTORY" src/factories/DistributorFactory.sol:DistributorFactory \
+    --verifier etherscan --rpc-url {{env('RPC_URL')}} --watch -vvvv || echo "Failed to verify DistributorFactory"
+  
+  echo ""
+  echo "6. Verifying GGVStrategyFactory..."
+  GGV_ARGS=$(cast abi-encode "constructor(address,address)" "$TELLER" "$BORING_QUEUE")
+  forge verify-contract "$GGV_STRATEGY_FACTORY" src/factories/GGVStrategyFactory.sol:GGVStrategyFactory \
+    --verifier etherscan --rpc-url {{env('RPC_URL')}} --constructor-args "$GGV_ARGS" --watch -vvvv || echo "Failed to verify GGVStrategyFactory"
+  
+  echo ""
+  echo "7. Verifying Factory..."
+
+  FACTORY_ARGS=$(cast abi-encode \
+    "constructor(address,(address,address,address,address,address,address))" \
+    "$LOCATOR" \
+    "($STV_POOL_FACTORY,$STV_STETH_POOL_FACTORY,$WITHDRAWAL_QUEUE_FACTORY,$DISTRIBUTOR_FACTORY,$GGV_STRATEGY_FACTORY,$TIMELOCK_FACTORY)")
+  forge verify-contract "$FACTORY" src/Factory.sol:Factory \
+    --verifier etherscan --rpc-url {{env('RPC_URL')}} --constructor-args "$FACTORY_ARGS" --watch -vvvv || echo "Failed to verify Factory"
+  
+  echo ""
+  echo "Verification complete!"
