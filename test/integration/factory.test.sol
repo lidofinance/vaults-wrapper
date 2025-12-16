@@ -25,7 +25,7 @@ contract FactoryIntegrationTest is StvPoolHarness {
     }
 
     function _buildConfigs(
-        bool allowlistEnabled,
+        bool allowListEnabled,
         address allowListManager,
         bool mintingEnabled,
         uint256 reserveRatioGapBP,
@@ -53,7 +53,7 @@ contract FactoryIntegrationTest is StvPoolHarness {
         commonPoolConfig = Factory.CommonPoolConfig({minWithdrawalDelayTime: 1 days, name: name, symbol: symbol, emergencyCommittee: address(0)});
 
         auxiliaryConfig = Factory.AuxiliaryPoolConfig({
-            allowlistEnabled: allowlistEnabled,
+            allowListEnabled: allowListEnabled,
             allowListManager: allowListManager,
             mintingEnabled: mintingEnabled,
             reserveRatioGapBP: reserveRatioGapBP
@@ -350,7 +350,7 @@ contract FactoryIntegrationTest is StvPoolHarness {
             assertEq(emittedCommonPoolConfig.name, commonPoolConfig.name, "name should match");
             assertEq(emittedCommonPoolConfig.symbol, commonPoolConfig.symbol, "symbol should match");
 
-            assertEq(emittedAuxiliaryConfig.allowlistEnabled, auxiliaryConfig.allowlistEnabled, "allowlistEnabled should match");
+            assertEq(emittedAuxiliaryConfig.allowListEnabled, auxiliaryConfig.allowListEnabled, "allowListEnabled should match");
             assertEq(emittedAuxiliaryConfig.allowListManager, auxiliaryConfig.allowListManager, "allowListManager should match");
             assertEq(emittedAuxiliaryConfig.mintingEnabled, auxiliaryConfig.mintingEnabled, "mintingEnabled should match");
             assertEq(emittedAuxiliaryConfig.reserveRatioGapBP, auxiliaryConfig.reserveRatioGapBP, "reserveRatioGapBP should match");
@@ -385,7 +385,7 @@ contract FactoryIntegrationTest is StvPoolHarness {
         // i=2: StvPool with allowlist (allowListManager configured)
         // i=3: StvStrategyPool (strategy, allowlist with timelock as manager)
         for (uint256 i = 0; i < 4; i++) {
-            bool allowlistEnabled = (i >= 2);
+            bool allowListEnabled = (i >= 2);
             bool mintingEnabled = (i == 1 || i == 3);
             uint256 reserveRatioGapBP = (i == 3) ? 500 : 0;
             address strategyFactory = (i == 3) ? address(factory.GGV_STRATEGY_FACTORY()) : address(0);
@@ -401,7 +401,7 @@ contract FactoryIntegrationTest is StvPoolHarness {
                 Factory.CommonPoolConfig memory commonPoolConfig,
                 Factory.AuxiliaryPoolConfig memory auxiliaryConfig,
                 Factory.TimelockConfig memory timelockConfig
-            ) = _buildConfigs(allowlistEnabled, allowListManagerConfig, mintingEnabled, reserveRatioGapBP, poolName, poolSymbol);
+            ) = _buildConfigs(allowListEnabled, allowListManagerConfig, mintingEnabled, reserveRatioGapBP, poolName, poolSymbol);
 
             (, Factory.PoolDeployment memory deployment) =
                 _deployThroughFactory(vaultConfig, timelockConfig, commonPoolConfig, auxiliaryConfig, strategyFactory);
@@ -480,7 +480,7 @@ contract FactoryIntegrationTest is StvPoolHarness {
             );
 
             // Check ALLOW_LIST_MANAGER_ROLE based on allowlist configuration
-            if (allowlistEnabled) {
+            if (allowListEnabled) {
                 // For strategy pools, ALLOW_LIST_MANAGER_ROLE is not assigned to anyone
                 // For non-strategy pools, it goes to the configured allowListManager
                 if (strategyFactory != address(0)) {

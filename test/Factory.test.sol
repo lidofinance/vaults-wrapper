@@ -70,7 +70,7 @@ contract FactoryTest is Test {
     }
 
     function _buildConfigs(
-        bool allowlistEnabled,
+        bool allowListEnabled,
         address allowListManager,
         bool mintingEnabled,
         uint256 reserveRatioGapBP,
@@ -97,7 +97,7 @@ contract FactoryTest is Test {
         });
 
         auxiliaryConfig = Factory.AuxiliaryPoolConfig({
-            allowlistEnabled: allowlistEnabled,
+            allowListEnabled: allowListEnabled,
             allowListManager: allowListManager,
             mintingEnabled: mintingEnabled,
             reserveRatioGapBP: reserveRatioGapBP
@@ -204,7 +204,7 @@ contract FactoryTest is Test {
         assertEq(deployment.poolType, wrapperFactory.STRATEGY_POOL_TYPE());
     }
 
-    function test_allowlistEnabled() public {
+    function test_allowListEnabled() public {
         (
             Factory.VaultConfig memory vaultConfig,
             Factory.CommonPoolConfig memory commonPoolConfig,
