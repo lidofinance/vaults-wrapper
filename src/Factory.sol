@@ -91,22 +91,24 @@ contract Factory {
 
     /**
      * @notice Configuration specific to StvStETH pools (deprecated, kept for compatibility)
-     * @param allowlistEnabled Whether the pool requires allowlist for deposits
+     * @param allowListEnabled Whether the pool requires allowlist for deposits
      * @param reserveRatioGapBP Maximum allowed gap in reserve ratio in basis points
      */
     struct StvStETHPoolConfig {
-        bool allowlistEnabled;
+        bool allowListEnabled;
         uint256 reserveRatioGapBP;
     }
 
     /**
      * @notice Extended configuration for pools with minting or strategy capabilities
-     * @param allowlistEnabled Whether the pool requires allowlist for deposits
+     * @param allowListEnabled Whether the pool requires allowlist for deposits
+     * @param allowListManager Address to be granted ALLOW_LIST_MANAGER_ROLE (ignored for strategy pools)
      * @param mintingEnabled Whether the pool can mint stETH tokens
      * @param reserveRatioGapBP Maximum allowed gap in reserve ratio in basis points
      */
     struct AuxiliaryPoolConfig {
-        bool allowlistEnabled;
+        bool allowListEnabled;
+        address allowListManager;
         bool mintingEnabled;
         uint256 reserveRatioGapBP;
     }
@@ -356,6 +358,7 @@ contract Factory {
      * @param _timelockConfig Configuration for the timelock controller
      * @param _commonPoolConfig Common pool parameters (name, symbol, withdrawal delay)
      * @param _allowListEnabled Whether to enable allowlist for deposits
+     * @param _allowListManager Address to be granted ALLOW_LIST_MANAGER_ROLE
      * @return intermediate Deployment state needed for finish phase
      * @dev ETH for vault connection deposit should be sent in createPoolFinish
      */
@@ -363,10 +366,14 @@ contract Factory {
         VaultConfig memory _vaultConfig,
         TimelockConfig memory _timelockConfig,
         CommonPoolConfig memory _commonPoolConfig,
-        bool _allowListEnabled
+        bool _allowListEnabled,
+        address _allowListManager
     ) external returns (PoolIntermediate memory intermediate) {
         AuxiliaryPoolConfig memory _auxiliaryPoolConfig = AuxiliaryPoolConfig({
-            allowlistEnabled: _allowListEnabled, mintingEnabled: false, reserveRatioGapBP: 0
+            allowListEnabled: _allowListEnabled,
+            allowListManager: _allowListManager,
+            mintingEnabled: false,
+            reserveRatioGapBP: 0
         });
         intermediate =
             createPoolStart(_vaultConfig, _timelockConfig, _commonPoolConfig, _auxiliaryPoolConfig, address(0), "");
@@ -378,6 +385,7 @@ contract Factory {
      * @param _timelockConfig Configuration for the timelock controller
      * @param _commonPoolConfig Common pool parameters (name, symbol, withdrawal delay)
      * @param _allowListEnabled Whether to enable allowlist for deposits
+     * @param _allowListManager Address to be granted ALLOW_LIST_MANAGER_ROLE
      * @param _reserveRatioGapBP Maximum allowed reserve ratio gap in basis points
      * @return intermediate Deployment state needed for finish phase
      * @dev ETH for vault connection deposit should be sent in createPoolFinish
@@ -387,10 +395,14 @@ contract Factory {
         TimelockConfig memory _timelockConfig,
         CommonPoolConfig memory _commonPoolConfig,
         bool _allowListEnabled,
+        address _allowListManager,
         uint256 _reserveRatioGapBP
     ) external returns (PoolIntermediate memory intermediate) {
         AuxiliaryPoolConfig memory _auxiliaryPoolConfig = AuxiliaryPoolConfig({
-            allowlistEnabled: _allowListEnabled, mintingEnabled: true, reserveRatioGapBP: _reserveRatioGapBP
+            allowListEnabled: _allowListEnabled,
+            allowListManager: _allowListManager,
+            mintingEnabled: true,
+            reserveRatioGapBP: _reserveRatioGapBP
         });
 
         intermediate =
@@ -414,7 +426,10 @@ contract Factory {
         uint256 _reserveRatioGapBP
     ) external returns (PoolIntermediate memory intermediate) {
         AuxiliaryPoolConfig memory auxiliaryConfig = AuxiliaryPoolConfig({
-            allowlistEnabled: true, mintingEnabled: true, reserveRatioGapBP: _reserveRatioGapBP
+            allowListEnabled: true,
+            allowListManager: address(0),
+            mintingEnabled: true,
+            reserveRatioGapBP: _reserveRatioGapBP
         });
         intermediate = createPoolStart(
             _vaultConfig, _timelockConfig, _commonPoolConfig, auxiliaryConfig, address(GGV_STRATEGY_FACTORY), ""
@@ -444,6 +459,17 @@ contract Factory {
     ) public returns (PoolIntermediate memory intermediate) {
         if (bytes(_commonPoolConfig.name).length == 0 || bytes(_commonPoolConfig.symbol).length == 0) {
             revert InvalidConfiguration("name and symbol must be set");
+        }
+
+        // Validate allowListManager configuration
+        // For strategy pools, allowListManager is ignored so we don't validate it
+        if (_strategyFactory == address(0)) {
+            if (_auxiliaryConfig.allowListEnabled && _auxiliaryConfig.allowListManager == address(0)) {
+                revert InvalidConfiguration("allowListManager must be set when allowlist is enabled");
+            }
+            if (!_auxiliaryConfig.allowListEnabled && _auxiliaryConfig.allowListManager != address(0)) {
+                revert InvalidConfiguration("allowListManager must be zero when allowlist is disabled");
+            }
         }
 
         address timelock = TIMELOCK_FACTORY.deploy(
@@ -481,12 +507,12 @@ contract Factory {
         address poolImpl = address(0);
         if (poolType == STV_POOL_TYPE) {
             poolImpl = STV_POOL_FACTORY.deploy(
-                dashboardAddress, _auxiliaryConfig.allowlistEnabled, wqProxy, distributor, poolType
+                dashboardAddress, _auxiliaryConfig.allowListEnabled, wqProxy, distributor, poolType
             );
         } else if (poolType == STV_STETH_POOL_TYPE || poolType == STRATEGY_POOL_TYPE) {
             poolImpl = STV_STETH_POOL_FACTORY.deploy(
                 dashboardAddress,
-                _auxiliaryConfig.allowlistEnabled,
+                _auxiliaryConfig.allowListEnabled,
                 _auxiliaryConfig.reserveRatioGapBP,
                 wqProxy,
                 distributor,
@@ -641,6 +667,13 @@ contract Factory {
             }
         }
 
+        if (_auxiliaryConfig.allowListEnabled) {
+            if (_strategyFactory == address(0)) {
+                pool.grantRole(pool.ALLOW_LIST_MANAGER_ROLE(), _auxiliaryConfig.allowListManager);
+            }
+            pool.revokeRole(pool.ALLOW_LIST_MANAGER_ROLE(), tempAdmin);
+        }
+
         pool.grantRole(DEFAULT_ADMIN_ROLE, _intermediate.timelock);
         pool.revokeRole(DEFAULT_ADMIN_ROLE, tempAdmin);
 
@@ -688,8 +721,8 @@ contract Factory {
         poolType = STV_POOL_TYPE;
         if (_strategyFactory != address(0)) {
             poolType = STRATEGY_POOL_TYPE;
-            if (!_auxiliaryConfig.allowlistEnabled) {
-                revert InvalidConfiguration("allowlistEnabled must be true if strategy factory is set");
+            if (!_auxiliaryConfig.allowListEnabled) {
+                revert InvalidConfiguration("allowListEnabled must be true if strategy factory is set");
             }
             if (!_auxiliaryConfig.mintingEnabled) {
                 revert InvalidConfiguration("mintingEnabled must be true if strategy factory is set");

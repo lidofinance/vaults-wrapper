@@ -14,7 +14,7 @@ contract StvStETHPoolHarness is StvPoolHarness {
         returns (WrapperContext memory)
     {
         DeploymentConfig memory config = DeploymentConfig({
-            allowlistEnabled: enableAllowlist,
+            allowListEnabled: enableAllowlist,
             mintingEnabled: true,
             owner: NODE_OPERATOR,
             nodeOperator: NODE_OPERATOR,
