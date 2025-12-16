@@ -47,6 +47,7 @@ contract DeployPool is Script {
         returns (string memory json)
     {
         json = vm.serializeBool("_auxiliaryPoolConfig", "allowlistEnabled", _cfg.allowlistEnabled);
+        json = vm.serializeAddress("_auxiliaryPoolConfig", "allowListManager", _cfg.allowListManager);
         json = vm.serializeBool("_auxiliaryPoolConfig", "mintingEnabled", _cfg.mintingEnabled);
         json = vm.serializeUint("_auxiliaryPoolConfig", "reserveRatioGapBP", _cfg.reserveRatioGapBP);
     }
@@ -168,6 +169,7 @@ contract DeployPool is Script {
 
         p.auxiliaryPoolConfig = Factory.AuxiliaryPoolConfig({
             allowlistEnabled: vm.parseJsonBool(json, "$.auxiliaryPoolConfig.allowlistEnabled"),
+            allowListManager: vm.parseJsonAddress(json, "$.auxiliaryPoolConfig.allowListManager"),
             mintingEnabled: vm.parseJsonBool(json, "$.auxiliaryPoolConfig.mintingEnabled"),
             reserveRatioGapBP: vm.parseJsonUint(json, "$.auxiliaryPoolConfig.reserveRatioGapBP")
         });
@@ -221,6 +223,7 @@ contract DeployPool is Script {
             }),
             auxiliaryPoolConfig: Factory.AuxiliaryPoolConfig({
                 allowlistEnabled: vm.parseJsonBool(json, "$.config.auxiliaryPoolConfig.allowlistEnabled"),
+                allowListManager: vm.parseJsonAddress(json, "$.config.auxiliaryPoolConfig.allowListManager"),
                 mintingEnabled: vm.parseJsonBool(json, "$.config.auxiliaryPoolConfig.mintingEnabled"),
                 reserveRatioGapBP: vm.parseJsonUint(json, "$.config.auxiliaryPoolConfig.reserveRatioGapBP")
             }),

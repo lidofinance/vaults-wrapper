@@ -13,6 +13,7 @@
   },
   "auxiliaryPoolConfig": {
     "allowlistEnabled": true,
+    "allowListManager": "0x0000000000000000000000000000000000000000",
     "mintingEnabled": true,
     "reserveRatioGapBP": 250
   },

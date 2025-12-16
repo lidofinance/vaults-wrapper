@@ -38,6 +38,7 @@ contract FactoryTest is Test {
     address public admin = address(0x1);
     address public nodeOperator = address(0x2);
     address public nodeOperatorManager = address(0x3);
+    address public allowListManager = address(0x4);
 
     uint256 public connectDeposit = 1 ether;
     uint256 internal immutable FUSAKA_TX_GAS_LIMIT = 16_777_216;
@@ -70,6 +71,7 @@ contract FactoryTest is Test {
 
     function _buildConfigs(
         bool allowlistEnabled,
+        address allowListManager,
         bool mintingEnabled,
         uint256 reserveRatioGapBP,
         string memory name,
@@ -95,7 +97,10 @@ contract FactoryTest is Test {
         });
 
         auxiliaryConfig = Factory.AuxiliaryPoolConfig({
-            allowlistEnabled: allowlistEnabled, mintingEnabled: mintingEnabled, reserveRatioGapBP: reserveRatioGapBP
+            allowlistEnabled: allowlistEnabled,
+            allowListManager: allowListManager,
+            mintingEnabled: mintingEnabled,
+            reserveRatioGapBP: reserveRatioGapBP
         });
     }
 
@@ -108,7 +113,7 @@ contract FactoryTest is Test {
             Factory.VaultConfig memory vaultConfig,
             Factory.CommonPoolConfig memory commonPoolConfig,
             Factory.AuxiliaryPoolConfig memory auxiliaryConfig
-        ) = _buildConfigs(false, false, 0, "Factory STV Pool", "FSTV");
+        ) = _buildConfigs(false, address(0), false, 0, "Factory STV Pool", "FSTV");
 
         Factory.TimelockConfig memory timelockConfig = _defaultTimelockConfig();
         address strategyFactory = address(0);
@@ -148,7 +153,7 @@ contract FactoryTest is Test {
             Factory.VaultConfig memory vaultConfig,
             Factory.CommonPoolConfig memory commonPoolConfig,
             Factory.AuxiliaryPoolConfig memory auxiliaryConfig
-        ) = _buildConfigs(false, false, 0, "Factory STV Pool", "FSTV");
+        ) = _buildConfigs(false, address(0), false, 0, "Factory STV Pool", "FSTV");
 
         Factory.TimelockConfig memory timelockConfig = _defaultTimelockConfig();
         address strategyFactory = address(0);
@@ -169,7 +174,7 @@ contract FactoryTest is Test {
             Factory.VaultConfig memory vaultConfig,
             Factory.CommonPoolConfig memory commonPoolConfig,
             Factory.AuxiliaryPoolConfig memory auxiliaryConfig
-        ) = _buildConfigs(true, true, 0, "Factory stETH Pool", "FSTETH");
+        ) = _buildConfigs(true, address(0), true, 0, "Factory stETH Pool", "FSTETH");
 
         Factory.TimelockConfig memory timelockConfig = _defaultTimelockConfig();
         address strategyFactory = address(wrapperFactory.GGV_STRATEGY_FACTORY());
@@ -204,7 +209,7 @@ contract FactoryTest is Test {
             Factory.VaultConfig memory vaultConfig,
             Factory.CommonPoolConfig memory commonPoolConfig,
             Factory.AuxiliaryPoolConfig memory auxiliaryConfig
-        ) = _buildConfigs(true, false, 0, "Factory STV Pool", "FSTV");
+        ) = _buildConfigs(true, allowListManager, false, 0, "Factory STV Pool", "FSTV");
 
         Factory.TimelockConfig memory timelockConfig = _defaultTimelockConfig();
         address strategyFactory = address(0);
@@ -228,7 +233,7 @@ contract FactoryTest is Test {
             Factory.VaultConfig memory vaultConfig,
             Factory.CommonPoolConfig memory commonPoolConfig,
             Factory.AuxiliaryPoolConfig memory auxiliaryConfig
-        ) = _buildConfigs(false, false, 0, "Factory STV Pool", "FSTV");
+        ) = _buildConfigs(false, address(0), false, 0, "Factory STV Pool", "FSTV");
 
         Factory.TimelockConfig memory timelockConfig = _defaultTimelockConfig();
         address strategyFactory = address(0);
@@ -258,7 +263,7 @@ contract FactoryTest is Test {
             Factory.VaultConfig memory vaultConfig,
             Factory.CommonPoolConfig memory commonPoolConfig,
             Factory.AuxiliaryPoolConfig memory auxiliaryConfig
-        ) = _buildConfigs(false, true, 0, "Factory stETH Pool", "FSTETH");
+        ) = _buildConfigs(false, address(0), true, 0, "Factory stETH Pool", "FSTETH");
 
         Factory.TimelockConfig memory timelockConfig = _defaultTimelockConfig();
         address strategyFactory = address(0);
@@ -288,7 +293,7 @@ contract FactoryTest is Test {
             Factory.VaultConfig memory vaultConfig,
             Factory.CommonPoolConfig memory commonPoolConfig,
             Factory.AuxiliaryPoolConfig memory auxiliaryConfig
-        ) = _buildConfigs(true, true, 0, "Factory Strategy Pool", "FSP");
+        ) = _buildConfigs(true, address(0), true, 0, "Factory Strategy Pool", "FSP");
 
         Factory.TimelockConfig memory timelockConfig = _defaultTimelockConfig();
         address strategyFactory = address(wrapperFactory.GGV_STRATEGY_FACTORY());
@@ -321,7 +326,7 @@ contract FactoryTest is Test {
             Factory.VaultConfig memory vaultConfig,
             Factory.CommonPoolConfig memory commonPoolConfig,
             Factory.AuxiliaryPoolConfig memory auxiliaryConfig
-        ) = _buildConfigs(false, false, 0, "Deadline Test Pool", "DTP");
+        ) = _buildConfigs(false, address(0), false, 0, "Deadline Test Pool", "DTP");
 
         Factory.TimelockConfig memory timelockConfig = _defaultTimelockConfig();
         address strategyFactory = address(0);
@@ -351,7 +356,7 @@ contract FactoryTest is Test {
             Factory.VaultConfig memory vaultConfig,
             Factory.CommonPoolConfig memory commonPoolConfig,
             Factory.AuxiliaryPoolConfig memory auxiliaryConfig
-        ) = _buildConfigs(false, false, 0, "Deadline Test Pool", "DTP");
+        ) = _buildConfigs(false, address(0), false, 0, "Deadline Test Pool", "DTP");
 
         Factory.TimelockConfig memory timelockConfig = _defaultTimelockConfig();
         address strategyFactory = address(0);
@@ -379,7 +384,7 @@ contract FactoryTest is Test {
             Factory.VaultConfig memory vaultConfig,
             Factory.CommonPoolConfig memory commonPoolConfig,
             Factory.AuxiliaryPoolConfig memory auxiliaryConfig
-        ) = _buildConfigs(false, false, 0, "Deadline Test Pool", "DTP");
+        ) = _buildConfigs(false, address(0), false, 0, "Deadline Test Pool", "DTP");
 
         Factory.TimelockConfig memory timelockConfig = _defaultTimelockConfig();
         address strategyFactory = address(0);
@@ -406,7 +411,7 @@ contract FactoryTest is Test {
             Factory.VaultConfig memory vaultConfig,
             Factory.CommonPoolConfig memory commonPoolConfig,
             Factory.AuxiliaryPoolConfig memory auxiliaryConfig
-        ) = _buildConfigs(false, false, 0, "Fake Pool", "FAKE");
+        ) = _buildConfigs(false, address(0), false, 0, "Fake Pool", "FAKE");
 
         Factory.TimelockConfig memory timelockConfig = _defaultTimelockConfig();
         address strategyFactory = address(0);
@@ -436,7 +441,7 @@ contract FactoryTest is Test {
             Factory.VaultConfig memory vaultConfig,
             Factory.CommonPoolConfig memory commonPoolConfig,
             Factory.AuxiliaryPoolConfig memory auxiliaryConfig
-        ) = _buildConfigs(false, false, 0, "Deadline Test Pool", "DTP");
+        ) = _buildConfigs(false, address(0), false, 0, "Deadline Test Pool", "DTP");
 
         Factory.TimelockConfig memory timelockConfig = _defaultTimelockConfig();
         address strategyFactory = address(0);
@@ -465,7 +470,7 @@ contract FactoryTest is Test {
             Factory.VaultConfig memory vaultConfig,
             Factory.CommonPoolConfig memory commonPoolConfig,
             Factory.AuxiliaryPoolConfig memory auxiliaryConfig
-        ) = _buildConfigs(false, false, 0, "Deadline Test Pool", "DTP");
+        ) = _buildConfigs(false, address(0), false, 0, "Deadline Test Pool", "DTP");
 
         Factory.TimelockConfig memory timelockConfig = _defaultTimelockConfig();
         address strategyFactory = address(0);

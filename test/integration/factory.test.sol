@@ -14,6 +14,7 @@ import {Vm} from "forge-std/Vm.sol";
 
 contract FactoryIntegrationTest is StvPoolHarness {
     Factory internal factory;
+    address internal constant ALLOW_LIST_MANAGER = address(0xA110);
 
     function setUp() public {
         _initializeCore();
@@ -25,6 +26,7 @@ contract FactoryIntegrationTest is StvPoolHarness {
 
     function _buildConfigs(
         bool allowlistEnabled,
+        address allowListManager,
         bool mintingEnabled,
         uint256 reserveRatioGapBP,
         string memory name,
@@ -51,7 +53,10 @@ contract FactoryIntegrationTest is StvPoolHarness {
         commonPoolConfig = Factory.CommonPoolConfig({minWithdrawalDelayTime: 1 days, name: name, symbol: symbol, emergencyCommittee: address(0)});
 
         auxiliaryConfig = Factory.AuxiliaryPoolConfig({
-            allowlistEnabled: allowlistEnabled, mintingEnabled: mintingEnabled, reserveRatioGapBP: reserveRatioGapBP
+            allowlistEnabled: allowlistEnabled,
+            allowListManager: allowListManager,
+            mintingEnabled: mintingEnabled,
+            reserveRatioGapBP: reserveRatioGapBP
         });
     }
 
@@ -80,7 +85,7 @@ contract FactoryIntegrationTest is StvPoolHarness {
             Factory.CommonPoolConfig memory commonPoolConfig,
             Factory.AuxiliaryPoolConfig memory auxiliaryConfig,
             Factory.TimelockConfig memory timelockConfig
-        ) = _buildConfigs(false, false, 0, "Factory Test Pool", "FT-STV");
+        ) = _buildConfigs(false, address(0), false, 0, "Factory Test Pool", "FT-STV");
         address strategyFactory = address(0);
 
         assertGt(CONNECT_DEPOSIT, 1, "CONNECT_DEPOSIT must be > 1 for this test");
@@ -105,7 +110,7 @@ contract FactoryIntegrationTest is StvPoolHarness {
             Factory.CommonPoolConfig memory commonPoolConfig,
             Factory.AuxiliaryPoolConfig memory auxiliaryConfig,
             Factory.TimelockConfig memory timelockConfig
-        ) = _buildConfigs(false, false, 0, "Factory No Mint", "FNM");
+        ) = _buildConfigs(false, address(0), false, 0, "Factory No Mint", "FNM");
         address strategyFactory = address(0);
 
         (, Factory.PoolDeployment memory deployment) =
@@ -131,7 +136,7 @@ contract FactoryIntegrationTest is StvPoolHarness {
             Factory.CommonPoolConfig memory commonPoolConfig,
             Factory.AuxiliaryPoolConfig memory auxiliaryConfig,
             Factory.TimelockConfig memory timelockConfig
-        ) = _buildConfigs(false, true, 0, "Factory Mint Pool", "FMP");
+        ) = _buildConfigs(false, address(0), true, 0, "Factory Mint Pool", "FMP");
         address strategyFactory = address(0);
 
         (, Factory.PoolDeployment memory deployment) =
@@ -149,7 +154,7 @@ contract FactoryIntegrationTest is StvPoolHarness {
             Factory.CommonPoolConfig memory commonPoolConfig,
             Factory.AuxiliaryPoolConfig memory auxiliaryConfig,
             Factory.TimelockConfig memory timelockConfig
-        ) = _buildConfigs(true, true, 500, "Factory Strategy Pool", "FSP");
+        ) = _buildConfigs(true, address(0), true, 500, "Factory Strategy Pool", "FSP");
         address strategyFactory = address(factory.GGV_STRATEGY_FACTORY());
 
         (, Factory.PoolDeployment memory deployment) =
@@ -180,7 +185,7 @@ contract FactoryIntegrationTest is StvPoolHarness {
             Factory.CommonPoolConfig memory commonPoolConfig,
             Factory.AuxiliaryPoolConfig memory auxiliaryConfig,
             Factory.TimelockConfig memory timelockConfig
-        ) = _buildConfigs(false, false, 0, "Factory Tamper", "FTAMP");
+        ) = _buildConfigs(false, address(0), false, 0, "Factory Tamper", "FTAMP");
 
         address strategyFactory = address(0);
 
@@ -205,7 +210,7 @@ contract FactoryIntegrationTest is StvPoolHarness {
             Factory.CommonPoolConfig memory commonPoolConfig,
             Factory.AuxiliaryPoolConfig memory auxiliaryConfig,
             Factory.TimelockConfig memory timelockConfig
-        ) = _buildConfigs(false, false, 0, "Factory Tamper Config", "FTCFG");
+        ) = _buildConfigs(false, address(0), false, 0, "Factory Tamper Config", "FTCFG");
 
         address strategyFactory = address(0);
 
@@ -235,7 +240,7 @@ contract FactoryIntegrationTest is StvPoolHarness {
             Factory.CommonPoolConfig memory commonPoolConfig,
             Factory.AuxiliaryPoolConfig memory auxiliaryConfig,
             Factory.TimelockConfig memory timelockConfig
-        ) = _buildConfigs(false, false, 0, "Factory Wrong Sender", "FWS");
+        ) = _buildConfigs(false, address(0), false, 0, "Factory Wrong Sender", "FWS");
 
         address strategyFactory = address(0);
 
@@ -261,7 +266,7 @@ contract FactoryIntegrationTest is StvPoolHarness {
             Factory.CommonPoolConfig memory commonPoolConfig,
             Factory.AuxiliaryPoolConfig memory auxiliaryConfig,
             Factory.TimelockConfig memory timelockConfig
-        ) = _buildConfigs(false, false, 0, "Factory Double Finish", "FDF");
+        ) = _buildConfigs(false, address(0), false, 0, "Factory Double Finish", "FDF");
 
         address strategyFactory = address(0);
 
@@ -288,7 +293,7 @@ contract FactoryIntegrationTest is StvPoolHarness {
             Factory.CommonPoolConfig memory commonPoolConfig,
             Factory.AuxiliaryPoolConfig memory auxiliaryConfig,
             Factory.TimelockConfig memory timelockConfig
-        ) = _buildConfigs(false, false, 0, "Factory Event Pool", "FEP");
+        ) = _buildConfigs(false, address(0), false, 0, "Factory Event Pool", "FEP");
         address strategyFactory = address(0);
 
         vm.startPrank(vaultConfig.nodeOperator);
@@ -300,7 +305,7 @@ contract FactoryIntegrationTest is StvPoolHarness {
 
         Vm.Log[] memory entries = vm.getRecordedLogs();
         bytes32 expectedTopic = keccak256(
-            "PoolCreationStarted(address,(address,address,uint256,uint256),(uint256,string,string,address),(bool,bool,uint256),(uint256,address,address),address,bytes,(address,address,address,address,address,address),uint256)"
+            "PoolCreationStarted(address,(address,address,uint256,uint256),(uint256,string,string,address),(bool,address,bool,uint256),(uint256,address,address),address,bytes,(address,address,address,address,address,address),uint256)"
         );
 
         bool found;
@@ -346,6 +351,7 @@ contract FactoryIntegrationTest is StvPoolHarness {
             assertEq(emittedCommonPoolConfig.symbol, commonPoolConfig.symbol, "symbol should match");
 
             assertEq(emittedAuxiliaryConfig.allowlistEnabled, auxiliaryConfig.allowlistEnabled, "allowlistEnabled should match");
+            assertEq(emittedAuxiliaryConfig.allowListManager, auxiliaryConfig.allowListManager, "allowListManager should match");
             assertEq(emittedAuxiliaryConfig.mintingEnabled, auxiliaryConfig.mintingEnabled, "mintingEnabled should match");
             assertEq(emittedAuxiliaryConfig.reserveRatioGapBP, auxiliaryConfig.reserveRatioGapBP, "reserveRatioGapBP should match");
 
@@ -373,22 +379,29 @@ contract FactoryIntegrationTest is StvPoolHarness {
     }
 
     function test_initial_acl_configuration() public {
-        // Test all three pool types: StvPool (no minting), StvStETHPool (minting), and StvStrategyPool (strategy)
-        for (uint256 i = 0; i < 3; i++) {
-            bool allowlistEnabled = (i == 2);
-            bool mintingEnabled = (i >= 1);
-            uint256 reserveRatioGapBP = (i == 2) ? 500 : 0;
-            address strategyFactory = (i == 2) ? address(factory.GGV_STRATEGY_FACTORY()) : address(0);
+        // Test all four pool configurations:
+        // i=0: StvPool (no minting, no allowlist)
+        // i=1: StvStETHPool (minting, no allowlist)
+        // i=2: StvPool with allowlist (allowListManager configured)
+        // i=3: StvStrategyPool (strategy, allowlist with timelock as manager)
+        for (uint256 i = 0; i < 4; i++) {
+            bool allowlistEnabled = (i >= 2);
+            bool mintingEnabled = (i == 1 || i == 3);
+            uint256 reserveRatioGapBP = (i == 3) ? 500 : 0;
+            address strategyFactory = (i == 3) ? address(factory.GGV_STRATEGY_FACTORY()) : address(0);
+            // For strategy pools, allowListManager config is ignored (timelock is used)
+            // For non-strategy pools with allowlist, use ALLOW_LIST_MANAGER
+            address allowListManagerConfig = (i == 2) ? ALLOW_LIST_MANAGER : address(0);
 
-            string memory poolName = i == 0 ? "Factory StvPool" : i == 1 ? "Factory StvStETHPool" : "Factory StrategyPool";
-            string memory poolSymbol = i == 0 ? "FSTV" : i == 1 ? "FSTETH" : "FSTRAT";
+            string memory poolName = i == 0 ? "Factory StvPool" : i == 1 ? "Factory StvStETHPool" : i == 2 ? "Factory StvPoolAllowlist" : "Factory StrategyPool";
+            string memory poolSymbol = i == 0 ? "FSTV" : i == 1 ? "FSTETH" : i == 2 ? "FSTVA" : "FSTRAT";
 
             (
                 Factory.VaultConfig memory vaultConfig,
                 Factory.CommonPoolConfig memory commonPoolConfig,
                 Factory.AuxiliaryPoolConfig memory auxiliaryConfig,
                 Factory.TimelockConfig memory timelockConfig
-            ) = _buildConfigs(allowlistEnabled, mintingEnabled, reserveRatioGapBP, poolName, poolSymbol);
+            ) = _buildConfigs(allowlistEnabled, allowListManagerConfig, mintingEnabled, reserveRatioGapBP, poolName, poolSymbol);
 
             (, Factory.PoolDeployment memory deployment) =
                 _deployThroughFactory(vaultConfig, timelockConfig, commonPoolConfig, auxiliaryConfig, strategyFactory);
@@ -468,10 +481,25 @@ contract FactoryIntegrationTest is StvPoolHarness {
 
             // Check ALLOW_LIST_MANAGER_ROLE based on allowlist configuration
             if (allowlistEnabled) {
-                assertTrue(
-                    pool.hasRole(pool.ALLOW_LIST_MANAGER_ROLE(), timelock),
-                    "timelock should have ALLOW_LIST_MANAGER_ROLE when allowlist enabled"
-                );
+                // For strategy pools, ALLOW_LIST_MANAGER_ROLE is not assigned to anyone
+                // For non-strategy pools, it goes to the configured allowListManager
+                if (strategyFactory != address(0)) {
+                    // Strategy pool: no one has ALLOW_LIST_MANAGER_ROLE
+                    assertFalse(
+                        pool.hasRole(pool.ALLOW_LIST_MANAGER_ROLE(), timelock),
+                        "timelock should not have ALLOW_LIST_MANAGER_ROLE for strategy pools"
+                    );
+                } else {
+                    // Non-strategy pool: allowListManager has the role
+                    assertTrue(
+                        pool.hasRole(pool.ALLOW_LIST_MANAGER_ROLE(), allowListManagerConfig),
+                        "allowListManager should have ALLOW_LIST_MANAGER_ROLE when allowlist enabled"
+                    );
+                    assertFalse(
+                        pool.hasRole(pool.ALLOW_LIST_MANAGER_ROLE(), timelock),
+                        "timelock should not have ALLOW_LIST_MANAGER_ROLE for non-strategy pools"
+                    );
+                }
                 assertFalse(
                     pool.hasRole(pool.ALLOW_LIST_MANAGER_ROLE(), address(factory)),
                     "factory should not have ALLOW_LIST_MANAGER_ROLE on pool"

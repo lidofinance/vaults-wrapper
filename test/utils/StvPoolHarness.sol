@@ -124,6 +124,7 @@ contract StvPoolHarness is Test {
 
         Factory.AuxiliaryPoolConfig memory auxiliaryConfig = Factory.AuxiliaryPoolConfig({
             allowlistEnabled: config.allowlistEnabled,
+            allowListManager: config.allowlistEnabled ? owner : address(0),
             mintingEnabled: config.mintingEnabled,
             reserveRatioGapBP: config.reserveRatioGapBP
         });

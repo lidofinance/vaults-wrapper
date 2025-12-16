@@ -13,6 +13,7 @@
   },
   "auxiliaryPoolConfig": {
     "allowlistEnabled": false,
+    "allowListManager": "0xcc95b0Dbe1519AfaC58d954444839A80700380a2",
     "mintingEnabled": false,
     "reserveRatioGapBP": 0
   },
