@@ -1,14 +1,14 @@
 {
   "deployment": {
-    "factory": "0xc0FaeB19bEBd0D4Cc730E99E3625E1570d280C26",
+    "factory": "0x66eb579EA49573F042d694200f0a4cA667B0D9B9",
     "network": "560048"
   },
   "factories": {
-    "distributorFactory": "0xd906B5b75184b6705Ff45DC52FC870fDa3b3824A",
-    "ggvStrategyFactory": "0x61ca214f45CD0B5FA751063e8dA7FEc4b7d1c14B",
-    "stvPoolFactory": "0x1a86eEBe7D938a45e707d707FAc0efc381c275Dc",
-    "stvStETHPoolFactory": "0xE4aFCA15d92700A8Ca566Dab734ABD94eDDd37E0",
-    "timelockFactory": "0x9fdFf8efBaF7505C5E03Ad85Dd416BC39Df1e372",
-    "withdrawalQueueFactory": "0x98BBb7a451040464B4E98821295EaE6F295d7E8F"
+    "distributorFactory": "0x1ea2E6B3C3A723042A32A565227D5AbBf2359df7",
+    "ggvStrategyFactory": "0xD2d7eA0baacd77aE117Ab1d9D4317830884F2935",
+    "stvPoolFactory": "0x783DBAA9165E4d78453dAB85c64CD19684c12C71",
+    "stvStETHPoolFactory": "0xe95b68E74747dB78e253331Dd121664779465436",
+    "timelockFactory": "0x08ba7d7Ba6a3B99268e0698ae4746FAC4ed93951",
+    "withdrawalQueueFactory": "0xeeb5356160517fd1ca1148540570469eFF430d19"
   }
 }
