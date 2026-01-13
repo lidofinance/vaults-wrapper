@@ -133,13 +133,12 @@ contract StvPool is Initializable, ERC20Upgradeable, AllowList, FeaturePausable 
     }
 
     /**
-     * @notice Assets owned by an account
-     * @param _account The account to query
-     * @return assets Amount of assets (18 decimals)
-     * @dev Overridable method to include other assets if needed
+     * @notice Assets of a specific account
+     * @param _account The address of the account
+     * @return assets Assets of the account (18 decimals)
      */
-    function assetsOf(address _account) public view virtual returns (uint256 assets) {
-        assets = nominalAssetsOf(_account); /* plus other assets if any */
+    function assetsOf(address _account) public view returns (uint256 assets) {
+        assets = _convertToAssets(balanceOf(_account));
     }
 
     // =================================================================================

@@ -221,6 +221,18 @@ contract StvStETHPool is StvPool {
      * @dev Includes total assets + total exceeding minted stETH
      */
     function totalAssets() public view override returns (uint256 assets) {
+        /// As a result of the rebalancing initiated in the Staking Vault, bypassing the Wrapper,
+        /// part of the total liability can be reduced at the expense of the Staking Vault's assets.
+        ///
+        /// As a result of this operation, the total liabilityShares on the Staking Vault will decrease,
+        /// while mintedStethShares will remain the same, as will the users' debts on these obligations.
+        /// The difference between these two values is the stETH that users owe to Wrapper, but which
+        /// should not be returned to Staking Vault, but should be distributed among all participants
+        /// in exchange for the withdrawn ETH.
+        ///
+        /// Thus, in rare situations, StvStETHPool may have two assets: ETH and stETH, which are
+        /// distributed among all users in proportion to their shares.
+
         uint256 exceedingMintedSteth = totalExceedingMintedSteth();
 
         /// total assets = nominal assets + exceeding minted steth - unassigned liability steth
@@ -233,26 +245,6 @@ contract StvStETHPool is StvPool {
         } else {
             assets = Math.saturatingSub(totalNominalAssets(), totalUnassignedLiabilitySteth());
         }
-    }
-
-    /**
-     * @notice Assets of a specific account
-     * @param _account The address of the account
-     * @return assets Assets of the account (18 decimals)
-     */
-    function assetsOf(address _account) public view override returns (uint256 assets) {
-        /// As a result of the rebalancing initiated in the Staking Vault, bypassing the Wrapper,
-        /// part of the total liability can be reduced at the expense of the Staking Vault's assets.
-        ///
-        /// As a result of this operation, the total liabilityShares on the Staking Vault will decrease,
-        /// while mintedStethShares will remain the same, as will the users' debts on these obligations.
-        /// The difference between these two values is the stETH that users owe to Wrapper, but which
-        /// should not be returned to Staking Vault, but should be distributed among all participants
-        /// in exchange for the withdrawn ETH.
-        ///
-        /// Thus, in rare situations, StvStETHPool may have two assets: ETH and stETH, which are
-        /// distributed among all users in proportion to their shares.
-        assets = _convertToAssets(balanceOf(_account));
     }
 
     // =================================================================================
