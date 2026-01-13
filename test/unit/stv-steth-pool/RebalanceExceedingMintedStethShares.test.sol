@@ -8,6 +8,7 @@ import {StvStETHPool} from "src/StvStETHPool.sol";
 import {IERC20Errors} from "@openzeppelin/contracts/interfaces/draft-IERC6093.sol";
 
 contract RebalanceExceedingMintedStethSharesTest is Test, SetupStvStETHPool {
+    uint256 constant SHARE_RATE_TOLERANCE = 2;
     uint256 ethToDeposit = 10 ether;
     uint256 stethSharesToMint = 1 * 10 ** 18;
 
@@ -324,6 +325,48 @@ contract RebalanceExceedingMintedStethSharesTest is Test, SetupStvStETHPool {
         pool.rebalanceExceedingMintedStethShares(sharesToRebalance);
 
         assertEq(pool.mintedStethSharesOf(address(this)), mintedBefore - sharesToRebalance);
+    }
+
+    function test_RebalanceExceedingMintedStethShares_BadDebt_KeepsShareRate() public {
+        // Deposit more to have enough STV for rebalancing after losses
+        pool.depositETH{value: 20 ether}(address(this), address(0));
+
+        // First, mint max shares to create a leveraged position
+        uint256 maxShares = pool.remainingMintingCapacitySharesOf(address(this), 0);
+        pool.mintStethShares(maxShares);
+
+        // Create exceeding shares by external rebalancing on vault
+        // (rebalance partial amount to keep some liability)
+        uint256 totalMinted = pool.totalMintedStethShares();
+        uint256 partialRebalance = totalMinted / 4;
+        dashboard.rebalanceVaultWithShares(partialRebalance);
+
+        uint256 exceedingShares = pool.totalExceedingMintedStethShares();
+        assertGt(exceedingShares, 0, "should have exceeding shares");
+
+        // Simulate loss to make bad debt on vault
+        uint256 liabilityShares = pool.totalLiabilityShares();
+        uint256 vaultValue = dashboard.VAULT_HUB().totalValue(dashboard.stakingVault());
+        uint256 minValueToCoverLiability = steth.getPooledEthBySharesRoundUp(liabilityShares);
+        assertGt(vaultValue, minValueToCoverLiability);
+
+        uint256 loss = vaultValue - minValueToCoverLiability + 1;
+        dashboard.mock_simulateRewards(-int256(loss));
+
+        uint256 valueShares = steth.getSharesByPooledEth(dashboard.VAULT_HUB().totalValue(dashboard.stakingVault()));
+        assertLt(valueShares, pool.totalLiabilityShares(), "vault should have bad debt");
+
+        uint256 rateBefore = pool.previewRedeem(1e27);
+
+        uint256 sharesToRebalance = exceedingShares / 2;
+        uint256 stvRequired = pool.previewWithdraw(steth.getPooledEthBySharesRoundUp(sharesToRebalance));
+        assertLe(stvRequired, pool.balanceOf(address(this)));
+
+        pool.rebalanceExceedingMintedStethShares(sharesToRebalance);
+
+        uint256 rateAfter = pool.previewRedeem(1e27);
+        assertGe(rateAfter, rateBefore, "share rate should not decrease");
+        assertApproxEqAbs(rateAfter, rateBefore, SHARE_RATE_TOLERANCE, "share rate should be equal within tolerance");
     }
 
     // Undercollateralized account cannot rebalance full debt due to insufficient STV
