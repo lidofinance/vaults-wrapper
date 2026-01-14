@@ -37,6 +37,7 @@ contract Distributor is AccessControlEnumerable {
 
     // ==================== Errors ====================
     error AlreadyProcessed();
+    error AlreadySetInThisBlock();
     error InvalidProof();
     error ClaimableTooLow();
     error RootNotSet();
@@ -50,7 +51,7 @@ contract Distributor is AccessControlEnumerable {
      * @param _manager The address of the manager (MANAGER_ROLE)
      */
     constructor(address _owner, address _manager) {
-        lastProcessedBlock = block.number;
+        lastProcessedBlock = 0;
 
         _grantRole(DEFAULT_ADMIN_ROLE, _owner);
         _grantRole(MANAGER_ROLE, _manager);
@@ -86,6 +87,7 @@ contract Distributor is AccessControlEnumerable {
     function setMerkleRoot(bytes32 _root, string calldata _cid) external {
         _checkRole(MANAGER_ROLE, msg.sender);
         if (_root == root && keccak256(bytes(_cid)) == keccak256(bytes(cid))) revert AlreadyProcessed();
+        if (block.number == lastProcessedBlock) revert AlreadySetInThisBlock();
 
         emit MerkleRootUpdated(root, _root, cid, _cid, lastProcessedBlock, block.number);
 
