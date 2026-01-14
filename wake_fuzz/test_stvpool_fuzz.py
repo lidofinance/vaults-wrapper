@@ -97,18 +97,20 @@ class FuzzPool(FuzzTest):
 
     node_operators: list[NodeOperatorInfo]
 
-
     ## TO BE OVERRIDEN
-    def pool_build_configs(self) -> tuple[
+    def pool_build_configs(
+        self,
+    ) -> tuple[
         Factory.VaultConfig, Factory.CommonPoolConfig, Factory.AuxiliaryPoolConfig
     ]:
         return self.build_configs(False, False, 0, "Factory STV Pool", "FSTV")
 
     ## TO BE OBERRRIDEN
-    def past_pool_specific_config(self, deployment: Factory.PoolDeployment, deploy_tx: TransactionAbc):
+    def past_pool_specific_config(
+        self, deployment: Factory.PoolDeployment, deploy_tx: TransactionAbc
+    ):
         self.pool = StvPool(deployment.pool)
         assert self.withdrawal_queue.IS_REBALANCING_SUPPORTED() == False
-
 
     def pre_sequence(self) -> None:
         """Deploy mock environment and create a pool before fuzz sequence runs."""
@@ -152,7 +154,7 @@ class FuzzPool(FuzzTest):
         self.stv_pool_factory = StvPoolFactory.deploy(from_=self.deployer)
         self.stv_steth_pool_factory = StvStETHPoolFactory.deploy(from_=self.deployer)
         self.withdrawal_queue_factory = WithdrawalQueueFactory.deploy(
-            from_ = self.deployer
+            from_=self.deployer
         )
         self.distributor_factory = DistributorFactory.deploy(from_=self.deployer)
         dummy_teller = DummyImplementation.deploy(from_=self.deployer)
@@ -179,7 +181,7 @@ class FuzzPool(FuzzTest):
             vault_config,
             common_pool_config,
             auxiliary_config,
-        ) = self.pool_build_configs() # to be overriden
+        ) = self.pool_build_configs()  # to be overriden
         timelock_config = self.default_timelock_config()
         strategy_factory = Address.ZERO
 
@@ -212,7 +214,6 @@ class FuzzPool(FuzzTest):
 
         assert self.dashboard.WSTETH().address == self.wsteth.address
 
-
         tx = self.wrapper_factory.createPoolFinish(
             _vaultConfig=vault_config,
             _timelockConfig=timelock_config,
@@ -240,7 +241,6 @@ class FuzzPool(FuzzTest):
         self.last_checkpoint_index = 0
 
         self.past_pool_specific_config(deployment, tx)
-
 
     def build_configs(
         self,
@@ -302,7 +302,7 @@ class FuzzPool(FuzzTest):
         # if (totalValueInStethShares < totalLiabilityShares()) revert VaultInBadDebt();
 
         total_value = self.vault_hub.totalValue(self.staking_vault.address)
-        total_share =  self.steth.getSharesByPooledEth(total_value)
+        total_share = self.steth.getSharesByPooledEth(total_value)
         total_liability_shares = self.pool.totalLiabilityShares()
         if total_share < total_liability_shares:
             return "Vault in bad debt"
@@ -352,9 +352,7 @@ class FuzzPool(FuzzTest):
 
         user = random.choice(eligible_users)
 
-        amount_stv = random_int(
-            stv_estimated_amount, self.pool_balance[user]
-        )
+        amount_stv = random_int(stv_estimated_amount, self.pool_balance[user])
 
         # previewRedeem
         asset_amount = amount_stv * self.pool_total_asset // self.pool_total_supply
@@ -428,8 +426,10 @@ class FuzzPool(FuzzTest):
         assets_to_rebalance = 0
         if steth_shares_to_rebalance > 0:
             # Ceil
-            assets_to_rebalance = (-(-steth_shares_to_rebalance * current_checkpoint_steth_share_rate)
-                // E27_PRECISION_BASE)
+            assets_to_rebalance = (
+                -(-steth_shares_to_rebalance * current_checkpoint_steth_share_rate)
+                // E27_PRECISION_BASE
+            )
 
             assets_to_claim = max(0, assets_to_claim - assets_to_rebalance)
 
@@ -452,9 +452,7 @@ class FuzzPool(FuzzTest):
     def flow_finalize(self):
         max_request = random_int(1, 100)
 
-        currnent_checkpoint_stv_rate = (
-            self.withdrawal_queue.calculateCurrentStvRate()
-        )
+        currnent_checkpoint_stv_rate = self.withdrawal_queue.calculateCurrentStvRate()
         current_checkpoint_steth_share_rate = (
             self.withdrawal_queue.calculateCurrentStethShareRate()
         )
@@ -541,7 +539,6 @@ class FuzzPool(FuzzTest):
 
         total_eth_to_withdraw = total_eth_to_claim + total_gas_coverage
 
-
         gas_coverage_recipient = random_account()
 
         with may_revert() as err:
@@ -556,8 +553,6 @@ class FuzzPool(FuzzTest):
             return "no finalizable requests"
 
         assert err.value is None
-
-
 
         logger.info(f"total-eth-to-withdraw: {total_eth_to_withdraw}")
 
@@ -683,8 +678,7 @@ class FuzzPool(FuzzTest):
         gas_cost_for_each_withdrawal_request = random_int(0, 5 * 10**14)
 
         tx = self.withdrawal_queue.setFinalizationGasCostCoverage(
-            _coverage=gas_cost_for_each_withdrawal_request,
-            from_=self.node_operator
+            _coverage=gas_cost_for_each_withdrawal_request, from_=self.node_operator
         )
 
         event = next(
@@ -743,9 +737,7 @@ class FuzzPool(FuzzTest):
 
     def post_invariants(self) -> None:
         if random_bool():
-            chain.mine(
-                lambda x: x + random_int(0, 1 * 60 * 60)
-            )
+            chain.mine(lambda x: x + random_int(0, 1 * 60 * 60))
 
     @invariant()
     def invariant_balances(self):
@@ -910,7 +902,9 @@ class FuzzPool(FuzzTest):
         ]
 
         #############################
-        logger.info(f"##################################################################")
+        logger.info(
+            f"##################################################################"
+        )
         logger.info(f"Unfulfilled requests: {len(un_fullfilled_requests)}")
         logger.info(
             f"Claimable requests  : {len(fullfilled_requests) - len(claimed_requests)}"
@@ -918,9 +912,7 @@ class FuzzPool(FuzzTest):
         logger.info(f"Claimed requests    : {len(claimed_requests)}")
 
         currnet_rate = self.withdrawal_queue.calculateCurrentStvRate()
-        logger.info(
-            f"Current STV rate    : {currnet_rate} ({currnet_rate / 1e27})"
-        )
+        logger.info(f"Current STV rate    : {currnet_rate} ({currnet_rate / 1e27})")
         logger.info(f"node operator {len(self.node_operators)}")
 
 

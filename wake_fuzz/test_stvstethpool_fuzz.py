@@ -8,7 +8,9 @@ from pytypes.wake_fuzz.mocks.MockVaultHub import MockVaultHub
 from pytypes.src.StvStETHPool import StvStETHPool
 from pytypes.src.WithdrawalQueue import WithdrawalQueue
 
-from pytypes.lib.openzeppelincontracts.contracts.governance.TimelockController import  TimelockController
+from pytypes.lib.openzeppelincontracts.contracts.governance.TimelockController import (
+    TimelockController,
+)
 
 from collections import defaultdict
 from typing import cast
@@ -28,7 +30,9 @@ def revert_handler(e: RevertError):
     if e.tx is not None:
         print(e.tx.call_trace)
 
+
 TOTAL_BASIS_POINTS = 100_00
+
 
 class FuzzStEthPoool(FuzzPool):
 
@@ -36,30 +40,30 @@ class FuzzStEthPoool(FuzzPool):
     def stv_steth_pool(self) -> StvStETHPool:
         return cast(StvStETHPool, self.pool)
 
-    bp_ratio: int # define in pool, that steth share minging ratio
-    reserve_ratio_bp: int # derive from vault hub
-    forced_rebalance_threshold_bp: int # derive from vault hub
+    bp_ratio: int  # define in pool, that steth share minging ratio
+    reserve_ratio_bp: int  # derive from vault hub
+    forced_rebalance_threshold_bp: int  # derive from vault hub
 
     steth_shares: dict[Account, int]
     wsteth_balance: dict[Account, int]
-
 
     # steth_shares + wsteth_balance however rounding makes difference,
     # but rounding is only happen each 1 and never multiplied,
     # and done in LIDO during unwrap() from wsteth to steth.
     user_minted_shares: dict[Account, int]
 
-
     total_liability_in_share: int
 
     user_bad_debt_socializer_user: Account
 
-    timelock_controller: TimelockController # admin of pool
+    timelock_controller: TimelockController  # admin of pool
 
     vault_reserve_ratio_gap_bp: int
 
     @override
-    def pool_build_configs(self) -> tuple[
+    def pool_build_configs(
+        self,
+    ) -> tuple[
         Factory.VaultConfig, Factory.CommonPoolConfig, Factory.AuxiliaryPoolConfig
     ]:
         return self.build_configs(
@@ -67,39 +71,42 @@ class FuzzStEthPoool(FuzzPool):
             minting_enabled=True,
             reserve_ratio_gap_bp=self.vault_reserve_ratio_gap_bp,
             name="Factory STV Pool",
-            symbol="FSTV"
+            symbol="FSTV",
         )
 
     @override
-    def past_pool_specific_config(self, deployment: Factory.PoolDeployment, deploy_tx: TransactionAbc):
+    def past_pool_specific_config(
+        self, deployment: Factory.PoolDeployment, deploy_tx: TransactionAbc
+    ):
         self.pool = StvStETHPool(deployment.pool)
         assert isinstance(self.pool, StvStETHPool)
 
         self.timelock_controller = TimelockController(deployment.timelock)
 
-        assert self.withdrawal_queue.IS_REBALANCING_SUPPORTED() == True # only for stvstEthPool
+        assert (
+            self.withdrawal_queue.IS_REBALANCING_SUPPORTED() == True
+        )  # only for stvstEthPool
 
         # pool # syncvault Parameters
 
         event = next(
-            e for e in deploy_tx.events if isinstance(e, StvStETHPool.VaultParametersUpdated)
+            e
+            for e in deploy_tx.events
+            if isinstance(e, StvStETHPool.VaultParametersUpdated)
         )
         self.reserve_ratio_bp = event.newReserveRatioBP
         self.forced_rebalance_threshold_bp = event.newForcedRebalanceThresholdBP
 
-
-        self.user_bad_debt_socializer_user =  chain.accounts[4]
+        self.user_bad_debt_socializer_user = chain.accounts[4]
 
         self.pool.grantRole(
             self.pool.LOSS_SOCIALIZER_ROLE(),
             self.user_bad_debt_socializer_user,
-            from_=self.timelock_controller # open-zappelin timelock, not testing it.
+            from_=self.timelock_controller,  # open-zappelin timelock, not testing it.
         )
-
 
         # once during setup, by DEFAULT_ADMIN_ROLE holder
         self.pool.setMaxLossSocializationBP(10_000, from_=self.timelock_controller)
-
 
     @override
     def pre_sequence(self):
@@ -144,21 +151,28 @@ class FuzzStEthPoool(FuzzPool):
         # check minted stEthShare for this
         # stored as common summed value since value takes same things
         if self.steth_shares[user] + self.wsteth_balance[user] > 0:
-        #     stv_value = self.pool.convertStethSharesToStv(self.minted_steth_shares[user], request_type="call")
-        #     if stv_value >= amount_stv:
-        #         return "user can withdraw from minted stEthShare, skip withdrawal request"
+            #     stv_value = self.pool.convertStethSharesToStv(self.minted_steth_shares[user], request_type="call")
+            #     if stv_value >= amount_stv:
+            #         return "user can withdraw from minted stEthShare, skip withdrawal request"
 
             # assetsToLock in the code
-            in_asset = self.steth.getPooledEthBySharesRoundUp(self.steth_shares[user] + self.wsteth_balance[user])
+            in_asset = self.steth.getPooledEthBySharesRoundUp(
+                self.steth_shares[user] + self.wsteth_balance[user]
+            )
 
             # asset to lock vlaue is calculated with ceil. round
-            asset_tobe_locked = -(( - in_asset * TOTAL_BASIS_POINTS) // (TOTAL_BASIS_POINTS - self.bp_ratio))
+            asset_tobe_locked = -(
+                (-in_asset * TOTAL_BASIS_POINTS) // (TOTAL_BASIS_POINTS - self.bp_ratio)
+            )
 
-            stv_value = -(-asset_tobe_locked * self.pool_total_supply // self.pool_total_asset)
+            stv_value = -(
+                -asset_tobe_locked * self.pool_total_supply // self.pool_total_asset
+            )
 
             if stv_value > self.pool_balance[user] - amount_stv:
-                return "user can withdraw from minted stEthShare, skip withdrawal request"
-
+                return (
+                    "user can withdraw from minted stEthShare, skip withdrawal request"
+                )
 
         tx = self.withdrawal_queue.requestWithdrawal(
             _owner=user.address,
@@ -193,7 +207,6 @@ class FuzzStEthPoool(FuzzPool):
             f"Requested withdrawal of {amount_stv} STV for request id {request_id} by {user.address}"
         )
 
-
     @flow()
     def flow_mint_steth_shares(self):
 
@@ -202,7 +215,9 @@ class FuzzStEthPoool(FuzzPool):
         stv_amount = self.pool_balance[user]
         eth_amount = stv_amount * self.pool_total_asset // self.pool_total_supply
 
-        max_steth_to_mint = eth_amount * (TOTAL_BASIS_POINTS - self.bp_ratio) // TOTAL_BASIS_POINTS
+        max_steth_to_mint = (
+            eth_amount * (TOTAL_BASIS_POINTS - self.bp_ratio) // TOTAL_BASIS_POINTS
+        )
 
         max_steth_shares_to_mint = self.steth.getSharesByPooledEth(max_steth_to_mint)
 
@@ -218,7 +233,9 @@ class FuzzStEthPoool(FuzzPool):
             tx = self.stv_steth_pool.mintWsteth(max_mintable_now, from_=user)
 
         # Also for WSTETH but make sense
-        event = next(e for e in tx.events if isinstance(e, StvStETHPool.StethSharesMinted))
+        event = next(
+            e for e in tx.events if isinstance(e, StvStETHPool.StethSharesMinted)
+        )
         assert event.account == user.address
         assert event.stethShares == max_mintable_now
 
@@ -227,11 +244,9 @@ class FuzzStEthPoool(FuzzPool):
         else:
             self.wsteth_balance[user] += max_mintable_now
 
-
         self.user_minted_shares[user] += max_mintable_now
 
         logger.info(f"User {user} minted {max_mintable_now} stETH shares")
-
 
     @flow(weight=10)
     def flow_burn_steth_shares(self):
@@ -253,7 +268,9 @@ class FuzzStEthPoool(FuzzPool):
         steth_shares_to_withdraw = random_int(1, steth_shares_owned)
 
         steth_amount = self.steth.getPooledEthByShares(steth_shares_to_withdraw)
-        unwrapped_steth_share_from_wsteth = self.steth.getSharesByPooledEth(steth_amount)
+        unwrapped_steth_share_from_wsteth = self.steth.getSharesByPooledEth(
+            steth_amount
+        )
 
         # Diff is always 0 or 1 due to rounding
         assert 0 <= steth_shares_to_withdraw - unwrapped_steth_share_from_wsteth <= 1
@@ -261,34 +278,43 @@ class FuzzStEthPoool(FuzzPool):
         if is_steth_share:
 
             # function round down. approve more than required
-            approve_steth_amount = self.steth.getPooledEthByShares(steth_shares_to_withdraw) * 110 // 100
+            approve_steth_amount = (
+                self.steth.getPooledEthByShares(steth_shares_to_withdraw) * 110 // 100
+            )
             tx = self.steth.approve(self.pool.address, approve_steth_amount, from_=user)
         else:
-            tx = self.wsteth.approve(self.pool.address, steth_shares_to_withdraw, from_=user)
+            tx = self.wsteth.approve(
+                self.pool.address, steth_shares_to_withdraw, from_=user
+            )
 
         if is_steth_share:
-            tx = self.stv_steth_pool.burnStethShares(steth_shares_to_withdraw, from_=user)
+            tx = self.stv_steth_pool.burnStethShares(
+                steth_shares_to_withdraw, from_=user
+            )
         else:
             tx = self.stv_steth_pool.burnWsteth(steth_shares_to_withdraw, from_=user)
 
-        event = next(e for e in tx.events if isinstance(e, StvStETHPool.StethSharesBurned)) # same event for both
+        event = next(
+            e for e in tx.events if isinstance(e, StvStETHPool.StethSharesBurned)
+        )  # same event for both
         assert event.account == user.address
 
         if is_steth_share:
             assert event.stethShares == steth_shares_to_withdraw
         else:
             assert event.stethShares == unwrapped_steth_share_from_wsteth
-            logger.info(f"User {user} withdrew {unwrapped_steth_share_from_wsteth} stETH shares via WSTETH burn")
+            logger.info(
+                f"User {user} withdrew {unwrapped_steth_share_from_wsteth} stETH shares via WSTETH burn"
+            )
 
         if is_steth_share:
             self.steth_shares[user] -= steth_shares_to_withdraw
             self.user_minted_shares[user] -= steth_shares_to_withdraw
         else:
             self.wsteth_balance[user] -= steth_shares_to_withdraw
-            self.user_minted_shares[user] -= unwrapped_steth_share_from_wsteth # FOCUS,
+            self.user_minted_shares[user] -= unwrapped_steth_share_from_wsteth  # FOCUS,
 
         logger.info(f"User {user} withdrew {steth_shares_to_withdraw} stETH shares")
-
 
     @flow()
     def flow_force_rebalance(self):
@@ -296,8 +322,9 @@ class FuzzStEthPoool(FuzzPool):
         # not using eligible user list to make bad debt to run flow_force_rebalance_socialize_loss.
         user = random_account()
 
-        (steth_share, stv, is_undercollateralized
-        )= self.stv_steth_pool.previewForceRebalance(user.address)
+        (steth_share, stv, is_undercollateralized) = (
+            self.stv_steth_pool.previewForceRebalance(user.address)
+        )
         # undewrcollateralized when user holding share value is less than
 
         # save steth, steth get more value so correct.
@@ -313,23 +340,26 @@ class FuzzStEthPoool(FuzzPool):
             return "undercollateralized"
 
         total_value = self.vault_hub.totalValue(self.staking_vault.address)
-        total_share =  self.steth.getSharesByPooledEth(total_value)
+        total_share = self.steth.getSharesByPooledEth(total_value)
         total_liability_shares = self.pool.totalLiabilityShares()
         if total_share < total_liability_shares:
             return "Vault in bad debt"
 
         tx = self.stv_steth_pool.forceRebalance(
             user,
-            from_=random_account(), # anyone
+            from_=random_account(),  # anyone
         )
 
-        event = next(e for e in tx.events if isinstance(e, StvStETHPool.StethSharesRebalanced))
+        event = next(
+            e for e in tx.events if isinstance(e, StvStETHPool.StethSharesRebalanced)
+        )
         assert event.account == user.address
         assert event.stethShares == steth_share
         assert event.stvBurned == stv
 
-
-        event = next(e for e in tx.events if isinstance(e, StvStETHPool.StethSharesBurned))
+        event = next(
+            e for e in tx.events if isinstance(e, StvStETHPool.StethSharesBurned)
+        )
         assert event.account == user.address
         assert event.stethShares == steth_share
 
@@ -338,12 +368,16 @@ class FuzzStEthPoool(FuzzPool):
         assert event.to == Address.ZERO
         assert event.value == stv
 
-        assert False == any(e for e in tx.events if isinstance(e, StvStETHPool.SocializedLoss))
+        assert False == any(
+            e for e in tx.events if isinstance(e, StvStETHPool.SocializedLoss)
+        )
 
         self.user_minted_shares[user] -= steth_share
         self.pool_balance[user] -= stv
-        self.native_balance[self.staking_vault] -= steth_value # 1:1 with eth
-        self.native_balance[self.vault_hub] += steth_value # actual implementation is different
+        self.native_balance[self.staking_vault] -= steth_value  # 1:1 with eth
+        self.native_balance[
+            self.vault_hub
+        ] += steth_value  # actual implementation is different
 
         # so it state is like by buring stv, token change to Eth,
         # and by giving eth to lido,
@@ -353,8 +387,9 @@ class FuzzStEthPoool(FuzzPool):
         # Therefore, for pool point of view,
         # Pool total asset and stv decrease!
 
-
-        event = next(e for e in tx.events if isinstance(e, MockVaultHub.VaultRebalanced))
+        event = next(
+            e for e in tx.events if isinstance(e, MockVaultHub.VaultRebalanced)
+        )
         assert event.vault == self.staking_vault.address
         assert event.sharesBurned == steth_share
         assert event.etherWithdrawn == steth_value
@@ -362,12 +397,7 @@ class FuzzStEthPoool(FuzzPool):
         self.pool_total_asset -= steth_value
         self.pool_total_supply -= stv
 
-
         logger.info(f"Force rebalance called for {user}")
-
-
-
-
 
     @flow()
     def flow_force_rebalance_socialize_loss(self):
@@ -375,7 +405,9 @@ class FuzzStEthPoool(FuzzPool):
         eligible_users: list[Account] = []
 
         for user in chain.accounts:
-            (_, _, loop_is_undercollateralized) = self.stv_steth_pool.previewForceRebalance(user)
+            (_, _, loop_is_undercollateralized) = (
+                self.stv_steth_pool.previewForceRebalance(user)
+            )
             if loop_is_undercollateralized:
                 eligible_users.append(user)
 
@@ -383,20 +415,27 @@ class FuzzStEthPoool(FuzzPool):
             return "no user is undercollateralized"
 
         user = random.choice(eligible_users)
-        (steth_share, stv_can_be_burn_for_user, is_undercollateralized) = self.stv_steth_pool.previewForceRebalance(user)
+        (steth_share, stv_can_be_burn_for_user, is_undercollateralized) = (
+            self.stv_steth_pool.previewForceRebalance(user)
+        )
 
         if steth_share == 0:
             assert stv_can_be_burn_for_user == 0
             assert self.staking_vault.balance == 0
             return "StakingVault lack of liquidity"
 
+        steth_value = self.steth.getPooledEthBySharesRoundUp(
+            steth_share
+        )  # save steth, steth get more value so correct.
 
-        steth_value = self.steth.getPooledEthBySharesRoundUp(steth_share) # save steth, steth get more value so correct.
-
-        stv_to_burn = self.pool.previewWithdraw(steth_value) # just convert to stv with ceil
+        stv_to_burn = self.pool.previewWithdraw(
+            steth_value
+        )  # just convert to stv with ceil
 
         # POC shoud be this value..
-        stv_can_be_burn_for_user_value = ((stv_can_be_burn_for_user * self.pool_total_asset) // self.pool_total_supply)
+        stv_can_be_burn_for_user_value = (
+            stv_can_be_burn_for_user * self.pool_total_asset
+        ) // self.pool_total_supply
 
         user_stv = self.pool_balance[user]
 
@@ -406,7 +445,7 @@ class FuzzStEthPoool(FuzzPool):
         # user_value = (self.pool_balance[user] * self.pool_total_asset // self.pool_total_supply)
 
         total_value = self.vault_hub.totalValue(self.staking_vault.address)
-        total_share =  self.steth.getSharesByPooledEth(total_value)
+        total_share = self.steth.getSharesByPooledEth(total_value)
         total_liability_shares = self.pool.totalLiabilityShares()
         if total_share < total_liability_shares:
             logger.info("Vault in bad debt, deposit reverted")
@@ -414,15 +453,19 @@ class FuzzStEthPoool(FuzzPool):
 
         tx = self.stv_steth_pool.forceRebalanceAndSocializeLoss(
             user,
-            from_=self.user_bad_debt_socializer_user, # not anyone!!! if he can not cover it? what happen!!
+            from_=self.user_bad_debt_socializer_user,  # not anyone!!! if he can not cover it? what happen!!
         )
 
-        event = next(e for e in tx.events if isinstance(e, StvStETHPool.StethSharesRebalanced))
+        event = next(
+            e for e in tx.events if isinstance(e, StvStETHPool.StethSharesRebalanced)
+        )
         assert event.account == user.address
         assert event.stethShares == steth_share
         assert event.stvBurned == stv_can_be_burn_for_user
 
-        event = next(e for e in tx.events if isinstance(e, StvStETHPool.StethSharesBurned))
+        event = next(
+            e for e in tx.events if isinstance(e, StvStETHPool.StethSharesBurned)
+        )
         assert event.account == user.address
         assert event.stethShares == steth_share
 
@@ -431,29 +474,29 @@ class FuzzStEthPoool(FuzzPool):
         assert event.to == Address.ZERO
         assert event.value == stv_can_be_burn_for_user
 
-
         if stv_to_burn > stv_can_be_burn_for_user:
-            event = next(e for e in tx.events if isinstance(e, StvStETHPool.SocializedLoss))
-            assert event.maxLossSocializationBP == 10000 #constant for this test.
+            event = next(
+                e for e in tx.events if isinstance(e, StvStETHPool.SocializedLoss)
+            )
+            assert event.maxLossSocializationBP == 10000  # constant for this test.
             assert event.stv == stv_to_burn - stv_can_be_burn_for_user
 
         else:
-            assert False == any(e for e in tx.events if isinstance(e, StvStETHPool.SocializedLoss))
+            assert False == any(
+                e for e in tx.events if isinstance(e, StvStETHPool.SocializedLoss)
+            )
 
         self.pool_balance[user] -= stv_can_be_burn_for_user
         self.user_minted_shares[user] -= steth_share
 
-        self.native_balance[self.staking_vault] -= steth_value # 1:1 with eth
+        self.native_balance[self.staking_vault] -= steth_value  # 1:1 with eth
         self.native_balance[self.vault_hub] += steth_value
-
 
         self.pool_total_asset -= steth_value
         self.pool_total_supply -= stv_can_be_burn_for_user
         # only user holding stv burns makes remaining to be burn socialize to everyone
 
-
         logger.info(f"Force rebalance called for {user}")
-
 
     @flow()
     def flow_rebalance_unassigned_liability(self):
@@ -462,14 +505,14 @@ class FuzzStEthPoool(FuzzPool):
             return "no unassigned liability"
 
         self.pool.rebalanceUnassignedLiability(
-            _stethShares=unassigned_liability_share,
-            from_=random_account()
+            _stethShares=unassigned_liability_share, from_=random_account()
         )
 
-        logger.info(f"Rebalanced unassigned liability of {unassigned_liability_share} stETH shares")
+        logger.info(
+            f"Rebalanced unassigned liability of {unassigned_liability_share} stETH shares"
+        )
 
         breakpoint()
-
 
     @flow()
     def flow_sync_vault_parameters(self):
@@ -480,7 +523,6 @@ class FuzzStEthPoool(FuzzPool):
 
     def stv_to_value(self, stv: int) -> int:
         return stv * self.pool_total_asset // self.pool_total_supply
-
 
     @invariant()
     def inv_preview_rebalance(self):
@@ -495,14 +537,15 @@ class FuzzStEthPoool(FuzzPool):
             user_stv = self.pool_balance[user]
             user_stv_value = self.stv_to_value(user_stv)
             user_steth_share = self.user_minted_shares[user]
-            user_rounded_up_steth_value = self.steth.getPooledEthBySharesRoundUp(user_steth_share)
+            user_rounded_up_steth_value = self.steth.getPooledEthBySharesRoundUp(
+                user_steth_share
+            )
 
-            assets_threshold = (
-                -(
-                    -user_rounded_up_steth_value
-                    * 10000 // (10000 - self.forced_rebalance_threshold_bp)
-                )
-            )# 1000 is threshold, round up
+            assets_threshold = -(
+                -user_rounded_up_steth_value
+                * 10000
+                // (10000 - self.forced_rebalance_threshold_bp)
+            )  # 1000 is threshold, round up
 
             is_breached = user_stv_value < assets_threshold
             if not is_breached:
@@ -524,30 +567,35 @@ class FuzzStEthPoool(FuzzPool):
                 target_steth_value_to_rebalance = stethliability
                 assert is_undercollateralized == True
 
-            steth_to_rebalance_limit_in_value = (self.stv_steth_pool.totalExceedingMintedSteth()
-                                            + self.staking_vault.availableBalance())
-            steth_to_rebalance_in_value = min(target_steth_value_to_rebalance, steth_to_rebalance_limit_in_value)
+            steth_to_rebalance_limit_in_value = (
+                self.stv_steth_pool.totalExceedingMintedSteth()
+                + self.staking_vault.availableBalance()
+            )
+            steth_to_rebalance_in_value = min(
+                target_steth_value_to_rebalance, steth_to_rebalance_limit_in_value
+            )
 
             if self.pool_total_asset == 0:
                 return
             # rounding up
-            stv_required = -(-steth_to_rebalance_in_value * self.pool_total_supply // self.pool_total_asset)
+            stv_required = -(
+                -steth_to_rebalance_in_value
+                * self.pool_total_supply
+                // self.pool_total_asset
+            )
 
-
-            assert steth_share == self.steth.getSharesByPooledEth(steth_to_rebalance_in_value)
+            assert steth_share == self.steth.getSharesByPooledEth(
+                steth_to_rebalance_in_value
+            )
             assert stv == min(stv_required, user_stv)
 
             # if steth_share == 0 and stv == 0 and is_undercollateralized == True:
             #     breakpoint() # THIs happen when vault does not have liqudity. carefully watch the vault state.
 
-
-
-
     @invariant()
     def inv_steht_never_be_negative(self):
         for user in self.steth_shares:
             assert self.steth_shares[user] >= 0
-
 
     @invariant()
     def inv_steth_balance(self):
@@ -557,20 +605,18 @@ class FuzzStEthPoool(FuzzPool):
         for account in self.wsteth_balance:
             assert self.wsteth_balance[account] == self.wsteth.balanceOf(account)
 
-
     @invariant()
     def inv_steth_shares(self):
         for account in self.steth_shares:
-            assert self.user_minted_shares[account] == self.stv_steth_pool.mintedStethSharesOf(account)
-
-
+            assert self.user_minted_shares[
+                account
+            ] == self.stv_steth_pool.mintedStethSharesOf(account)
 
     @flow()
     def flow_steth_value_changes(self):
 
         self.steth.mock_accrueYield(random_int(0, 10**14))  # up to 1 ETH yield
         logger.info("mock value up for stETH")
-
 
     @invariant()
     def inv_user_minting_steth_capablity(self):
@@ -579,12 +625,18 @@ class FuzzStEthPoool(FuzzPool):
 
         # 1 ETH and ho much stETH shares can be mint?
         # print(tx.call_trace)
-        tx = self.stv_steth_pool.calcStethSharesToMintForAssets(assets, request_type="tx")
+        tx = self.stv_steth_pool.calcStethSharesToMintForAssets(
+            assets, request_type="tx"
+        )
         oc_steth_share = tx.return_value
-        mintable_steth_with_eth_value = assets * (TOTAL_BASIS_POINTS - self.bp_ratio) // TOTAL_BASIS_POINTS
+        mintable_steth_with_eth_value = (
+            assets * (TOTAL_BASIS_POINTS - self.bp_ratio) // TOTAL_BASIS_POINTS
+        )
         # print(mintable_steth_with_eth_value)
         # print(self.bp_ratio)
-        tx = self.steth.getSharesByPooledEth(mintable_steth_with_eth_value, request_type="tx") # Out of scope for now.
+        tx = self.steth.getSharesByPooledEth(
+            mintable_steth_with_eth_value, request_type="tx"
+        )  # Out of scope for now.
         # print(tx.call_trace)
         steth_shares = tx.return_value
         assert oc_steth_share == steth_shares
@@ -594,10 +646,14 @@ class FuzzStEthPoool(FuzzPool):
 
         lock_share = self.stv_steth_pool.calcAssetsToLockForStethShares(10**18)
 
-        in_asset = self.steth.getPooledEthBySharesRoundUp(10**18) # assetsToLock in the code
+        in_asset = self.steth.getPooledEthBySharesRoundUp(
+            10**18
+        )  # assetsToLock in the code
         # asset to lock vlaue is calculated with ceil. round
 
-        asset_tobe_locked = -((-in_asset * TOTAL_BASIS_POINTS) // (TOTAL_BASIS_POINTS - self.bp_ratio))
+        asset_tobe_locked = -(
+            (-in_asset * TOTAL_BASIS_POINTS) // (TOTAL_BASIS_POINTS - self.bp_ratio)
+        )
 
         assert lock_share == asset_tobe_locked
 
@@ -607,38 +663,39 @@ class FuzzStEthPoool(FuzzPool):
     def inv_reserve_ratio_bp(self):
         assert self.reserve_ratio_bp == self.stv_steth_pool.reserveRatioBP()
 
-
     @invariant()
     def inv_forced_rebalance_threshold_bp(self):
-        assert self.forced_rebalance_threshold_bp == self.stv_steth_pool.forcedRebalanceThresholdBP()
+        assert (
+            self.forced_rebalance_threshold_bp
+            == self.stv_steth_pool.forcedRebalanceThresholdBP()
+        )
 
     @invariant()
     def print_user_acocunt_status(self):
         for user in chain.accounts:
-            (
-                stv,
-                steth_share,
-                is_undercollateralized
-            )= self.stv_steth_pool.previewForceRebalance(user.address)
+            (stv, steth_share, is_undercollateralized) = (
+                self.stv_steth_pool.previewForceRebalance(user.address)
+            )
 
-            logger.info(f"""user {user.address} stv: {stv} steth_share:
-            {steth_share} is_undercollateralized: {is_undercollateralized}""")
+            logger.info(
+                f"""user {user.address} stv: {stv} steth_share:
+            {steth_share} is_undercollateralized: {is_undercollateralized}"""
+            )
 
     @invariant()
     def inv_total_minted_steth_share(self):
-        assert sum(self.user_minted_shares.values()) == self.stv_steth_pool.totalMintedStethShares()
-
+        assert (
+            sum(self.user_minted_shares.values())
+            == self.stv_steth_pool.totalMintedStethShares()
+        )
 
     @invariant()
     def inv_total_exceeding_minted_steth_shares(self):
         assert (
-            sum(self.user_minted_shares.values()) - sum(self.user_minted_shares.values())
+            sum(self.user_minted_shares.values())
+            - sum(self.user_minted_shares.values())
             == self.stv_steth_pool.totalExceedingMintedStethShares()
         )
-
-
-
-
 
     @override
     @invariant()
@@ -656,6 +713,7 @@ class FuzzStEthPoool(FuzzPool):
         assert (
             total_liability_shares == self.dashboard.liabilityShares()
         )  # In actual implemntation
+
 
 @chain.connect()
 @on_revert(revert_handler)
