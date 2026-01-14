@@ -31,4 +31,10 @@ These tests only cover the vaults-wrapper code.
 For Vaults integration fuzzing, see the Ackee Blockchain repository:
 - [tests-lido-vaults-wrapper (integration tests with Core repo)](https://github.com/Ackee-Blockchain/tests-lido-vaults-wrapper)
 
-Tested with `wake` version `5.0.0rc1`.
+Tested with `wake` version `5.0.0rc1`. This is a prerelease version.
+
+Install Wake with:
+```bash
+pip3 install --pre eth-wake
+```
+
