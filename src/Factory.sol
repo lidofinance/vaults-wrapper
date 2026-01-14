@@ -472,6 +472,14 @@ contract Factory {
             }
         }
 
+        // Validate proposer and executor addresses
+        if (_timelockConfig.proposer == address(0)) {
+            revert InvalidConfiguration("proposer must not be zero address");
+        }
+        if (_timelockConfig.executor == address(0)) {
+            revert InvalidConfiguration("executor must not be zero address");
+        }
+
         address timelock = TIMELOCK_FACTORY.deploy(
             _timelockConfig.minDelaySeconds, _timelockConfig.proposer, _timelockConfig.executor
         );

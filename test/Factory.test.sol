@@ -512,4 +512,54 @@ contract FactoryTest is Test {
         );
         assertTrue(deployment2.pool != address(0), "Deployer 2 should successfully finish");
     }
+
+    // ============ Proposer and Executor Validation Tests ============
+
+    function test_revertCreatePoolWithZeroProposer() public {
+        // Test that creating a pool with proposer = address(0) reverts
+        (
+            Factory.VaultConfig memory vaultConfig,
+            Factory.CommonPoolConfig memory commonPoolConfig,
+            Factory.AuxiliaryPoolConfig memory auxiliaryConfig
+        ) = _buildConfigs(false, address(0), false, 0, "Test Pool", "TP");
+
+        Factory.TimelockConfig memory timelockConfig = Factory.TimelockConfig({
+            minDelaySeconds: 0,
+            proposer: address(0), // Invalid proposer
+            executor: admin
+        });
+        address strategyFactory = address(0);
+
+        vm.startPrank(admin);
+        // Should revert with "proposer must not be zero address" error
+        vm.expectRevert(abi.encodeWithSignature("InvalidConfiguration(string)", "proposer must not be zero address"));
+        wrapperFactory.createPoolStart(
+            vaultConfig, timelockConfig, commonPoolConfig, auxiliaryConfig, strategyFactory, ""
+        );
+        vm.stopPrank();
+    }
+
+    function test_revertCreatePoolWithZeroExecutor() public {
+        // Test that creating a pool with executor = address(0) reverts
+        (
+            Factory.VaultConfig memory vaultConfig,
+            Factory.CommonPoolConfig memory commonPoolConfig,
+            Factory.AuxiliaryPoolConfig memory auxiliaryConfig
+        ) = _buildConfigs(false, address(0), false, 0, "Test Pool", "TP");
+
+        Factory.TimelockConfig memory timelockConfig = Factory.TimelockConfig({
+            minDelaySeconds: 0,
+            proposer: address(this),
+            executor: address(0) // Invalid executor
+        });
+        address strategyFactory = address(0);
+
+        vm.startPrank(admin);
+        // Should revert with "executor must not be zero address" error
+        vm.expectRevert(abi.encodeWithSignature("InvalidConfiguration(string)", "executor must not be zero address"));
+        wrapperFactory.createPoolStart(
+            vaultConfig, timelockConfig, commonPoolConfig, auxiliaryConfig, strategyFactory, ""
+        );
+        vm.stopPrank();
+    }
 }
