@@ -178,6 +178,7 @@ contract GGVStrategy is IStrategy, AccessControlEnumerableUpgradeable, FeaturePa
      * @inheritdoc IStrategy
      */
     function requestExitByWsteth(uint256 _wsteth, bytes calldata _params) external returns (bytes32 requestId) {
+        if (_wsteth == 0) revert ZeroArgument("_wsteth");
         GGVParamsRequestExit memory params = abi.decode(_params, (GGVParamsRequestExit));
 
         IStrategyCallForwarder callForwarder = _getOrCreateCallForwarder(msg.sender);
