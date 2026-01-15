@@ -368,8 +368,6 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, FeaturePausable 
         if (value < MIN_WITHDRAWAL_VALUE) revert RequestValueTooSmall(value);
         if (assets > MAX_WITHDRAWAL_ASSETS) revert RequestAssetsTooLarge(assets);
 
-        _transferForWithdrawalQueue(msg.sender, _stvToWithdraw, _stethSharesToRebalance);
-
         WithdrawalQueueStorage storage $ = _getWithdrawalQueueStorage();
 
         uint256 lastRequestId = $.lastRequestId;
@@ -392,6 +390,8 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, FeaturePausable 
         });
 
         assert($.requestsByOwner[_owner].add(requestId));
+
+        _transferForWithdrawalQueue(msg.sender, _stvToWithdraw, _stethSharesToRebalance);
 
         emit WithdrawalRequested(requestId, _owner, _stvToWithdraw, _stethSharesToRebalance, assets);
     }
