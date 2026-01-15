@@ -34,7 +34,7 @@ contract GGVStrategy is IStrategy, AccessControlEnumerableUpgradeable, FeaturePa
     bytes32 public constant SUPPLY_RESUME_ROLE = keccak256("SUPPLY_RESUME_ROLE");
 
     struct GGVParamsSupply {
-        uint16 minimumMint;
+        uint256 minimumMint;
     }
 
     struct GGVParamsRequestExit {
