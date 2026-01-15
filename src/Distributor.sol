@@ -51,8 +51,6 @@ contract Distributor is AccessControlEnumerable {
      * @param _manager The address of the manager (MANAGER_ROLE)
      */
     constructor(address _owner, address _manager) {
-        lastProcessedBlock = 0;
-
         _grantRole(DEFAULT_ADMIN_ROLE, _owner);
         _grantRole(MANAGER_ROLE, _manager);
     }
