@@ -750,7 +750,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, FeaturePausable 
         for (uint256 i = 0; i < _requestIds.length; ++i) {
             if (_requestIds[i] < prevRequestId) revert RequestIdsNotSorted();
             hintIds[i] = findCheckpointHint(_requestIds[i], _firstIndex, _lastIndex);
-            _firstIndex = hintIds[i];
+            if (hintIds[i] != NOT_FOUND) _firstIndex = hintIds[i];
             prevRequestId = _requestIds[i];
         }
     }
