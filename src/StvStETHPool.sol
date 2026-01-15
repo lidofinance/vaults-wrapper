@@ -28,6 +28,7 @@ contract StvStETHPool is StvPool {
     error InsufficientStv();
     error ZeroArgument();
     error CannotRebalanceWithdrawalQueue();
+    error CannotTransferLiabilityToWithdrawalQueue();
     error UndercollateralizedAccount();
     error CollateralizedAccount();
     error ExcessiveLossSocialization();
@@ -200,6 +201,7 @@ contract StvStETHPool is StvPool {
      * @param _stethShares Amount of stETH shares liability to transfer (18 decimals)
      * @dev Ensures that the transferred stv covers the minimum required to lock for the transferred stETH shares liability
      * @dev Can only be called by the WithdrawalQueue contract
+     * @dev Requires fresh oracle report, which is checked in the Withdrawal Queue
      */
     function transferFromWithLiabilityForWithdrawalQueue(address _from, uint256 _stv, uint256 _stethShares) external {
         _checkOnlyWithdrawalQueue();
@@ -797,8 +799,12 @@ contract StvStETHPool is StvPool {
      * @param _stethShares The amount of stETH shares liability to transfer
      * @return success True if the transfer was successful
      * @dev Ensures that the transferred stv covers the minimum required to lock for the transferred stETH shares liability
+     * @dev Requires fresh oracle report to price stv accurately
      */
     function transferWithLiability(address _to, uint256 _stv, uint256 _stethShares) external returns (bool success) {
+        if (_to == address(WITHDRAWAL_QUEUE)) revert CannotTransferLiabilityToWithdrawalQueue();
+        _checkFreshReport();
+
         _transferWithLiability(msg.sender, _to, _stv, _stethShares);
         success = true;
     }
