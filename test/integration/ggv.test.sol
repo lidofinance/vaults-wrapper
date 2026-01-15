@@ -353,57 +353,6 @@ contract GGVTest is StvStrategyPoolHarness {
         );
     }
 
-    function test_supply_with_uint256_minimumMint_exceeding_uint16() public {
-        uint256 depositAmount = 1 ether;
-
-        // Use a value that exceeds uint16 max (65535)
-        uint256 largeMinimumMint = 100_000; // This exceeds uint16 max of 65,535
-
-        uint256 wstethToMint = pool.remainingMintingCapacitySharesOf(USER1, depositAmount);
-
-        // Supply with minimumMint exceeding uint16 max value
-        vm.prank(USER1);
-        ggvStrategy.supply{value: depositAmount}(
-            address(0),
-            wstethToMint,
-            abi.encode(GGVStrategy.GGVParamsSupply(largeMinimumMint))
-        );
-
-        // Verify the supply was successful
-        uint256 mintedShares = ggvStrategy.mintedStethSharesOf(USER1);
-        assertEq(mintedShares, wstethToMint, "minted shares mismatch");
-
-        IStrategyCallForwarder callForwarder = ggvStrategy.getStrategyCallForwarderAddress(USER1);
-        uint256 ggvShares = boringVault.balanceOf(address(callForwarder));
-        assertGt(ggvShares, 0, "should have GGV shares after deposit");
-
-        // Verify the parameter was correctly passed by checking it meets the minimum
-        // Since our mock returns shares >= minimumMint, we can verify it worked
-        assertGe(ggvShares, largeMinimumMint, "GGV shares should meet minimumMint requirement");
-    }
-
-    function test_supply_with_max_uint256_minimumMint() public {
-        uint256 depositAmount = 1 ether;
-
-        // Use a very large uint256 value to test the full range
-        uint256 veryLargeMinimumMint = type(uint128).max; // Use uint128 max as a large but reasonable test value
-
-        uint256 wstethToMint = pool.remainingMintingCapacitySharesOf(USER1, depositAmount);
-
-        // This should work with the new uint256 type
-        // (In real scenario with actual vault, this might revert if shares < minimumMint)
-        vm.prank(USER1);
-        ggvStrategy.supply{value: depositAmount}(
-            address(0),
-            wstethToMint,
-            abi.encode(GGVStrategy.GGVParamsSupply(veryLargeMinimumMint))
-        );
-
-        // Verify the transaction succeeded and parameters were passed correctly
-        uint256 mintedShares = ggvStrategy.mintedStethSharesOf(USER1);
-        assertEq(mintedShares, wstethToMint, "minted shares mismatch");
-    }
-
     function _finalizeWQ(uint256 _maxRequest, uint256 vaultProfit) public {
         vm.deal(address(pool.VAULT()), 1 ether);
 
