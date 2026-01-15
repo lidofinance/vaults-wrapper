@@ -19,9 +19,7 @@ contract ConstructorTest is Test, SetupDistributor {
     }
 
     function test_Constructor_InitializesLastProcessedBlock() public view {
-        // lastProcessedBlock should be set to block.number at deployment
-        // In our setUp, distributor is deployed in the same block
-        assertEq(distributor.lastProcessedBlock(), block.number);
+        assertEq(distributor.lastProcessedBlock(), 0);
     }
 
     function test_Constructor_InitializesRootToZero() public view {
@@ -46,4 +44,3 @@ contract ConstructorTest is Test, SetupDistributor {
         assertEq(distributor.MANAGER_ROLE(), expectedRole);
     }
 }
-

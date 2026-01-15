@@ -233,6 +233,8 @@ contract ClaimingTest is Test, SetupDistributor {
         bytes32 root2 = merkleTree.root();
         bytes32[] memory proof2 = merkleTree.getProof(0);
 
+        vm.roll(block.number + 1);
+
         vm.prank(manager);
         distributor.setMerkleRoot(root2, "QmTest2");
 
@@ -293,6 +295,8 @@ contract ClaimingTest is Test, SetupDistributor {
         newTree.pushLeaf(_leafData(userAlice, address(token1), newClaimAmount));
         bytes32 newRoot = newTree.root();
         bytes32[] memory newProof = newTree.getProof(0);
+
+        vm.roll(block.number + 1);
 
         vm.prank(manager);
         distributor.setMerkleRoot(newRoot, "QmPreviewTest2");
