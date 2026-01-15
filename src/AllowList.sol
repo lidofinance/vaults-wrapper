@@ -42,6 +42,22 @@ abstract contract AllowList is Initializable, AccessControlEnumerableUpgradeable
     }
 
     /**
+     * @notice Ensure multiple addresses are in the allowlist (batch operation)
+     * @dev Idempotent - only adds users who are not already allowlisted, no revert if already present
+     * @param _users Array of addresses to ensure are in the allowlist
+     */
+    function ensureAllowListed(address[] calldata _users) external {
+        _checkRole(ALLOW_LIST_MANAGER_ROLE, msg.sender);
+
+        for (uint256 i = 0; i < _users.length; i++) {
+            if (!isAllowListed(_users[i])) {
+                grantRole(DEPOSIT_ROLE, _users[i]);
+                emit AllowListAdded(_users[i]);
+            }
+        }
+    }
+
+    /**
      * @notice Remove an address from the allowlist
      * @param _user Address to remove from allowlist
      */
@@ -52,6 +68,22 @@ abstract contract AllowList is Initializable, AccessControlEnumerableUpgradeable
         revokeRole(DEPOSIT_ROLE, _user);
 
         emit AllowListRemoved(_user);
+    }
+
+    /**
+     * @notice Ensure multiple addresses are not in the allowlist (batch operation)
+     * @dev Idempotent - only removes users who are currently allowlisted, no revert if already absent
+     * @param _users Array of addresses to ensure are not in the allowlist
+     */
+    function ensureNotAllowListed(address[] calldata _users) external {
+        _checkRole(ALLOW_LIST_MANAGER_ROLE, msg.sender);
+
+        for (uint256 i = 0; i < _users.length; i++) {
+            if (isAllowListed(_users[i])) {
+                revokeRole(DEPOSIT_ROLE, _users[i]);
+                emit AllowListRemoved(_users[i]);
+            }
+        }
     }
 
     /**
