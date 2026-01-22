@@ -7,7 +7,6 @@ import {StvPool} from "./StvPool.sol";
 import {StvStETHPool} from "./StvStETHPool.sol";
 import {WithdrawalQueue} from "./WithdrawalQueue.sol";
 import {DistributorFactory} from "./factories/DistributorFactory.sol";
-import {GGVStrategyFactory} from "./factories/GGVStrategyFactory.sol";
 import {StvPoolFactory} from "./factories/StvPoolFactory.sol";
 import {StvStETHPoolFactory} from "./factories/StvStETHPoolFactory.sol";
 import {TimelockFactory} from "./factories/TimelockFactory.sol";
@@ -38,7 +37,6 @@ contract Factory {
      * @param stvStETHPoolFactory Factory for deploying StvStETHPool implementations
      * @param withdrawalQueueFactory Factory for deploying WithdrawalQueue implementations
      * @param distributorFactory Factory for deploying Distributor implementations
-     * @param ggvStrategyFactory Factory for deploying GGV strategy implementations
      * @param timelockFactory Factory for deploying Timelock controllers
      */
     struct SubFactories {
@@ -46,7 +44,6 @@ contract Factory {
         address stvStETHPoolFactory;
         address withdrawalQueueFactory;
         address distributorFactory;
-        address ggvStrategyFactory;
         address timelockFactory;
     }
 
@@ -281,11 +278,6 @@ contract Factory {
     DistributorFactory public immutable DISTRIBUTOR_FACTORY;
 
     /**
-     * @notice Factory for deploying GGV strategy implementations
-     */
-    GGVStrategyFactory public immutable GGV_STRATEGY_FACTORY;
-
-    /**
      * @notice Factory for deploying Timelock controllers
      */
     TimelockFactory public immutable TIMELOCK_FACTORY;
@@ -342,7 +334,6 @@ contract Factory {
         STV_STETH_POOL_FACTORY = StvStETHPoolFactory(_subFactories.stvStETHPoolFactory);
         WITHDRAWAL_QUEUE_FACTORY = WithdrawalQueueFactory(_subFactories.withdrawalQueueFactory);
         DISTRIBUTOR_FACTORY = DistributorFactory(_subFactories.distributorFactory);
-        GGV_STRATEGY_FACTORY = GGVStrategyFactory(_subFactories.ggvStrategyFactory);
         TIMELOCK_FACTORY = TimelockFactory(_subFactories.timelockFactory);
 
         DUMMY_IMPLEMENTATION = address(new DummyImplementation());
@@ -407,33 +398,6 @@ contract Factory {
 
         intermediate =
             createPoolStart(_vaultConfig, _timelockConfig, _commonPoolConfig, _auxiliaryPoolConfig, address(0), "");
-    }
-
-    /**
-     * @notice Initiates deployment of a GGV strategy pool (first phase)
-     * @param _vaultConfig Configuration for the vault
-     * @param _timelockConfig Configuration for the timelock controller
-     * @param _commonPoolConfig Common pool parameters (name, symbol, withdrawal delay)
-     * @param _reserveRatioGapBP Maximum allowed reserve ratio gap in basis points
-     * @return intermediate Deployment state needed for finish phase
-     * @dev ETH for vault connection deposit should be sent in createPoolFinish
-     * @dev Automatically enables allowlist and minting for GGV pools
-     */
-    function createPoolGGVStart(
-        VaultConfig memory _vaultConfig,
-        TimelockConfig memory _timelockConfig,
-        CommonPoolConfig memory _commonPoolConfig,
-        uint256 _reserveRatioGapBP
-    ) external returns (PoolIntermediate memory intermediate) {
-        AuxiliaryPoolConfig memory auxiliaryConfig = AuxiliaryPoolConfig({
-            allowListEnabled: true,
-            allowListManager: address(0),
-            mintingEnabled: true,
-            reserveRatioGapBP: _reserveRatioGapBP
-        });
-        intermediate = createPoolStart(
-            _vaultConfig, _timelockConfig, _commonPoolConfig, auxiliaryConfig, address(GGV_STRATEGY_FACTORY), ""
-        );
     }
 
     /**

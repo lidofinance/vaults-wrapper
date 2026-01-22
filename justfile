@@ -55,14 +55,6 @@ deploy-all env_file:
   just deploy-pool-start $FACTORY "config/${POOL_CONFIG_NAME}"
   just deploy-pool-finish $FACTORY $INTERMEDIATE_JSON
 
-  export POOL_CONFIG_NAME="hoodi-stv-ggv.json"
-  export INTERMEDIATE_JSON="deployments/intermediate-${NOW}-${POOL_CONFIG_NAME}"
-  just deploy-pool-start $FACTORY "config/${POOL_CONFIG_NAME}"
-  just deploy-pool-finish $FACTORY $INTERMEDIATE_JSON
-
-deploy-ggv-mocks:
-  forge script script/DeployGGVMocks.s.sol:DeployGGVMocks $(just _script-flags) --gas-limit {{fusaka_tx_gas_limit}} --sig 'run()'
-
 publish-sources address contract_path constructor_args:
   forge verify-contract {{address}} {{contract_path}} \
     --verifier etherscan \
@@ -113,7 +105,6 @@ verify-all:
   FACTORY_CONFIG="config/hoodi-factory.json"
   
   FACTORY=$(jq -r '.deployment.factory' "$DEPLOYMENT_JSON")
-  GGV_STRATEGY_FACTORY=$(jq -r '.factories.ggvStrategyFactory' "$DEPLOYMENT_JSON")
   STV_POOL_FACTORY=$(jq -r '.factories.stvPoolFactory' "$DEPLOYMENT_JSON")
   STV_STETH_POOL_FACTORY=$(jq -r '.factories.stvStETHPoolFactory' "$DEPLOYMENT_JSON")
   WITHDRAWAL_QUEUE_FACTORY=$(jq -r '.factories.withdrawalQueueFactory' "$DEPLOYMENT_JSON")
@@ -121,8 +112,6 @@ verify-all:
   DISTRIBUTOR_FACTORY=$(jq -r '.factories.distributorFactory' "$DEPLOYMENT_JSON")
   
   LOCATOR=$(jq -r '.lidoLocator' "$FACTORY_CONFIG")
-  TELLER=$(jq -r '.strategies.ggv.teller' "$FACTORY_CONFIG")
-  BORING_QUEUE=$(jq -r '.strategies.ggv.boringOnChainQueue' "$FACTORY_CONFIG")
   
   echo "Verifying contracts..."
   echo "Factory: $FACTORY"
@@ -153,18 +142,12 @@ verify-all:
     --verifier etherscan --rpc-url {{env('RPC_URL')}} --watch -vvvv || echo "Failed to verify DistributorFactory"
   
   echo ""
-  echo "6. Verifying GGVStrategyFactory..."
-  GGV_ARGS=$(cast abi-encode "constructor(address,address)" "$TELLER" "$BORING_QUEUE")
-  forge verify-contract "$GGV_STRATEGY_FACTORY" src/factories/GGVStrategyFactory.sol:GGVStrategyFactory \
-    --verifier etherscan --rpc-url {{env('RPC_URL')}} --constructor-args "$GGV_ARGS" --watch -vvvv || echo "Failed to verify GGVStrategyFactory"
-  
-  echo ""
-  echo "7. Verifying Factory..."
+  echo "6. Verifying Factory..."
 
   FACTORY_ARGS=$(cast abi-encode \
-    "constructor(address,(address,address,address,address,address,address))" \
+    "constructor(address,(address,address,address,address,address))" \
     "$LOCATOR" \
-    "($STV_POOL_FACTORY,$STV_STETH_POOL_FACTORY,$WITHDRAWAL_QUEUE_FACTORY,$DISTRIBUTOR_FACTORY,$GGV_STRATEGY_FACTORY,$TIMELOCK_FACTORY)")
+    "($STV_POOL_FACTORY,$STV_STETH_POOL_FACTORY,$WITHDRAWAL_QUEUE_FACTORY,$DISTRIBUTOR_FACTORY,$TIMELOCK_FACTORY)")
   forge verify-contract "$FACTORY" src/Factory.sol:Factory \
     --verifier etherscan --rpc-url {{env('RPC_URL')}} --constructor-args "$FACTORY_ARGS" --watch -vvvv || echo "Failed to verify Factory"
   

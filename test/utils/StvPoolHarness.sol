@@ -15,6 +15,8 @@ import {IVaultHub} from "src/interfaces/core/IVaultHub.sol";
 import {IWstETH} from "src/interfaces/core/IWstETH.sol";
 import {CoreHarness} from "test/utils/CoreHarness.sol";
 import {FactoryHelper} from "test/utils/FactoryHelper.sol";
+import {DummyImplementation} from "src/proxy/DummyImplementation.sol";
+import {GGVStrategyFactory} from "src/factories/GGVStrategyFactory.sol";
 
 /**
  * @title StvPoolHarness
@@ -108,7 +110,7 @@ contract StvPoolHarness is Test {
             console.log("Using predeployed factory from FACTORY_ADDRESS", factoryFromEnv);
         } else {
             FactoryHelper helper = new FactoryHelper();
-            factory = helper.deployMainFactory(address(core.locator()), config.ggvTeller, config.ggvBoringQueue);
+            factory = helper.deployMainFactory(address(core.locator()));
         }
 
         Factory.VaultConfig memory vaultConfig = Factory.VaultConfig({
@@ -137,7 +139,7 @@ contract StvPoolHarness is Test {
 
         address strategyFactoryAddress = address(0);
         if (config.strategyKind == StrategyKind.GGV) {
-            strategyFactoryAddress = address(factory.GGV_STRATEGY_FACTORY());
+            strategyFactoryAddress = address(new GGVStrategyFactory(config.ggvTeller, config.ggvBoringQueue));
         }
         // StrategyKind.NONE: strategyFactoryAddress remains address(0)
 
