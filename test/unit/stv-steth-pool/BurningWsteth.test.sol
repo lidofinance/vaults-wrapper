@@ -345,33 +345,51 @@ contract BurningWstethTest is Test, SetupStvStETHPool {
 
         uint256 wstethToBurn = 123456789; // Odd number to trigger rounding
         uint256 mintedBefore = pool.mintedStethSharesOf(address(this));
+        uint256 totalLiabilityBefore = pool.totalLiabilityShares();
 
         // Calculate what actually gets burned (simulating unwrap rounding)
         uint256 unwrappedSteth = steth.getPooledEthByShares(wstethToBurn);
         uint256 unwrappedStethShares = steth.getSharesByPooledEth(unwrappedSteth);
 
+        // Verify rounding occurred
+        assertGt(wstethToBurn, unwrappedStethShares);
+        assertEq(wstethToBurn - unwrappedStethShares, 1); // 1 share lost due to rounding
+
         pool.burnWsteth(wstethToBurn);
 
-        // Should decrease by unwrapped shares, accounting for rounding loss
+        // User's liability should decrease by unwrapped shares, accounting for rounding loss
         assertEq(pool.mintedStethSharesOf(address(this)), mintedBefore - unwrappedStethShares);
-        assertLe(unwrappedStethShares, wstethToBurn); // Loss due to rounding
+        assertLt(unwrappedStethShares, wstethToBurn); // Loss due to rounding
+
+        // Total liability should decrease by unwrapped shares, accounting for rounding loss
+        uint256 totalLiabilityDecrease = totalLiabilityBefore - pool.totalLiabilityShares();
+        assertEq(totalLiabilityDecrease, unwrappedStethShares);
+        assertLt(totalLiabilityDecrease, wstethToBurn); // Loss due to rounding
     }
 
     function test_BurnWsteth_DustAccumulatesOnWsteth() public {
         // Set share rate to create dust
-        steth.mock_setTotalPooled(333 * 10 ** 18, 100 * 10 ** 18); // share rate = 3.33
+        steth.mock_setTotalPooled(1001 * 10 ** 18, 1000 * 10 ** 18); // share rate = 1.001
 
-        uint256 wstethToBurn = 1000;
+        uint256 wstethToBurn = 123456789;
 
         // Unwrap simulation: wsteth -> steth -> shares
         uint256 unwrappedSteth = steth.getPooledEthByShares(wstethToBurn);
         uint256 unwrappedStethShares = steth.getSharesByPooledEth(unwrappedSteth);
 
+        // Verify rounding occurred
+        assertGt(wstethToBurn, unwrappedStethShares);
+        assertEq(wstethToBurn - unwrappedStethShares, 1); // 1 share lost due to rounding
+
+        // Record stETH shares on WSTETH contract before burn
+        uint256 stethSharesOnWstethBefore = steth.sharesOf(address(wsteth));
+
         pool.burnWsteth(wstethToBurn);
 
-        // Pool should not hold wsteth, dust goes elsewhere in the process
-        assertEq(wsteth.balanceOf(address(pool)), 0);
-        // Verify rounding occurred (shares decreased by less than or equal to wsteth burned)
-        assertLe(unwrappedStethShares, wstethToBurn);
+        // Verify some dust remains on wstETH contract 
+        uint256 stethSharesOnWstethDecrease = stethSharesOnWstethBefore - steth.sharesOf(address(wsteth));
+        assertEq(stethSharesOnWstethDecrease, unwrappedStethShares); // Shares decreased by unwrapped amount
+        assertGt(wstethToBurn, stethSharesOnWstethDecrease); // Loss due to rounding
+        assertEq(wstethToBurn - stethSharesOnWstethDecrease, 1); // 1 share of dust remains
     }
 }
