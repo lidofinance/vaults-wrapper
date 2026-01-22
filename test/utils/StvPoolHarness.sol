@@ -15,7 +15,6 @@ import {IVaultHub} from "src/interfaces/core/IVaultHub.sol";
 import {IWstETH} from "src/interfaces/core/IWstETH.sol";
 import {CoreHarness} from "test/utils/CoreHarness.sol";
 import {FactoryHelper} from "test/utils/FactoryHelper.sol";
-import {DummyImplementation} from "src/proxy/DummyImplementation.sol";
 import {GGVStrategyFactory} from "src/factories/GGVStrategyFactory.sol";
 
 /**

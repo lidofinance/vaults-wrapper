@@ -55,6 +55,9 @@ deploy-all env_file:
   just deploy-pool-start $FACTORY "config/${POOL_CONFIG_NAME}"
   just deploy-pool-finish $FACTORY $INTERMEDIATE_JSON
 
+deploy-ggv-mocks:
+  forge script script/DeployGGVMocks.s.sol:DeployGGVMocks $(just _script-flags) --gas-limit {{fusaka_tx_gas_limit}} --sig 'run()'
+  
 publish-sources address contract_path constructor_args:
   forge verify-contract {{address}} {{contract_path}} \
     --verifier etherscan \
