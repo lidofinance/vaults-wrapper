@@ -35,6 +35,7 @@ contract DeployFactory is Script {
         factoriesSection = vm.serializeAddress("factories", "stvStETHPoolFactory", _subFactories.stvStETHPoolFactory);
         factoriesSection =
             vm.serializeAddress("factories", "withdrawalQueueFactory", _subFactories.withdrawalQueueFactory);
+        factoriesSection = vm.serializeAddress("factories", "distributorFactory", _subFactories.distributorFactory);
         factoriesSection = vm.serializeAddress("factories", "ggvStrategyFactory", _subFactories.ggvStrategyFactory);
         factoriesSection = vm.serializeAddress("factories", "timelockFactory", _subFactories.timelockFactory);
 

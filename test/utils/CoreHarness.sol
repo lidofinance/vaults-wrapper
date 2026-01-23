@@ -138,8 +138,10 @@ contract CoreHarness is Test {
         IOperatorGrid.Tier memory tier = operatorGrid.tier(DEFAULT_TIER_ID);
         if (tier.shareLimit == 0) {
             IOperatorGrid.TierParams[] memory params = new IOperatorGrid.TierParams[](1);
+
+            uint256 shareLimit = 1000 ether;
             params[0] = IOperatorGrid.TierParams({
-                shareLimit: 10_000 ether,
+                shareLimit: shareLimit,
                 reserveRatioBP: tier.reserveRatioBP,
                 forcedRebalanceThresholdBP: tier.forcedRebalanceThresholdBP,
                 infraFeeBP: tier.infraFeeBP,
@@ -149,6 +151,12 @@ contract CoreHarness is Test {
 
             uint256[] memory tierIds = new uint256[](1);
             tierIds[0] = 0;
+
+            //registry will be assigned on upgrade to EVMScriptExecutor, VaultsAdapter
+            bytes32 REGISTRY_ROLE = operatorGrid.REGISTRY_ROLE();
+
+            vm.prank(agent);
+            operatorGrid.grantRole(REGISTRY_ROLE, agent);
 
             vm.prank(agent);
             operatorGrid.alterTiers(tierIds, params);

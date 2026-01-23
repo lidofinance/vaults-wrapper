@@ -12,7 +12,8 @@
     "emergencyCommittee": "0xcc95b0Dbe1519AfaC58d954444839A80700380a2"
   },
   "auxiliaryPoolConfig": {
-    "allowlistEnabled": false,
+    "allowListEnabled": false,
+    "allowListManager": "0x0000000000000000000000000000000000000000",
     "mintingEnabled": true,
     "reserveRatioGapBP": 250
   },

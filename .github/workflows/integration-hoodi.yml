@@ -1,0 +1,23 @@
+name: Integration Tests (Hoodi)
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Run integration tests on Hoodi
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      FOUNDRY_PROFILE: test
+      RPC_URL: https://0xrpc.io/hoodi
+      CORE_LOCATOR_ADDRESS: "0xe2EF9536DAAAEBFf5b1c130957AB3E80056b06D8"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: ./.github/actions/setup
+
+      - run: just test-integration

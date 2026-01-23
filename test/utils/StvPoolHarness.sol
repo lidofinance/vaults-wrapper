@@ -52,7 +52,7 @@ contract StvPoolHarness is Test {
     }
 
     struct DeploymentConfig {
-        bool allowlistEnabled;
+        bool allowListEnabled;
         bool mintingEnabled;
         address owner;
         address nodeOperator;
@@ -123,7 +123,8 @@ contract StvPoolHarness is Test {
         });
 
         Factory.AuxiliaryPoolConfig memory auxiliaryConfig = Factory.AuxiliaryPoolConfig({
-            allowlistEnabled: config.allowlistEnabled,
+            allowListEnabled: config.allowListEnabled,
+            allowListManager: config.allowListEnabled ? owner : address(0),
             mintingEnabled: config.mintingEnabled,
             reserveRatioGapBP: config.reserveRatioGapBP
         });
@@ -177,7 +178,7 @@ contract StvPoolHarness is Test {
         returns (WrapperContext memory context)
     {
         DeploymentConfig memory config = DeploymentConfig({
-            allowlistEnabled: enableAllowlist,
+            allowListEnabled: enableAllowlist,
             mintingEnabled: false,
             owner: NODE_OPERATOR,
             nodeOperator: NODE_OPERATOR,

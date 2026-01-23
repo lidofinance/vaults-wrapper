@@ -6,4 +6,5 @@ interface IStrategyCallForwarder {
     function doCall(address _target, bytes calldata _data) external returns (bytes memory);
     function doCallWithValue(address _target, bytes calldata _data, uint256 _value) external returns (bytes memory);
     function sendValue(address payable _recipient, uint256 _amount) external;
+    function safeTransferERC20(address _token, address _recipient, uint256 _amount) external;
 }

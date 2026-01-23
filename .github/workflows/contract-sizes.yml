@@ -1,0 +1,16 @@
+name: Check bytecode size
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build & check sizes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: foundry-rs/foundry-toolchain@v1
+      - run: forge build --sizes

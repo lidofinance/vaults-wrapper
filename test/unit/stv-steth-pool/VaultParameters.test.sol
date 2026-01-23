@@ -13,7 +13,7 @@ contract VaultParametersTest is Test, SetupStvStETHPool {
         address stakingVault = dashboard.stakingVault();
         uint256 vaultReserveRatioBP = vaultHub.vaultConnection(stakingVault).reserveRatioBP;
 
-        assertEq(pool.reserveRatioBP(), vaultReserveRatioBP + RESERVE_RATIO_GAP_BP);
+        assertEq(pool.poolReserveRatioBP(), vaultReserveRatioBP + RESERVE_RATIO_GAP_BP);
     }
 
     function test_ForcedRebalanceThresholdBP_ReturnsExpectedValue() public view {
@@ -21,7 +21,7 @@ contract VaultParametersTest is Test, SetupStvStETHPool {
         address stakingVault = dashboard.stakingVault();
         uint256 vaultForcedRebalanceThresholdBP = vaultHub.vaultConnection(stakingVault).forcedRebalanceThresholdBP;
 
-        assertEq(pool.forcedRebalanceThresholdBP(), vaultForcedRebalanceThresholdBP + RESERVE_RATIO_GAP_BP);
+        assertEq(pool.poolForcedRebalanceThresholdBP(), vaultForcedRebalanceThresholdBP + RESERVE_RATIO_GAP_BP);
     }
 
     function test_SyncVaultParameters_UpdatesParameters() public {
@@ -33,8 +33,8 @@ contract VaultParametersTest is Test, SetupStvStETHPool {
 
         pool.syncVaultParameters();
 
-        assertEq(pool.reserveRatioBP(), baseReserveRatioBP + RESERVE_RATIO_GAP_BP);
-        assertEq(pool.forcedRebalanceThresholdBP(), baseForcedThresholdBP + RESERVE_RATIO_GAP_BP);
+        assertEq(pool.poolReserveRatioBP(), baseReserveRatioBP + RESERVE_RATIO_GAP_BP);
+        assertEq(pool.poolForcedRebalanceThresholdBP(), baseForcedThresholdBP + RESERVE_RATIO_GAP_BP);
     }
 
     function test_SyncVaultParameters_EmitsEvent() public {

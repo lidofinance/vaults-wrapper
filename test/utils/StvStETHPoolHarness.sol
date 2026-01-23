@@ -14,7 +14,7 @@ contract StvStETHPoolHarness is StvPoolHarness {
         returns (WrapperContext memory)
     {
         DeploymentConfig memory config = DeploymentConfig({
-            allowlistEnabled: enableAllowlist,
+            allowListEnabled: enableAllowlist,
             mintingEnabled: true,
             owner: NODE_OPERATOR,
             nodeOperator: NODE_OPERATOR,
@@ -77,10 +77,10 @@ contract StvStETHPoolHarness is StvPoolHarness {
 
     /**
      * @notice Calculate max mintable stETH shares for a given ETH amount
-     * @dev Uses reserveRatioBP from StvStETHPool which includes the pool gap
+     * @dev Uses poolReserveRatioBP from StvStETHPool which includes the pool gap
      */
     function _calcMaxMintableStShares(WrapperContext memory ctx, uint256 _eth) public view returns (uint256) {
-        uint256 wrapperRrBp = stvStETHPool(ctx).reserveRatioBP();
+        uint256 wrapperRrBp = stvStETHPool(ctx).poolReserveRatioBP();
         return steth.getSharesByPooledEth(_eth * (TOTAL_BASIS_POINTS - wrapperRrBp) / TOTAL_BASIS_POINTS);
     }
 }
