@@ -11,17 +11,25 @@ import {Factory} from "src/Factory.sol";
 import {IDashboard} from "src/interfaces/core/IDashboard.sol";
 import {IOssifiableProxy} from "src/interfaces/core/IOssifiableProxy.sol";
 import {Vm} from "forge-std/Vm.sol";
+import {DummyImplementation} from "src/proxy/DummyImplementation.sol";
+import {GGVStrategyFactory} from "src/factories/GGVStrategyFactory.sol";
 
 contract FactoryIntegrationTest is StvPoolHarness {
     Factory internal factory;
     address internal constant ALLOW_LIST_MANAGER = address(0xA110);
+    address internal strategyGGVFactory;
+
 
     function setUp() public {
         _initializeCore();
 
         FactoryHelper helper = new FactoryHelper();
 
-        factory = helper.deployMainFactory(address(core.locator()), address(0), address(0));
+        factory = helper.deployMainFactory(address(core.locator()));
+
+        address dummyTeller = address(new DummyImplementation());
+        address dummyQueue = address(new DummyImplementation());
+        strategyGGVFactory = address(new GGVStrategyFactory(dummyTeller, dummyQueue));
     }
 
     function _buildConfigs(
@@ -155,10 +163,9 @@ contract FactoryIntegrationTest is StvPoolHarness {
             Factory.AuxiliaryPoolConfig memory auxiliaryConfig,
             Factory.TimelockConfig memory timelockConfig
         ) = _buildConfigs(true, address(0), true, 500, "Factory Strategy Pool", "FSP");
-        address strategyFactory = address(factory.GGV_STRATEGY_FACTORY());
 
         (, Factory.PoolDeployment memory deployment) =
-            _deployThroughFactory(vaultConfig, timelockConfig, commonPoolConfig, auxiliaryConfig, strategyFactory);
+            _deployThroughFactory(vaultConfig, timelockConfig, commonPoolConfig, auxiliaryConfig, strategyGGVFactory);
 
         assertTrue(deployment.strategy != address(0), "strategy should be deployed");
 
@@ -388,7 +395,7 @@ contract FactoryIntegrationTest is StvPoolHarness {
             bool allowListEnabled = (i >= 2);
             bool mintingEnabled = (i == 1 || i == 3);
             uint256 reserveRatioGapBP = (i == 3) ? 500 : 0;
-            address strategyFactory = (i == 3) ? address(factory.GGV_STRATEGY_FACTORY()) : address(0);
+            address strategyFactory = (i == 3) ? strategyGGVFactory : address(0);
             // For strategy pools, allowListManager config is ignored (timelock is used)
             // For non-strategy pools with allowlist, use ALLOW_LIST_MANAGER
             address allowListManagerConfig = (i == 2) ? ALLOW_LIST_MANAGER : address(0);

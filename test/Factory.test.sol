@@ -59,9 +59,7 @@ contract FactoryTest is Test {
         subFactories.stvStETHPoolFactory = address(new StvStETHPoolFactory());
         subFactories.withdrawalQueueFactory = address(new WithdrawalQueueFactory());
         subFactories.distributorFactory = address(new DistributorFactory());
-        address dummyTeller = address(new DummyImplementation());
-        address dummyQueue = address(new DummyImplementation());
-        subFactories.ggvStrategyFactory = address(new GGVStrategyFactory(dummyTeller, dummyQueue));
+
         subFactories.timelockFactory = address(new TimelockFactory());
 
         wrapperFactory = new Factory(address(locator), subFactories);
@@ -177,15 +175,16 @@ contract FactoryTest is Test {
         ) = _buildConfigs(true, address(0), true, 0, "Factory stETH Pool", "FSTETH");
 
         Factory.TimelockConfig memory timelockConfig = _defaultTimelockConfig();
-        address strategyFactory = address(wrapperFactory.GGV_STRATEGY_FACTORY());
 
-        address ggvFactory = address(wrapperFactory.GGV_STRATEGY_FACTORY());
+        address dummyTeller = address(new DummyImplementation());
+        address dummyQueue = address(new DummyImplementation());
+        address strategyFactory = address(new GGVStrategyFactory(dummyTeller, dummyQueue));
 
         vm.startPrank(admin);
         Factory.PoolIntermediate memory intermediate = wrapperFactory.createPoolStart(
             vaultConfig, timelockConfig, commonPoolConfig, auxiliaryConfig, strategyFactory, ""
         );
-        uint256 nonceBefore = vm.getNonce(ggvFactory);
+        uint256 nonceBefore = vm.getNonce(strategyFactory);
         Factory.PoolDeployment memory deployment = wrapperFactory.createPoolFinish{value: connectDeposit}(
             vaultConfig, timelockConfig, commonPoolConfig, auxiliaryConfig, strategyFactory, "", intermediate
         );
@@ -193,7 +192,7 @@ contract FactoryTest is Test {
 
         StvStETHPool pool = StvStETHPool(payable(deployment.pool));
 
-        uint256 nonceAfter = vm.getNonce(ggvFactory);
+        uint256 nonceAfter = vm.getNonce(strategyFactory);
         assertTrue(nonceAfter >= nonceBefore);
         assertTrue(deployment.strategy != address(0));
         assertTrue(pool.isAllowListed(deployment.strategy));
@@ -296,7 +295,10 @@ contract FactoryTest is Test {
         ) = _buildConfigs(true, address(0), true, 0, "Factory Strategy Pool", "FSP");
 
         Factory.TimelockConfig memory timelockConfig = _defaultTimelockConfig();
-        address strategyFactory = address(wrapperFactory.GGV_STRATEGY_FACTORY());
+
+        address dummyTeller = address(new DummyImplementation());
+        address dummyQueue = address(new DummyImplementation());
+        address strategyFactory = address(new GGVStrategyFactory(dummyTeller, dummyQueue));
 
         vm.startPrank(admin);
         uint256 gasBefore = gasleft();

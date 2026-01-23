@@ -151,7 +151,7 @@ contract DeployPool is Script {
         json = vm.serializeBytes("_ctorBytecode", "withdrawalQueueProxy", withdrawalCtorBytecode);
     }
 
-    function _readPoolParams(string memory _path, address _ggvFactory) internal view returns (PoolParams memory p) {
+    function _readPoolParams(string memory _path) internal view returns (PoolParams memory p) {
         string memory json = vm.readFile(_path);
         p.vaultConfig = Factory.VaultConfig({
             nodeOperator: vm.parseJsonAddress(json, "$.vaultConfig.nodeOperator"),
@@ -184,14 +184,7 @@ contract DeployPool is Script {
 
         try vm.parseJsonAddress(json, "$.strategyFactory") returns (address addr) {
             p.strategyFactory = addr;
-        } catch {
-            string memory strategyFactoryString = vm.parseJsonString(json, "$.strategyFactory");
-            if (keccak256(bytes(strategyFactoryString)) == keccak256(bytes("GGV"))) {
-                p.strategyFactory = _ggvFactory;
-            } else {
-                revert("Invalid strategy factory: must be either address or 'GGV'");
-            }
-        }
+        } catch {}
     }
 
     function _loadIntermediate(string memory _path) internal view returns (Factory.PoolIntermediate memory) {
@@ -270,7 +263,7 @@ contract DeployPool is Script {
 
         require(msg.sender.balance > 1 ether, "msg.sender balance must be above 1 ether");
 
-        PoolParams memory p = _readPoolParams(paramsJsonPath, address(_factory.GGV_STRATEGY_FACTORY()));
+        PoolParams memory p = _readPoolParams(paramsJsonPath);
 
         require(bytes(p.commonPoolConfig.name).length != 0, "commonPoolConfig.name missing");
         require(bytes(p.commonPoolConfig.symbol).length != 0, "commonPoolConfig.symbol missing");
