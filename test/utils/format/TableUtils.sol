@@ -5,6 +5,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {console} from "forge-std/console.sol";
 
+import {StvPoolHarness} from "../StvPoolHarness.sol";
 import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import {IStETH} from "src/interfaces/core/IStETH.sol";
 import {IWstETH} from "src/interfaces/core/IWstETH.sol";
@@ -21,14 +22,16 @@ interface IWrapper {
 
 library TableUtils {
     using SafeCast for uint256;
+
     Vm private constant VM = Vm(address(uint160(uint256(keccak256("hevm cheat code")))));
 
     struct Context {
         IWrapper pool;
-        IERC20 boringVault;
+        IERC20 lpToken;
         IStETH steth;
         IWstETH wsteth;
         IBoringOnChainQueue boringQueue;
+        StvPoolHarness.StrategyKind strategyKind;
     }
 
     struct User {
@@ -39,16 +42,32 @@ library TableUtils {
     function init(
         Context storage self,
         address _pool,
+        address _lpToken,
+        address _steth,
+        address _wsteth,
+        StvPoolHarness.StrategyKind strategyKind,
+        bytes memory data
+    ) internal {
+        self.pool = IWrapper(_pool);
+        self.steth = IStETH(_steth);
+        self.wsteth = IWstETH(_wsteth);
+        self.lpToken = IERC20(_lpToken);
+        self.strategyKind = strategyKind;
+        if (strategyKind == StvPoolHarness.StrategyKind.GGV) {
+            address boringQueue = abi.decode(data, (address));
+            self.boringQueue = IBoringOnChainQueue(boringQueue);
+        }
+    }
+
+    function init(
+        Context storage self,
+        address _pool,
         address _boringVault,
         address _steth,
         address _wsteth,
         address _boringQueue
     ) internal {
-        self.pool = IWrapper(_pool);
-        self.boringVault = IERC20(_boringVault);
-        self.steth = IStETH(_steth);
-        self.wsteth = IWstETH(_wsteth);
-        self.boringQueue = IBoringOnChainQueue(_boringQueue);
+        init(self, _pool, _boringVault, _steth, _wsteth, StvPoolHarness.StrategyKind.GGV, abi.encode(_boringQueue));
     }
 
     function printHeader(string memory title) internal pure {
@@ -91,9 +110,7 @@ library TableUtils {
 
         uint256 stethShareRate = self.steth.getPooledEthByShares(1e18);
 
-        console.log(
-            unicode"─────────────────────────────────────────────────"
-        );
+        console.log(unicode"─────────────────────────────────────────────────");
         console.log("  stETH Share Rate:", formatETH(stethShareRate));
         console.log("pool totalSupply", formatETH(self.pool.totalSupply()));
         console.log("pool totalAssets", formatETH(self.pool.totalAssets()));
@@ -107,9 +124,10 @@ library TableUtils {
         uint256 stv = self.pool.balanceOf(_user);
         uint256 assets = self.pool.previewRedeem(stv);
         uint256 debtSteth = self.pool.mintedStethSharesOf(_user);
-        uint256 ggv = self.boringVault.balanceOf(_user);
-        uint256 ggvStethOut =
-            self.boringQueue.previewAssetsOut(address(self.wsteth), ggv.toUint128(), _discount.toUint16());
+        uint256 ggv = self.lpToken.balanceOf(_user);
+        uint256 ggvStethOut = self.strategyKind == StvPoolHarness.StrategyKind.MELLOW
+            ? 0
+            : self.boringQueue.previewAssetsOut(address(self.wsteth), ggv.toUint128(), _discount.toUint16());
         uint256 wsteth = self.wsteth.balanceOf(_user);
 
         console.log(

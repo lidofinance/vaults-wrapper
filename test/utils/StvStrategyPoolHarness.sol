@@ -19,6 +19,19 @@ contract StvStrategyPoolHarness is StvStETHPoolHarness {
         address _teller,
         address _boringQueue
     ) internal returns (WrapperContext memory) {
+        return _deployStvStETHPool(
+            enableAllowlist, nodeOperatorFeeBP, reserveRatioGapBP, _teller, _boringQueue, StrategyKind.GGV
+        );
+    }
+
+    function _deployStvStETHPool(
+        bool enableAllowlist,
+        uint256 nodeOperatorFeeBP,
+        uint256 reserveRatioGapBP,
+        address _teller,
+        address _boringQueue,
+        StrategyKind strategyKind
+    ) internal returns (WrapperContext memory) {
         DeploymentConfig memory config = DeploymentConfig({
             allowListEnabled: enableAllowlist,
             mintingEnabled: true,
@@ -29,7 +42,7 @@ contract StvStrategyPoolHarness is StvStETHPoolHarness {
             confirmExpiry: CONFIRM_EXPIRY,
             minWithdrawalDelayTime: 1 days,
             reserveRatioGapBP: reserveRatioGapBP,
-            strategyKind: StrategyKind.GGV,
+            strategyKind: strategyKind,
             ggvTeller: _teller,
             ggvBoringQueue: _boringQueue,
             timelockMinDelaySeconds: 0,

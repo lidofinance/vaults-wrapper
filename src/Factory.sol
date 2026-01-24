@@ -8,6 +8,7 @@ import {StvStETHPool} from "./StvStETHPool.sol";
 import {WithdrawalQueue} from "./WithdrawalQueue.sol";
 import {DistributorFactory} from "./factories/DistributorFactory.sol";
 import {GGVStrategyFactory} from "./factories/GGVStrategyFactory.sol";
+import {MellowStrategyFactory} from "./factories/MellowStrategyFactory.sol";
 import {StvPoolFactory} from "./factories/StvPoolFactory.sol";
 import {StvStETHPoolFactory} from "./factories/StvStETHPoolFactory.sol";
 import {TimelockFactory} from "./factories/TimelockFactory.sol";
@@ -39,6 +40,7 @@ contract Factory {
      * @param withdrawalQueueFactory Factory for deploying WithdrawalQueue implementations
      * @param distributorFactory Factory for deploying Distributor implementations
      * @param ggvStrategyFactory Factory for deploying GGV strategy implementations
+     * @param mellowStrategyFactory Factory for deploying Mellow strategy implementations
      * @param timelockFactory Factory for deploying Timelock controllers
      */
     struct SubFactories {
@@ -47,6 +49,7 @@ contract Factory {
         address withdrawalQueueFactory;
         address distributorFactory;
         address ggvStrategyFactory;
+        address mellowStrategyFactory;
         address timelockFactory;
     }
 
@@ -286,6 +289,11 @@ contract Factory {
     GGVStrategyFactory public immutable GGV_STRATEGY_FACTORY;
 
     /**
+     * @notice Factory for deploying Mellow strategy implementations
+     */
+    MellowStrategyFactory public immutable MELLOW_STRATEGY_FACTORY;
+
+    /**
      * @notice Factory for deploying Timelock controllers
      */
     TimelockFactory public immutable TIMELOCK_FACTORY;
@@ -343,6 +351,7 @@ contract Factory {
         WITHDRAWAL_QUEUE_FACTORY = WithdrawalQueueFactory(_subFactories.withdrawalQueueFactory);
         DISTRIBUTOR_FACTORY = DistributorFactory(_subFactories.distributorFactory);
         GGV_STRATEGY_FACTORY = GGVStrategyFactory(_subFactories.ggvStrategyFactory);
+        MELLOW_STRATEGY_FACTORY = MellowStrategyFactory(_subFactories.mellowStrategyFactory);
         TIMELOCK_FACTORY = TimelockFactory(_subFactories.timelockFactory);
 
         DUMMY_IMPLEMENTATION = address(new DummyImplementation());
@@ -435,6 +444,34 @@ contract Factory {
             _vaultConfig, _timelockConfig, _commonPoolConfig, auxiliaryConfig, address(GGV_STRATEGY_FACTORY), ""
         );
     }
+
+    /**
+     * @notice Initiates deployment of a Mellow strategy pool (first phase)
+     * @param _vaultConfig Configuration for the vault
+     * @param _timelockConfig Configuration for the timelock controller
+     * @param _commonPoolConfig Common pool parameters (name, symbol, withdrawal delay)
+     * @param _reserveRatioGapBP Maximum allowed reserve ratio gap in basis points
+     * @return intermediate Deployment state needed for finish phase
+     * @dev ETH for vault connection deposit should be sent in createPoolFinish
+     * @dev Automatically enables allowlist and minting for Mellow pools
+     */
+    function createPoolMellowStart(
+        VaultConfig memory _vaultConfig,
+        TimelockConfig memory _timelockConfig,
+        CommonPoolConfig memory _commonPoolConfig,
+        uint256 _reserveRatioGapBP
+    ) external returns (PoolIntermediate memory intermediate) {
+        AuxiliaryPoolConfig memory auxiliaryConfig = AuxiliaryPoolConfig({
+            allowListEnabled: true,
+            allowListManager: address(0),
+            mintingEnabled: true,
+            reserveRatioGapBP: _reserveRatioGapBP
+        });
+        intermediate = createPoolStart(
+            _vaultConfig, _timelockConfig, _commonPoolConfig, auxiliaryConfig, address(MELLOW_STRATEGY_FACTORY), ""
+        );
+    }
+
 
     /**
      * @notice Generic pool deployment start function (first phase)

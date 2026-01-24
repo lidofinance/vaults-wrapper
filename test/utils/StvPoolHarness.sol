@@ -48,7 +48,8 @@ contract StvPoolHarness is Test {
     // Deployment configuration struct
     enum StrategyKind {
         NONE,
-        GGV
+        GGV,
+        MELLOW
     }
 
     struct DeploymentConfig {
@@ -138,6 +139,8 @@ contract StvPoolHarness is Test {
         address strategyFactoryAddress = address(0);
         if (config.strategyKind == StrategyKind.GGV) {
             strategyFactoryAddress = address(factory.GGV_STRATEGY_FACTORY());
+        } else if (config.strategyKind == StrategyKind.MELLOW) {
+            strategyFactoryAddress = address(factory.MELLOW_STRATEGY_FACTORY());
         }
         // StrategyKind.NONE: strategyFactoryAddress remains address(0)
 
