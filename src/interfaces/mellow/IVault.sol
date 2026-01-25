@@ -18,6 +18,8 @@ interface IVault {
 
     function feeManager() external view returns (IFeeManager);
 
+    function getQueueCount(address asset) external view returns (uint256);
+
     function queueAt(address asset, uint256 index) external view returns (address);
 
     function setQueueLimit(uint256 limit) external;

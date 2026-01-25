@@ -9,10 +9,10 @@ import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 
 import {IDepositQueue} from "../../src/interfaces/mellow/IDepositQueue.sol";
+import {IOracle} from "../../src/interfaces/mellow/IOracle.sol";
 import {IRedeemQueue} from "../../src/interfaces/mellow/IRedeemQueue.sol";
 import {ISyncDepositQueue} from "../../src/interfaces/mellow/ISyncDepositQueue.sol";
 import {IVault} from "../../src/interfaces/mellow/IVault.sol";
-import {IOracle} from "../../src/interfaces/mellow/IOracle.sol";
 
 import {StvStrategyPoolHarness} from "test/utils/StvStrategyPoolHarness.sol";
 
@@ -22,12 +22,12 @@ import {IStrategy} from "../../src/interfaces/IStrategy.sol";
 import {IStrategyCallForwarder} from "../../src/interfaces/IStrategyCallForwarder.sol";
 import {MellowStrategy} from "../../src/strategy/MellowStrategy.sol";
 
-import {TableUtils} from "../utils/format/TableUtils.sol";
 import {AllowList} from "../../src/AllowList.sol";
+import {TableUtils} from "../utils/format/TableUtils.sol";
 
 import {IWstETH} from "../../src/interfaces/core/IWstETH.sol";
 
-contract MellowTest is StvStrategyPoolHarness {
+contract MellowIntegrationTest is StvStrategyPoolHarness {
     using SafeCast for uint256;
 
     // Permissions
@@ -39,19 +39,19 @@ contract MellowTest is StvStrategyPoolHarness {
     bytes32 public constant SET_QUEUE_STATUS_ROLE = keccak256("modules.ShareModule.SET_QUEUE_STATUS_ROLE");
     bytes32 public constant SET_QUEUE_LIMIT_ROLE = keccak256("modules.ShareModule.SET_QUEUE_LIMIT_ROLE");
     bytes32 public constant REMOVE_QUEUE_ROLE = keccak256("modules.ShareModule.REMOVE_QUEUE_ROLE");
-    
+
     address public constant WSTETH = 0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0;
 
     IVault public constant STRETH = IVault(0x277C6A642564A91ff78b008022D65683cEE5CCC5);
     address public constant PROXY_ADMIN = 0x81698f87C6482bF1ce9bFcfC0F103C4A0Adf0Af0;
-    
+
     address public syncDepositQueue;
     address public asyncDepositQueue;
     address public asyncRedeemQueue;
 
     MellowStrategy public mellowStrategy;
     StvStETHPool public pool;
-    WithdrawalQueue public withdrawalQueue; 
+    WithdrawalQueue public withdrawalQueue;
 
     WrapperContext public ctx;
 
@@ -104,17 +104,18 @@ contract MellowTest is StvStrategyPoolHarness {
 
         vm.startPrank(getRoleHolder(SET_SECURITY_PARAMS_ROLE));
         // inf params for testing only
-        STRETH.oracle().setSecurityParams(
-            IOracle.SecurityParams({
-                maxAbsoluteDeviation: type(uint224).max,
-                suspiciousAbsoluteDeviation: type(uint224).max,
-                maxRelativeDeviationD18: 1 ether,
-                suspiciousRelativeDeviationD18: 1 ether,
-                timeout: 1,
-                depositInterval: 1,
-                redeemInterval: 1
-            })
-        );
+        STRETH.oracle()
+            .setSecurityParams(
+                IOracle.SecurityParams({
+                    maxAbsoluteDeviation: type(uint224).max,
+                    suspiciousAbsoluteDeviation: type(uint224).max,
+                    maxRelativeDeviationD18: 1 ether,
+                    suspiciousRelativeDeviationD18: 1 ether,
+                    timeout: 1,
+                    depositInterval: 1,
+                    redeemInterval: 1
+                })
+            );
         vm.stopPrank();
     }
 
@@ -221,7 +222,7 @@ contract MellowTest is StvStrategyPoolHarness {
         withdrawalQueue.claimWithdrawal(USER1, wqRequestIds[0]);
 
         uint256 ethClaimed = USER1.balance - userBalanceBeforeClaim;
-        assertEq(ethClaimed, 1 ether - 3 wei);    
+        assertEq(ethClaimed, 1 ether - 3 wei);
     }
 
     function testMultipleDepositQueuesFlow() public {
@@ -234,7 +235,7 @@ contract MellowTest is StvStrategyPoolHarness {
 
         uint256 asyncAmount = depositAmount / 2;
         uint256 assetsAsync = pool.remainingMintingCapacitySharesOf(USER1, asyncAmount);
-        
+
         uint256 syncAmount = depositAmount - asyncAmount;
         uint256 assetsSync = pool.remainingMintingCapacitySharesOf(USER1, syncAmount);
         {
@@ -257,15 +258,15 @@ contract MellowTest is StvStrategyPoolHarness {
 
         // uint256 mellowShares = STRETH.shareManager().sharesOf(user1StrategyCallForwarder);
         // assertEq(
-        //     mellowShares, 
-            
+        //     mellowShares,
+
         // );
 
         skip(1 seconds);
         core.increaseBufferedEther(steth.totalSupply() * 1 / 100);
         _submitMellowReport(0);
         _handleBatches();
-        
+
         uint256 userMintedStethSharesAfterDeposit = mellowStrategy.mintedStethSharesOf(USER1);
 
         // mellowShares = STRETH.shareManager().sharesOf(user1StrategyCallForwarder);
@@ -338,11 +339,8 @@ contract MellowTest is StvStrategyPoolHarness {
         withdrawalQueue.claimWithdrawal(USER1, wqRequestIds[0]);
 
         uint256 ethClaimed = USER1.balance - userBalanceBeforeClaim;
-        assertEq(ethClaimed, 1 ether - 4 wei);    
+        assertEq(ethClaimed, 1 ether - 4 wei);
     }
-
-
-
 
     // Helpers
 

@@ -5,12 +5,10 @@ import {Vm} from "forge-std/Vm.sol";
 import {Factory} from "src/Factory.sol";
 import {StvPool} from "src/StvPool.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
-import {StvPoolHarness} from "test/utils/StvPoolHarness.sol";
-import {FactoryHelper} from "test/utils/FactoryHelper.sol";
-import {Factory} from "src/Factory.sol";
 import {IDashboard} from "src/interfaces/core/IDashboard.sol";
 import {IOssifiableProxy} from "src/interfaces/core/IOssifiableProxy.sol";
-import {Vm} from "forge-std/Vm.sol";
+import {FactoryHelper} from "test/utils/FactoryHelper.sol";
+import {StvPoolHarness} from "test/utils/StvPoolHarness.sol";
 
 contract FactoryIntegrationTest is StvPoolHarness {
     Factory internal factory;
@@ -50,7 +48,9 @@ contract FactoryIntegrationTest is StvPoolHarness {
 
         timelockConfig = Factory.TimelockConfig({minDelaySeconds: 0, proposer: NODE_OPERATOR, executor: NODE_OPERATOR});
 
-        commonPoolConfig = Factory.CommonPoolConfig({minWithdrawalDelayTime: 1 days, name: name, symbol: symbol, emergencyCommittee: address(0)});
+        commonPoolConfig = Factory.CommonPoolConfig({
+            minWithdrawalDelayTime: 1 days, name: name, symbol: symbol, emergencyCommittee: address(0)
+        });
 
         auxiliaryConfig = Factory.AuxiliaryPoolConfig({
             allowListEnabled: allowListEnabled,
@@ -216,12 +216,7 @@ contract FactoryIntegrationTest is StvPoolHarness {
 
         vm.startPrank(vaultConfig.nodeOperator);
         Factory.PoolIntermediate memory intermediate = factory.createPoolStart(
-            vaultConfig,
-            timelockConfig,
-            commonPoolConfig,
-            auxiliaryConfig,
-            strategyFactory,
-            ""
+            vaultConfig, timelockConfig, commonPoolConfig, auxiliaryConfig, strategyFactory, ""
         );
 
         // Tamper with the configuration before finishing
@@ -342,20 +337,46 @@ contract FactoryIntegrationTest is StvPoolHarness {
             // Verify all the emitted values match the inputs
             assertEq(sender, vaultConfig.nodeOperator, "sender should match node operator");
             assertEq(emittedVaultConfig.nodeOperator, vaultConfig.nodeOperator, "nodeOperator should match");
-            assertEq(emittedVaultConfig.nodeOperatorManager, vaultConfig.nodeOperatorManager, "nodeOperatorManager should match");
-            assertEq(emittedVaultConfig.nodeOperatorFeeBP, vaultConfig.nodeOperatorFeeBP, "nodeOperatorFeeBP should match");
+            assertEq(
+                emittedVaultConfig.nodeOperatorManager,
+                vaultConfig.nodeOperatorManager,
+                "nodeOperatorManager should match"
+            );
+            assertEq(
+                emittedVaultConfig.nodeOperatorFeeBP, vaultConfig.nodeOperatorFeeBP, "nodeOperatorFeeBP should match"
+            );
             assertEq(emittedVaultConfig.confirmExpiry, vaultConfig.confirmExpiry, "confirmExpiry should match");
 
-            assertEq(emittedCommonPoolConfig.minWithdrawalDelayTime, commonPoolConfig.minWithdrawalDelayTime, "minWithdrawalDelayTime should match");
+            assertEq(
+                emittedCommonPoolConfig.minWithdrawalDelayTime,
+                commonPoolConfig.minWithdrawalDelayTime,
+                "minWithdrawalDelayTime should match"
+            );
             assertEq(emittedCommonPoolConfig.name, commonPoolConfig.name, "name should match");
             assertEq(emittedCommonPoolConfig.symbol, commonPoolConfig.symbol, "symbol should match");
 
-            assertEq(emittedAuxiliaryConfig.allowListEnabled, auxiliaryConfig.allowListEnabled, "allowListEnabled should match");
-            assertEq(emittedAuxiliaryConfig.allowListManager, auxiliaryConfig.allowListManager, "allowListManager should match");
-            assertEq(emittedAuxiliaryConfig.mintingEnabled, auxiliaryConfig.mintingEnabled, "mintingEnabled should match");
-            assertEq(emittedAuxiliaryConfig.reserveRatioGapBP, auxiliaryConfig.reserveRatioGapBP, "reserveRatioGapBP should match");
+            assertEq(
+                emittedAuxiliaryConfig.allowListEnabled,
+                auxiliaryConfig.allowListEnabled,
+                "allowListEnabled should match"
+            );
+            assertEq(
+                emittedAuxiliaryConfig.allowListManager,
+                auxiliaryConfig.allowListManager,
+                "allowListManager should match"
+            );
+            assertEq(
+                emittedAuxiliaryConfig.mintingEnabled, auxiliaryConfig.mintingEnabled, "mintingEnabled should match"
+            );
+            assertEq(
+                emittedAuxiliaryConfig.reserveRatioGapBP,
+                auxiliaryConfig.reserveRatioGapBP,
+                "reserveRatioGapBP should match"
+            );
 
-            assertEq(emittedTimelockConfig.minDelaySeconds, timelockConfig.minDelaySeconds, "minDelaySeconds should match");
+            assertEq(
+                emittedTimelockConfig.minDelaySeconds, timelockConfig.minDelaySeconds, "minDelaySeconds should match"
+            );
             assertEq(emittedTimelockConfig.proposer, timelockConfig.proposer, "proposer should match");
             assertEq(emittedTimelockConfig.executor, timelockConfig.executor, "executor should match");
 
@@ -365,7 +386,11 @@ contract FactoryIntegrationTest is StvPoolHarness {
             assertEq(emittedIntermediate.dashboard, intermediate.dashboard, "dashboard address should match");
             assertEq(emittedIntermediate.poolProxy, intermediate.poolProxy, "poolProxy address should match");
             assertEq(emittedIntermediate.poolImpl, intermediate.poolImpl, "poolImpl address should match");
-            assertEq(emittedIntermediate.withdrawalQueueProxy, intermediate.withdrawalQueueProxy, "withdrawalQueueProxy should match");
+            assertEq(
+                emittedIntermediate.withdrawalQueueProxy,
+                intermediate.withdrawalQueueProxy,
+                "withdrawalQueueProxy should match"
+            );
             assertEq(emittedIntermediate.wqImpl, intermediate.wqImpl, "wqImpl address should match");
             assertEq(emittedIntermediate.timelock, intermediate.timelock, "timelock should match");
 
@@ -393,7 +418,9 @@ contract FactoryIntegrationTest is StvPoolHarness {
             // For non-strategy pools with allowlist, use ALLOW_LIST_MANAGER
             address allowListManagerConfig = (i == 2) ? ALLOW_LIST_MANAGER : address(0);
 
-            string memory poolName = i == 0 ? "Factory StvPool" : i == 1 ? "Factory StvStETHPool" : i == 2 ? "Factory StvPoolAllowlist" : "Factory StrategyPool";
+            string memory poolName = i == 0
+                ? "Factory StvPool"
+                : i == 1 ? "Factory StvStETHPool" : i == 2 ? "Factory StvPoolAllowlist" : "Factory StrategyPool";
             string memory poolSymbol = i == 0 ? "FSTV" : i == 1 ? "FSTETH" : i == 2 ? "FSTVA" : "FSTRAT";
 
             (
@@ -401,7 +428,9 @@ contract FactoryIntegrationTest is StvPoolHarness {
                 Factory.CommonPoolConfig memory commonPoolConfig,
                 Factory.AuxiliaryPoolConfig memory auxiliaryConfig,
                 Factory.TimelockConfig memory timelockConfig
-            ) = _buildConfigs(allowListEnabled, allowListManagerConfig, mintingEnabled, reserveRatioGapBP, poolName, poolSymbol);
+            ) = _buildConfigs(
+                allowListEnabled, allowListManagerConfig, mintingEnabled, reserveRatioGapBP, poolName, poolSymbol
+            );
 
             (, Factory.PoolDeployment memory deployment) =
                 _deployThroughFactory(vaultConfig, timelockConfig, commonPoolConfig, auxiliaryConfig, strategyFactory);
@@ -427,8 +456,7 @@ contract FactoryIntegrationTest is StvPoolHarness {
 
             // === Dashboard AccessControl Roles ===
             assertTrue(
-                dashboard.hasRole(dashboard.FUND_ROLE(), deployment.pool),
-                "pool should have FUND_ROLE on dashboard"
+                dashboard.hasRole(dashboard.FUND_ROLE(), deployment.pool), "pool should have FUND_ROLE on dashboard"
             );
             assertTrue(
                 dashboard.hasRole(dashboard.REBALANCE_ROLE(), deployment.pool),
@@ -467,16 +495,14 @@ contract FactoryIntegrationTest is StvPoolHarness {
 
             // === Pool (StvPool) AccessControl Roles ===
             assertTrue(
-                pool.hasRole(pool.DEFAULT_ADMIN_ROLE(), timelock),
-                "timelock should have DEFAULT_ADMIN_ROLE on pool"
+                pool.hasRole(pool.DEFAULT_ADMIN_ROLE(), timelock), "timelock should have DEFAULT_ADMIN_ROLE on pool"
             );
             assertFalse(
                 pool.hasRole(pool.DEFAULT_ADMIN_ROLE(), address(factory)),
                 "factory should not have DEFAULT_ADMIN_ROLE on pool"
             );
             assertFalse(
-                pool.hasRole(pool.DEFAULT_ADMIN_ROLE(), deployer),
-                "deployer should not have DEFAULT_ADMIN_ROLE on pool"
+                pool.hasRole(pool.DEFAULT_ADMIN_ROLE(), deployer), "deployer should not have DEFAULT_ADMIN_ROLE on pool"
             );
 
             // Check ALLOW_LIST_MANAGER_ROLE based on allowlist configuration
@@ -530,9 +556,7 @@ contract FactoryIntegrationTest is StvPoolHarness {
 
             // === Proxy Ownership (OssifiableProxy) ===
             assertEq(
-                IOssifiableProxy(deployment.pool).proxy__getAdmin(),
-                timelock,
-                "pool proxy should be owned by timelock"
+                IOssifiableProxy(deployment.pool).proxy__getAdmin(), timelock, "pool proxy should be owned by timelock"
             );
             assertNotEq(
                 IOssifiableProxy(deployment.pool).proxy__getAdmin(),
@@ -618,6 +642,4 @@ contract FactoryIntegrationTest is StvPoolHarness {
             }
         }
     }
-
-
 }

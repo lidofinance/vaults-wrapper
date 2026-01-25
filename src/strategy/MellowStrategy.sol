@@ -210,7 +210,7 @@ contract MellowStrategy is
     // SUPPLY
     // =================================================================================
 
-    function previewSupply(uint256 assets, MellowSupplyParams memory supplyParams)
+    function previewSupply(uint256 assets, address callForwarder, MellowSupplyParams memory supplyParams)
         public
         view
         returns (bool success, uint256 shares)
@@ -241,6 +241,16 @@ contract MellowStrategy is
             if (penaltyD6 != 0) {
                 shares = Math.mulDiv(shares, 1e6 - penaltyD6, 1e6);
             }
+        } else {
+            IDepositQueue depositQueue = IDepositQueue(queue);
+            (uint256 requestTimestamp, ) = depositQueue.requestOf(callForwarder);
+            if (requestTimestamp != 0) {
+                // NOTE: This check does not cover the edge case where `claimableShares == 0` due to rounding.
+                // In that scenario, the user is expected to call `claimShares()` first to materialize the shares.
+                if (depositQueue.claimableOf(callForwarder) == 0) {
+                    return (false, 0);
+                }
+            }
         }
         if (shares == 0) {
             return (false, 0);
@@ -253,13 +263,14 @@ contract MellowStrategy is
      */
     function supply(address referral, uint256 assets, bytes calldata params) external payable returns (uint256 stv) {
         MellowSupplyParams memory supplyParams = abi.decode(params, (MellowSupplyParams));
-        (bool success, uint256 shares) = previewSupply(assets, supplyParams);
+        address msgSender = _msgSender();
+        IStrategyCallForwarder callForwarder = _getOrCreateCallForwarder(msgSender);
+        
+        (bool success, uint256 shares) = previewSupply(assets, address(callForwarder), supplyParams);
         if (!success) {
             revert SupplyFailed();
         }
 
-        address msgSender = _msgSender();
-        IStrategyCallForwarder callForwarder = _getOrCreateCallForwarder(msgSender);
         if (msg.value > 0) {
             stv = StvStETHPool(payable(POOL)).depositETH{value: msg.value}(address(callForwarder), referral);
         }
