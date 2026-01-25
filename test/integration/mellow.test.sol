@@ -3,41 +3,34 @@ pragma solidity 0.8.30;
 
 import {console} from "forge-std/console.sol";
 
-import "@openzeppelin/contracts/access/extensions/IAccessControlEnumerable.sol";
+import {IAccessControlEnumerable} from "@openzeppelin/contracts/access/extensions/IAccessControlEnumerable.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 
-import "src/interfaces/mellow/IDepositQueue.sol";
-import "src/interfaces/mellow/IRedeemQueue.sol";
-import "src/interfaces/mellow/ISyncDepositQueue.sol";
-import "src/interfaces/mellow/IVault.sol";
+import {IDepositQueue} from "../../src/interfaces/mellow/IDepositQueue.sol";
+import {IRedeemQueue} from "../../src/interfaces/mellow/IRedeemQueue.sol";
+import {ISyncDepositQueue} from "../../src/interfaces/mellow/ISyncDepositQueue.sol";
+import {IVault} from "../../src/interfaces/mellow/IVault.sol";
+import {IOracle} from "../../src/interfaces/mellow/IOracle.sol";
 
 import {StvStrategyPoolHarness} from "test/utils/StvStrategyPoolHarness.sol";
 
-import {StvStETHPool} from "src/StvStETHPool.sol";
-import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
-import {IStrategy} from "src/interfaces/IStrategy.sol";
-import {IStrategyCallForwarder} from "src/interfaces/IStrategyCallForwarder.sol";
-import {MellowStrategy} from "src/strategy/MellowStrategy.sol";
+import {StvStETHPool} from "../../src/StvStETHPool.sol";
+import {WithdrawalQueue} from "../../src/WithdrawalQueue.sol";
+import {IStrategy} from "../../src/interfaces/IStrategy.sol";
+import {IStrategyCallForwarder} from "../../src/interfaces/IStrategyCallForwarder.sol";
+import {MellowStrategy} from "../../src/strategy/MellowStrategy.sol";
 
 import {TableUtils} from "../utils/format/TableUtils.sol";
-import {AllowList} from "src/AllowList.sol";
+import {AllowList} from "../../src/AllowList.sol";
 
-import "src/interfaces/core/IWstETH.sol";
+import {IWstETH} from "../../src/interfaces/core/IWstETH.sol";
 
 contract MellowTest is StvStrategyPoolHarness {
     using SafeCast for uint256;
-    using TableUtils for TableUtils.Context;
 
-    address public constant ADMIN = address(0x1337);
-    address public constant SOLVER = address(0x1338);
-
-    MellowStrategy public mellowStrategy;
-
-    StvStETHPool public pool;
-    WithdrawalQueue public withdrawalQueue;
-
+    // Permissions
     bytes32 public constant SUBMIT_REPORTS_ROLE = keccak256("oracles.Oracle.SUBMIT_REPORTS_ROLE");
     bytes32 public constant ACCEPT_REPORT_ROLE = keccak256("oracles.Oracle.ACCEPT_REPORT_ROLE");
     bytes32 public constant SET_SECURITY_PARAMS_ROLE = keccak256("oracles.Oracle.SET_SECURITY_PARAMS_ROLE");
@@ -46,16 +39,19 @@ contract MellowTest is StvStrategyPoolHarness {
     bytes32 public constant SET_QUEUE_STATUS_ROLE = keccak256("modules.ShareModule.SET_QUEUE_STATUS_ROLE");
     bytes32 public constant SET_QUEUE_LIMIT_ROLE = keccak256("modules.ShareModule.SET_QUEUE_LIMIT_ROLE");
     bytes32 public constant REMOVE_QUEUE_ROLE = keccak256("modules.ShareModule.REMOVE_QUEUE_ROLE");
+    
+    address public constant WSTETH = 0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0;
 
-    IVault public immutable strETH = IVault(0x277C6A642564A91ff78b008022D65683cEE5CCC5);
-    address public constant proxyAdmin = 0x81698f87C6482bF1ce9bFcfC0F103C4A0Adf0Af0;
+    IVault public constant STRETH = IVault(0x277C6A642564A91ff78b008022D65683cEE5CCC5);
+    address public constant PROXY_ADMIN = 0x81698f87C6482bF1ce9bFcfC0F103C4A0Adf0Af0;
+    
     address public syncDepositQueue;
     address public asyncDepositQueue;
     address public asyncRedeemQueue;
 
-    address public constant WSTETH = 0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0;
-
-    TableUtils.User[] public logUsers;
+    MellowStrategy public mellowStrategy;
+    StvStETHPool public pool;
+    WithdrawalQueue public withdrawalQueue; 
 
     WrapperContext public ctx;
 
@@ -63,7 +59,7 @@ contract MellowTest is StvStrategyPoolHarness {
     address public user2StrategyCallForwarder;
 
     function getRoleHolder(bytes32 role) internal view returns (address) {
-        return IAccessControlEnumerable(address(strETH)).getRoleMember(role, 0);
+        return IAccessControlEnumerable(address(STRETH)).getRoleMember(role, 0);
     }
 
     function isValidBlock() internal view returns (bool) {
@@ -74,26 +70,23 @@ contract MellowTest is StvStrategyPoolHarness {
         if (!isValidBlock()) return;
         _initializeCore();
 
-        vm.deal(ADMIN, 100_000 ether);
-        vm.deal(SOLVER, 100_000 ether);
-
         // sync deposit queue deployment
         {
             address lazyAdmin = getRoleHolder(bytes32(0));
             vm.startPrank(lazyAdmin);
-            IAccessControl(address(strETH)).grantRole(CREATE_QUEUE_ROLE, lazyAdmin);
-            IAccessControl(address(strETH)).grantRole(SET_QUEUE_LIMIT_ROLE, lazyAdmin);
-            strETH.setQueueLimit(10);
-            strETH.createQueue(2, true, proxyAdmin, WSTETH, abi.encode(0, 24 hours));
+            IAccessControlEnumerable(address(STRETH)).grantRole(CREATE_QUEUE_ROLE, lazyAdmin);
+            IAccessControlEnumerable(address(STRETH)).grantRole(SET_QUEUE_LIMIT_ROLE, lazyAdmin);
+            STRETH.setQueueLimit(10);
+            STRETH.createQueue(2, true, PROXY_ADMIN, WSTETH, abi.encode(0, 30 days));
             vm.stopPrank();
         }
 
-        asyncDepositQueue = strETH.queueAt(WSTETH, 0);
-        asyncRedeemQueue = strETH.queueAt(WSTETH, 1);
-        syncDepositQueue = strETH.queueAt(WSTETH, 2);
+        asyncDepositQueue = STRETH.queueAt(WSTETH, 0);
+        asyncRedeemQueue = STRETH.queueAt(WSTETH, 1);
+        syncDepositQueue = STRETH.queueAt(WSTETH, 2);
 
         ctx = _deployStvStETHPool(
-            true, 0, 0, StrategyKind.MELLOW, abi.encode(strETH, syncDepositQueue, asyncDepositQueue, asyncRedeemQueue)
+            true, 0, 0, StrategyKind.MELLOW, abi.encode(STRETH, syncDepositQueue, asyncDepositQueue, asyncRedeemQueue)
         );
         pool = StvStETHPool(payable(ctx.pool));
         vm.label(address(pool), "WrapperProxy");
@@ -109,11 +102,9 @@ contract MellowTest is StvStrategyPoolHarness {
 
         withdrawalQueue = pool.WITHDRAWAL_QUEUE();
 
-        address securityParamsSetter = getRoleHolder(SET_SECURITY_PARAMS_ROLE);
-
-        vm.startPrank(securityParamsSetter);
+        vm.startPrank(getRoleHolder(SET_SECURITY_PARAMS_ROLE));
         // inf params for testing only
-        strETH.oracle().setSecurityParams(
+        STRETH.oracle().setSecurityParams(
             IOracle.SecurityParams({
                 maxAbsoluteDeviation: type(uint224).max,
                 suspiciousAbsoluteDeviation: type(uint224).max,
@@ -127,7 +118,7 @@ contract MellowTest is StvStrategyPoolHarness {
         vm.stopPrank();
     }
 
-    function test_revert_if_user_is_not_allowlisted() public {
+    function testRevertIfUserIsNotAllowlisted() public {
         if (!isValidBlock()) return;
         uint256 depositAmount = 1 ether;
         vm.prank(USER1);
@@ -135,22 +126,11 @@ contract MellowTest is StvStrategyPoolHarness {
         pool.depositETH{value: depositAmount}(USER1, address(0));
     }
 
-    function test_scenario_1() public {
+    function testNormalFlow() public {
         if (!isValidBlock()) return;
         uint256 stethIncrease = 1;
         uint256 vaultProfit = 0;
         uint256 depositAmount = 1 ether;
-
-        logUsers.push(TableUtils.User(USER1, "user1"));
-        logUsers.push(TableUtils.User(user1StrategyCallForwarder, "user1_forwarder"));
-        logUsers.push(TableUtils.User(address(pool), "pool"));
-        logUsers.push(TableUtils.User(address(pool.WITHDRAWAL_QUEUE()), "wq"));
-        logUsers.push(TableUtils.User(address(strETH), "strETH"));
-        if (syncDepositQueue != address(0)) {
-            logUsers.push(TableUtils.User(address(syncDepositQueue), "syncDepositQueue"));
-        }
-        logUsers.push(TableUtils.User(address(asyncDepositQueue), "asyncDepositQueue"));
-        logUsers.push(TableUtils.User(address(asyncRedeemQueue), "asyncRedeemQueue"));
 
         core.increaseBufferedEther(steth.totalSupply() * stethIncrease / 100);
 
@@ -163,7 +143,7 @@ contract MellowTest is StvStrategyPoolHarness {
             abi.encode(MellowStrategy.MellowSupplyParams({isSync: false, merkleProof: new bytes32[](0)}))
         );
 
-        uint256 mellowShares = strETH.shareManager().sharesOf(user1StrategyCallForwarder);
+        uint256 mellowShares = STRETH.shareManager().sharesOf(user1StrategyCallForwarder);
         assertEq(mellowShares, 0);
 
         skip(1 seconds);
@@ -171,7 +151,7 @@ contract MellowTest is StvStrategyPoolHarness {
         _submitMellowReport(0);
         _handleBatches();
 
-        mellowShares = strETH.shareManager().sharesOf(user1StrategyCallForwarder);
+        mellowShares = STRETH.shareManager().sharesOf(user1StrategyCallForwarder);
         assertNotEq(mellowShares, 0);
 
         uint256 userMintedStethSharesAfterDeposit = mellowStrategy.mintedStethSharesOf(USER1);
@@ -232,7 +212,7 @@ contract MellowTest is StvStrategyPoolHarness {
         vm.stopPrank();
 
         vm.deal(address(ctx.vault), 10 ether);
-        _finalizeWQ(1, vaultProfit);
+        _finalizeWithdrawalQueue(1, vaultProfit);
 
         uint256 userBalanceBeforeClaim = USER1.balance;
         uint256[] memory wqRequestIds = withdrawalQueue.withdrawalRequestsOf(USER1);
@@ -241,11 +221,133 @@ contract MellowTest is StvStrategyPoolHarness {
         withdrawalQueue.claimWithdrawal(USER1, wqRequestIds[0]);
 
         uint256 ethClaimed = USER1.balance - userBalanceBeforeClaim;
-        console.log("ETH Claimed:", ethClaimed);
+        assertEq(ethClaimed, 1 ether - 3 wei);    
     }
 
+    function testMultipleDepositQueuesFlow() public {
+        if (!isValidBlock()) return;
+        uint256 stethIncrease = 1;
+        uint256 vaultProfit = 0;
+        uint256 depositAmount = 1 ether;
+
+        core.increaseBufferedEther(steth.totalSupply() * stethIncrease / 100);
+
+        uint256 asyncAmount = depositAmount / 2;
+        uint256 assetsAsync = pool.remainingMintingCapacitySharesOf(USER1, asyncAmount);
+        
+        uint256 syncAmount = depositAmount - asyncAmount;
+        uint256 assetsSync = pool.remainingMintingCapacitySharesOf(USER1, syncAmount);
+        {
+            vm.startPrank(USER1);
+
+            mellowStrategy.supply{value: asyncAmount}(
+                address(0),
+                assetsAsync,
+                abi.encode(MellowStrategy.MellowSupplyParams({isSync: false, merkleProof: new bytes32[](0)}))
+            );
+
+            mellowStrategy.supply{value: syncAmount}(
+                address(0),
+                assetsSync,
+                abi.encode(MellowStrategy.MellowSupplyParams({isSync: true, merkleProof: new bytes32[](0)}))
+            );
+
+            vm.stopPrank();
+        }
+
+        // uint256 mellowShares = STRETH.shareManager().sharesOf(user1StrategyCallForwarder);
+        // assertEq(
+        //     mellowShares, 
+            
+        // );
+
+        skip(1 seconds);
+        core.increaseBufferedEther(steth.totalSupply() * 1 / 100);
+        _submitMellowReport(0);
+        _handleBatches();
+        
+        uint256 userMintedStethSharesAfterDeposit = mellowStrategy.mintedStethSharesOf(USER1);
+
+        // mellowShares = STRETH.shareManager().sharesOf(user1StrategyCallForwarder);
+        // assertNotEq(mellowShares, 0);
+
+        // uint256 userMintedStethSharesAfterDeposit = mellowStrategy.mintedStethSharesOf(USER1);
+        // assertEq(mellowStrategy.sharesOf(USER1), mellowShares);
+        // assertEq(mellowStrategy.activeSharesOf(USER1), 0);
+        // assertEq(mellowStrategy.claimableSharesOf(USER1), mellowShares);
+
+        // vm.prank(USER1);
+        // mellowStrategy.claimShares();
+
+        // assertEq(mellowStrategy.sharesOf(USER1), mellowShares);
+        // assertEq(mellowStrategy.activeSharesOf(USER1), mellowShares);
+        // assertEq(mellowStrategy.claimableSharesOf(USER1), 0);
+
+        vm.startPrank(USER1);
+        bytes32 requestId = mellowStrategy.requestExitByShares(mellowStrategy.sharesOf(USER1), new bytes(0));
+        vm.stopPrank();
+
+        assertEq(mellowStrategy.sharesOf(USER1), 0);
+        assertEq(mellowStrategy.activeSharesOf(USER1), 0);
+        assertEq(mellowStrategy.claimableSharesOf(USER1), 0);
+
+        skip(1 seconds);
+
+        _submitMellowReport(0);
+        _handleBatches();
+
+        mellowStrategy.getRedeemQueueRequests(USER1, 0, 10);
+
+        vm.startPrank(USER1);
+        mellowStrategy.finalizeRequestExit(requestId);
+        vm.stopPrank();
+
+        // simulate the unwrapping of wstETH to stETH with rounding issue
+        uint256 wstethUserBalance = mellowStrategy.wstethOf(USER1);
+        assertGt(
+            userMintedStethSharesAfterDeposit,
+            wstethUserBalance,
+            "user minted steth shares should be greater than wsteth balance"
+        );
+
+        uint256 mintedStethShares = mellowStrategy.mintedStethSharesOf(USER1);
+        uint256 wstethToBurn = Math.min(mintedStethShares, wstethUserBalance);
+
+        uint256 stETHAmount = steth.getPooledEthByShares(wstethToBurn);
+        uint256 sharesAfterUnwrapping = steth.getSharesByPooledEth(stETHAmount);
+
+        uint256 stethSharesToRebalance = 0;
+        if (mintedStethShares > sharesAfterUnwrapping) {
+            stethSharesToRebalance = mintedStethShares - sharesAfterUnwrapping;
+        }
+
+        uint256 stvToWithdraw = mellowStrategy.stvOf(USER1);
+
+        vm.startPrank(USER1);
+        mellowStrategy.burnWsteth(wstethToBurn);
+        mellowStrategy.requestWithdrawalFromPool(USER1, stvToWithdraw, stethSharesToRebalance);
+        vm.stopPrank();
+
+        vm.deal(address(ctx.vault), 10 ether);
+        _finalizeWithdrawalQueue(1, vaultProfit);
+
+        uint256 userBalanceBeforeClaim = USER1.balance;
+        uint256[] memory wqRequestIds = withdrawalQueue.withdrawalRequestsOf(USER1);
+
+        vm.prank(USER1);
+        withdrawalQueue.claimWithdrawal(USER1, wqRequestIds[0]);
+
+        uint256 ethClaimed = USER1.balance - userBalanceBeforeClaim;
+        assertEq(ethClaimed, 1 ether - 4 wei);    
+    }
+
+
+
+
+    // Helpers
+
     function _submitMellowReport(int256 deltaD6) internal {
-        IOracle oracle = strETH.oracle();
+        IOracle oracle = STRETH.oracle();
         IOracle.DetailedReport memory report = oracle.getReport(WSTETH);
         uint256 minTimestamp = report.timestamp + 1 seconds;
         if (block.timestamp < minTimestamp) {
@@ -281,7 +383,7 @@ contract MellowTest is StvStrategyPoolHarness {
         IRedeemQueue(asyncRedeemQueue).handleBatches(type(uint256).max);
     }
 
-    function _finalizeWQ(uint256 _maxRequest, uint256 vaultProfit) public {
+    function _finalizeWithdrawalQueue(uint256 maxRequests, uint256 vaultProfit) public {
         vm.deal(address(pool.VAULT()), 1 ether);
 
         vm.warp(block.timestamp + 1 days);
@@ -294,9 +396,9 @@ contract MellowTest is StvStrategyPoolHarness {
         }
 
         vm.startPrank(NODE_OPERATOR);
-        uint256 finalizedRequests = pool.WITHDRAWAL_QUEUE().finalize(_maxRequest, address(0));
+        uint256 finalizedRequests = pool.WITHDRAWAL_QUEUE().finalize(maxRequests, address(0));
         vm.stopPrank();
 
-        assertEq(finalizedRequests, _maxRequest, "Invalid finalized requests");
+        assertEq(finalizedRequests, maxRequests, "Invalid finalized requests");
     }
 }
