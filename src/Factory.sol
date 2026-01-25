@@ -472,8 +472,9 @@ contract Factory {
             }
         }
 
-        address timelock =
-            TIMELOCK_FACTORY.deploy(_timelockConfig.minDelaySeconds, _timelockConfig.proposer, _timelockConfig.executor);
+        address timelock = TIMELOCK_FACTORY.deploy(
+            _timelockConfig.minDelaySeconds, _timelockConfig.proposer, _timelockConfig.executor
+        );
 
         address tempAdmin = address(this);
 
@@ -620,23 +621,26 @@ contract Factory {
         address wqImpl = _intermediate.wqImpl;
         address poolImpl = _intermediate.poolImpl;
 
-        OssifiableProxy(payable(_intermediate.poolProxy)).proxy__upgradeToAndCall(
-            poolImpl, abi.encodeCall(StvPool.initialize, (tempAdmin, _commonPoolConfig.name, _commonPoolConfig.symbol))
-        );
+        OssifiableProxy(payable(_intermediate.poolProxy))
+            .proxy__upgradeToAndCall(
+                poolImpl,
+                abi.encodeCall(StvPool.initialize, (tempAdmin, _commonPoolConfig.name, _commonPoolConfig.symbol))
+            );
         OssifiableProxy(payable(_intermediate.poolProxy)).proxy__changeAdmin(_intermediate.timelock);
 
-        OssifiableProxy(payable(_intermediate.withdrawalQueueProxy)).proxy__upgradeToAndCall(
-            wqImpl,
-            abi.encodeCall(
-                WithdrawalQueue.initialize,
-                (
-                    _intermediate.timelock,
-                    _vaultConfig.nodeOperator,
-                    _commonPoolConfig.emergencyCommittee,
-                    _commonPoolConfig.emergencyCommittee
+        OssifiableProxy(payable(_intermediate.withdrawalQueueProxy))
+            .proxy__upgradeToAndCall(
+                wqImpl,
+                abi.encodeCall(
+                    WithdrawalQueue.initialize,
+                    (
+                        _intermediate.timelock,
+                        _vaultConfig.nodeOperator,
+                        _commonPoolConfig.emergencyCommittee,
+                        _commonPoolConfig.emergencyCommittee
+                    )
                 )
-            )
-        );
+            );
         OssifiableProxy(payable(_intermediate.withdrawalQueueProxy)).proxy__changeAdmin(_intermediate.timelock);
 
         StvPool pool = StvPool(payable(_intermediate.poolProxy));
