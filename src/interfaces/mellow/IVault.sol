@@ -17,4 +17,10 @@ interface IVault {
     function isPausedQueue(address queue) external view returns (bool);
 
     function feeManager() external view returns (IFeeManager);
+
+    function queueAt(address asset, uint256 index) external view returns (address);
+
+    function setQueueLimit(uint256 limit) external;
+
+    function createQueue(uint256 version, bool isDeposit, address owner, address asset, bytes calldata data) external;
 }

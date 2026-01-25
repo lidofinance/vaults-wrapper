@@ -30,8 +30,6 @@ import {FeaturePausable} from "../utils/FeaturePausable.sol";
 import {IStrategy} from "../interfaces/IStrategy.sol";
 import {IWstETH} from "../interfaces/core/IWstETH.sol";
 
-import "forge-std/console.sol";
-
 contract MellowStrategy is
     IStrategy,
     AccessControlEnumerableUpgradeable,
@@ -112,7 +110,7 @@ contract MellowStrategy is
             if (
                 !vault_.hasQueue(syncDepositQueue_) || !vault_.isDepositQueue(syncDepositQueue_)
                     || IQueue(syncDepositQueue_).asset() != address(wsteth)
-                    || Strings.equal(ISyncDepositQueue(syncDepositQueue_).name(), "SyncDepositQueue")
+                    || !Strings.equal(ISyncDepositQueue(syncDepositQueue_).name(), "SyncDepositQueue")
             ) {
                 revert InvalidQueue("syncDeposit");
             }

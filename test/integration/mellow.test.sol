@@ -41,12 +41,17 @@ contract MellowTest is StvStrategyPoolHarness {
     bytes32 public constant SUBMIT_REPORTS_ROLE = keccak256("oracles.Oracle.SUBMIT_REPORTS_ROLE");
     bytes32 public constant ACCEPT_REPORT_ROLE = keccak256("oracles.Oracle.ACCEPT_REPORT_ROLE");
     bytes32 public constant SET_SECURITY_PARAMS_ROLE = keccak256("oracles.Oracle.SET_SECURITY_PARAMS_ROLE");
+    bytes32 public constant SET_HOOK_ROLE = keccak256("modules.ShareModule.SET_HOOK_ROLE");
+    bytes32 public constant CREATE_QUEUE_ROLE = keccak256("modules.ShareModule.CREATE_QUEUE_ROLE");
+    bytes32 public constant SET_QUEUE_STATUS_ROLE = keccak256("modules.ShareModule.SET_QUEUE_STATUS_ROLE");
+    bytes32 public constant SET_QUEUE_LIMIT_ROLE = keccak256("modules.ShareModule.SET_QUEUE_LIMIT_ROLE");
+    bytes32 public constant REMOVE_QUEUE_ROLE = keccak256("modules.ShareModule.REMOVE_QUEUE_ROLE");
 
     IVault public immutable strETH = IVault(0x277C6A642564A91ff78b008022D65683cEE5CCC5);
-
-    address public immutable syncDepositQueue = address(0);
-    address public immutable asyncDepositQueue = 0x614cb9E9D13712781DfD15aDC9F3DAde60E4eFAb;
-    address public immutable asyncRedeemQueue = 0x1ae8C006b5C97707aa074AaeD42BecAD2CF80Da2;
+    address public constant proxyAdmin = 0x81698f87C6482bF1ce9bFcfC0F103C4A0Adf0Af0;
+    address public syncDepositQueue;
+    address public asyncDepositQueue;
+    address public asyncRedeemQueue;
 
     address public constant WSTETH = 0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0;
 
@@ -57,12 +62,35 @@ contract MellowTest is StvStrategyPoolHarness {
     address public user1StrategyCallForwarder;
     address public user2StrategyCallForwarder;
 
+    function getRoleHolder(bytes32 role) internal view returns (address) {
+        return IAccessControlEnumerable(address(strETH)).getRoleMember(role, 0);
+    }
+
+    function isValidBlock() internal view returns (bool) {
+        return block.chainid == 1 && block.number >= 24307000;
+    }
+
     function setUp() public {
-        console.log("Chain id:", block.chainid);
+        if (!isValidBlock()) return;
         _initializeCore();
 
         vm.deal(ADMIN, 100_000 ether);
         vm.deal(SOLVER, 100_000 ether);
+
+        // sync deposit queue deployment
+        {
+            address lazyAdmin = getRoleHolder(bytes32(0));
+            vm.startPrank(lazyAdmin);
+            IAccessControl(address(strETH)).grantRole(CREATE_QUEUE_ROLE, lazyAdmin);
+            IAccessControl(address(strETH)).grantRole(SET_QUEUE_LIMIT_ROLE, lazyAdmin);
+            strETH.setQueueLimit(10);
+            strETH.createQueue(2, true, proxyAdmin, WSTETH, abi.encode(0, 24 hours));
+            vm.stopPrank();
+        }
+
+        asyncDepositQueue = strETH.queueAt(WSTETH, 0);
+        asyncRedeemQueue = strETH.queueAt(WSTETH, 1);
+        syncDepositQueue = strETH.queueAt(WSTETH, 2);
 
         ctx = _deployStvStETHPool(
             true, 0, 0, StrategyKind.MELLOW, abi.encode(strETH, syncDepositQueue, asyncDepositQueue, asyncRedeemQueue)
@@ -81,8 +109,7 @@ contract MellowTest is StvStrategyPoolHarness {
 
         withdrawalQueue = pool.WITHDRAWAL_QUEUE();
 
-        address securityParamsSetter =
-            IAccessControlEnumerable(address(strETH)).getRoleMember(SET_SECURITY_PARAMS_ROLE, 0);
+        address securityParamsSetter = getRoleHolder(SET_SECURITY_PARAMS_ROLE);
 
         vm.startPrank(securityParamsSetter);
         // inf params for testing only
@@ -101,6 +128,7 @@ contract MellowTest is StvStrategyPoolHarness {
     }
 
     function test_revert_if_user_is_not_allowlisted() public {
+        if (!isValidBlock()) return;
         uint256 depositAmount = 1 ether;
         vm.prank(USER1);
         vm.expectRevert(abi.encodeWithSelector(AllowList.NotAllowListed.selector, USER1));
@@ -108,6 +136,7 @@ contract MellowTest is StvStrategyPoolHarness {
     }
 
     function test_scenario_1() public {
+        if (!isValidBlock()) return;
         uint256 stethIncrease = 1;
         uint256 vaultProfit = 0;
         uint256 depositAmount = 1 ether;
@@ -215,9 +244,6 @@ contract MellowTest is StvStrategyPoolHarness {
         console.log("ETH Claimed:", ethClaimed);
     }
 
-    /*
-        for testing - only wstETH reporst
-    */
     function _submitMellowReport(int256 deltaD6) internal {
         IOracle oracle = strETH.oracle();
         IOracle.DetailedReport memory report = oracle.getReport(WSTETH);
@@ -241,7 +267,7 @@ contract MellowTest is StvStrategyPoolHarness {
             revert("Too high deviation");
         }
 
-        address oracleSubmitter = IAccessControlEnumerable(address(strETH)).getRoleMember(SUBMIT_REPORTS_ROLE, 0);
+        address oracleSubmitter = getRoleHolder(SUBMIT_REPORTS_ROLE);
 
         vm.startPrank(oracleSubmitter);
         IOracle.Report[] memory reports = new IOracle.Report[](1);
