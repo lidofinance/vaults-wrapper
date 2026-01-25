@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity 0.8.30;
 
-import {AccessControlEnumerableUpgradeable} from
-    "@openzeppelin/contracts-upgradeable/access/extensions/AccessControlEnumerableUpgradeable.sol";
+import {
+    AccessControlEnumerableUpgradeable
+} from "@openzeppelin/contracts-upgradeable/access/extensions/AccessControlEnumerableUpgradeable.sol";
 
 import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
@@ -324,7 +325,7 @@ contract MellowStrategy is
         return (true, assets);
     }
 
-    function requestExitByShares(uint256 shares, bytes calldata /* params_ */ ) external returns (bytes32 requestId) {
+    function requestExitByShares(uint256 shares, bytes calldata) external returns (bytes32 requestId) {
         (bool success, uint256 assets) = previewRedeem(shares);
         if (!success || assets == 0) revert RedeemFailed();
         return _requestExit(assets, shares);
@@ -333,7 +334,7 @@ contract MellowStrategy is
     /**
      * @inheritdoc IStrategy
      */
-    function requestExitByWsteth(uint256 assets, bytes calldata /* params_ */ ) external returns (bytes32 requestId) {
+    function requestExitByWsteth(uint256 assets, bytes calldata) external returns (bytes32 requestId) {
         (bool success, uint256 shares) = previewWithdraw(assets);
         if (!success) revert WithdrawalFailed();
         return _requestExit(assets, shares);
