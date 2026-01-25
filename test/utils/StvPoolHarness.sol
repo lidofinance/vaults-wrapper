@@ -8,6 +8,7 @@ import {Distributor} from "src/Distributor.sol";
 import {Factory} from "src/Factory.sol";
 import {StvPool} from "src/StvPool.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
+import {MellowStrategyFactory} from "src/factories/MellowStrategyFactory.sol";
 import {IDashboard} from "src/interfaces/core/IDashboard.sol";
 import {ILido} from "src/interfaces/core/ILido.sol";
 import {IStakingVault} from "src/interfaces/core/IStakingVault.sol";
@@ -147,7 +148,7 @@ contract StvPoolHarness is Test {
         if (config.strategyKind == StrategyKind.GGV) {
             strategyFactoryAddress = address(factory.GGV_STRATEGY_FACTORY());
         } else if (config.strategyKind == StrategyKind.MELLOW) {
-            strategyFactoryAddress = address(factory.MELLOW_STRATEGY_FACTORY());
+            strategyFactoryAddress = address(new MellowStrategyFactory());
         }
         // StrategyKind.NONE: strategyFactoryAddress remains address(0)
 

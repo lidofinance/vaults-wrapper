@@ -4,7 +4,6 @@ pragma solidity 0.8.30;
 import {Factory} from "src/Factory.sol";
 import {DistributorFactory} from "src/factories/DistributorFactory.sol";
 import {GGVStrategyFactory} from "src/factories/GGVStrategyFactory.sol";
-import {MellowStrategyFactory} from "src/factories/MellowStrategyFactory.sol";
 import {StvPoolFactory} from "src/factories/StvPoolFactory.sol";
 import {StvStETHPoolFactory} from "src/factories/StvStETHPoolFactory.sol";
 import {TimelockFactory} from "src/factories/TimelockFactory.sol";
@@ -24,7 +23,6 @@ contract FactoryHelper {
         subFactories.withdrawalQueueFactory = address(new WithdrawalQueueFactory());
         subFactories.distributorFactory = address(new DistributorFactory());
         subFactories.ggvStrategyFactory = address(new GGVStrategyFactory(dummyTeller, dummyQueue));
-        subFactories.mellowStrategyFactory = address(new MellowStrategyFactory());
         subFactories.timelockFactory = address(new TimelockFactory());
 
         defaultTimelockConfig =
@@ -42,7 +40,6 @@ contract FactoryHelper {
         Factory.SubFactories memory factories = subFactories;
         if (ggvTeller != address(0) && ggvBoringQueue != address(0)) {
             factories.ggvStrategyFactory = address(new GGVStrategyFactory(ggvTeller, ggvBoringQueue));
-            factories.mellowStrategyFactory = address(new MellowStrategyFactory());
         }
 
         factory = new Factory(locatorAddress, factories);
