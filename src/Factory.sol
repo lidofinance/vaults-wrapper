@@ -459,7 +459,11 @@ contract Factory {
         VaultConfig memory _vaultConfig,
         TimelockConfig memory _timelockConfig,
         CommonPoolConfig memory _commonPoolConfig,
-        uint256 _reserveRatioGapBP
+        uint256 _reserveRatioGapBP,
+        address _mellowVault,
+        address _syncDepositQueue,
+        address _asyncDepositQueue,
+        address _asyncRedeemQueue
     ) external returns (PoolIntermediate memory intermediate) {
         AuxiliaryPoolConfig memory auxiliaryConfig = AuxiliaryPoolConfig({
             allowListEnabled: true,
@@ -468,10 +472,14 @@ contract Factory {
             reserveRatioGapBP: _reserveRatioGapBP
         });
         intermediate = createPoolStart(
-            _vaultConfig, _timelockConfig, _commonPoolConfig, auxiliaryConfig, address(MELLOW_STRATEGY_FACTORY), ""
+            _vaultConfig,
+            _timelockConfig,
+            _commonPoolConfig,
+            auxiliaryConfig,
+            address(MELLOW_STRATEGY_FACTORY),
+            abi.encode(_mellowVault, _syncDepositQueue, _asyncDepositQueue, _asyncRedeemQueue)
         );
     }
-
 
     /**
      * @notice Generic pool deployment start function (first phase)
@@ -509,9 +517,8 @@ contract Factory {
             }
         }
 
-        address timelock = TIMELOCK_FACTORY.deploy(
-            _timelockConfig.minDelaySeconds, _timelockConfig.proposer, _timelockConfig.executor
-        );
+        address timelock =
+            TIMELOCK_FACTORY.deploy(_timelockConfig.minDelaySeconds, _timelockConfig.proposer, _timelockConfig.executor);
 
         address tempAdmin = address(this);
 
@@ -658,26 +665,23 @@ contract Factory {
         address wqImpl = _intermediate.wqImpl;
         address poolImpl = _intermediate.poolImpl;
 
-        OssifiableProxy(payable(_intermediate.poolProxy))
-            .proxy__upgradeToAndCall(
-                poolImpl,
-                abi.encodeCall(StvPool.initialize, (tempAdmin, _commonPoolConfig.name, _commonPoolConfig.symbol))
-            );
+        OssifiableProxy(payable(_intermediate.poolProxy)).proxy__upgradeToAndCall(
+            poolImpl, abi.encodeCall(StvPool.initialize, (tempAdmin, _commonPoolConfig.name, _commonPoolConfig.symbol))
+        );
         OssifiableProxy(payable(_intermediate.poolProxy)).proxy__changeAdmin(_intermediate.timelock);
 
-        OssifiableProxy(payable(_intermediate.withdrawalQueueProxy))
-            .proxy__upgradeToAndCall(
-                wqImpl,
-                abi.encodeCall(
-                    WithdrawalQueue.initialize,
-                    (
-                        _intermediate.timelock,
-                        _vaultConfig.nodeOperator,
-                        _commonPoolConfig.emergencyCommittee,
-                        _commonPoolConfig.emergencyCommittee
-                    )
+        OssifiableProxy(payable(_intermediate.withdrawalQueueProxy)).proxy__upgradeToAndCall(
+            wqImpl,
+            abi.encodeCall(
+                WithdrawalQueue.initialize,
+                (
+                    _intermediate.timelock,
+                    _vaultConfig.nodeOperator,
+                    _commonPoolConfig.emergencyCommittee,
+                    _commonPoolConfig.emergencyCommittee
                 )
-            );
+            )
+        );
         OssifiableProxy(payable(_intermediate.withdrawalQueueProxy)).proxy__changeAdmin(_intermediate.timelock);
 
         StvPool pool = StvPool(payable(_intermediate.poolProxy));
