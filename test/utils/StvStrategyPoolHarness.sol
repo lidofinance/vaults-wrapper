@@ -20,7 +20,7 @@ contract StvStrategyPoolHarness is StvStETHPoolHarness {
         address _boringQueue
     ) internal returns (WrapperContext memory) {
         return _deployStvStETHPool(
-            enableAllowlist, nodeOperatorFeeBP, reserveRatioGapBP, _teller, _boringQueue, StrategyKind.GGV
+            enableAllowlist, nodeOperatorFeeBP, reserveRatioGapBP, StrategyKind.GGV, abi.encode(_teller, _boringQueue)
         );
     }
 
@@ -28,9 +28,8 @@ contract StvStrategyPoolHarness is StvStETHPoolHarness {
         bool enableAllowlist,
         uint256 nodeOperatorFeeBP,
         uint256 reserveRatioGapBP,
-        address _teller,
-        address _boringQueue,
-        StrategyKind strategyKind
+        StrategyKind strategyKind,
+        bytes memory deployParams
     ) internal returns (WrapperContext memory) {
         DeploymentConfig memory config = DeploymentConfig({
             allowListEnabled: enableAllowlist,
@@ -43,8 +42,7 @@ contract StvStrategyPoolHarness is StvStETHPoolHarness {
             minWithdrawalDelayTime: 1 days,
             reserveRatioGapBP: reserveRatioGapBP,
             strategyKind: strategyKind,
-            ggvTeller: _teller,
-            ggvBoringQueue: _boringQueue,
+            deployParams: deployParams,
             timelockMinDelaySeconds: 0,
             timelockExecutor: NODE_OPERATOR,
             name: "Integration Strategy Pool",

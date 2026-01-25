@@ -30,6 +30,8 @@ import {FeaturePausable} from "../utils/FeaturePausable.sol";
 import {IStrategy} from "../interfaces/IStrategy.sol";
 import {IWstETH} from "../interfaces/core/IWstETH.sol";
 
+import "forge-std/console.sol";
+
 contract MellowStrategy is
     IStrategy,
     AccessControlEnumerableUpgradeable,
@@ -86,9 +88,11 @@ contract MellowStrategy is
     error InvalidQueue(string name);
     error SuspiciousReport();
     error InsufficientMellowShares();
+    error WithdrawalFailed();
     error RedeemFailed();
     error SupplyFailed();
     error RequestIdNotFound();
+    error ZeroShares();
 
     constructor(
         bytes32 strategyId_,
@@ -217,7 +221,7 @@ contract MellowStrategy is
         if (queue == address(0)) {
             return (false, 0);
         }
-        if (MELLOW_VAULT.isQueuePaused(queue) || !MELLOW_VAULT.hasQueue(queue)) {
+        if (MELLOW_VAULT.isPausedQueue(queue) || !MELLOW_VAULT.hasQueue(queue)) {
             return (false, 0);
         }
         (bool isSuspicious, uint256 priceD18, uint32 timestamp) = getUncheckedWstETHReport();
@@ -285,7 +289,7 @@ contract MellowStrategy is
     function previewWithdraw(uint256 assets) public view returns (bool success, uint256 shares) {
         if (isFeaturePaused(REDEEM_FEATURE)) return (false, 0);
         address queue = MELLOW_ASYNC_REDEEM_QUEUE;
-        if (MELLOW_VAULT.isQueuePaused(queue) || !MELLOW_VAULT.hasQueue(queue)) {
+        if (MELLOW_VAULT.isPausedQueue(queue) || !MELLOW_VAULT.hasQueue(queue)) {
             return (false, 0);
         }
         (bool isSuspicious, uint256 priceD18,) = getUncheckedWstETHReport();
@@ -298,29 +302,59 @@ contract MellowStrategy is
         if (redeemFeeD6 != 0) {
             shares = Math.mulDiv(shares, 1e6, 1e6 - redeemFeeD6, Math.Rounding.Ceil);
         }
+        if (shares == 0) return (false, 0);
+        return (true, shares);
+    }
+
+    function previewRedeem(uint256 shares) public view returns (bool success, uint256 assets) {
+        if (isFeaturePaused(REDEEM_FEATURE)) return (false, 0);
+        address queue = MELLOW_ASYNC_REDEEM_QUEUE;
+        if (MELLOW_VAULT.isPausedQueue(queue) || !MELLOW_VAULT.hasQueue(queue)) {
+            return (false, 0);
+        }
+        (bool isSuspicious, uint256 priceD18,) = getUncheckedWstETHReport();
+        if (isSuspicious || priceD18 == 0) {
+            return (false, 0);
+        }
+
+        assets = Math.mulDiv(shares, 1 ether, priceD18);
+        uint256 redeemFeeD6 = MELLOW_VAULT.feeManager().redeemFeeD6();
+        if (redeemFeeD6 != 0) {
+            assets = Math.mulDiv(assets, 1e6, 1e6 - redeemFeeD6);
+        }
+        if (assets == 0) return (false, 0);
         return (true, assets);
+    }
+
+    function requestExitByShares(uint256 shares, bytes calldata /* params_ */ ) external returns (bytes32 requestId) {
+        (bool success, uint256 assets) = previewRedeem(shares);
+        if (!success || assets == 0) revert RedeemFailed();
+        return _requestExit(assets, shares);
     }
 
     /**
      * @inheritdoc IStrategy
      */
-    function requestExitByWsteth(uint256 _wsteth, bytes calldata /* params_ */ ) external returns (bytes32 requestId) {
-        (bool success, uint256 shares) = previewWithdraw(_wsteth);
-        if (!success) revert RedeemFailed();
+    function requestExitByWsteth(uint256 assets, bytes calldata /* params_ */ ) external returns (bytes32 requestId) {
+        (bool success, uint256 shares) = previewWithdraw(assets);
+        if (!success) revert WithdrawalFailed();
+        return _requestExit(assets, shares);
+    }
 
+    function _requestExit(uint256 assets, uint256 shares) internal returns (bytes32 requestId) {
         address msgSender = _msgSender();
         IStrategyCallForwarder callForwarder = _getOrCreateCallForwarder(msgSender);
         uint256 userShares = MELLOW_SHARE_MANAGER.sharesOf(address(callForwarder));
         if (shares > userShares) revert InsufficientMellowShares();
 
-        address queue = MELLOW_ASYNC_DEPOSIT_QUEUE;
+        address queue = MELLOW_ASYNC_REDEEM_QUEUE;
         callForwarder.doCall(queue, abi.encodeCall(IRedeemQueue.redeem, (shares)));
         requestId = bytes32(bytes20(queue)) | bytes32(uint256(uint32(block.timestamp)));
 
         // ignore response in case of multiple requests in a single block
         _requests[msgSender].add(requestId);
 
-        emit StrategyExitRequested(msgSender, requestId, _wsteth, "");
+        emit StrategyExitRequested(msgSender, requestId, assets, new bytes(0));
         emit MellowWithdrawalRequested(msgSender, requestId, shares);
     }
 

@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity 0.8.30;
 
-interface IShareManager {
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+
+interface IShareManager is IERC20 {
     /// @return address Returns address of the vault using this ShareManager
     function vault() external view returns (address);
 

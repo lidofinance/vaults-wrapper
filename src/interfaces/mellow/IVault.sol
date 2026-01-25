@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity 0.8.30;
 
+import {IFeeManager} from "./IFeeManager.sol";
 import {IOracle} from "./IOracle.sol";
 import {IShareManager} from "./IShareManager.sol";
-import {IFeeManager} from "./IFeeManager.sol";
 
 interface IVault {
     function shareManager() external view returns (IShareManager);
@@ -14,7 +14,7 @@ interface IVault {
 
     function isDepositQueue(address queue) external view returns (bool);
 
-    function isQueuePaused(address queue) external view returns (bool);
+    function isPausedQueue(address queue) external view returns (bool);
 
     function feeManager() external view returns (IFeeManager);
 }

@@ -63,8 +63,7 @@ contract StvPoolHarness is Test {
         uint256 minWithdrawalDelayTime;
         uint256 reserveRatioGapBP;
         StrategyKind strategyKind;
-        address ggvTeller;
-        address ggvBoringQueue;
+        bytes deployParams;
         uint256 timelockMinDelaySeconds;
         address timelockExecutor;
         string name;
@@ -109,7 +108,12 @@ contract StvPoolHarness is Test {
             console.log("Using predeployed factory from FACTORY_ADDRESS", factoryFromEnv);
         } else {
             FactoryHelper helper = new FactoryHelper();
-            factory = helper.deployMainFactory(address(core.locator()), config.ggvTeller, config.ggvBoringQueue);
+            if (config.strategyKind == StrategyKind.GGV) {
+                (address ggvTeller, address ggvBoringQueue) = abi.decode(config.deployParams, (address, address));
+                factory = helper.deployMainFactory(address(core.locator()), ggvTeller, ggvBoringQueue);
+            } else {
+                factory = helper.deployMainFactory(address(core.locator()), address(0), address(0));
+            }
         }
 
         Factory.VaultConfig memory vaultConfig = Factory.VaultConfig({
@@ -120,7 +124,10 @@ contract StvPoolHarness is Test {
         });
 
         Factory.CommonPoolConfig memory commonPoolConfig = Factory.CommonPoolConfig({
-            minWithdrawalDelayTime: config.minWithdrawalDelayTime, name: config.name, symbol: config.symbol, emergencyCommittee: address(0)
+            minWithdrawalDelayTime: config.minWithdrawalDelayTime,
+            name: config.name,
+            symbol: config.symbol,
+            emergencyCommittee: address(0)
         });
 
         Factory.AuxiliaryPoolConfig memory auxiliaryConfig = Factory.AuxiliaryPoolConfig({
@@ -145,11 +152,21 @@ contract StvPoolHarness is Test {
         // StrategyKind.NONE: strategyFactoryAddress remains address(0)
 
         vm.startPrank(config.nodeOperator);
+        bytes memory strategyDeployBytes_;
+        if (config.strategyKind == StrategyKind.MELLOW) {
+            strategyDeployBytes_ = config.deployParams;
+        }
         Factory.PoolIntermediate memory intermediate = factory.createPoolStart(
-            vaultConfig, timelockConfig, commonPoolConfig, auxiliaryConfig, strategyFactoryAddress, ""
+            vaultConfig, timelockConfig, commonPoolConfig, auxiliaryConfig, strategyFactoryAddress, strategyDeployBytes_
         );
         Factory.PoolDeployment memory deployment = factory.createPoolFinish{value: CONNECT_DEPOSIT}(
-            vaultConfig, timelockConfig, commonPoolConfig, auxiliaryConfig, strategyFactoryAddress, "", intermediate
+            vaultConfig,
+            timelockConfig,
+            commonPoolConfig,
+            auxiliaryConfig,
+            strategyFactoryAddress,
+            strategyDeployBytes_,
+            intermediate
         );
         vm.stopPrank();
 
@@ -191,8 +208,7 @@ contract StvPoolHarness is Test {
             minWithdrawalDelayTime: 1 days,
             reserveRatioGapBP: 0,
             strategyKind: StrategyKind.NONE,
-            ggvTeller: address(0),
-            ggvBoringQueue: address(0),
+            deployParams: new bytes(0),
             timelockMinDelaySeconds: 0,
             timelockExecutor: NODE_OPERATOR,
             name: "Test STV Pool",

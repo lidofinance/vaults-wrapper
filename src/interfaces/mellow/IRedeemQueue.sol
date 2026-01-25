@@ -26,4 +26,6 @@ interface IRedeemQueue is IQueue {
     function redeem(uint256 shares) external;
 
     function claim(address account, uint32[] calldata timestamps) external returns (uint256 assets);
+
+    function handleBatches(uint256 batches) external returns (uint256 counter);
 }
