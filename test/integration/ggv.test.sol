@@ -353,6 +353,30 @@ contract GGVTest is StvStrategyPoolHarness {
         );
     }
 
+    function test_supply_zeroWstethToMint_doesNotRevert() public {
+        uint256 depositAmount = 1 ether;
+        uint256 wstethToMint = 0;
+
+        IStrategyCallForwarder callForwarder = ggvStrategy.getStrategyCallForwarderAddress(USER1);
+
+        uint256 mintedSharesBefore = ggvStrategy.mintedStethSharesOf(USER1);
+        uint256 wstethBalanceBefore = wsteth.balanceOf(address(callForwarder));
+        uint256 ggvSharesBefore = boringVault.balanceOf(address(callForwarder));
+
+        vm.prank(USER1);
+        uint256 stv = ggvStrategy.supply{value: depositAmount}(address(0), wstethToMint, abi.encode(GGVStrategy.GGVParamsSupply(0)));
+
+        uint256 mintedSharesAfter = ggvStrategy.mintedStethSharesOf(USER1);
+        uint256 wstethBalanceAfter = wsteth.balanceOf(address(callForwarder));
+        uint256 ggvSharesAfter = boringVault.balanceOf(address(callForwarder));
+
+        assertGt(stv, 0, "stv should be minted from ETH deposit");
+        assertEq(mintedSharesAfter, mintedSharesBefore, "no wsteth shares should be minted");
+        assertEq(mintedSharesAfter, 0, "minted shares should be zero");
+        assertEq(wstethBalanceAfter, wstethBalanceBefore, "wsteth balance should not change");
+        assertEq(ggvSharesAfter, ggvSharesBefore, "ggv shares should not change");
+    }
+
     function _finalizeWQ(uint256 _maxRequest, uint256 vaultProfit) public {
         vm.deal(address(pool.VAULT()), 1 ether);
 

@@ -1,4 +1,4 @@
-name: Integration Tests (Hoodi)
+name: Integration Tests (Mainnet)
 
 on:
   push:
@@ -11,8 +11,8 @@ jobs:
     timeout-minutes: 10
     env:
       FOUNDRY_PROFILE: test
-      RPC_URL: https://hoodi.drpc.org
-      CORE_LOCATOR_ADDRESS: "0xe2EF9536DAAAEBFf5b1c130957AB3E80056b06D8"
+      RPC_URL: https://eth.drpc.org
+      CORE_LOCATOR_ADDRESS: "0xC1d0b3DE6792Bf6b4b37EccdcC24e45978Cfd2Eb"
     steps:
       - uses: actions/checkout@v4
         with:
