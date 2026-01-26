@@ -279,6 +279,7 @@ contract StvStETHPool is StvPool {
     /**
      * @notice Calculate the remaining minting capacity in stETH shares for a specific account
      * @param _account The address of the account
+     * @param _ethToFund The amount of ETH to fund
      * @return stethShares The remaining minting capacity in stETH shares
      */
     function remainingMintingCapacitySharesOf(address _account, uint256 _ethToFund)

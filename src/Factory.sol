@@ -78,6 +78,7 @@ contract Factory {
      * @param minWithdrawalDelayTime Minimum delay time for processing withdrawals
      * @param name ERC20 token name for the pool shares
      * @param symbol ERC20 token symbol for the pool shares
+     * @param emergencyCommittee Address of the emergency committee
      */
     struct CommonPoolConfig {
         uint256 minWithdrawalDelayTime;
@@ -114,7 +115,9 @@ contract Factory {
      * @notice Intermediate state returned by deployment start functions
      * @param dashboard Address of the deployed dashboard
      * @param poolProxy Address of the deployed pool proxy (not yet initialized)
+     * @param poolImpl Address of the deployed pool implementation (not yet initialized)
      * @param withdrawalQueueProxy Address of the deployed withdrawal queue proxy (not yet initialized)
+     * @param wqImpl Address of the deployed withdrawal queue implementation (not yet initialized)
      * @param timelock Address of the deployed timelock controller
      */
     struct PoolIntermediate {
@@ -291,11 +294,6 @@ contract Factory {
      * @notice Default admin role identifier (keccak256("") = 0x00)
      */
     bytes32 public immutable DEFAULT_ADMIN_ROLE = 0x00;
-
-    /**
-     * @notice Total basis points constant (100.00%)
-     */
-    uint256 public constant TOTAL_BASIS_POINTS = 100_00;
 
     /**
      * @notice Maximum time allowed between start and finish deployment phases
@@ -725,7 +723,7 @@ contract Factory {
         address _strategyFactory,
         bytes memory _strategyDeployBytes,
         PoolIntermediate memory _intermediate
-    ) public pure returns (bytes32 result) {
+    ) internal pure returns (bytes32 result) {
         result = keccak256(
             abi.encode(
                 _sender,
