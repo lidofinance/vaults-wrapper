@@ -533,14 +533,14 @@ class FuzzStEthPoool(FuzzPool):
             tx = self.stv_steth_pool.previewForceRebalance(user, request_type="tx")
 
             steth_share, stv, is_undercollateralized = tx.return_value
-
             user_stv = self.pool_balance[user]
-            user_stv_value = self.stv_to_value(user_stv)
+            user_stv_value = self.stv_to_value(user_stv) # in eth
             user_steth_share = self.user_minted_shares[user]
             user_rounded_up_steth_value = self.steth.getPooledEthBySharesRoundUp(
                 user_steth_share
             )
 
+            # the calculation of threshold is the same
             assets_threshold = -(
                 -user_rounded_up_steth_value
                 * 10000
@@ -557,36 +557,59 @@ class FuzzStEthPoool(FuzzPool):
             reserve_ratio_bp = self.reserve_ratio_bp
             stethliability = user_rounded_up_steth_value
 
+            TOTAL_BASIS_POINTS = 10000
+
             target_steth_value_to_rebalance = (
-                stethliability * 10000 - (10000 - reserve_ratio_bp) * user_stv_value
+                stethliability * TOTAL_BASIS_POINTS - (TOTAL_BASIS_POINTS - reserve_ratio_bp) * user_stv_value
+            ) // reserve_ratio_bp
+
+            steth_liability_in_share = user_steth_share
+
+            target_steth_share_to_rebalance_new = (
+                steth_liability_in_share * TOTAL_BASIS_POINTS - (TOTAL_BASIS_POINTS - reserve_ratio_bp) * self.steth.getSharesByPooledEth(user_stv_value)
             ) // reserve_ratio_bp
 
             # giving user this value of steth, and buring this value of stv.
 
-            if target_steth_value_to_rebalance > stethliability:
-                target_steth_value_to_rebalance = stethliability
+            if target_steth_share_to_rebalance_new > steth_liability_in_share:
+                target_steth_share_to_rebalance_new = steth_liability_in_share
                 assert is_undercollateralized == True
 
-            steth_to_rebalance_limit_in_value = (
-                self.stv_steth_pool.totalExceedingMintedSteth()
-                + self.staking_vault.availableBalance()
-            )
-            steth_to_rebalance_in_value = min(
-                target_steth_value_to_rebalance, steth_to_rebalance_limit_in_value
-            )
+            # steth_to_rebalance_limit_in_value = (
+            #     self.stv_steth_pool.totalExceedingMintedSteth()
+            #     + self.staking_vault.availableBalance()
+            # )
+            # steth_to_rebalance_in_value = min(
+            #     target_steth_value_to_rebalance, steth_to_rebalance_limit_in_value
+            # )
 
             if self.pool_total_asset == 0:
                 return
             # rounding up
-            stv_required = -(
-                -steth_to_rebalance_in_value
+            # stv_required = - (
+            #     - steth_to_rebalance_in_value
+            #     * self.pool_total_supply
+            #     // self.pool_total_asset
+            # )
+
+            steth_share_new = (
+                self.stv_steth_pool.totalExceedingMintedStethShares() +
+                self.steth.getSharesByPooledEth(
+                    self.staking_vault.availableBalance()
+                )
+            )
+
+            steth_share_expected = min(steth_share_new, target_steth_share_to_rebalance_new)
+
+            steth_to_rebalance = self.steth.getPooledEthBySharesRoundUp(steth_share_expected)
+
+            stv_required = - (
+                - steth_to_rebalance
                 * self.pool_total_supply
                 // self.pool_total_asset
             )
 
-            assert steth_share == self.steth.getSharesByPooledEth(
-                steth_to_rebalance_in_value
-            )
+            assert steth_share == steth_share_expected
             assert stv == min(stv_required, user_stv)
 
             # if steth_share == 0 and stv == 0 and is_undercollateralized == True:
@@ -661,13 +684,13 @@ class FuzzStEthPoool(FuzzPool):
 
     @invariant()
     def inv_reserve_ratio_bp(self):
-        assert self.reserve_ratio_bp == self.stv_steth_pool.reserveRatioBP()
+        assert self.reserve_ratio_bp == self.stv_steth_pool.poolReserveRatioBP()
 
     @invariant()
     def inv_forced_rebalance_threshold_bp(self):
         assert (
             self.forced_rebalance_threshold_bp
-            == self.stv_steth_pool.forcedRebalanceThresholdBP()
+            == self.stv_steth_pool.poolForcedRebalanceThresholdBP()
         )
 
     @invariant()

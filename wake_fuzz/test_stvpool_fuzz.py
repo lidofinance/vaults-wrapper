@@ -169,7 +169,7 @@ class FuzzPool(FuzzTest):
             stvStETHPoolFactory=self.stv_steth_pool_factory.address,
             withdrawalQueueFactory=self.withdrawal_queue_factory.address,
             distributorFactory=self.distributor_factory.address,
-            ggvStrategyFactory=self.ggv_strategy_factory.address,
+            # ggvStrategyFactory=self.ggv_strategy_factory.address,
             timelockFactory=self.timelock_factory.address,
         )
 
@@ -267,7 +267,8 @@ class FuzzPool(FuzzTest):
         )
 
         auxiliary_config = Factory.AuxiliaryPoolConfig(
-            allowlistEnabled=allowlist_enabled,
+            allowListEnabled=allowlist_enabled,
+            allowListManager=Address.ZERO, # !!!
             mintingEnabled=minting_enabled,
             reserveRatioGapBP=reserve_ratio_gap_bp,
         )
@@ -294,6 +295,9 @@ class FuzzPool(FuzzTest):
         amount = random_int(10**15, 10**20)
         user.balance += amount
         self.native_balance[user] += amount
+
+        if self.pool_total_asset == 0:
+            return "Pool total asset is zero"
 
         # previewDeposit
         expected = amount * self.pool_total_supply // self.pool_total_asset
@@ -562,7 +566,7 @@ class FuzzPool(FuzzTest):
         assert len(finalized_events) == 1
         finalized_event = finalized_events[0]
 
-        assert finalized_event.ethLocked == total_eth_to_claim  # why named ethLocked
+        assert finalized_event.ethLocked == total_eth_to_claim
         assert finalized_event.ethForGasCoverage == total_gas_coverage
         assert finalized_event.stvBurned == total_stv_to_burn
         assert finalized_event.stvRebalanced == 0
@@ -629,9 +633,6 @@ class FuzzPool(FuzzTest):
             return "no node operator"
 
         reward_slash = random_int(-(10**20), 10**16, min_prob=0.8)
-        # reward_slash = - 10**20
-
-        # self.native_balance[self.staking_vault]
 
         node_operator = random.choice(self.node_operators)
 
