@@ -34,7 +34,7 @@ contract GGVStrategy is IStrategy, AccessControlEnumerableUpgradeable, FeaturePa
     bytes32 public constant SUPPLY_RESUME_ROLE = keccak256("SUPPLY_RESUME_ROLE");
 
     struct GGVParamsSupply {
-        uint16 minimumMint;
+        uint256 minimumMint;
     }
 
     struct GGVParamsRequestExit {
@@ -178,6 +178,8 @@ contract GGVStrategy is IStrategy, AccessControlEnumerableUpgradeable, FeaturePa
      * @inheritdoc IStrategy
      */
     function requestExitByWsteth(uint256 _wsteth, bytes calldata _params) external returns (bytes32 requestId) {
+        if (_wsteth == 0) revert ZeroArgument("_wsteth");
+
         GGVParamsRequestExit memory params = abi.decode(_params, (GGVParamsRequestExit));
 
         IStrategyCallForwarder callForwarder = _getOrCreateCallForwarder(msg.sender);

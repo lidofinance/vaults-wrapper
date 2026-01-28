@@ -68,4 +68,3 @@ abstract contract SetupDistributor is Test {
         return abi.encode(recipient, token, amount);
     }
 }
-

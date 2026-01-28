@@ -111,6 +111,40 @@ contract CheckpointsTest is Test, SetupWithdrawalQueue {
         assertEq(hints[0], 0);
     }
 
+    function test_CheckpointHints_BatchDoesNotRevertOnNotFinalizedRequests() public {
+        _requestWithdrawalAndFinalize(10 ** STV_DECIMALS);
+
+        uint256 requestId1 = withdrawalQueue.requestWithdrawal(address(this), 10 ** STV_DECIMALS, 0);
+        uint256 requestId2 = withdrawalQueue.requestWithdrawal(address(this), 10 ** STV_DECIMALS, 0);
+
+        uint256[] memory requestIds = new uint256[](2);
+        requestIds[0] = requestId1;
+        requestIds[1] = requestId2;
+
+        uint256[] memory hints =
+            withdrawalQueue.findCheckpointHintBatch(requestIds, 1, withdrawalQueue.getLastCheckpointIndex());
+
+        assertEq(hints[0], 0);
+        assertEq(hints[1], 0);
+    }
+
+    function test_CheckpointHints_BatchDoesNotRevertWhenFirstOutsideRange() public {
+        uint256 requestId1 = _requestWithdrawalAndFinalize(10 ** STV_DECIMALS);
+        uint256 requestId2 = _requestWithdrawalAndFinalize(10 ** STV_DECIMALS);
+
+        uint256 lastCheckpointIndex = withdrawalQueue.getLastCheckpointIndex();
+        assertEq(lastCheckpointIndex, 2);
+
+        uint256[] memory requestIds = new uint256[](2);
+        requestIds[0] = requestId1;
+        requestIds[1] = requestId2;
+
+        uint256[] memory hints = withdrawalQueue.findCheckpointHintBatch(requestIds, 2, lastCheckpointIndex);
+
+        assertEq(hints[0], 0);
+        assertEq(hints[1], 2);
+    }
+
     function test_CheckpointHints_InvalidRange() public {
         uint256 requestId = _requestWithdrawalAndFinalize(10 ** STV_DECIMALS);
 

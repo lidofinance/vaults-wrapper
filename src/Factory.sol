@@ -7,7 +7,6 @@ import {StvPool} from "./StvPool.sol";
 import {StvStETHPool} from "./StvStETHPool.sol";
 import {WithdrawalQueue} from "./WithdrawalQueue.sol";
 import {DistributorFactory} from "./factories/DistributorFactory.sol";
-import {GGVStrategyFactory} from "./factories/GGVStrategyFactory.sol";
 import {StvPoolFactory} from "./factories/StvPoolFactory.sol";
 import {StvStETHPoolFactory} from "./factories/StvStETHPoolFactory.sol";
 import {TimelockFactory} from "./factories/TimelockFactory.sol";
@@ -38,7 +37,6 @@ contract Factory {
      * @param stvStETHPoolFactory Factory for deploying StvStETHPool implementations
      * @param withdrawalQueueFactory Factory for deploying WithdrawalQueue implementations
      * @param distributorFactory Factory for deploying Distributor implementations
-     * @param ggvStrategyFactory Factory for deploying GGV strategy implementations
      * @param timelockFactory Factory for deploying Timelock controllers
      */
     struct SubFactories {
@@ -46,7 +44,6 @@ contract Factory {
         address stvStETHPoolFactory;
         address withdrawalQueueFactory;
         address distributorFactory;
-        address ggvStrategyFactory;
         address timelockFactory;
     }
 
@@ -81,6 +78,7 @@ contract Factory {
      * @param minWithdrawalDelayTime Minimum delay time for processing withdrawals
      * @param name ERC20 token name for the pool shares
      * @param symbol ERC20 token symbol for the pool shares
+     * @param emergencyCommittee Address of the emergency committee
      */
     struct CommonPoolConfig {
         uint256 minWithdrawalDelayTime;
@@ -117,7 +115,9 @@ contract Factory {
      * @notice Intermediate state returned by deployment start functions
      * @param dashboard Address of the deployed dashboard
      * @param poolProxy Address of the deployed pool proxy (not yet initialized)
+     * @param poolImpl Address of the deployed pool implementation (not yet initialized)
      * @param withdrawalQueueProxy Address of the deployed withdrawal queue proxy (not yet initialized)
+     * @param wqImpl Address of the deployed withdrawal queue implementation (not yet initialized)
      * @param timelock Address of the deployed timelock controller
      */
     struct PoolIntermediate {
@@ -281,11 +281,6 @@ contract Factory {
     DistributorFactory public immutable DISTRIBUTOR_FACTORY;
 
     /**
-     * @notice Factory for deploying GGV strategy implementations
-     */
-    GGVStrategyFactory public immutable GGV_STRATEGY_FACTORY;
-
-    /**
      * @notice Factory for deploying Timelock controllers
      */
     TimelockFactory public immutable TIMELOCK_FACTORY;
@@ -299,11 +294,6 @@ contract Factory {
      * @notice Default admin role identifier (keccak256("") = 0x00)
      */
     bytes32 public immutable DEFAULT_ADMIN_ROLE = 0x00;
-
-    /**
-     * @notice Total basis points constant (100.00%)
-     */
-    uint256 public constant TOTAL_BASIS_POINTS = 100_00;
 
     /**
      * @notice Maximum time allowed between start and finish deployment phases
@@ -342,7 +332,6 @@ contract Factory {
         STV_STETH_POOL_FACTORY = StvStETHPoolFactory(_subFactories.stvStETHPoolFactory);
         WITHDRAWAL_QUEUE_FACTORY = WithdrawalQueueFactory(_subFactories.withdrawalQueueFactory);
         DISTRIBUTOR_FACTORY = DistributorFactory(_subFactories.distributorFactory);
-        GGV_STRATEGY_FACTORY = GGVStrategyFactory(_subFactories.ggvStrategyFactory);
         TIMELOCK_FACTORY = TimelockFactory(_subFactories.timelockFactory);
 
         DUMMY_IMPLEMENTATION = address(new DummyImplementation());
@@ -410,33 +399,6 @@ contract Factory {
     }
 
     /**
-     * @notice Initiates deployment of a GGV strategy pool (first phase)
-     * @param _vaultConfig Configuration for the vault
-     * @param _timelockConfig Configuration for the timelock controller
-     * @param _commonPoolConfig Common pool parameters (name, symbol, withdrawal delay)
-     * @param _reserveRatioGapBP Maximum allowed reserve ratio gap in basis points
-     * @return intermediate Deployment state needed for finish phase
-     * @dev ETH for vault connection deposit should be sent in createPoolFinish
-     * @dev Automatically enables allowlist and minting for GGV pools
-     */
-    function createPoolGGVStart(
-        VaultConfig memory _vaultConfig,
-        TimelockConfig memory _timelockConfig,
-        CommonPoolConfig memory _commonPoolConfig,
-        uint256 _reserveRatioGapBP
-    ) external returns (PoolIntermediate memory intermediate) {
-        AuxiliaryPoolConfig memory auxiliaryConfig = AuxiliaryPoolConfig({
-            allowListEnabled: true,
-            allowListManager: address(0),
-            mintingEnabled: true,
-            reserveRatioGapBP: _reserveRatioGapBP
-        });
-        intermediate = createPoolStart(
-            _vaultConfig, _timelockConfig, _commonPoolConfig, auxiliaryConfig, address(GGV_STRATEGY_FACTORY), ""
-        );
-    }
-
-    /**
      * @notice Generic pool deployment start function (first phase)
      * @param _vaultConfig Configuration for the vault
      * @param _timelockConfig Configuration for the timelock controller
@@ -470,6 +432,14 @@ contract Factory {
             if (!_auxiliaryConfig.allowListEnabled && _auxiliaryConfig.allowListManager != address(0)) {
                 revert InvalidConfiguration("allowListManager must be zero when allowlist is disabled");
             }
+        }
+
+        // Validate proposer and executor addresses
+        if (_timelockConfig.proposer == address(0)) {
+            revert InvalidConfiguration("proposer must not be zero address");
+        }
+        if (_timelockConfig.executor == address(0)) {
+            revert InvalidConfiguration("executor must not be zero address");
         }
 
         address timelock = TIMELOCK_FACTORY.deploy(
@@ -753,7 +723,7 @@ contract Factory {
         address _strategyFactory,
         bytes memory _strategyDeployBytes,
         PoolIntermediate memory _intermediate
-    ) public pure returns (bytes32 result) {
+    ) internal pure returns (bytes32 result) {
         result = keccak256(
             abi.encode(
                 _sender,

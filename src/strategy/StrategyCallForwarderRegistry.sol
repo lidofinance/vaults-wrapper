@@ -7,8 +7,8 @@ import {IStrategyCallForwarder} from "src/interfaces/IStrategyCallForwarder.sol"
 abstract contract StrategyCallForwarderRegistry {
     error CallForwarderZeroArgument(string name);
 
-    /// @dev WARNING: This ID is used to calculate user proxy addresses.
-    /// Changing this value will break user proxy address calculations.
+    /// @dev WARNING: STRATEGY_ID and STRATEGY_CALL_FORWARDER_IMPL are used to calculate user proxy addresses
+    /// Changing either value will break user proxy address calculations.
     bytes32 public immutable STRATEGY_ID;
     address public immutable STRATEGY_CALL_FORWARDER_IMPL;
 

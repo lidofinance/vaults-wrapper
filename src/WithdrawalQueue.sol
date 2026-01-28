@@ -233,13 +233,14 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, FeaturePausable 
      * @param _finalizer Address that will be granted FINALIZE_ROLE
      * @param _withdrawalsPauser Address that will be granted WITHDRAWALS_PAUSE_ROLE (zero address for none)
      * @param _finalizePauser Address that will be granted FINALIZE_PAUSE_ROLE (zero address for none)
-     * @dev Reverts if `_admin` equals to `address(0)`
+     * @dev Reverts if `_admin` or `_finalizer` equals to `address(0)`
      */
     function initialize(address _admin, address _finalizer, address _withdrawalsPauser, address _finalizePauser)
         external
         initializer
     {
         if (_admin == address(0)) revert ZeroAddress();
+        if (_finalizer == address(0)) revert ZeroAddress();
 
         __AccessControlEnumerable_init();
 
@@ -368,8 +369,6 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, FeaturePausable 
         if (value < MIN_WITHDRAWAL_VALUE) revert RequestValueTooSmall(value);
         if (assets > MAX_WITHDRAWAL_ASSETS) revert RequestAssetsTooLarge(assets);
 
-        _transferForWithdrawalQueue(msg.sender, _stvToWithdraw, _stethSharesToRebalance);
-
         WithdrawalQueueStorage storage $ = _getWithdrawalQueueStorage();
 
         uint256 lastRequestId = $.lastRequestId;
@@ -392,6 +391,8 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, FeaturePausable 
         });
 
         assert($.requestsByOwner[_owner].add(requestId));
+
+        _transferForWithdrawalQueue(msg.sender, _stvToWithdraw, _stethSharesToRebalance);
 
         emit WithdrawalRequested(requestId, _owner, _stvToWithdraw, _stethSharesToRebalance, assets);
     }
@@ -750,7 +751,7 @@ contract WithdrawalQueue is AccessControlEnumerableUpgradeable, FeaturePausable 
         for (uint256 i = 0; i < _requestIds.length; ++i) {
             if (_requestIds[i] < prevRequestId) revert RequestIdsNotSorted();
             hintIds[i] = findCheckpointHint(_requestIds[i], _firstIndex, _lastIndex);
-            _firstIndex = hintIds[i];
+            if (hintIds[i] != NOT_FOUND) _firstIndex = hintIds[i];
             prevRequestId = _requestIds[i];
         }
     }
