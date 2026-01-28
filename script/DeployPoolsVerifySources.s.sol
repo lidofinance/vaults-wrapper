@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.30;
 
+import {ShortString, ShortStrings} from "@openzeppelin/contracts/utils/ShortStrings.sol";
 import {Script} from "forge-std/Script.sol";
 import {console2} from "forge-std/console2.sol";
 import {StvPoolFactory} from "src/factories/StvPoolFactory.sol";
 import {StvStETHPoolFactory} from "src/factories/StvStETHPoolFactory.sol";
-import {ShortString, ShortStrings} from "@openzeppelin/contracts/utils/ShortStrings.sol";
 
 interface ICoreFactory {
     function VAULT_HUB() external view returns (address);
@@ -32,7 +32,6 @@ contract DashboardStub {
 }
 
 contract DeployPoolsVerifySources is Script {
-
     struct PoolParams {
         bool allowListEnabled;
         bool mintingEnabled;
@@ -47,10 +46,7 @@ contract DeployPoolsVerifySources is Script {
     }
 
     function _readFactoryAddress(string memory _path, string memory jsonPath) internal view returns (address addr) {
-        require(
-            vm.isFile(_path),
-            string(abi.encodePacked("FACTORY_DEPLOYMENT_JSON file does not exist at: ", _path))
-        );
+        require(vm.isFile(_path), string(abi.encodePacked("FACTORY_DEPLOYMENT_JSON file does not exist at: ", _path)));
         string memory json = vm.readFile(_path);
         addr = vm.parseJsonAddress(json, jsonPath);
         require(addr != address(0), "factory address missing");
@@ -69,11 +65,11 @@ contract DeployPoolsVerifySources is Script {
         }
     }
 
-    function _readDeploymentRefs(
-        address _dashboard,
-        address _withdrawalQueue,
-        address _distributor
-    ) internal pure returns (DeploymentRefs memory p) {
+    function _readDeploymentRefs(address _dashboard, address _withdrawalQueue, address _distributor)
+        internal
+        pure
+        returns (DeploymentRefs memory p)
+    {
         p.dashboard = _dashboard;
         p.withdrawalQueue = _withdrawalQueue;
         p.distributor = _distributor;
@@ -100,13 +96,8 @@ contract DeployPoolsVerifySources is Script {
         bytes32 poolType = params.strategyFactory == address(0) ? _stvPoolType() : _strategyPoolType();
 
         vm.startBroadcast();
-        impl = _factory.deploy(
-            refs.dashboard,
-            params.allowListEnabled,
-            refs.withdrawalQueue,
-            refs.distributor,
-            poolType
-        );
+        impl =
+            _factory.deploy(refs.dashboard, params.allowListEnabled, refs.withdrawalQueue, refs.distributor, poolType);
         vm.stopBroadcast();
 
         console2.log("Deployed", tag);
@@ -164,6 +155,8 @@ contract DeployPoolsVerifySources is Script {
         DeploymentRefs memory stvStethRefs = _readDeploymentRefs(address(dashboard), vaultHub, vaultHub);
 
         _deployStvPool(StvPoolFactory(stvPoolFactoryAddr), stvParams, stvRefs, "stv-impl");
-        _deployStvStethPool(StvStETHPoolFactory(stvStethPoolFactoryAddr), stvStethParams, stvStethRefs, "stv-steth-impl");
+        _deployStvStethPool(
+            StvStETHPoolFactory(stvStethPoolFactoryAddr), stvStethParams, stvStethRefs, "stv-steth-impl"
+        );
     }
 }
