@@ -37,6 +37,12 @@ deploy-pool-finish FACTORY_ADDRESS INTERMEDIATE_JSON:
   FACTORY_ADDRESS={{FACTORY_ADDRESS}} \
   forge script script/DeployPool.s.sol:DeployPool $(just _script-flags {{env('RPC_URL')}} {{env('DEPLOYER')}} {{env('PRIVATE_KEY')}}) --gas-estimate-multiplier 110 --sig 'run()'
 
+deploy-pools-verify-sources DEPLOYMENT_JSON STV_PARAMS_JSON STV_STETH_PARAMS_JSON:
+  FACTORY_DEPLOYMENT_JSON={{DEPLOYMENT_JSON}} \
+  STV_POOL_PARAMS_JSON={{STV_PARAMS_JSON}} \
+  STV_STETH_POOL_PARAMS_JSON={{STV_STETH_PARAMS_JSON}} \
+  forge script script/DeployPoolsVerifySources.s.sol:DeployPoolsVerifySources $(just _script-flags {{env('RPC_URL')}} {{env('DEPLOYER')}} {{env('PRIVATE_KEY')}}) --sig 'run()'
+
 deploy-all env_file:
   #!/usr/bin/env bash
   set -euxo pipefail
@@ -57,6 +63,7 @@ deploy-all env_file:
 
 deploy-ggv-mocks:
   forge script script/DeployGGVMocks.s.sol:DeployGGVMocks $(just _script-flags) --gas-limit {{fusaka_tx_gas_limit}} --sig 'run()'
+
 publish-sources address contract_path constructor_args:
   forge verify-contract {{address}} {{contract_path}} \
     --verifier etherscan \
@@ -102,47 +109,47 @@ core-deploy subdir='lido-core' rpc_port='9123':
 verify-all:
   #!/usr/bin/env bash
   set -euo pipefail
-  
+
   DEPLOYMENT_JSON="deployments/pool-factory-latest.json"
   FACTORY_CONFIG="config/hoodi-factory.json"
-  
+
   FACTORY=$(jq -r '.deployment.factory' "$DEPLOYMENT_JSON")
   STV_POOL_FACTORY=$(jq -r '.factories.stvPoolFactory' "$DEPLOYMENT_JSON")
   STV_STETH_POOL_FACTORY=$(jq -r '.factories.stvStETHPoolFactory' "$DEPLOYMENT_JSON")
   WITHDRAWAL_QUEUE_FACTORY=$(jq -r '.factories.withdrawalQueueFactory' "$DEPLOYMENT_JSON")
   TIMELOCK_FACTORY=$(jq -r '.factories.timelockFactory' "$DEPLOYMENT_JSON")
   DISTRIBUTOR_FACTORY=$(jq -r '.factories.distributorFactory' "$DEPLOYMENT_JSON")
-  
+
   LOCATOR=$(jq -r '.lidoLocator' "$FACTORY_CONFIG")
-  
+
   echo "Verifying contracts..."
   echo "Factory: $FACTORY"
   echo ""
-  
+
   echo "1. Verifying StvPoolFactory..."
   forge verify-contract "$STV_POOL_FACTORY" src/factories/StvPoolFactory.sol:StvPoolFactory \
     --verifier etherscan --rpc-url {{env('RPC_URL')}} --watch -vvvv || echo "Failed to verify StvPoolFactory"
-  
+
   echo ""
   echo "2. Verifying StvStETHPoolFactory..."
   forge verify-contract "$STV_STETH_POOL_FACTORY" src/factories/StvStETHPoolFactory.sol:StvStETHPoolFactory \
     --verifier etherscan --rpc-url {{env('RPC_URL')}} --watch -vvvv || echo "Failed to verify StvStETHPoolFactory"
-  
+
   echo ""
   echo "3. Verifying WithdrawalQueueFactory..."
   forge verify-contract "$WITHDRAWAL_QUEUE_FACTORY" src/factories/WithdrawalQueueFactory.sol:WithdrawalQueueFactory \
     --verifier etherscan --rpc-url {{env('RPC_URL')}} --watch -vvvv || echo "Failed to verify WithdrawalQueueFactory"
-  
+
   echo ""
   echo "4. Verifying TimelockFactory..."
   forge verify-contract "$TIMELOCK_FACTORY" src/factories/TimelockFactory.sol:TimelockFactory \
     --verifier etherscan --rpc-url {{env('RPC_URL')}} --watch -vvvv || echo "Failed to verify TimelockFactory"
-  
+
   echo ""
   echo "5. Verifying DistributorFactory..."
   forge verify-contract "$DISTRIBUTOR_FACTORY" src/factories/DistributorFactory.sol:DistributorFactory \
     --verifier etherscan --rpc-url {{env('RPC_URL')}} --watch -vvvv || echo "Failed to verify DistributorFactory"
-  
+
   echo ""
   echo "6. Verifying Factory..."
 
@@ -152,6 +159,6 @@ verify-all:
     "($STV_POOL_FACTORY,$STV_STETH_POOL_FACTORY,$WITHDRAWAL_QUEUE_FACTORY,$DISTRIBUTOR_FACTORY,$TIMELOCK_FACTORY)")
   forge verify-contract "$FACTORY" src/Factory.sol:Factory \
     --verifier etherscan --rpc-url {{env('RPC_URL')}} --constructor-args "$FACTORY_ARGS" --watch -vvvv || echo "Failed to verify Factory"
-  
+
   echo ""
   echo "Verification complete!"
