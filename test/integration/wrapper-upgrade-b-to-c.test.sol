@@ -5,7 +5,10 @@ import {Factory} from "src/Factory.sol";
 import {OssifiableProxy} from "src/proxy/OssifiableProxy.sol";
 import {StvPool} from "src/StvPool.sol";
 import {StvStETHPool} from "src/StvStETHPool.sol";
+import {StvStETHPoolFactory} from "src/factories/StvStETHPoolFactory.sol";
 import {IStrategy} from "src/interfaces/IStrategy.sol";
+import {IDashboard} from "src/interfaces/core/IDashboard.sol";
+import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
 
 import {FactoryHelper} from "test/utils/FactoryHelper.sol";
 import {StvPoolHarness} from "test/utils/StvPoolHarness.sol";
@@ -24,6 +27,12 @@ contract WrapperUpgradeBtoCTest is StvPoolHarness, TimelockHarness {
         factory = helper.deployMainFactory(address(core.locator()));
     }
 
+    // The flow:
+    // - NodeOperator creates pool (Wrapper-B) via Factory
+    //   - pool type is StvStETHPool
+    //   - allowlist is disabled
+    //   - minting is disabled
+    //   - TODO
     function test_upgradeWrapperB_toWrapperC_strategyPool() public {
         Factory.VaultConfig memory vaultConfig = Factory.VaultConfig({
             nodeOperator: NODE_OPERATOR,
@@ -92,15 +101,14 @@ contract WrapperUpgradeBtoCTest is StvPoolHarness, TimelockHarness {
         _setupTimelock(deployment.timelock, NODE_OPERATOR, NODE_OPERATOR);
 
         // new implementation
-        address newPoolImpl = address(
-            new StvStETHPool(
-                deployment.dashboard,
-                /* allowListEnabled */ true,
-                reserveRatioGapBP,
-                deployment.withdrawalQueue,
-                deployment.distributor,
-                factory.STRATEGY_POOL_TYPE()
-            )
+        StvStETHPoolFactory poolFactory = factory.STV_STETH_POOL_FACTORY();
+        address newPoolImpl = poolFactory.deploy(
+            deployment.dashboard,
+            /* allowListEnabled */ true,
+            reserveRatioGapBP,
+            deployment.withdrawalQueue,
+            deployment.distributor,
+            factory.STRATEGY_POOL_TYPE()
         );
         bytes memory upgradePayload =
             abi.encodeWithSignature("proxy__upgradeToAndCall(address,bytes)", newPoolImpl, bytes(""));
@@ -119,6 +127,7 @@ contract WrapperUpgradeBtoCTest is StvPoolHarness, TimelockHarness {
         // - grant ALLOW_LIST_MANAGER_ROLE to timelock
         // - add strategy to allowlist
         // - revoke ALLOW_LIST_MANAGER_ROLE from previous manager (Factory) and from timelock
+        // - revoke emergency pauser roles from NodeOperator
         bytes32 managerRole = pool.ALLOW_LIST_MANAGER_ROLE();
         bytes memory grantManagerToTimelock =
             abi.encodeWithSignature("grantRole(bytes32,address)", managerRole, deployment.timelock);
@@ -127,6 +136,12 @@ contract WrapperUpgradeBtoCTest is StvPoolHarness, TimelockHarness {
             abi.encodeWithSignature("revokeRole(bytes32,address)", managerRole, address(factory));
         bytes memory revokeManagerFromTimelock =
             abi.encodeWithSignature("revokeRole(bytes32,address)", managerRole, deployment.timelock);
+        bytes32 depositsPauseRole = pool.DEPOSITS_PAUSE_ROLE();
+        bytes memory revokeDepositsPauseFromNodeOperator =
+            abi.encodeWithSignature("revokeRole(bytes32,address)", depositsPauseRole, NODE_OPERATOR);
+        bytes32 mintingPauseRole = pool.MINTING_PAUSE_ROLE();
+        bytes memory revokeMintingPauseFromNodeOperator =
+            abi.encodeWithSignature("revokeRole(bytes32,address)", mintingPauseRole, NODE_OPERATOR);
 
         // Minting was paused in Wrapper-B; resume it in Wrapper-C so the strategy can mint wstETH.
         bytes32 mintingResumeRole = pool.MINTING_RESUME_ROLE();
@@ -136,30 +151,77 @@ contract WrapperUpgradeBtoCTest is StvPoolHarness, TimelockHarness {
         bytes memory revokeMintingResumeFromTimelock =
             abi.encodeWithSignature("revokeRole(bytes32,address)", mintingResumeRole, deployment.timelock);
 
-        address[] memory targets = new address[](8);
-        bytes[] memory payloads = new bytes[](8);
-        targets[0] = address(pool);
-        payloads[0] = upgradePayload;
-        targets[1] = address(pool);
-        payloads[1] = grantManagerToTimelock;
-        targets[2] = address(pool);
-        payloads[2] = allowlistStrategy;
-        targets[3] = address(pool);
-        payloads[3] = revokeManagerFromFactory;
-        targets[4] = address(pool);
-        payloads[4] = revokeManagerFromTimelock;
-        targets[5] = address(pool);
-        payloads[5] = grantMintingResumeToTimelock;
-        targets[6] = address(pool);
-        payloads[6] = resumeMinting;
-        targets[7] = address(pool);
-        payloads[7] = revokeMintingResumeFromTimelock;
+        uint256 idx = 0;
+        address[] memory targets = new address[](10);
+        bytes[] memory payloads = new bytes[](10);
+
+        targets[idx] = address(pool);
+        payloads[idx] = upgradePayload;
+        idx++;
+
+        targets[idx] = address(pool);
+        payloads[idx] = grantManagerToTimelock;
+        idx++;
+
+        targets[idx] = address(pool);
+        payloads[idx] = allowlistStrategy;
+        idx++;
+
+        targets[idx] = address(pool);
+        payloads[idx] = revokeManagerFromFactory;
+        idx++;
+
+        targets[idx] = address(pool);
+        payloads[idx] = revokeManagerFromTimelock;
+        idx++;
+
+        targets[idx] = address(pool);
+        payloads[idx] = revokeDepositsPauseFromNodeOperator;
+        idx++;
+
+        targets[idx] = address(pool);
+        payloads[idx] = revokeMintingPauseFromNodeOperator;
+        idx++;
+
+        targets[idx] = address(pool);
+        payloads[idx] = grantMintingResumeToTimelock;
+        idx++;
+
+        targets[idx] = address(pool);
+        payloads[idx] = resumeMinting;
+        idx++;
+
+        targets[idx] = address(pool);
+        payloads[idx] = revokeMintingResumeFromTimelock;
+        idx++;
+
+        // Ensure we filled all array entries
+        assertEq(idx, targets.length, "all target/payload entries should be filled");
 
         _timelockScheduleAndExecuteBatch(targets, payloads);
 
         // Verify upgrade: poolType is now strategy pool
         assertEq(pool.poolType(), factory.STRATEGY_POOL_TYPE(), "expected Wrapper-C type");
         assertTrue(pool.ALLOW_LIST_ENABLED(), "allowlist must be enabled in Wrapper-C");
+
+        // Check that the factory no longer has the ALLOW_LIST_MANAGER_ROLE after upgrade
+        assertFalse(pool.hasRole(managerRole, address(factory)), "Factory should not have ALLOW_LIST_MANAGER_ROLE");
+        assertFalse(pool.hasRole(depositsPauseRole, NODE_OPERATOR), "NodeOperator should not pause deposits");
+        assertFalse(pool.hasRole(mintingPauseRole, NODE_OPERATOR), "NodeOperator should not pause minting");
+        WithdrawalQueue wq = WithdrawalQueue(payable(deployment.withdrawalQueue));
+        assertFalse(
+            wq.hasRole(wq.WITHDRAWALS_PAUSE_ROLE(), NODE_OPERATOR),
+            "NodeOperator should not pause withdrawals"
+        );
+        assertFalse(
+            wq.hasRole(wq.FINALIZE_PAUSE_ROLE(), NODE_OPERATOR),
+            "NodeOperator should not pause finalization"
+        );
+        IDashboard dashboard = IDashboard(payable(deployment.dashboard));
+        assertFalse(
+            dashboard.hasRole(dashboard.PAUSE_BEACON_CHAIN_DEPOSITS_ROLE(), NODE_OPERATOR),
+            "NodeOperator should not pause beacon chain deposits"
+        );
 
         // Verify state continuity: user's STV balance didn't change during upgrade
         assertEq(pool.balanceOf(USER1), userStvBefore, "user STV should be preserved");
@@ -205,4 +267,3 @@ contract WrapperUpgradeBtoCTest is StvPoolHarness, TimelockHarness {
         assertEq(userWstethAfter - userWstethBefore, wstethToMint, "user must receive wstETH");
     }
 }
-
