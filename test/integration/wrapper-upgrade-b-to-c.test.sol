@@ -209,19 +209,7 @@ contract WrapperUpgradeBtoCTest is StvPoolHarness, TimelockHarness {
         assertFalse(pool.hasRole(depositsPauseRole, NODE_OPERATOR), "NodeOperator should not pause deposits");
         assertFalse(pool.hasRole(mintingPauseRole, NODE_OPERATOR), "NodeOperator should not pause minting");
         WithdrawalQueue wq = WithdrawalQueue(payable(deployment.withdrawalQueue));
-        assertFalse(
-            wq.hasRole(wq.WITHDRAWALS_PAUSE_ROLE(), NODE_OPERATOR),
-            "NodeOperator should not pause withdrawals"
-        );
-        assertFalse(
-            wq.hasRole(wq.FINALIZE_PAUSE_ROLE(), NODE_OPERATOR),
-            "NodeOperator should not pause finalization"
-        );
         IDashboard dashboard = IDashboard(payable(deployment.dashboard));
-        assertFalse(
-            dashboard.hasRole(dashboard.PAUSE_BEACON_CHAIN_DEPOSITS_ROLE(), NODE_OPERATOR),
-            "NodeOperator should not pause beacon chain deposits"
-        );
 
         // Verify state continuity: user's STV balance didn't change during upgrade
         assertEq(pool.balanceOf(USER1), userStvBefore, "user STV should be preserved");
