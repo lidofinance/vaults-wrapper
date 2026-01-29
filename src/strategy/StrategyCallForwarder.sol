@@ -3,7 +3,7 @@ pragma solidity 0.8.30;
 
 import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
-import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
@@ -11,7 +11,7 @@ import {IStrategyCallForwarder} from "src/interfaces/IStrategyCallForwarder.sol"
 
 contract StrategyCallForwarder is
     Initializable,
-    ReentrancyGuardUpgradeable,
+    ReentrancyGuard,
     OwnableUpgradeable,
     IStrategyCallForwarder
 {
@@ -22,7 +22,6 @@ contract StrategyCallForwarder is
     }
 
     function initialize(address _owner) external initializer {
-        __ReentrancyGuard_init();
         __Ownable_init(_owner);
     }
 
