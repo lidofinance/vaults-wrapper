@@ -1,0 +1,37 @@
+[compiler.solc]
+exclude_paths = ["node_modules", "lib", ".venv", "script", "test/integration", "test/unit", "test/utils","venv", "test/Factory.test.sol"]
+remappings = [
+    "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",
+    "@openzeppelin/contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/contracts/",
+    "forge-std/=lib/forge-std/src/",
+    "@solmate/=boring-vault/lib/solmate/src/",
+    "erc4626-tests/=lib/openzeppelin-contracts-upgradeable/lib/erc4626-tests/",
+    "halmos-cheatcodes/=lib/openzeppelin-contracts-upgradeable/lib/halmos-cheatcodes/src/",
+    "openzeppelin-contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/",
+    "openzeppelin-contracts/=lib/openzeppelin-contracts/",
+]
+via_IR = true
+target_version = "0.8.30"
+
+[compiler.solc.optimizer]
+enabled = true
+runs = 200
+
+[compiler.solc.metadata]
+append_CBOR = true
+use_literal_content = false
+bytecode_hash = "ipfs"
+
+[detectors]
+exclude = []
+ignore_paths = [".venv", "test", "venv"]
+exclude_paths = ["node_modules", "lib", ".venv", "script", "test", "venv"]
+
+[testing]
+cmd = "revm"
+
+[general]
+call_trace_options = [
+    "contract_name", "function_name", "named_arguments", "status", "address",
+    "call_type", "value", "return_value", "error", "events", "arguments", "gas"
+]
