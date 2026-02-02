@@ -1,0 +1,27 @@
+{
+  "vaultConfig": {
+    "nodeOperator": "0xcc95b0Dbe1519AfaC58d954444839A80700380a2",
+    "nodeOperatorManager": "0xcc95b0Dbe1519AfaC58d954444839A80700380a2",
+    "nodeOperatorFeeBP": 10,
+    "confirmExpiry": 3600
+  },
+  "commonPoolConfig": {
+    "minWithdrawalDelayTime": 3600,
+    "name": "Staked ETH GGV Pool",
+    "symbol": "STV",
+    "emergencyCommittee": "0xcc95b0Dbe1519AfaC58d954444839A80700380a2"
+  },
+  "auxiliaryPoolConfig": {
+    "allowListEnabled": true,
+    "allowListManager": "0x0000000000000000000000000000000000000000",
+    "mintingEnabled": true,
+    "reserveRatioGapBP": 250
+  },
+  "timelockConfig": {
+    "minDelaySeconds": 60,
+    "proposer": "0xcc95b0Dbe1519AfaC58d954444839A80700380a2",
+    "executor": "0xcc95b0Dbe1519AfaC58d954444839A80700380a2"
+  },
+  "strategyFactory": "GGV",
+  "connectDepositWei": 1000000000000000000
+}

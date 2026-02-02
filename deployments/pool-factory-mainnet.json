@@ -1,0 +1,13 @@
+{
+  "deployment": {
+    "factory": "0x3f221b8E5bC098cC6C23611BEeacaeCfD77e1587",
+    "network": "1"
+  },
+  "factories": {
+    "distributorFactory": "0x9FD67B2D5b88BeBaC741EE50510cf808B4854a5F",
+    "stvPoolFactory": "0x5Def7fBC0211351139B928f307EDC794af845Bde",
+    "stvStETHPoolFactory": "0x671978CEEa7DAf405fA08E930E1047d1b7b21a69",
+    "timelockFactory": "0x15f2C9ea98e5564d25A46eE39D19704476998786",
+    "withdrawalQueueFactory": "0xB011531857B6006479627e776feB6c0cEA5fc74a"
+  }
+}

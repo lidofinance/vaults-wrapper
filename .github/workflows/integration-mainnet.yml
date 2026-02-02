@@ -1,0 +1,23 @@
+name: Integration Tests (Mainnet)
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Run integration tests on Hoodi
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      FOUNDRY_PROFILE: test
+      RPC_URL: https://eth.drpc.org
+      CORE_LOCATOR_ADDRESS: "0xC1d0b3DE6792Bf6b4b37EccdcC24e45978Cfd2Eb"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: ./.github/actions/setup
+
+      - run: just test-integration
