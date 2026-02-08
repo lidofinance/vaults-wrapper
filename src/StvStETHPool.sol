@@ -28,6 +28,7 @@ contract StvStETHPool is StvPool {
     error InsufficientStv();
     error ZeroArgument();
     error CannotRebalanceWithdrawalQueue();
+    error CannotTransferLiabilityToWithdrawalQueue();
     error UndercollateralizedAccount();
     error CollateralizedAccount();
     error ExcessiveLossSocialization();
@@ -72,9 +73,6 @@ contract StvStETHPool is StvPool {
         address _distributor,
         bytes32 _poolType
     ) StvPool(_dashboard, _allowListEnabled, _withdrawalQueue, _distributor, _poolType) {
-        uint256 vaultRR = VAULT_HUB.vaultConnection(address(VAULT)).reserveRatioBP;
-        if (_reserveRatioGapBP + vaultRR >= TOTAL_BASIS_POINTS) revert InvalidValue();
-
         RESERVE_RATIO_GAP_BP = _reserveRatioGapBP;
         WSTETH = IWstETH(DASHBOARD.WSTETH());
 
@@ -200,6 +198,7 @@ contract StvStETHPool is StvPool {
      * @param _stethShares Amount of stETH shares liability to transfer (18 decimals)
      * @dev Ensures that the transferred stv covers the minimum required to lock for the transferred stETH shares liability
      * @dev Can only be called by the WithdrawalQueue contract
+     * @dev Requires fresh oracle report, which is checked in the Withdrawal Queue
      */
     function transferFromWithLiabilityForWithdrawalQueue(address _from, uint256 _stv, uint256 _stethShares) external {
         _checkOnlyWithdrawalQueue();
@@ -221,6 +220,18 @@ contract StvStETHPool is StvPool {
      * @dev Includes total assets + total exceeding minted stETH
      */
     function totalAssets() public view override returns (uint256 assets) {
+        /// As a result of the rebalancing initiated in the Staking Vault, bypassing the Wrapper,
+        /// part of the total liability can be reduced at the expense of the Staking Vault's assets.
+        ///
+        /// As a result of this operation, the total liabilityShares on the Staking Vault will decrease,
+        /// while mintedStethShares will remain the same, as will the users' debts on these obligations.
+        /// The difference between these two values is the stETH that users owe to Wrapper, but which
+        /// should not be returned to Staking Vault, but should be distributed among all participants
+        /// in exchange for the withdrawn ETH.
+        ///
+        /// Thus, in rare situations, StvStETHPool may have two assets: ETH and stETH, which are
+        /// distributed among all users in proportion to their shares.
+
         uint256 exceedingMintedSteth = totalExceedingMintedSteth();
 
         /// total assets = nominal assets + exceeding minted steth - unassigned liability steth
@@ -233,26 +244,6 @@ contract StvStETHPool is StvPool {
         } else {
             assets = Math.saturatingSub(totalNominalAssets(), totalUnassignedLiabilitySteth());
         }
-    }
-
-    /**
-     * @notice Assets of a specific account
-     * @param _account The address of the account
-     * @return assets Assets of the account (18 decimals)
-     */
-    function assetsOf(address _account) public view override returns (uint256 assets) {
-        /// As a result of the rebalancing initiated in the Staking Vault, bypassing the Wrapper,
-        /// part of the total liability can be reduced at the expense of the Staking Vault's assets.
-        ///
-        /// As a result of this operation, the total liabilityShares on the Staking Vault will decrease,
-        /// while mintedStethShares will remain the same, as will the users' debts on these obligations.
-        /// The difference between these two values is the stETH that users owe to Wrapper, but which
-        /// should not be returned to Staking Vault, but should be distributed among all participants
-        /// in exchange for the withdrawn ETH.
-        ///
-        /// Thus, in rare situations, StvStETHPool may have two assets: ETH and stETH, which are
-        /// distributed among all users in proportion to their shares.
-        assets = _convertToAssets(balanceOf(_account));
     }
 
     // =================================================================================
@@ -288,6 +279,7 @@ contract StvStETHPool is StvPool {
     /**
      * @notice Calculate the remaining minting capacity in stETH shares for a specific account
      * @param _account The address of the account
+     * @param _ethToFund The amount of ETH to fund
      * @return stethShares The remaining minting capacity in stETH shares
      */
     function remainingMintingCapacitySharesOf(address _account, uint256 _ethToFund)
@@ -797,8 +789,12 @@ contract StvStETHPool is StvPool {
      * @param _stethShares The amount of stETH shares liability to transfer
      * @return success True if the transfer was successful
      * @dev Ensures that the transferred stv covers the minimum required to lock for the transferred stETH shares liability
+     * @dev Requires fresh oracle report to price stv accurately
      */
     function transferWithLiability(address _to, uint256 _stv, uint256 _stethShares) external returns (bool success) {
+        if (_to == address(WITHDRAWAL_QUEUE)) revert CannotTransferLiabilityToWithdrawalQueue();
+        _checkFreshReport();
+
         _transferWithLiability(msg.sender, _to, _stv, _stethShares);
         success = true;
     }

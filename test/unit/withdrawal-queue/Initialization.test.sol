@@ -40,6 +40,11 @@ contract InitializationTest is Test {
         withdrawalQueueProxy.initialize(address(0), finalizeRoleHolder, address(0), address(0));
     }
 
+    function test_Initialize_RevertWhenFinalizerZero() public {
+        vm.expectRevert(WithdrawalQueue.ZeroAddress.selector);
+        withdrawalQueueProxy.initialize(owner, address(0), address(0), address(0));
+    }
+
     function test_Initialize_RevertWhenCalledTwice() public {
         withdrawalQueueProxy.initialize(owner, finalizeRoleHolder, owner, owner);
 

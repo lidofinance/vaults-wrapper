@@ -88,7 +88,6 @@ new Factory(locatorAddress, SubFactories({
     stvStETHPoolFactory,
     withdrawalQueueFactory,
     distributorFactory,
-    ggvStrategyFactory,
     timelockFactory
 }))
 ```
@@ -98,7 +97,6 @@ new Factory(locatorAddress, SubFactories({
 // Simplified wrappers
 createPoolStvStart(vaultConfig, timelockConfig, commonPoolConfig, allowlistEnabled)
 createPoolStvStETHStart(vaultConfig, timelockConfig, commonPoolConfig, allowlistEnabled, reserveRatioGapBP)
-createPoolGGVStart(vaultConfig, timelockConfig, commonPoolConfig, reserveRatioGapBP)
 
 // Generic (used by wrappers above)
 createPoolStart(vaultConfig, timelockConfig, commonPoolConfig, auxiliaryConfig, strategyFactory, strategyDeployBytes)
@@ -218,7 +216,6 @@ just -E .env.xxx deploy-factory          # Deploy factory
 just -E .env.xxx deploy-pool-start ...   # Start pool deployment
 just -E .env.xxx deploy-pool-finish ...  # Finish pool deployment  
 just -E .env.xxx deploy-all <env>        # Deploy factory + all pool types
-just -E .env.xxx deploy-ggv-mocks        # Deploy GGV mock contracts
 
 # Testing
 just test-unit                           # Run unit tests (no env needed)

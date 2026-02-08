@@ -105,7 +105,7 @@ contract MockDashboard is AccessControlEnumerable {
         uint256 unwrappedShares = STETH.getSharesByPooledEth(unwrappedStETH);
 
         STETH.transferShares(address(VAULT_HUB), unwrappedShares);
-        VAULT_HUB.burnShares(VAULT, amount);
+        VAULT_HUB.burnShares(VAULT, unwrappedShares);
     }
 
     function remainingMintingCapacityShares(

@@ -9,7 +9,6 @@ import {IStETH} from "./interfaces/core/IStETH.sol";
 import {IStakingVault} from "./interfaces/core/IStakingVault.sol";
 import {IVaultHub} from "./interfaces/core/IVaultHub.sol";
 import {FeaturePausable} from "./utils/FeaturePausable.sol";
-import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {ERC20Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
@@ -18,7 +17,7 @@ import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
  * @notice ERC20 staking vault token pool that accepts ETH deposits and manages withdrawals through a queue
  * @dev Implements a tokenized staking pool where users deposit ETH and receive STV tokens representing their share
  */
-contract StvPool is Initializable, ERC20Upgradeable, AllowList, FeaturePausable {
+contract StvPool is ERC20Upgradeable, AllowList, FeaturePausable {
     // Custom errors
     error ZeroDeposit();
     error InvalidRecipient();
@@ -133,13 +132,12 @@ contract StvPool is Initializable, ERC20Upgradeable, AllowList, FeaturePausable 
     }
 
     /**
-     * @notice Assets owned by an account
-     * @param _account The account to query
-     * @return assets Amount of assets (18 decimals)
-     * @dev Overridable method to include other assets if needed
+     * @notice Assets of a specific account
+     * @param _account The address of the account
+     * @return assets Assets of the account (18 decimals)
      */
-    function assetsOf(address _account) public view virtual returns (uint256 assets) {
-        assets = nominalAssetsOf(_account); /* plus other assets if any */
+    function assetsOf(address _account) public view returns (uint256 assets) {
+        assets = _convertToAssets(balanceOf(_account));
     }
 
     // =================================================================================

@@ -6,22 +6,17 @@ import {console2} from "forge-std/console2.sol";
 
 import {Factory} from "src/Factory.sol";
 import {DistributorFactory} from "src/factories/DistributorFactory.sol";
-import {GGVStrategyFactory} from "src/factories/GGVStrategyFactory.sol";
 import {StvPoolFactory} from "src/factories/StvPoolFactory.sol";
 import {StvStETHPoolFactory} from "src/factories/StvStETHPoolFactory.sol";
 import {TimelockFactory} from "src/factories/TimelockFactory.sol";
 import {WithdrawalQueueFactory} from "src/factories/WithdrawalQueueFactory.sol";
 
 contract DeployFactory is Script {
-    function _deployImplFactories(address _ggvTeller, address _ggvBoringQueue)
-        internal
-        returns (Factory.SubFactories memory f)
-    {
+    function _deployImplFactories() internal returns (Factory.SubFactories memory f) {
         f.stvPoolFactory = address(new StvPoolFactory());
         f.stvStETHPoolFactory = address(new StvStETHPoolFactory());
         f.withdrawalQueueFactory = address(new WithdrawalQueueFactory());
         f.distributorFactory = address(new DistributorFactory());
-        f.ggvStrategyFactory = address(new GGVStrategyFactory(_ggvTeller, _ggvBoringQueue));
         f.timelockFactory = address(new TimelockFactory());
     }
 
@@ -36,7 +31,6 @@ contract DeployFactory is Script {
         factoriesSection =
             vm.serializeAddress("factories", "withdrawalQueueFactory", _subFactories.withdrawalQueueFactory);
         factoriesSection = vm.serializeAddress("factories", "distributorFactory", _subFactories.distributorFactory);
-        factoriesSection = vm.serializeAddress("factories", "ggvStrategyFactory", _subFactories.ggvStrategyFactory);
         factoriesSection = vm.serializeAddress("factories", "timelockFactory", _subFactories.timelockFactory);
 
         string memory out = "";
@@ -50,11 +44,7 @@ contract DeployFactory is Script {
         vm.writeJson(json, "deployments/pool-factory-latest.json");
     }
 
-    function _readFactoryConfig(string memory _paramsPath)
-        internal
-        view
-        returns (address locator, address teller, address boringQueue)
-    {
+    function _readFactoryConfig(string memory _paramsPath) internal view returns (address locator) {
         require(
             vm.isFile(_paramsPath),
             string(abi.encodePacked("FACTORY_PARAMS_JSON file does not exist at: ", _paramsPath))
@@ -62,12 +52,8 @@ contract DeployFactory is Script {
         string memory json = vm.readFile(_paramsPath);
 
         locator = vm.parseJsonAddress(json, "$.lidoLocator");
-        teller = vm.parseJsonAddress(json, "$.strategies.ggv.teller");
-        boringQueue = vm.parseJsonAddress(json, "$.strategies.ggv.boringOnChainQueue");
 
         require(locator != address(0), "lidoLocator missing");
-        require(teller != address(0), "strategies.ggv.teller missing");
-        require(boringQueue != address(0), "strategies.ggv.boringOnChainQueue missing");
     }
 
     function run() external {
@@ -83,12 +69,12 @@ contract DeployFactory is Script {
         );
 
         // Read all factory configuration from JSON file
-        (address locatorAddress, address ggvTeller, address ggvBoringQueue) = _readFactoryConfig(paramsJsonPath);
+        (address locatorAddress) = _readFactoryConfig(paramsJsonPath);
 
         vm.startBroadcast();
 
         // Deploy implementation factories and proxy stub
-        Factory.SubFactories memory subFactories = _deployImplFactories(ggvTeller, ggvBoringQueue);
+        Factory.SubFactories memory subFactories = _deployImplFactories();
 
         Factory factory = new Factory(locatorAddress, subFactories);
 

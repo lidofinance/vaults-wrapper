@@ -16,6 +16,7 @@ import {IVaultHub} from "src/interfaces/core/IVaultHub.sol";
 import {IWstETH} from "src/interfaces/core/IWstETH.sol";
 import {CoreHarness} from "test/utils/CoreHarness.sol";
 import {FactoryHelper} from "test/utils/FactoryHelper.sol";
+import {GGVStrategyFactory} from "src/factories/GGVStrategyFactory.sol";
 
 /**
  * @title StvPoolHarness
@@ -115,6 +116,9 @@ contract StvPoolHarness is Test {
             } else {
                 factory = helper.deployMainFactory(address(core.locator()), address(0), address(0));
             }
+            // TODO: check
+            factory = helper.deployMainFactory(address(core.locator()));
+
         }
 
         Factory.VaultConfig memory vaultConfig = Factory.VaultConfig({
@@ -146,7 +150,7 @@ contract StvPoolHarness is Test {
 
         address strategyFactoryAddress = address(0);
         if (config.strategyKind == StrategyKind.GGV) {
-            strategyFactoryAddress = address(factory.GGV_STRATEGY_FACTORY());
+            strategyFactoryAddress = address(new GGVStrategyFactory(config.ggvTeller, config.ggvBoringQueue));
         } else if (config.strategyKind == StrategyKind.MELLOW) {
             strategyFactoryAddress = address(new MellowStrategyFactory());
         }

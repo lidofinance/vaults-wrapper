@@ -15,14 +15,10 @@ contract FactoryHelper {
     Factory.TimelockConfig public defaultTimelockConfig;
 
     constructor() {
-        address dummyTeller = address(new DummyImplementation());
-        address dummyQueue = address(new DummyImplementation());
-
         subFactories.stvPoolFactory = address(new StvPoolFactory());
         subFactories.stvStETHPoolFactory = address(new StvStETHPoolFactory());
         subFactories.withdrawalQueueFactory = address(new WithdrawalQueueFactory());
         subFactories.distributorFactory = address(new DistributorFactory());
-        subFactories.ggvStrategyFactory = address(new GGVStrategyFactory(dummyTeller, dummyQueue));
         subFactories.timelockFactory = address(new TimelockFactory());
 
         defaultTimelockConfig =
@@ -31,17 +27,5 @@ contract FactoryHelper {
 
     function deployMainFactory(address locatorAddress) external returns (Factory factory) {
         factory = new Factory(locatorAddress, subFactories);
-    }
-
-    function deployMainFactory(address locatorAddress, address ggvTeller, address ggvBoringQueue)
-        external
-        returns (Factory factory)
-    {
-        Factory.SubFactories memory factories = subFactories;
-        if (ggvTeller != address(0) && ggvBoringQueue != address(0)) {
-            factories.ggvStrategyFactory = address(new GGVStrategyFactory(ggvTeller, ggvBoringQueue));
-        }
-
-        factory = new Factory(locatorAddress, factories);
     }
 }

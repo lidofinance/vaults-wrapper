@@ -70,6 +70,26 @@ contract TransferWithLiabilityTest is Test, SetupStvStETHPool {
         pool.transferWithLiability(userAlice, 0, sharesToTransfer);
     }
 
+    function test_TransferWithLiability_RevertsWhenToWithdrawalQueue() public {
+        uint256 sharesToTransfer = pool.remainingMintingCapacitySharesOf(address(this), 0) / 2;
+        pool.mintStethShares(sharesToTransfer);
+        uint256 stvToTransfer = pool.balanceOf(address(this));
+
+        vm.expectRevert(StvStETHPool.CannotTransferLiabilityToWithdrawalQueue.selector);
+        pool.transferWithLiability(withdrawalQueue, stvToTransfer, sharesToTransfer);
+    }
+
+    function test_TransferWithLiability_RevertsWhenReportStale() public {
+        uint256 sharesToTransfer = pool.remainingMintingCapacitySharesOf(address(this), 0) / 2;
+        pool.mintStethShares(sharesToTransfer);
+        uint256 stvToTransfer = pool.balanceOf(address(this));
+
+        dashboard.VAULT_HUB().mock_setReportFreshness(dashboard.stakingVault(), false);
+
+        vm.expectRevert(StvPool.VaultReportStale.selector);
+        pool.transferWithLiability(userAlice, stvToTransfer, sharesToTransfer);
+    }
+
     // transferFromWithLiabilityForWithdrawalQueue tests
 
     function test_TransferWithLiabilityForWQ_OnlyCallableByWQ() public {
