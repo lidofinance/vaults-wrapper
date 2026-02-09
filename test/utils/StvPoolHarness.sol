@@ -8,7 +8,6 @@ import {Distributor} from "src/Distributor.sol";
 import {Factory} from "src/Factory.sol";
 import {StvPool} from "src/StvPool.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
-import {MellowStrategyFactory} from "src/factories/MellowStrategyFactory.sol";
 import {IDashboard} from "src/interfaces/core/IDashboard.sol";
 import {ILido} from "src/interfaces/core/ILido.sol";
 import {IStakingVault} from "src/interfaces/core/IStakingVault.sol";
@@ -17,6 +16,7 @@ import {IWstETH} from "src/interfaces/core/IWstETH.sol";
 import {CoreHarness} from "test/utils/CoreHarness.sol";
 import {FactoryHelper} from "test/utils/FactoryHelper.sol";
 import {GGVStrategyFactory} from "src/factories/GGVStrategyFactory.sol";
+import {MellowStrategyFactory} from "src/factories/MellowStrategyFactory.sol";
 
 /**
  * @title StvPoolHarness
@@ -110,15 +110,7 @@ contract StvPoolHarness is Test {
             console.log("Using predeployed factory from FACTORY_ADDRESS", factoryFromEnv);
         } else {
             FactoryHelper helper = new FactoryHelper();
-            if (config.strategyKind == StrategyKind.GGV) {
-                (address ggvTeller, address ggvBoringQueue) = abi.decode(config.deployParams, (address, address));
-                factory = helper.deployMainFactory(address(core.locator()), ggvTeller, ggvBoringQueue);
-            } else {
-                factory = helper.deployMainFactory(address(core.locator()), address(0), address(0));
-            }
-            // TODO: check
             factory = helper.deployMainFactory(address(core.locator()));
-
         }
 
         Factory.VaultConfig memory vaultConfig = Factory.VaultConfig({
@@ -129,10 +121,7 @@ contract StvPoolHarness is Test {
         });
 
         Factory.CommonPoolConfig memory commonPoolConfig = Factory.CommonPoolConfig({
-            minWithdrawalDelayTime: config.minWithdrawalDelayTime,
-            name: config.name,
-            symbol: config.symbol,
-            emergencyCommittee: address(0)
+            minWithdrawalDelayTime: config.minWithdrawalDelayTime, name: config.name, symbol: config.symbol, emergencyCommittee: address(0)
         });
 
         Factory.AuxiliaryPoolConfig memory auxiliaryConfig = Factory.AuxiliaryPoolConfig({
@@ -150,28 +139,19 @@ contract StvPoolHarness is Test {
 
         address strategyFactoryAddress = address(0);
         if (config.strategyKind == StrategyKind.GGV) {
-            strategyFactoryAddress = address(new GGVStrategyFactory(config.ggvTeller, config.ggvBoringQueue));
+            (address ggvTeller, address ggvBoringQueue) = abi.decode(config.deployParams, (address, address));
+            strategyFactoryAddress = address(new GGVStrategyFactory(ggvTeller, ggvBoringQueue));
         } else if (config.strategyKind == StrategyKind.MELLOW) {
             strategyFactoryAddress = address(new MellowStrategyFactory());
         }
         // StrategyKind.NONE: strategyFactoryAddress remains address(0)
 
         vm.startPrank(config.nodeOperator);
-        bytes memory strategyDeployBytes_;
-        if (config.strategyKind == StrategyKind.MELLOW) {
-            strategyDeployBytes_ = config.deployParams;
-        }
         Factory.PoolIntermediate memory intermediate = factory.createPoolStart(
-            vaultConfig, timelockConfig, commonPoolConfig, auxiliaryConfig, strategyFactoryAddress, strategyDeployBytes_
+            vaultConfig, timelockConfig, commonPoolConfig, auxiliaryConfig, strategyFactoryAddress, ""
         );
         Factory.PoolDeployment memory deployment = factory.createPoolFinish{value: CONNECT_DEPOSIT}(
-            vaultConfig,
-            timelockConfig,
-            commonPoolConfig,
-            auxiliaryConfig,
-            strategyFactoryAddress,
-            strategyDeployBytes_,
-            intermediate
+            vaultConfig, timelockConfig, commonPoolConfig, auxiliaryConfig, strategyFactoryAddress, "", intermediate
         );
         vm.stopPrank();
 
@@ -213,7 +193,7 @@ contract StvPoolHarness is Test {
             minWithdrawalDelayTime: 1 days,
             reserveRatioGapBP: 0,
             strategyKind: StrategyKind.NONE,
-            deployParams: new bytes(0),
+            deployParams: "",
             timelockMinDelaySeconds: 0,
             timelockExecutor: NODE_OPERATOR,
             name: "Test STV Pool",

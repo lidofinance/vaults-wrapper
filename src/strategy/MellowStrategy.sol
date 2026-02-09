@@ -92,6 +92,7 @@ contract MellowStrategy is
     error SupplyFailed();
     error RequestIdNotFound();
     error ZeroShares();
+    error NoAsyncDepositQueue();
 
     constructor(
         bytes32 strategyId_,
@@ -243,7 +244,7 @@ contract MellowStrategy is
             }
         } else {
             IDepositQueue depositQueue = IDepositQueue(queue);
-            (uint256 requestTimestamp, ) = depositQueue.requestOf(callForwarder);
+            (uint256 requestTimestamp,) = depositQueue.requestOf(callForwarder);
             if (requestTimestamp != 0) {
                 // NOTE: This check does not cover the edge case where `claimableShares == 0` due to rounding.
                 // In that scenario, the user is expected to call `claimShares()` first to materialize the shares.
@@ -265,7 +266,7 @@ contract MellowStrategy is
         MellowSupplyParams memory supplyParams = abi.decode(params, (MellowSupplyParams));
         address msgSender = _msgSender();
         IStrategyCallForwarder callForwarder = _getOrCreateCallForwarder(msgSender);
-        
+
         (bool success, uint256 shares) = previewSupply(assets, address(callForwarder), supplyParams);
         if (!success) {
             revert SupplyFailed();
@@ -288,6 +289,9 @@ contract MellowStrategy is
     }
 
     function claimShares() external returns (bool success) {
+        if (MELLOW_ASYNC_DEPOSIT_QUEUE == address(0)) {
+            revert NoAsyncDepositQueue();
+        }
         IStrategyCallForwarder callForwarder = _getOrCreateCallForwarder(_msgSender());
         success = IDepositQueue(MELLOW_ASYNC_DEPOSIT_QUEUE).claim(address(callForwarder));
     }
