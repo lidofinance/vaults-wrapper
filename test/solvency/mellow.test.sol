@@ -392,6 +392,7 @@ contract MellowSolvencyTest is StvStrategyPoolHarness {
     }
 
     function _handleBatches() public {
+        deal(address(WSTETH), address(STRETH), 10000 ether);
         IRedeemQueue(asyncRedeemQueue).handleBatches(type(uint256).max);
     }
 

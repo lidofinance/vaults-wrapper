@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.30;
 
+import {console} from "forge-std/console.sol";
+
 import {IAccessControlEnumerable} from "@openzeppelin/contracts/access/extensions/IAccessControlEnumerable.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
@@ -172,8 +174,6 @@ contract MellowIntegrationTest is StvStrategyPoolHarness {
 
         _submitMellowReport(0);
         _handleBatches();
-
-        mellowStrategy.getRedeemQueueRequests(USER1, 0, 10);
 
         vm.startPrank(USER1);
         mellowStrategy.finalizeRequestExit(requestId);
@@ -350,6 +350,8 @@ contract MellowIntegrationTest is StvStrategyPoolHarness {
     }
 
     function _handleBatches() public {
+        // just to cover everything
+        deal(address(WSTETH), address(STRETH), 100000 ether);
         IRedeemQueue(asyncRedeemQueue).handleBatches(type(uint256).max);
     }
 
