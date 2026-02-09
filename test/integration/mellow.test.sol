@@ -1,17 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.30;
 
-import {console} from "forge-std/console.sol";
-
 import {IAccessControlEnumerable} from "@openzeppelin/contracts/access/extensions/IAccessControlEnumerable.sol";
-import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 
-import {IDepositQueue} from "../../src/interfaces/mellow/IDepositQueue.sol";
 import {IOracle} from "../../src/interfaces/mellow/IOracle.sol";
 import {IRedeemQueue} from "../../src/interfaces/mellow/IRedeemQueue.sol";
-import {ISyncDepositQueue} from "../../src/interfaces/mellow/ISyncDepositQueue.sol";
+// import {ISyncDepositQueue} from "../../src/interfaces/mellow/ISyncDepositQueue.sol";
 import {IVault} from "../../src/interfaces/mellow/IVault.sol";
 
 import {StvStrategyPoolHarness} from "test/utils/StvStrategyPoolHarness.sol";
@@ -19,16 +15,18 @@ import {StvStrategyPoolHarness} from "test/utils/StvStrategyPoolHarness.sol";
 import {StvStETHPool} from "../../src/StvStETHPool.sol";
 import {WithdrawalQueue} from "../../src/WithdrawalQueue.sol";
 import {IStrategy} from "../../src/interfaces/IStrategy.sol";
-import {IStrategyCallForwarder} from "../../src/interfaces/IStrategyCallForwarder.sol";
+// import {IStrategyCallForwarder} from "../../src/interfaces/IStrategyCallForwarder.sol";
 import {MellowStrategy} from "../../src/strategy/MellowStrategy.sol";
 
 import {AllowList} from "../../src/AllowList.sol";
-import {TableUtils} from "../utils/format/TableUtils.sol";
+// import {TableUtils} from "../utils/format/TableUtils.sol";
 
-import {IWstETH} from "../../src/interfaces/core/IWstETH.sol";
+// import {IWstETH} from "../../src/interfaces/core/IWstETH.sol";
 
 contract MellowIntegrationTest is StvStrategyPoolHarness {
     using SafeCast for uint256;
+    using SafeCast for int256;
+    
 
     // Permissions
     bytes32 public constant SUBMIT_REPORTS_ROLE = keccak256("oracles.Oracle.SUBMIT_REPORTS_ROLE");
@@ -354,12 +352,11 @@ contract MellowIntegrationTest is StvStrategyPoolHarness {
 
         uint256 newPriceD18 = report.priceD18;
         if (deltaD6 < 0) {
-            deltaD6 = -deltaD6;
             // price increment
-            newPriceD18 += newPriceD18 * uint256(deltaD6) / 1e6;
+            newPriceD18 += newPriceD18 * (-deltaD6).toUint256() / 1e6;
         } else {
             // price decrement
-            newPriceD18 -= newPriceD18 * uint256(deltaD6) / 1e6;
+            newPriceD18 -= newPriceD18 * deltaD6.toUint256() / 1e6;
         }
 
         (bool isValid, bool isSuspicious) = oracle.validatePrice(newPriceD18, WSTETH);

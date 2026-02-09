@@ -229,7 +229,7 @@ contract MellowStrategy is
 
         shares = Math.mulDiv(assets, priceD18, 1 ether);
 
-        uint256 depositFeeD6 = MELLOW_VAULT.feeManager().depositFeeD6();
+        uint256 depositFeeD6 = MELLOW_FEE_MANAGER.depositFeeD6();
         if (depositFeeD6 != 0) {
             shares = Math.mulDiv(shares, 1e6 - depositFeeD6, 1e6);
         }
@@ -312,7 +312,7 @@ contract MellowStrategy is
         }
 
         shares = Math.mulDiv(assets, priceD18, 1 ether, Math.Rounding.Ceil);
-        uint256 redeemFeeD6 = MELLOW_VAULT.feeManager().redeemFeeD6();
+        uint256 redeemFeeD6 = MELLOW_FEE_MANAGER.redeemFeeD6();
         if (redeemFeeD6 != 0) {
             shares = Math.mulDiv(shares, 1e6, 1e6 - redeemFeeD6, Math.Rounding.Ceil);
         }
@@ -332,7 +332,7 @@ contract MellowStrategy is
         }
 
         assets = Math.mulDiv(shares, 1 ether, priceD18);
-        uint256 redeemFeeD6 = MELLOW_VAULT.feeManager().redeemFeeD6();
+        uint256 redeemFeeD6 = MELLOW_FEE_MANAGER.redeemFeeD6();
         if (redeemFeeD6 != 0) {
             assets = Math.mulDiv(assets, 1e6, 1e6 - redeemFeeD6);
         }

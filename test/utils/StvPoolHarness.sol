@@ -138,20 +138,22 @@ contract StvPoolHarness is Test {
         });
 
         address strategyFactoryAddress = address(0);
+        bytes memory strategyDeployBytes;
         if (config.strategyKind == StrategyKind.GGV) {
             (address ggvTeller, address ggvBoringQueue) = abi.decode(config.deployParams, (address, address));
             strategyFactoryAddress = address(new GGVStrategyFactory(ggvTeller, ggvBoringQueue));
         } else if (config.strategyKind == StrategyKind.MELLOW) {
             strategyFactoryAddress = address(new MellowStrategyFactory());
+            strategyDeployBytes = config.deployParams;
         }
         // StrategyKind.NONE: strategyFactoryAddress remains address(0)
 
         vm.startPrank(config.nodeOperator);
         Factory.PoolIntermediate memory intermediate = factory.createPoolStart(
-            vaultConfig, timelockConfig, commonPoolConfig, auxiliaryConfig, strategyFactoryAddress, ""
+            vaultConfig, timelockConfig, commonPoolConfig, auxiliaryConfig, strategyFactoryAddress,strategyDeployBytes
         );
         Factory.PoolDeployment memory deployment = factory.createPoolFinish{value: CONNECT_DEPOSIT}(
-            vaultConfig, timelockConfig, commonPoolConfig, auxiliaryConfig, strategyFactoryAddress, "", intermediate
+            vaultConfig, timelockConfig, commonPoolConfig, auxiliaryConfig, strategyFactoryAddress, strategyDeployBytes, intermediate
         );
         vm.stopPrank();
 
