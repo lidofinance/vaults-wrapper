@@ -156,13 +156,11 @@ contract MellowSolvencyTest is StvStrategyPoolHarness {
         deal(actor, ethValue);
         vm.startPrank(actor);
 
-        uint256 assets = pool.remainingMintingCapacitySharesOf(actor, ethValue);
-
+        address callForwarder = address(mellowStrategy.getStrategyCallForwarderAddress(actor));
+        uint256 assets = pool.remainingMintingCapacitySharesOf(callForwarder, ethValue);
         MellowStrategy.MellowSupplyParams memory supplyParams =
             MellowStrategy.MellowSupplyParams(rnd.randBool(), new bytes32[](0));
-        (bool success,) = mellowStrategy.previewSupply(
-            assets, address(mellowStrategy.getStrategyCallForwarderAddress(actor)), supplyParams
-        );
+        (bool success,) = mellowStrategy.previewSupply(assets, callForwarder, supplyParams);
 
         bytes memory data = abi.encode(supplyParams);
         if (!success) {
@@ -227,7 +225,7 @@ contract MellowSolvencyTest is StvStrategyPoolHarness {
         }
         if (counter == 0) return;
 
-        uint256 index = rnd.randInt(counter);
+        uint256 index = rnd.randInt(counter - 1);
         for (uint256 i = 0; i < claimableRequests.length; i++) {
             if (claimableRequests[i] == 0) continue;
             if (index == 0) {

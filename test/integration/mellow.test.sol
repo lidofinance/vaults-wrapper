@@ -7,7 +7,6 @@ import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 
 import {IOracle} from "../../src/interfaces/mellow/IOracle.sol";
 import {IRedeemQueue} from "../../src/interfaces/mellow/IRedeemQueue.sol";
-// import {ISyncDepositQueue} from "../../src/interfaces/mellow/ISyncDepositQueue.sol";
 import {IVault} from "../../src/interfaces/mellow/IVault.sol";
 
 import {StvStrategyPoolHarness} from "test/utils/StvStrategyPoolHarness.sol";
@@ -15,13 +14,9 @@ import {StvStrategyPoolHarness} from "test/utils/StvStrategyPoolHarness.sol";
 import {StvStETHPool} from "../../src/StvStETHPool.sol";
 import {WithdrawalQueue} from "../../src/WithdrawalQueue.sol";
 import {IStrategy} from "../../src/interfaces/IStrategy.sol";
-// import {IStrategyCallForwarder} from "../../src/interfaces/IStrategyCallForwarder.sol";
 import {MellowStrategy} from "../../src/strategy/MellowStrategy.sol";
 
 import {AllowList} from "../../src/AllowList.sol";
-// import {TableUtils} from "../utils/format/TableUtils.sol";
-
-// import {IWstETH} from "../../src/interfaces/core/IWstETH.sol";
 
 contract MellowIntegrationTest is StvStrategyPoolHarness {
     using SafeCast for uint256;
@@ -254,11 +249,6 @@ contract MellowIntegrationTest is StvStrategyPoolHarness {
             vm.stopPrank();
         }
 
-        // uint256 mellowShares = STRETH.shareManager().sharesOf(user1StrategyCallForwarder);
-        // assertEq(
-        //     mellowShares,
-
-        // );
 
         skip(1 seconds);
         core.increaseBufferedEther(steth.totalSupply() * 1 / 100);
@@ -266,21 +256,6 @@ contract MellowIntegrationTest is StvStrategyPoolHarness {
         _handleBatches();
 
         uint256 userMintedStethSharesAfterDeposit = mellowStrategy.mintedStethSharesOf(USER1);
-
-        // mellowShares = STRETH.shareManager().sharesOf(user1StrategyCallForwarder);
-        // assertNotEq(mellowShares, 0);
-
-        // uint256 userMintedStethSharesAfterDeposit = mellowStrategy.mintedStethSharesOf(USER1);
-        // assertEq(mellowStrategy.sharesOf(USER1), mellowShares);
-        // assertEq(mellowStrategy.activeSharesOf(USER1), 0);
-        // assertEq(mellowStrategy.claimableSharesOf(USER1), mellowShares);
-
-        // vm.prank(USER1);
-        // mellowStrategy.claimShares();
-
-        // assertEq(mellowStrategy.sharesOf(USER1), mellowShares);
-        // assertEq(mellowStrategy.activeSharesOf(USER1), mellowShares);
-        // assertEq(mellowStrategy.claimableSharesOf(USER1), 0);
 
         vm.startPrank(USER1);
         bytes32 requestId = mellowStrategy.requestExitByShares(mellowStrategy.sharesOf(USER1), new bytes(0));
