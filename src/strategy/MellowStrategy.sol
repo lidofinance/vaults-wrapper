@@ -86,31 +86,15 @@ contract MellowStrategy is
     // IMMUTABLES
     // ================================================================================
 
-    /// @notice Address of StvStETHPool used for minting wstETH and tracking stv positions.
     address public immutable POOL;
-
-    /// @notice wstETH token interface used as the Mellow vault asset for this strategy.
     IWstETH public immutable WSTETH;
 
-    /// @notice Target Mellow vault the strategy deposits into / redeems from.
     IVault public immutable MELLOW_VAULT;
-
-    /// @notice Mellow fee manager used to read deposit/redeem fee params for previews.
     IFeeManager public immutable MELLOW_FEE_MANAGER;
-
-    /// @notice Mellow oracle used to read the current wstETH price report for previews.
     IOracle public immutable MELLOW_ORACLE;
-
-    /// @notice Mellow share manager used to read user shares / claimable shares.
     IShareManager public immutable MELLOW_SHARE_MANAGER;
-
-    /// @notice Optional sync deposit queue (can be zero address if unused).
     address public immutable MELLOW_SYNC_DEPOSIT_QUEUE;
-
-    /// @notice Optional async deposit queue (can be zero address if unused).
     address public immutable MELLOW_ASYNC_DEPOSIT_QUEUE;
-
-    /// @notice Async redeem queue (required).
     address public immutable MELLOW_ASYNC_REDEEM_QUEUE;
 
     // ================================================================================
@@ -120,7 +104,7 @@ contract MellowStrategy is
     /**
      * @notice Emitted after a successful Mellow deposit request.
      * @param recipient Original user who initiated the supply.
-     * @param referralAddress Referral address passed through to deposit queue (if supported).
+     * @param referralAddress Referral address passed through to deposit queue.
      * @param wstethAmount Amount of wstETH deposited into the Mellow queue.
      * @param isSync Whether the sync deposit queue path was used.
      * @param shares Estimated shares for this deposit based on current oracle report and fees.
@@ -147,34 +131,15 @@ contract MellowStrategy is
     // ERRORS
     // ================================================================================
 
-    /// @notice Thrown when a required argument is the zero value.
     error ZeroArgument(string name);
-
-    /// @notice Thrown when a provided queue address does not satisfy required vault/asset/type invariants.
     error InvalidQueue(string name);
-
-    /// @notice Thrown when oracle report is flagged as suspicious.
     error SuspiciousReport();
-
-    /// @notice Thrown when user does not have enough Mellow shares to redeem the requested amount.
     error InsufficientMellowShares();
-
-    /// @notice Thrown when withdraw preview/flow fails.
     error WithdrawalFailed();
-
-    /// @notice Thrown when redeem preview/flow fails.
     error RedeemFailed();
-
-    /// @notice Thrown when supply preview/flow fails.
     error SupplyFailed();
-
-    /// @notice Thrown when a request id is not found in the user's outstanding request set.
     error RequestIdNotFound();
-
-    /// @notice Thrown when a computed shares amount is zero.
     error ZeroShares();
-
-    /// @notice Thrown when async deposit queue is required (claim) but not configured.
     error NoAsyncDepositQueue();
 
     // ================================================================================
@@ -183,16 +148,13 @@ contract MellowStrategy is
 
     /**
      * @notice Creates the strategy and validates all provided queue addresses against the Mellow vault.
-     * @dev This contract is upgradeable-initializable but uses an immutable constructor for config and
-     * disables initializers after constructor execution.
-     *
      * @param strategyId_ Strategy id used by StrategyCallForwarderRegistry.
      * @param strategyCallForwarderImpl_ Implementation address for user call-forwarders.
      * @param pool_ StvStETHPool address used for minting wstETH / tracking stv shares.
      * @param vault_ Mellow vault instance this strategy integrates with.
      * @param syncDepositQueue_ Optional sync deposit queue (0x0 if unused).
      * @param asyncDepositQueue_ Optional async deposit queue (0x0 if unused).
-     * @param asyncRedeemQueue_ Required async redeem queue (must be configured on vault).
+     * @param asyncRedeemQueue_ Required async redeem queue.
      */
     constructor(
         bytes32 strategyId_,
@@ -366,7 +328,7 @@ contract MellowStrategy is
             (uint256 requestTimestamp,) = depositQueue.requestOf(callForwarder);
             if (requestTimestamp != 0) {
                 // NOTE: This check does not cover the edge case where `claimableShares == 0` due to rounding.
-                // In that scenario, the user is expected to call `claimShares()` first to materialize the shares.
+                // In that scenario, the user is expected to call `claimShares()` first.
                 if (depositQueue.claimableOf(callForwarder) == 0) {
                     return (false, 0);
                 }
@@ -381,7 +343,7 @@ contract MellowStrategy is
     /**
      * @notice Supplies assets to the strategy and deposits wstETH into the configured Mellow deposit queue.
      * @dev Workflow:
-     * - Decode params (sync/async, allowlist proof)
+     * - Decode params (sync/async, optional whitelist proof)
      * - Ensure previewSupply is successful
      * - If msg.value > 0: deposit ETH to pool (mint stv to the user forwarder)
      * - Mint/obtain wstETH in pool for `assets`
@@ -419,7 +381,7 @@ contract MellowStrategy is
     }
 
     /**
-     * @notice Claims shares from the async deposit queue (materializes claimable shares for the user forwarder).
+     * @notice Claims shares from the async deposit queue.
      * @dev Reverts if async deposit queue is not configured.
      * @return success True if the queue claim call succeeded.
      */
@@ -513,13 +475,6 @@ contract MellowStrategy is
         return _requestExit(assets, shares);
     }
 
-    /**
-     * @notice Internal helper to create a redeem request in the Mellow redeem queue and track it locally.
-     * @dev Validates user shares (via ShareManager) and uses the user call forwarder to call redeem().
-     * @param assets Expected wstETH amount (used only for StrategyExitRequested event).
-     * @param shares Shares to redeem through the queue.
-     * @return requestId Encoded request id ({queue|timestamp}).
-     */
     function _requestExit(uint256 assets, uint256 shares) internal returns (bytes32 requestId) {
         address msgSender = _msgSender();
         IStrategyCallForwarder callForwarder = _getOrCreateCallForwarder(msgSender);
@@ -605,7 +560,7 @@ contract MellowStrategy is
     }
 
     /**
-     * @notice Returns total shares (active + pending/claimable, depending on ShareManager semantics) for a user.
+     * @notice Returns total shares (active + claimable) for a user.
      * @param _user The user to get the shares for.
      * @return shares The amount of shares.
      */
@@ -615,7 +570,7 @@ contract MellowStrategy is
     }
 
     /**
-     * @notice Returns claimable (not yet materialized) shares for a user.
+     * @notice Returns claimable shares for a user.
      * @param _user The user to get the claimable shares for.
      * @return shares The amount of claimable shares.
      */
@@ -625,7 +580,7 @@ contract MellowStrategy is
     }
 
     /**
-     * @notice Returns active shares for a user (already fully accounted as active).
+     * @notice Returns active shares for a user.
      * @param _user The user to get the active shares for.
      * @return shares The amount of active shares.
      */
