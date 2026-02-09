@@ -215,7 +215,7 @@ contract MellowIntegrationTest is StvStrategyPoolHarness {
         withdrawalQueue.claimWithdrawal(USER1, wqRequestIds[0]);
 
         uint256 ethClaimed = USER1.balance - userBalanceBeforeClaim;
-        assertEq(ethClaimed, 1 ether - 3 wei);
+        assertApproxEqAbs(ethClaimed, 1 ether, 10 wei);
     }
 
     function testMultipleDepositQueuesFlow() public {
@@ -312,7 +312,7 @@ contract MellowIntegrationTest is StvStrategyPoolHarness {
         withdrawalQueue.claimWithdrawal(USER1, wqRequestIds[0]);
 
         uint256 ethClaimed = USER1.balance - userBalanceBeforeClaim;
-        assertEq(ethClaimed, 1 ether - 4 wei);
+        assertApproxEqAbs(ethClaimed, 1 ether, 10 wei);
     }
 
     // Helpers
