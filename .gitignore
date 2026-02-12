@@ -6,17 +6,32 @@ out/
 lido-core/
 
 # IDE
+.idea/
 .cursor/
 .code/
 .vscode/
+.wake/
+.zed/
+
+# LLM files
+**/CLAUDE.md
 
 # Ignores development broadcast logs
 !/broadcast
 /broadcast/*/31337/
 /broadcast/**/dry-run/
 
+# Local deployments
+deployments/*-local.json
+
 # Docs
 docs/
 
 # Dotenv file
 .env
+.env.hoodi
+.env.mainnet
+
+# MacOS
+.DS_Store
+artifacts/

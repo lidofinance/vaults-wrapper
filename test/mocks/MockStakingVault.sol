@@ -1,7 +1,5 @@
-// SPDX-License-Identifier: GPL-3.0
-pragma solidity 0.8.25;
-
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+// SPDX-License-Identifier: MIT
+pragma solidity 0.8.30;
 
 /**
  * @title MockStakingVault
@@ -18,6 +16,8 @@ contract MockStakingVault {
         nodeOperator = address(0x123);
     }
 
+    receive() external payable {}
+
     function fund() external payable {
         emit StakingVaultFunded(msg.sender, msg.value);
         totalAssets += msg.value;
@@ -33,16 +33,20 @@ contract MockStakingVault {
     }
 
     function withdraw(address recipient, uint256 amount) external {
-        require(msg.sender == nodeOperator, "Not node operator");
-        (bool success, ) = recipient.call{value: amount}("");
+        // require(msg.sender == nodeOperator, "Not node operator");
+        (bool success,) = recipient.call{value: amount}("");
         require(success, "Transfer failed");
     }
 
     function triggerValidatorWithdrawals(
         bytes calldata pubkeys,
-        uint64[] calldata amounts,
+        uint64[] calldata amountsInGwei,
         address refundRecipient
     ) external payable {
         // Mock implementation
+    }
+
+    function availableBalance() external view returns (uint256) {
+        return address(this).balance;
     }
 }

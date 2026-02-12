@@ -1,0 +1,11 @@
+{
+  "timelock": {
+    "minDelaySeconds": 300
+  },
+  "strategies": {
+    "ggv": {
+      "teller": "0x4C74ccA483A278Bcb90Aea3f8F565e56202D82B2",
+      "boringOnChainQueue": "0xe39682c3C44b73285A2556D4869041e674d1a6B7"
+    }
+  }
+}

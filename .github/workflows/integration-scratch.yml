@@ -1,0 +1,35 @@
+name: Integration Tests (Scratch)
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Run integration tests on scratch core
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      FOUNDRY_PROFILE: test
+    services:
+      anvil:
+        image: ghcr.io/lidofinance/hardhat-node:2.26.0-scratch
+        ports:
+          - 9123:8545
+        env:
+          HARDFORK: prague
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: ./.github/actions/setup
+
+      - name: Setup Lido Core
+        run: |
+          just core-init feat/vaults
+          just core-deploy lido-core 9123
+
+      - name: Deploy GGV mocks
+        run: just -E .env.local deploy-ggv-mocks
+
+      - run: just -E .env.local test-integration
