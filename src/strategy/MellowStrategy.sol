@@ -10,8 +10,10 @@ import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 
+import {AllowList} from "../AllowList.sol";
 import {StvStETHPool} from "../StvStETHPool.sol";
 import {WithdrawalQueue} from "../WithdrawalQueue.sol";
+
 import {IStrategyCallForwarder} from "src/interfaces/IStrategyCallForwarder.sol";
 
 import {IDepositQueue} from "../interfaces/mellow/IDepositQueue.sol";
@@ -48,6 +50,7 @@ import {IWstETH} from "../interfaces/core/IWstETH.sol";
 contract MellowStrategy is
     IStrategy,
     AccessControlEnumerableUpgradeable,
+    AllowList,
     FeaturePausable,
     StrategyCallForwarderRegistry
 {
@@ -163,8 +166,9 @@ contract MellowStrategy is
         IVault vault_,
         address syncDepositQueue_,
         address asyncDepositQueue_,
-        address asyncRedeemQueue_
-    ) StrategyCallForwarderRegistry(strategyId_, strategyCallForwarderImpl_) {
+        address asyncRedeemQueue_,
+        bool allowListEnabled_
+    ) StrategyCallForwarderRegistry(strategyId_, strategyCallForwarderImpl_) AllowList(allowListEnabled_) {
         address wsteth = address(StvStETHPool(payable(pool_)).WSTETH());
         if (asyncDepositQueue_ == address(0) && syncDepositQueue_ == address(0)) {
             revert ZeroArgument("depositQueue");
@@ -287,17 +291,20 @@ contract MellowStrategy is
      * async queue requires claim-first, or computed shares are zero.
      *
      * @param assets Amount of wstETH to deposit into Mellow.
+     * @param msgSender User address.
      * @param callForwarder User-specific forwarder address whose queue state may affect async behavior.
      * @param supplyParams ABI-decoded params controlling queue selection and allowlist proof.
      * @return success Whether the operation is currently expected to succeed.
      * @return shares Estimated shares minted/credited for the deposit (net of fees/penalties).
      */
-    function previewSupply(uint256 assets, address callForwarder, MellowSupplyParams memory supplyParams)
-        public
-        view
-        returns (bool success, uint256 shares)
-    {
+    function previewSupply(
+        uint256 assets,
+        address msgSender,
+        address callForwarder,
+        MellowSupplyParams memory supplyParams
+    ) public view returns (bool success, uint256 shares) {
         if (isFeaturePaused(SUPPLY_FEATURE)) return (false, 0);
+        if (isAllowListed(msgSender)) return (false, 0);
         address queue = supplyParams.isSync ? MELLOW_SYNC_DEPOSIT_QUEUE : MELLOW_ASYNC_DEPOSIT_QUEUE;
         if (queue == address(0)) {
             return (false, 0);
@@ -359,7 +366,7 @@ contract MellowStrategy is
         address msgSender = _msgSender();
         IStrategyCallForwarder callForwarder = _getOrCreateCallForwarder(msgSender);
 
-        (bool success, uint256 shares) = previewSupply(assets, address(callForwarder), supplyParams);
+        (bool success, uint256 shares) = previewSupply(assets, msgSender, address(callForwarder), supplyParams);
         if (!success) {
             revert SupplyFailed();
         }

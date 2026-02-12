@@ -87,7 +87,7 @@ contract MellowSolvencyTest is StvStrategyPoolHarness {
         syncDepositQueue = STRETH.queueAt(WSTETH, 2);
 
         ctx = _deployStvStETHPool(
-            true, 0, 0, StrategyKind.MELLOW, abi.encode(STRETH, syncDepositQueue, asyncDepositQueue, asyncRedeemQueue)
+            true, 0, 0, StrategyKind.MELLOW, abi.encode(STRETH, syncDepositQueue, asyncDepositQueue, asyncRedeemQueue, false)
         );
         pool = StvStETHPool(payable(ctx.pool));
         vm.label(address(pool), "WrapperProxy");
@@ -160,7 +160,7 @@ contract MellowSolvencyTest is StvStrategyPoolHarness {
         uint256 assets = pool.remainingMintingCapacitySharesOf(callForwarder, ethValue);
         MellowStrategy.MellowSupplyParams memory supplyParams =
             MellowStrategy.MellowSupplyParams(rnd.randBool(), new bytes32[](0));
-        (bool success,) = mellowStrategy.previewSupply(assets, callForwarder, supplyParams);
+        (bool success,) = mellowStrategy.previewSupply(assets, actor, callForwarder, supplyParams);
 
         bytes memory data = abi.encode(supplyParams);
         if (!success) {

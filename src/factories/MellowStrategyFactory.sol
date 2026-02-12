@@ -11,21 +11,16 @@ contract MellowStrategyFactory is IStrategyFactory {
 
     /// @inheritdoc IStrategyFactory
     function deploy(address pool, bytes calldata deployBytes) external returns (address impl) {
-        (IVault vault, address syncDepositQueue, address asyncDepositQueue, address asyncRedeemQueue) =
-            abi.decode(deployBytes, (IVault, address, address, address));
+        (
+            IVault vault,
+            address syncDepositQueue,
+            address asyncDepositQueue,
+            address asyncRedeemQueue,
+            bool allowListEnabled
+        ) = abi.decode(deployBytes, (IVault, address, address, address, bool));
 
         address strategyCallForwarderImpl = address(new StrategyCallForwarder());
-        bytes32 salt = keccak256(
-            abi.encode(
-                STRATEGY_ID,
-                strategyCallForwarderImpl,
-                pool,
-                vault,
-                syncDepositQueue,
-                asyncDepositQueue,
-                asyncRedeemQueue
-            )
-        );
+        bytes32 salt = keccak256(abi.encode(STRATEGY_ID, strategyCallForwarderImpl, pool, deployBytes));
         impl = address(
             new MellowStrategy{salt: salt}(
                 STRATEGY_ID,
@@ -34,7 +29,8 @@ contract MellowStrategyFactory is IStrategyFactory {
                 vault,
                 syncDepositQueue,
                 asyncDepositQueue,
-                asyncRedeemQueue
+                asyncRedeemQueue,
+                allowListEnabled
             )
         );
     }

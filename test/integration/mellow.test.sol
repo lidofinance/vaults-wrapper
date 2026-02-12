@@ -81,7 +81,7 @@ contract MellowIntegrationTest is StvStrategyPoolHarness {
         syncDepositQueue = STRETH.queueAt(WSTETH, 2);
 
         ctx = _deployStvStETHPool(
-            true, 0, 0, StrategyKind.MELLOW, abi.encode(STRETH, syncDepositQueue, asyncDepositQueue, asyncRedeemQueue)
+            true, 0, 0, StrategyKind.MELLOW, abi.encode(STRETH, syncDepositQueue, asyncDepositQueue, asyncRedeemQueue, false)
         );
         pool = StvStETHPool(payable(ctx.pool));
         vm.label(address(pool), "WrapperProxy");
