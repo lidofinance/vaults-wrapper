@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity 0.8.30;
 
+import {console} from "forge-std/console.sol";
 import {StvStETHPool} from "src/StvStETHPool.sol";
 import {StvPoolHarness} from "test/utils/StvPoolHarness.sol";
 

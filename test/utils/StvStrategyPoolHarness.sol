@@ -56,9 +56,15 @@ contract StvStrategyPoolHarness is StvStETHPoolHarness {
         return ctx;
     }
 
-    function _allPossibleStvHolders(WrapperContext memory ctx) internal view override returns (address[] memory) {
+    function _allPossibleStvHolders(WrapperContext memory ctx)
+        internal
+        view
+        virtual
+        override
+        returns (address[] memory)
+    {
         address[] memory holders_ = super._allPossibleStvHolders(ctx);
-        address[] memory holders = new address[](holders_.length + 2);
+        address[] memory holders = new address[](holders_.length + 1);
         uint256 i = 0;
         for (i = 0; i < holders_.length; i++) {
             holders[i] = holders_[i];

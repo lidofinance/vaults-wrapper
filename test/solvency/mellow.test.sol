@@ -118,6 +118,19 @@ contract MellowSolvencyTest is StvStrategyPoolHarness {
         vm.stopPrank();
     }
 
+
+    function _allPossibleStvHolders(WrapperContext memory _ctx) internal view virtual override returns (address[] memory) {
+        address[] memory holders_ = super._allPossibleStvHolders(_ctx);
+        address[] memory holders = new address[](holders_.length + actors.length);
+        for (uint256 i = 0; i < holders_.length; i++) {
+            holders[i] = holders_[i];
+        }
+        for (uint256 i = 0; i < actors.length; i++) {
+            holders[i + holders_.length] = address(mellowStrategy.getStrategyCallForwarderAddress(actors[i]));
+        }
+        return holders;
+    }
+
     // Tests
 
     function testFixedSetOfRandomizedActions() public {
@@ -172,11 +185,13 @@ contract MellowSolvencyTest is StvStrategyPoolHarness {
         (bool success,) = mellowStrategy.previewSupply(assets, actor, callForwarder, supplyParams);
 
         bytes memory data = abi.encode(supplyParams);
+
         if (!success) {
             vm.expectRevert(abi.encodeWithSelector(MellowStrategy.SupplyFailed.selector));
+            mellowStrategy.supply{value: ethValue}(address(0), assets, data);
+        } else {
+            mellowStrategy.supply{value: ethValue}(address(0), assets, data);
         }
-        mellowStrategy.supply{value: ethValue}(address(0), assets, data);
-
         vm.stopPrank();
     }
 
