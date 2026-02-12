@@ -11,14 +11,13 @@ import {IOssifiableProxy} from "src/interfaces/core/IOssifiableProxy.sol";
 import {FactoryHelper} from "test/utils/FactoryHelper.sol";
 import {StvPoolHarness} from "test/utils/StvPoolHarness.sol";
 
-import {DummyImplementation} from "src/proxy/DummyImplementation.sol";
 import {GGVStrategyFactory} from "src/factories/GGVStrategyFactory.sol";
+import {DummyImplementation} from "src/proxy/DummyImplementation.sol";
 
 contract FactoryIntegrationTest is StvPoolHarness {
     Factory internal factory;
     address internal constant ALLOW_LIST_MANAGER = address(0xA110);
     address internal strategyGGVFactory;
-
 
     function setUp() public {
         _initializeCore();

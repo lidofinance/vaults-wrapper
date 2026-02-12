@@ -23,7 +23,6 @@ import {AllowList} from "../../src/AllowList.sol";
 contract MellowIntegrationTest is StvStrategyPoolHarness {
     using SafeCast for uint256;
     using SafeCast for int256;
-    
 
     // Permissions
     bytes32 public constant SUBMIT_REPORTS_ROLE = keccak256("oracles.Oracle.SUBMIT_REPORTS_ROLE");
@@ -62,7 +61,7 @@ contract MellowIntegrationTest is StvStrategyPoolHarness {
     }
 
     function setUp() public {
-        if (!isValidBlock()) return;
+        if (!isValidBlock()) vm.skip(true);
         _initializeCore();
 
         // sync deposit queue deployment
@@ -81,7 +80,11 @@ contract MellowIntegrationTest is StvStrategyPoolHarness {
         syncDepositQueue = STRETH.queueAt(WSTETH, 2);
 
         ctx = _deployStvStETHPool(
-            true, 0, 0, StrategyKind.MELLOW, abi.encode(STRETH, syncDepositQueue, asyncDepositQueue, asyncRedeemQueue, false)
+            true,
+            0,
+            0,
+            StrategyKind.MELLOW,
+            abi.encode(STRETH, syncDepositQueue, asyncDepositQueue, asyncRedeemQueue, false)
         );
         pool = StvStETHPool(payable(ctx.pool));
         vm.label(address(pool), "WrapperProxy");
@@ -115,7 +118,7 @@ contract MellowIntegrationTest is StvStrategyPoolHarness {
     }
 
     function testRevertIfUserIsNotAllowlisted() public {
-        if (!isValidBlock()) return;
+        if (!isValidBlock()) vm.skip(true);
         uint256 depositAmount = 1 ether;
         vm.prank(USER1);
         vm.expectRevert(abi.encodeWithSelector(AllowList.NotAllowListed.selector, USER1));
@@ -123,7 +126,7 @@ contract MellowIntegrationTest is StvStrategyPoolHarness {
     }
 
     function testNormalFlow() public {
-        if (!isValidBlock()) return;
+        if (!isValidBlock()) vm.skip(true);
         uint256 stethIncrease = 1;
         uint256 vaultProfit = 0;
         uint256 depositAmount = 1 ether;
@@ -219,7 +222,7 @@ contract MellowIntegrationTest is StvStrategyPoolHarness {
     }
 
     function testMultipleDepositQueuesFlow() public {
-        if (!isValidBlock()) return;
+        if (!isValidBlock()) vm.skip(true);
         uint256 stethIncrease = 1;
         uint256 vaultProfit = 0;
         uint256 depositAmount = 1 ether;
@@ -248,7 +251,6 @@ contract MellowIntegrationTest is StvStrategyPoolHarness {
 
             vm.stopPrank();
         }
-
 
         skip(1 seconds);
         core.increaseBufferedEther(steth.totalSupply() * 1 / 100);

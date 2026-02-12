@@ -68,7 +68,7 @@ contract MellowSolvencyTest is StvStrategyPoolHarness {
     // Setup
 
     function setUp() public {
-        if (!isValidBlock()) return;
+        if (!isValidBlock()) vm.skip(true);
         _initializeCore();
 
         // sync deposit queue deployment in case if its not yet in the prod vault
@@ -87,7 +87,11 @@ contract MellowSolvencyTest is StvStrategyPoolHarness {
         syncDepositQueue = STRETH.queueAt(WSTETH, 2);
 
         ctx = _deployStvStETHPool(
-            true, 0, 0, StrategyKind.MELLOW, abi.encode(STRETH, syncDepositQueue, asyncDepositQueue, asyncRedeemQueue, false)
+            true,
+            0,
+            0,
+            StrategyKind.MELLOW,
+            abi.encode(STRETH, syncDepositQueue, asyncDepositQueue, asyncRedeemQueue, false)
         );
         pool = StvStETHPool(payable(ctx.pool));
         vm.label(address(pool), "WrapperProxy");
@@ -117,27 +121,32 @@ contract MellowSolvencyTest is StvStrategyPoolHarness {
     // Tests
 
     function testFixedSetOfRandomizedActions() public {
-        if (!isValidBlock()) return;
-
+        if (!isValidBlock()) vm.skip(true);
         for (uint256 i = 0; i < 50; i++) {
             transitionRandomSupply();
+            _assertUniversalInvariants("testFixedSetOfRandomizedActions:transitionRandomSupply", ctx);
         }
         for (uint256 i = 0; i < 50; i++) {
             transitionRandomWithdrawal();
+            _assertUniversalInvariants("testFixedSetOfRandomizedActions:transitionRandomWithdrawal", ctx);
         }
 
         transitionRandomReport();
+        _assertUniversalInvariants("testFixedSetOfRandomizedActions:transitionRandomReport", ctx);
 
         for (uint256 i = 0; i < 50; i++) {
             transitionRandomClaim();
+            _assertUniversalInvariants("testFixedSetOfRandomizedActions:transitionRandomClaim", ctx);
         }
 
         for (uint256 i = 0; i < 50; i++) {
             transitionRandomBurnWsteth();
+            _assertUniversalInvariants("testFixedSetOfRandomizedActions:transitionRandomBurnWsteth", ctx);
         }
 
         for (uint256 i = 0; i < 50; i++) {
             transitionRandomLidoClaim();
+            _assertUniversalInvariants("testFixedSetOfRandomizedActions:transitionRandomLidoClaim", ctx);
         }
     }
 
