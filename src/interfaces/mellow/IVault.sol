@@ -4,8 +4,14 @@ pragma solidity 0.8.30;
 import {IFeeManager} from "./IFeeManager.sol";
 import {IOracle} from "./IOracle.sol";
 import {IShareManager} from "./IShareManager.sol";
+import {IAccessControlEnumerable} from "@openzeppelin/contracts/access/extensions/IAccessControlEnumerable.sol";
 
-interface IVault {
+interface IVault is IAccessControlEnumerable {
+    struct RoleHolder {
+        bytes32 role;
+        address holder;
+    }
+
     function shareManager() external view returns (IShareManager);
 
     function oracle() external view returns (IOracle);

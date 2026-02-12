@@ -155,8 +155,11 @@ contract MellowStrategy is IStrategy, AllowList, FeaturePausable, StrategyCallFo
         bool allowListEnabled_
     ) StrategyCallForwarderRegistry(strategyId_, strategyCallForwarderImpl_) AllowList(allowListEnabled_) {
         address wsteth = address(StvStETHPool(payable(pool_)).WSTETH());
+        if (address(vault_) == address(0)) {
+            revert ZeroArgument("vault");
+        }
         if (asyncDepositQueue_ == address(0) && syncDepositQueue_ == address(0)) {
-            revert ZeroArgument("depositQueue");
+            revert ZeroArgument("depositQueues");
         }
 
         if (syncDepositQueue_ != address(0)) {
@@ -183,6 +186,9 @@ contract MellowStrategy is IStrategy, AllowList, FeaturePausable, StrategyCallFo
             }
         }
 
+        if (asyncRedeemQueue_ == address(0)) {
+            revert ZeroArgument("asyncRedeemQueue");
+        }
         if (
             !vault_.hasQueue(asyncRedeemQueue_) || vault_.isDepositQueue(asyncRedeemQueue_)
                 || IQueue(asyncRedeemQueue_).asset() != address(wsteth)
