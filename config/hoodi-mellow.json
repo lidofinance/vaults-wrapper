@@ -1,0 +1,33 @@
+{
+  "vaultConfig": {
+    "nodeOperator": "0xcc95b0Dbe1519AfaC58d954444839A80700380a2",
+    "nodeOperatorManager": "0xcc95b0Dbe1519AfaC58d954444839A80700380a2",
+    "nodeOperatorFeeBP": 10,
+    "confirmExpiry": 3600
+  },
+  "commonPoolConfig": {
+    "minWithdrawalDelayTime": 3600,
+    "name": "Staked ETH Mellow Pool",
+    "symbol": "mSTV",
+    "emergencyCommittee": "0xcc95b0Dbe1519AfaC58d954444839A80700380a2"
+  },
+  "auxiliaryPoolConfig": {
+    "allowListEnabled": true,
+    "allowListManager": "0xcc95b0Dbe1519AfaC58d954444839A80700380a2",
+    "mintingEnabled": true,
+    "reserveRatioGapBP": 250
+  },
+  "timelockConfig": {
+    "minDelaySeconds": 60,
+    "proposer": "0xcc95b0Dbe1519AfaC58d954444839A80700380a2",
+    "executor": "0xcc95b0Dbe1519AfaC58d954444839A80700380a2"
+  },
+  "strategyFactory": "0x08f666ad8bbfe64e8fd95f948df9c63110cf6d5e",
+  "connectDepositWei": 1000000000000000000,
+  "mellow": {
+    "vault": "0x006029e2228D784572CcF31d4b791a48d0F3C75D",
+    "syncDepositQueue": "0x0000000000000000000000000000000000000000",
+    "asyncDepositQueue": "0x3854d45d95037913903710c8ab64e6650557Cb8E",
+    "asyncRedeemQueue": "0x6491B91aDfa0762E04E950A16b37627D57C00cc5"
+  }
+}
