@@ -62,12 +62,12 @@ library TableUtils {
     function init(
         Context storage self,
         address _pool,
-        address _boringVault,
+        address _lpToken,
         address _steth,
         address _wsteth,
         address _boringQueue
     ) internal {
-        init(self, _pool, _boringVault, _steth, _wsteth, StvPoolHarness.StrategyKind.GGV, abi.encode(_boringQueue));
+        init(self, _pool, _lpToken, _steth, _wsteth, StvPoolHarness.StrategyKind.GGV, abi.encode(_boringQueue));
     }
 
     function printHeader(string memory title) internal pure {
@@ -110,7 +110,9 @@ library TableUtils {
 
         uint256 stethShareRate = self.steth.getPooledEthByShares(1e18);
 
-        console.log(unicode"─────────────────────────────────────────────────");
+        console.log(
+            unicode"─────────────────────────────────────────────────"
+        );
         console.log("  stETH Share Rate:", formatETH(stethShareRate));
         console.log("pool totalSupply", formatETH(self.pool.totalSupply()));
         console.log("pool totalAssets", formatETH(self.pool.totalAssets()));
