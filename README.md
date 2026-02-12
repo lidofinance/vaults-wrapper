@@ -66,6 +66,10 @@ just deploy-all .env.hoodi.local
 # Deploy single pool (two-phase)
 just deploy-pool-start $FACTORY_ADDRESS config/hoodi-stv.json
 just deploy-pool-finish $FACTORY_ADDRESS deployments/intermediate-<timestamp>.json
+
+# Deploy Mellow strategy factory + Mellow strategy pool on local Hoodi fork
+just -E .env.hoodi.local deploy-mellow-strategy-factory
+just -E .env.hoodi.local deploy-mellow-pool $FACTORY_ADDRESS config/hoodi-mellow.json
 ```
 
 ### Configuration
@@ -78,6 +82,7 @@ Each pool type requires a JSON config. See `config/` directory for examples.
 - `commonPoolConfig` - Token name/symbol, withdrawal delay, emergency committee
 - `auxiliaryPoolConfig` - Minting, allowlist, reserve ratio gap settings
 - `strategyFactory` - Address of strategy factory (or zero address)
+- `mellow` - For Mellow strategy pools only: `vault`, `syncDepositQueue`, `asyncDepositQueue`, `asyncRedeemQueue`
 
 ### Factory Contract
 
@@ -216,6 +221,8 @@ just -E .env.xxx deploy-factory          # Deploy factory
 just -E .env.xxx deploy-pool-start ...   # Start pool deployment
 just -E .env.xxx deploy-pool-finish ...  # Finish pool deployment  
 just -E .env.xxx deploy-all <env>        # Deploy factory + all pool types
+just -E .env.xxx deploy-mellow-strategy-factory
+just -E .env.xxx deploy-mellow-pool ...
 
 # Testing
 just test-unit                           # Run unit tests (no env needed)
