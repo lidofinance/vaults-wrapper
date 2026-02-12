@@ -1,17 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.30;
 
-import {console} from "forge-std/console.sol";
-
 import {IAccessControlEnumerable} from "@openzeppelin/contracts/access/extensions/IAccessControlEnumerable.sol";
-import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 
-import {IDepositQueue} from "../../src/interfaces/mellow/IDepositQueue.sol";
 import {IOracle} from "../../src/interfaces/mellow/IOracle.sol";
 import {IRedeemQueue} from "../../src/interfaces/mellow/IRedeemQueue.sol";
-import {ISyncDepositQueue} from "../../src/interfaces/mellow/ISyncDepositQueue.sol";
 import {IVault} from "../../src/interfaces/mellow/IVault.sol";
 
 import {StvStrategyPoolHarness} from "test/utils/StvStrategyPoolHarness.sol";
@@ -19,13 +14,7 @@ import {StvStrategyPoolHarness} from "test/utils/StvStrategyPoolHarness.sol";
 import {StvStETHPool} from "../../src/StvStETHPool.sol";
 import {WithdrawalQueue} from "../../src/WithdrawalQueue.sol";
 import {IStrategy} from "../../src/interfaces/IStrategy.sol";
-import {IStrategyCallForwarder} from "../../src/interfaces/IStrategyCallForwarder.sol";
 import {MellowStrategy} from "../../src/strategy/MellowStrategy.sol";
-
-import {AllowList} from "../../src/AllowList.sol";
-import {TableUtils} from "../utils/format/TableUtils.sol";
-
-import {IWstETH} from "../../src/interfaces/core/IWstETH.sol";
 
 import {RandomLib} from "./libraries/RandomLib.sol";
 
@@ -118,8 +107,13 @@ contract MellowSolvencyTest is StvStrategyPoolHarness {
         vm.stopPrank();
     }
 
-
-    function _allPossibleStvHolders(WrapperContext memory _ctx) internal view virtual override returns (address[] memory) {
+    function _allPossibleStvHolders(WrapperContext memory _ctx)
+        internal
+        view
+        virtual
+        override
+        returns (address[] memory)
+    {
         address[] memory holders_ = super._allPossibleStvHolders(_ctx);
         address[] memory holders = new address[](holders_.length + actors.length);
         for (uint256 i = 0; i < holders_.length; i++) {

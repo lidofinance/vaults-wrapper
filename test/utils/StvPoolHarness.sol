@@ -10,6 +10,7 @@ import {StvPool} from "src/StvPool.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
 import {GGVStrategyFactory} from "src/factories/GGVStrategyFactory.sol";
 import {MellowStrategyFactory} from "src/factories/MellowStrategyFactory.sol";
+import {StrategyCallForwarderFactory} from "src/factories/StrategyCallForwarderFactory.sol";
 import {IDashboard} from "src/interfaces/core/IDashboard.sol";
 import {ILido} from "src/interfaces/core/ILido.sol";
 import {IStakingVault} from "src/interfaces/core/IStakingVault.sol";
@@ -145,27 +146,33 @@ contract StvPoolHarness is Test {
         if (config.strategyKind == StrategyKind.GGV) {
             (address ggvTeller, address ggvBoringQueue) = abi.decode(config.deployParams, (address, address));
             strategyFactoryAddress = address(new GGVStrategyFactory(ggvTeller, ggvBoringQueue));
-            strategyDeployBytes = new bytes(0);
         } else if (config.strategyKind == StrategyKind.MELLOW) {
-            strategyFactoryAddress = address(new MellowStrategyFactory());
-            strategyDeployBytes = config.deployParams;
-        } else {
-            strategyDeployBytes = new bytes(0);
+            (
+                address vault,
+                address syncDepositQueue,
+                address asyncDepositQueue,
+                address asyncRedeemQueue,
+                bool allowListEnabled
+            ) = abi.decode(config.deployParams, (address, address, address, address, bool));
+            strategyFactoryAddress = address(
+                new MellowStrategyFactory(
+                    vault,
+                    syncDepositQueue,
+                    asyncDepositQueue,
+                    asyncRedeemQueue,
+                    allowListEnabled,
+                    new StrategyCallForwarderFactory()
+                )
+            );
         }
         // StrategyKind.NONE: strategyFactoryAddress remains address(0)
 
         vm.startPrank(config.nodeOperator);
         Factory.PoolIntermediate memory intermediate = factory.createPoolStart(
-            vaultConfig, timelockConfig, commonPoolConfig, auxiliaryConfig, strategyFactoryAddress, strategyDeployBytes
+            vaultConfig, timelockConfig, commonPoolConfig, auxiliaryConfig, strategyFactoryAddress, ""
         );
         Factory.PoolDeployment memory deployment = factory.createPoolFinish{value: CONNECT_DEPOSIT}(
-            vaultConfig,
-            timelockConfig,
-            commonPoolConfig,
-            auxiliaryConfig,
-            strategyFactoryAddress,
-            strategyDeployBytes,
-            intermediate
+            vaultConfig, timelockConfig, commonPoolConfig, auxiliaryConfig, strategyFactoryAddress, "", intermediate
         );
         vm.stopPrank();
 

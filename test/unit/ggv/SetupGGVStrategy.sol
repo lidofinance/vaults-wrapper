@@ -5,9 +5,7 @@ import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.s
 import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import {Test} from "forge-std/Test.sol";
 
-import {StvStrategyPoolHarness} from "test/utils/StvStrategyPoolHarness.sol";
 import {GGVStrategy} from "src/strategy/GGVStrategy.sol";
-import {IStrategy} from "src/interfaces/IStrategy.sol";
 import {StvStETHPool} from "src/StvStETHPool.sol";
 import {GGVVaultMock} from "src/mock/ggv/GGVVaultMock.sol";
 import {ITellerWithMultiAssetSupport} from "src/interfaces/ggv/ITellerWithMultiAssetSupport.sol";
@@ -17,7 +15,6 @@ import {MockVaultHub} from "test/mocks/MockVaultHub.sol";
 import {MockStETH} from "test/mocks/MockStETH.sol";
 import {MockWstETH} from "test/mocks/MockWstETH.sol";
 import {StrategyCallForwarder} from "src/strategy/StrategyCallForwarder.sol";
-import {console} from "forge-std/console.sol";
 
 
 abstract contract SetupGGVStrategy is Test {

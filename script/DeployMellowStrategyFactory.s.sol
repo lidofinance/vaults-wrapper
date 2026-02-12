@@ -2,7 +2,7 @@
 pragma solidity 0.8.30;
 
 import {Script} from "forge-std/Script.sol";
-import {console2} from "forge-std/console2.sol";
+import {console} from "forge-std/console.sol";
 
 import {MellowStrategyFactory} from "src/factories/MellowStrategyFactory.sol";
 
@@ -46,14 +46,21 @@ contract DeployMellowStrategyFactory is Script {
     function run() external {
         string memory poolFactoryJsonPath =
             vm.envOr("POOL_FACTORY_DEPLOYMENT_JSON", string("deployments/pool-factory-hoodi.json"));
-
+        address strategyFactory;
         vm.startBroadcast();
-        address strategyFactory = address(new MellowStrategyFactory());
+        // strategyFactory = address(new MellowStrategyFactory(
+        //     vault,
+        //     syncDepositQueue,
+        //     asyncDepositQueue,
+        //     asyncRedeemQueue,
+        //     allowList,
+        //     strategyCallFordwarderFactory
+        // ));
         vm.stopBroadcast();
 
         _writePoolFactoryArtifacts(strategyFactory, poolFactoryJsonPath);
 
-        console2.log("Deployed MellowStrategyFactory at", strategyFactory);
-        console2.log("Updated", poolFactoryJsonPath);
+        console.log("Deployed MellowStrategyFactory at", strategyFactory);
+        console.log("Updated", poolFactoryJsonPath);
     }
 }

@@ -2,19 +2,18 @@
 pragma solidity 0.8.30;
 
 import {Factory} from "src/Factory.sol";
-import {OssifiableProxy} from "src/proxy/OssifiableProxy.sol";
-import {StvPool} from "src/StvPool.sol";
 import {StvStETHPool} from "src/StvStETHPool.sol";
+import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
 import {StvStETHPoolFactory} from "src/factories/StvStETHPoolFactory.sol";
 import {IStrategy} from "src/interfaces/IStrategy.sol";
 import {IDashboard} from "src/interfaces/core/IDashboard.sol";
-import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
+import {OssifiableProxy} from "src/proxy/OssifiableProxy.sol";
 
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {MockStrategy} from "test/mocks/MockStrategy.sol";
 import {FactoryHelper} from "test/utils/FactoryHelper.sol";
 import {StvPoolHarness} from "test/utils/StvPoolHarness.sol";
 import {TimelockHarness} from "test/utils/TimelockHarness.sol";
-import {MockStrategy} from "test/mocks/MockStrategy.sol";
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import {console} from "forge-std/console.sol";
 
@@ -41,7 +40,8 @@ contract WrapperUpgradeBtoCTest is StvPoolHarness, TimelockHarness {
             confirmExpiry: CONFIRM_EXPIRY
         });
 
-        Factory.TimelockConfig memory timelockConfig = Factory.TimelockConfig({minDelaySeconds: 0, proposer: NODE_OPERATOR, executor: NODE_OPERATOR});
+        Factory.TimelockConfig memory timelockConfig =
+            Factory.TimelockConfig({minDelaySeconds: 0, proposer: NODE_OPERATOR, executor: NODE_OPERATOR});
 
         uint256 reserveRatioGapBP = 500;
         Factory.CommonPoolConfig memory commonPoolConfig = Factory.CommonPoolConfig({
@@ -104,7 +104,8 @@ contract WrapperUpgradeBtoCTest is StvPoolHarness, TimelockHarness {
         StvStETHPoolFactory poolFactory = factory.STV_STETH_POOL_FACTORY();
         address newPoolImpl = poolFactory.deploy(
             deployment.dashboard,
-            /* allowListEnabled */ true,
+            /* allowListEnabled */
+            true,
             reserveRatioGapBP,
             deployment.withdrawalQueue,
             deployment.distributor,

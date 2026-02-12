@@ -1,14 +1,9 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity 0.8.30;
 
-import {
-    AccessControlEnumerableUpgradeable
-} from "@openzeppelin/contracts-upgradeable/access/extensions/AccessControlEnumerableUpgradeable.sol";
-
 import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
-import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 
 import {AllowList} from "../AllowList.sol";
 import {StvStETHPool} from "../StvStETHPool.sol";
@@ -47,15 +42,8 @@ import {IWstETH} from "../interfaces/core/IWstETH.sol";
  * - SUPPLY_PAUSE_ROLE / SUPPLY_RESUME_ROLE: control supply feature.
  * - REDEEM_PAUSE_ROLE / REDEEM_RESUME_ROLE: control redeem feature.
  */
-contract MellowStrategy is
-    IStrategy,
-    AccessControlEnumerableUpgradeable,
-    AllowList,
-    FeaturePausable,
-    StrategyCallForwarderRegistry
-{
+contract MellowStrategy is IStrategy, AllowList, FeaturePausable, StrategyCallForwarderRegistry {
     using SafeCast for uint256;
-    using EnumerableSet for EnumerableSet.Bytes32Set;
 
     /**
      * @notice Parameters used for supply into Mellow.
@@ -491,6 +479,11 @@ contract MellowStrategy is
 
         address queue = MELLOW_ASYNC_REDEEM_QUEUE;
         callForwarder.doCall(queue, abi.encodeCall(IRedeemQueue.redeem, (shares)));
+        // - If multiple exit requests are created within the same timestamp for the same user, they will be
+        //   merged by the queue into one underlying request.
+        // - This means there may be multiple `MellowWithdrawalRequested` (and `StrategyExitRequested`) events
+        //   that share the same `requestId`, while a single `finalizeRequestExit(requestId)` can finalize
+        //   the aggregated position and emit only one `StrategyExitFinalized`.
         requestId = bytes32(block.timestamp);
 
         emit StrategyExitRequested(msgSender, requestId, assets, new bytes(0));
