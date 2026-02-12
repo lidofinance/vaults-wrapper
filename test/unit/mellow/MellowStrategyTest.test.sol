@@ -288,12 +288,18 @@ contract MellowStrategyTest is Test {
             address(syncDepositWstethQueue),
             address(asyncDepositWstethQueue),
             address(asyncRedeemWstethQueue),
-            false
+            true
         );
 
+        assertEq(address(strategy.POOL()), address(pool));
+        assertEq(address(strategy.WSTETH()), address(wsteth));
         assertEq(address(strategy.MELLOW_VAULT()), address(vault));
-        assertEq(address(strategy.MELLOW_ASYNC_DEPOSIT_QUEUE()), address(asyncDepositWstethQueue));
+        assertEq(address(strategy.MELLOW_FEE_MANAGER()), address(IVault(vault).feeManager()));
+        assertEq(address(strategy.MELLOW_ORACLE()), address(IVault(vault).oracle()));
+        assertEq(address(strategy.MELLOW_SHARE_MANAGER()), address(IVault(vault).shareManager()));
         assertEq(address(strategy.MELLOW_SYNC_DEPOSIT_QUEUE()), address(syncDepositWstethQueue));
+        assertEq(address(strategy.MELLOW_ASYNC_DEPOSIT_QUEUE()), address(asyncDepositWstethQueue));
         assertEq(address(strategy.MELLOW_ASYNC_REDEEM_QUEUE()), address(asyncRedeemWstethQueue));
+        assertTrue(strategy.ALLOW_LIST_ENABLED());
     }
 }

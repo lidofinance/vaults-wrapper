@@ -141,7 +141,6 @@ contract StvPoolHarness is Test {
         });
 
         address strategyFactoryAddress = address(0);
-        bytes memory strategyDeployBytes;
         if (config.strategyKind == StrategyKind.GGV) {
             (address ggvTeller, address ggvBoringQueue) = abi.decode(config.deployParams, (address, address));
             strategyFactoryAddress = address(new GGVStrategyFactory(ggvTeller, ggvBoringQueue));
@@ -155,11 +154,7 @@ contract StvPoolHarness is Test {
             ) = abi.decode(config.deployParams, (address, address, address, address, bool));
             strategyFactoryAddress = address(
                 new MellowStrategyFactory(
-                    vault,
-                    syncDepositQueue,
-                    asyncDepositQueue,
-                    asyncRedeemQueue,
-                    allowListEnabled
+                    vault, syncDepositQueue, asyncDepositQueue, asyncRedeemQueue, allowListEnabled
                 )
             );
         }

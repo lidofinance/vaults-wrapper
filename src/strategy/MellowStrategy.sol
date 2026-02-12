@@ -214,8 +214,9 @@ contract MellowStrategy is IStrategy, AllowList, FeaturePausable, StrategyCallFo
         MELLOW_ASYNC_DEPOSIT_QUEUE = asyncDepositQueue_;
         MELLOW_ASYNC_REDEEM_QUEUE = asyncRedeemQueue_;
 
-        _disableInitializers();
         _pauseFeature(SUPPLY_FEATURE);
+
+        _disableInitializers();
     }
 
     /**
@@ -233,6 +234,8 @@ contract MellowStrategy is IStrategy, AllowList, FeaturePausable, StrategyCallFo
         if (address(0) != supplyPauser_) {
             _grantRole(SUPPLY_PAUSE_ROLE, supplyPauser_);
         }
+
+        _initializeAllowList(admin_);
     }
 
     // =================================================================================
@@ -295,7 +298,7 @@ contract MellowStrategy is IStrategy, AllowList, FeaturePausable, StrategyCallFo
         MellowSupplyParams memory supplyParams
     ) public view returns (bool success, uint256 shares) {
         if (isFeaturePaused(SUPPLY_FEATURE)) return (false, 0);
-        if (isAllowListed(msgSender)) return (false, 0);
+        if (ALLOW_LIST_ENABLED && !isAllowListed(msgSender)) return (false, 0);
         address queue = supplyParams.isSync ? MELLOW_SYNC_DEPOSIT_QUEUE : MELLOW_ASYNC_DEPOSIT_QUEUE;
         if (queue == address(0)) {
             return (false, 0);
