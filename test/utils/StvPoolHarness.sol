@@ -142,9 +142,12 @@ contract StvPoolHarness is Test {
         if (config.strategyKind == StrategyKind.GGV) {
             (address ggvTeller, address ggvBoringQueue) = abi.decode(config.deployParams, (address, address));
             strategyFactoryAddress = address(new GGVStrategyFactory(ggvTeller, ggvBoringQueue));
+            strategyDeployBytes = new bytes(0);
         } else if (config.strategyKind == StrategyKind.MELLOW) {
             strategyFactoryAddress = address(new MellowStrategyFactory());
             strategyDeployBytes = config.deployParams;
+        } else {
+            strategyDeployBytes = new bytes(0);
         }
         // StrategyKind.NONE: strategyFactoryAddress remains address(0)
 

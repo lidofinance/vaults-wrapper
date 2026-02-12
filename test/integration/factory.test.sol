@@ -11,7 +11,6 @@ import {IOssifiableProxy} from "src/interfaces/core/IOssifiableProxy.sol";
 import {FactoryHelper} from "test/utils/FactoryHelper.sol";
 import {StvPoolHarness} from "test/utils/StvPoolHarness.sol";
 
-import {Vm} from "forge-std/Vm.sol";
 import {DummyImplementation} from "src/proxy/DummyImplementation.sol";
 import {GGVStrategyFactory} from "src/factories/GGVStrategyFactory.sol";
 

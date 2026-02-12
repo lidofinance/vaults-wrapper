@@ -142,7 +142,6 @@ contract MellowStrategy is
     error RedeemFailed();
     error SupplyFailed();
     error RequestIdNotFound();
-    error ZeroShares();
     error NoAsyncDepositQueue();
 
     // ================================================================================
@@ -452,7 +451,7 @@ contract MellowStrategy is
         assets = Math.mulDiv(shares, 1 ether, priceD18);
         uint256 redeemFeeD6 = MELLOW_FEE_MANAGER.redeemFeeD6();
         if (redeemFeeD6 != 0) {
-            assets = Math.mulDiv(assets, 1e6, 1e6 - redeemFeeD6);
+            assets = Math.mulDiv(assets, 1e6 - redeemFeeD6, 1e6);
         }
         if (assets == 0) return (false, 0);
         return (true, assets);
@@ -465,6 +464,7 @@ contract MellowStrategy is
      * @return requestId Encoded request id used for finalization.
      */
     function requestExitByShares(uint256 shares, bytes calldata) external returns (bytes32 requestId) {
+        if (shares == 0) revert ZeroArgument("shares");
         (bool success, uint256 assets) = previewRedeem(shares);
         if (!success || assets == 0) revert RedeemFailed();
         return _requestExit(assets, shares);
@@ -477,6 +477,7 @@ contract MellowStrategy is
      * @return requestId Encoded request id used for finalization.
      */
     function requestExitByWsteth(uint256 assets, bytes calldata) external returns (bytes32 requestId) {
+        if (assets == 0) revert ZeroArgument("assets");
         (bool success, uint256 shares) = previewWithdraw(assets);
         if (!success) revert WithdrawalFailed();
         return _requestExit(assets, shares);
@@ -498,8 +499,7 @@ contract MellowStrategy is
 
     /**
      * @notice Finalizes an outstanding exit request by claiming assets from the Mellow redeem queue.
-     * @dev Validates requestId existence in local set, then calls redeemQueue.claim() via forwarder.
-     * Emits StrategyExitFinalized with claimed assets.
+     * @dev Calls redeemQueue.claim() via forwarder. Emits StrategyExitFinalized with claimed assets.
      * @param requestId Encoded request id returned by requestExit*().
      */
     function finalizeRequestExit(bytes32 requestId) external {
