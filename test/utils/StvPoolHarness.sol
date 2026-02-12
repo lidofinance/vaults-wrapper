@@ -10,7 +10,6 @@ import {StvPool} from "src/StvPool.sol";
 import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
 import {GGVStrategyFactory} from "src/factories/GGVStrategyFactory.sol";
 import {MellowStrategyFactory} from "src/factories/MellowStrategyFactory.sol";
-import {StrategyCallForwarderFactory} from "src/factories/StrategyCallForwarderFactory.sol";
 import {IDashboard} from "src/interfaces/core/IDashboard.sol";
 import {ILido} from "src/interfaces/core/ILido.sol";
 import {IStakingVault} from "src/interfaces/core/IStakingVault.sol";
@@ -160,8 +159,7 @@ contract StvPoolHarness is Test {
                     syncDepositQueue,
                     asyncDepositQueue,
                     asyncRedeemQueue,
-                    allowListEnabled,
-                    new StrategyCallForwarderFactory()
+                    allowListEnabled
                 )
             );
         }

@@ -124,12 +124,10 @@ contract MellowStrategy is IStrategy, AllowList, FeaturePausable, StrategyCallFo
 
     error ZeroArgument(string name);
     error InvalidQueue(string name);
-    error SuspiciousReport();
     error InsufficientMellowShares();
     error WithdrawalFailed();
     error RedeemFailed();
     error SupplyFailed();
-    error RequestIdNotFound();
     error NoAsyncDepositQueue();
 
     // ================================================================================
@@ -671,7 +669,6 @@ contract MellowStrategy is IStrategy, AllowList, FeaturePausable, StrategyCallFo
      * @param _wstethToBurn The amount of wstETH to burn.
      */
     function burnWsteth(uint256 _wstethToBurn) external {
-        if (_wstethToBurn == 0) revert ZeroArgument("_wstethToBurn");
         IStrategyCallForwarder callForwarder = _getOrCreateCallForwarder(_msgSender());
         callForwarder.doCall(address(WSTETH), abi.encodeWithSelector(WSTETH.approve.selector, POOL, _wstethToBurn));
         callForwarder.doCall(POOL, abi.encodeWithSelector(StvStETHPool.burnWsteth.selector, _wstethToBurn));
