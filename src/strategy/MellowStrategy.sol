@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: BUSL-1.1
+// SPDX-License-Identifier: MIT
 pragma solidity 0.8.30;
 
 import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
@@ -143,6 +143,7 @@ contract MellowStrategy is IStrategy, AllowList, FeaturePausable, StrategyCallFo
      * @param syncDepositQueue_ Optional sync deposit queue (0x0 if unused).
      * @param asyncDepositQueue_ Optional async deposit queue (0x0 if unused).
      * @param asyncRedeemQueue_ Required async redeem queue.
+     * @param allowListEnabled_ Whether the allow-list is active.
      */
     constructor(
         bytes32 strategyId_,
@@ -281,8 +282,8 @@ contract MellowStrategy is IStrategy, AllowList, FeaturePausable, StrategyCallFo
     /**
      * @notice Previews supply into Mellow by converting assets (wstETH) into shares using the current oracle report,
      * applying vault deposit fee and (for sync queue) sync penalty/maxAge constraints.
-     * @dev Returns (false, 0) if supply is paused, queue is missing/paused, oracle report is suspicious/expired,
-     * async queue requires claim-first, or computed shares are zero.
+     * @dev Returns (false, 0) if supply is paused, user is not allow-listed (when enabled), queue is missing/paused,
+     * oracle report is suspicious/expired, async queue requires claim-first, or computed shares are zero.
      *
      * @param assets Amount of wstETH to deposit into Mellow.
      * @param msgSender User address.
@@ -514,7 +515,7 @@ contract MellowStrategy is IStrategy, AllowList, FeaturePausable, StrategyCallFo
         );
         uint256 assets = abi.decode(response, (uint256));
 
-        emit StrategyExitFinalized(_msgSender(), requestId, assets);
+        emit StrategyExitFinalized(msgSender, requestId, assets);
     }
 
     // =================================================================================

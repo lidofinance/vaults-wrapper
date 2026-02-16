@@ -3,6 +3,8 @@ pragma solidity 0.8.30;
 
 import {Test} from "forge-std/Test.sol";
 
+import {TransparentUpgradeableProxy} from "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
+
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
@@ -36,21 +38,26 @@ import {StrategyCallForwarderRegistry} from "src/strategy/StrategyCallForwarderR
 import {FeaturePausable} from "src/utils/FeaturePausable.sol";
 
 import {MockDashboard, MockDashboardFactory} from "test/mocks/MockDashboard.sol";
+import {MockMellowQueue} from "test/mocks/MockMellowQueue.sol";
 import {MockStETH} from "test/mocks/MockStETH.sol";
 import {MockVaultHub} from "test/mocks/MockVaultHub.sol";
 import {MockWstETH} from "test/mocks/MockWstETH.sol";
 
+import {console} from "forge-std/console.sol";
+
 contract MellowStrategyTest is Test {
+    // Assets
+    address public eth = address(type(uint160).max / 0xf * 0xe);
+    address public wsteth;
+
     // Lido contracts
     StvStETHPool public pool;
     MockDashboard public dashboard;
     MockVaultHub public vaultHub;
-
-    address public steth;
-    address public wsteth;
-    address public eth = address(type(uint160).max / 0xf * 0xe);
+    address public withdrawalQueue = makeAddr("withdrawalQueue");
 
     // Mellow contracts
+    MellowStrategy public strategyImplementation;
     MellowStrategy public strategy;
     address public vault;
     address public shareManager;
@@ -63,10 +70,6 @@ contract MellowStrategyTest is Test {
     address public asyncRedeemWstethQueue;
 
     // Actors
-    address public owner = makeAddr("owner");
-    address public userAlice = makeAddr("userAlice");
-    address public userBob = makeAddr("userBob");
-    address public withdrawalQueue = makeAddr("withdrawalQueue");
     address public vaultAdmin = makeAddr("vaultAdmin");
 
     // Permissions
@@ -83,7 +86,7 @@ contract MellowStrategyTest is Test {
     uint256 public constant INITIAL_DEPOSIT = 1 ether;
     uint256 public constant RESERVE_RATIO_GAP_BP = 5_00; // 5%
 
-    function deployMellowVault() internal {
+    function _deployMellowVault() internal {
         if (block.chainid != 1 || block.number < 24307000) {
             vm.skip(true);
         }
@@ -157,10 +160,31 @@ contract MellowStrategyTest is Test {
         vm.stopPrank();
     }
 
+    function _deployStrategy(bool allowlist) internal {
+        _deployMellowVault();
+        strategyImplementation = new MellowStrategy(
+            bytes32("MellowStrategyId"),
+            address(new StrategyCallForwarder()),
+            address(pool),
+            IVault(vault),
+            address(syncDepositWstethQueue),
+            address(asyncDepositWstethQueue),
+            address(asyncRedeemWstethQueue),
+            allowlist
+        );
+
+        strategy = MellowStrategy(
+            payable(
+                new TransparentUpgradeableProxy(address(strategyImplementation), address(0xdead), "")
+            )
+        );
+        strategy.initialize(vaultAdmin, vaultAdmin);
+    }
+
+
     function setUp() external {
         // mocks
-        dashboard = new MockDashboardFactory().createMockDashboard(owner);
-        steth = address(dashboard.STETH());
+        dashboard = new MockDashboardFactory().createMockDashboard(vaultAdmin);
         wsteth = address(dashboard.WSTETH());
         vaultHub = dashboard.VAULT_HUB();
 
@@ -171,19 +195,19 @@ contract MellowStrategyTest is Test {
         ERC1967Proxy poolProxy = new ERC1967Proxy(address(poolImpl), "");
 
         pool = StvStETHPool(payable(poolProxy));
-        pool.initialize(owner, "Test", "stvETH");
+        pool.initialize(vaultAdmin, "Test", "stvETH");
     }
 
-    function testConstructorZeroStrategyId() external {
+    function testConstructor_ZeroStrategyId() external {
         vm.expectRevert(abi.encodeWithSignature("CallForwarderZeroArgument(string)", "_strategyId"));
-        strategy = new MellowStrategy(
+        strategyImplementation = new MellowStrategy(
             bytes32(0), address(0), address(0), IVault(address(0)), address(0), address(0), address(0), false
         );
     }
 
-    function testConstructorZeroCallForwarderImpl() external {
+    function testConstructor_ZeroCallForwarderImpl() external {
         vm.expectRevert(abi.encodeWithSignature("CallForwarderZeroArgument(string)", "_strategyCallForwarderImpl"));
-        strategy = new MellowStrategy(
+        strategyImplementation = new MellowStrategy(
             bytes32("MellowStrategyId"),
             address(0),
             address(0),
@@ -195,9 +219,9 @@ contract MellowStrategyTest is Test {
         );
     }
 
-    function testConstructorInvalidPool() external {
+    function testConstructor_InvalidPool() external {
         vm.expectRevert();
-        strategy = new MellowStrategy(
+        strategyImplementation = new MellowStrategy(
             bytes32("MellowStrategyId"),
             address(new StrategyCallForwarder()),
             address(0),
@@ -209,7 +233,7 @@ contract MellowStrategyTest is Test {
         );
 
         vm.expectRevert();
-        strategy = new MellowStrategy(
+        strategyImplementation = new MellowStrategy(
             bytes32("MellowStrategyId"),
             address(new StrategyCallForwarder()),
             address(0xdead),
@@ -221,9 +245,9 @@ contract MellowStrategyTest is Test {
         );
     }
 
-    function testConstructorZeroVault() external {
+    function testConstructor_ZeroVault() external {
         vm.expectRevert(abi.encodeWithSignature("ZeroArgument(string)", "vault"));
-        strategy = new MellowStrategy(
+        strategyImplementation = new MellowStrategy(
             bytes32("MellowStrategyId"),
             address(new StrategyCallForwarder()),
             address(pool),
@@ -235,9 +259,9 @@ contract MellowStrategyTest is Test {
         );
     }
 
-    function testConstructorZeroDepositQueues() external {
+    function testConstructor_ZeroDepositQueues() external {
         vm.expectRevert(abi.encodeWithSignature("ZeroArgument(string)", "depositQueues"));
-        strategy = new MellowStrategy(
+        strategyImplementation = new MellowStrategy(
             bytes32("MellowStrategyId"),
             address(new StrategyCallForwarder()),
             address(pool),
@@ -249,40 +273,384 @@ contract MellowStrategyTest is Test {
         );
     }
 
-    function testConstructorInvalidQueue() external {
-        deployMellowVault();
-
-        vm.expectRevert();
-        strategy = new MellowStrategy(
+    function testConstructor_InvalidQueue_SyncDepositQueue_AssetZero() external {
+        _deployMellowVault();
+        address strategyForwarder = address(new StrategyCallForwarder());
+        address mockQueue = makeAddr("mockQueue");
+        vm.mockCall(mockQueue, abi.encodeCall(IQueue.asset, ()), abi.encode(address(0)));
+        vm.expectRevert(abi.encodeWithSignature("InvalidQueue(string)", "syncDeposit"));
+        strategyImplementation = new MellowStrategy{salt: bytes32(0)}(
             bytes32("MellowStrategyId"),
-            address(new StrategyCallForwarder()),
+            strategyForwarder,
             address(pool),
             IVault(vault),
-            address(0xdead),
+            address(mockQueue),
             address(0),
-            address(0),
-            false
-        );
-
-        vm.expectRevert();
-        strategy = new MellowStrategy(
-            bytes32("MellowStrategyId"),
-            address(new StrategyCallForwarder()),
-            address(pool),
-            IVault(vault),
-            address(0),
-            address(0xdead),
             address(0),
             false
         );
     }
 
-    function testConstructorSuccess() external {
-        deployMellowVault();
-
-        strategy = new MellowStrategy(
+    function testConstructor_InvalidQueue_SyncDepositQueue_HasQueueFalse() external {
+        _deployMellowVault();
+        address strategyForwarder = address(new StrategyCallForwarder());
+        address mockQueue = makeAddr("mockQueue");
+        vm.mockCall(vault, abi.encodeCall(IVault.hasQueue, (mockQueue)), abi.encode(false));
+        vm.expectRevert(abi.encodeWithSignature("InvalidQueue(string)", "syncDeposit"));
+        strategyImplementation = new MellowStrategy(
             bytes32("MellowStrategyId"),
-            address(new StrategyCallForwarder()),
+            strategyForwarder,
+            address(pool),
+            IVault(vault),
+            address(mockQueue),
+            address(0),
+            address(0),
+            false
+        );
+    }
+
+    function testConstructor_InvalidQueue_SyncDepositQueue_IsDepositQueue_False() external {
+        _deployMellowVault();
+        address strategyForwarder = address(new StrategyCallForwarder());
+        address mockQueue = makeAddr("mockQueue");
+        vm.mockCall(vault, abi.encodeCall(IVault.hasQueue, (mockQueue)), abi.encode(true));
+        vm.mockCall(vault, abi.encodeCall(IVault.isDepositQueue, (mockQueue)), abi.encode(false));
+        vm.expectRevert(abi.encodeWithSignature("InvalidQueue(string)", "syncDeposit"));
+        strategyImplementation = new MellowStrategy(
+            bytes32("MellowStrategyId"),
+            strategyForwarder,
+            address(pool),
+            IVault(vault),
+            address(mockQueue),
+            address(0),
+            address(0),
+            false
+        );
+    }
+
+    function testConstructor_InvalidQueue_SyncDepositQueue_NonWstethAsset() external {
+        _deployMellowVault();
+        address strategyForwarder = address(new StrategyCallForwarder());
+        address mockQueue = makeAddr("mockQueue");
+        vm.mockCall(vault, abi.encodeCall(IVault.hasQueue, (mockQueue)), abi.encode(true));
+        vm.mockCall(vault, abi.encodeCall(IVault.isDepositQueue, (mockQueue)), abi.encode(true));
+        vm.mockCall(mockQueue, abi.encodeCall(IQueue.asset, ()), abi.encode(eth));
+        vm.expectRevert(abi.encodeWithSignature("InvalidQueue(string)", "syncDeposit"));
+        strategyImplementation = new MellowStrategy(
+            bytes32("MellowStrategyId"),
+            strategyForwarder,
+            address(pool),
+            IVault(vault),
+            address(mockQueue),
+            address(0),
+            address(0),
+            false
+        );
+    }
+
+    function testConstructor_InvalidQueue_SyncDepositQueue_nameReverts() external {
+        _deployMellowVault();
+        address strategyForwarder = address(new StrategyCallForwarder());
+        address mockQueue = makeAddr("mockQueue");
+        vm.mockCall(vault, abi.encodeCall(IVault.hasQueue, (mockQueue)), abi.encode(true));
+        vm.mockCall(vault, abi.encodeCall(IVault.isDepositQueue, (mockQueue)), abi.encode(true));
+        vm.mockCall(mockQueue, abi.encodeCall(IQueue.asset, ()), abi.encode(wsteth));
+        vm.mockCallRevert(mockQueue, abi.encodeCall(ISyncDepositQueue.name, ()), abi.encode("asset() call revert"));
+        vm.expectRevert(abi.encode("asset() call revert"));
+        strategyImplementation = new MellowStrategy(
+            bytes32("MellowStrategyId"),
+            strategyForwarder,
+            address(pool),
+            IVault(vault),
+            address(mockQueue),
+            address(0),
+            address(0),
+            false
+        );
+    }
+
+    function testConstructor_InvalidQueue_SyncDepositQueue_nameMismatch() external {
+        _deployMellowVault();
+        address strategyForwarder = address(new StrategyCallForwarder());
+        address mockQueue = makeAddr("mockQueue");
+        vm.mockCall(vault, abi.encodeCall(IVault.hasQueue, (mockQueue)), abi.encode(true));
+        vm.mockCall(vault, abi.encodeCall(IVault.isDepositQueue, (mockQueue)), abi.encode(true));
+        vm.mockCall(mockQueue, abi.encodeCall(IQueue.asset, ()), abi.encode(wsteth));
+        vm.mockCall(mockQueue, abi.encodeCall(ISyncDepositQueue.name, ()), abi.encode("NotASyncDepositQueueName"));
+        vm.expectRevert(abi.encodeWithSignature("InvalidQueue(string)", "syncDeposit"));
+        strategyImplementation = new MellowStrategy(
+            bytes32("MellowStrategyId"),
+            strategyForwarder,
+            address(pool),
+            IVault(vault),
+            address(mockQueue),
+            address(0),
+            address(0),
+            false
+        );
+    }
+
+    function testConstructor_InvalidQueue_AsyncDepositQueue_AssetZero() external {
+        _deployMellowVault();
+        address strategyForwarder = address(new StrategyCallForwarder());
+        address mockQueue = makeAddr("mockQueue");
+        vm.mockCall(mockQueue, abi.encodeCall(IQueue.asset, ()), abi.encode(address(0)));
+        vm.expectRevert(abi.encodeWithSignature("InvalidQueue(string)", "asyncDeposit"));
+        strategyImplementation = new MellowStrategy{salt: bytes32(0)}(
+            bytes32("MellowStrategyId"),
+            strategyForwarder,
+            address(pool),
+            IVault(vault),
+            address(0),
+            address(mockQueue),
+            address(0),
+            false
+        );
+    }
+
+    function testConstructor_InvalidQueue_AsyncDepositQueue_HasQueueFalse() external {
+        _deployMellowVault();
+        address strategyForwarder = address(new StrategyCallForwarder());
+        address mockQueue = makeAddr("mockQueue");
+        vm.mockCall(vault, abi.encodeCall(IVault.hasQueue, (mockQueue)), abi.encode(false));
+        vm.expectRevert(abi.encodeWithSignature("InvalidQueue(string)", "asyncDeposit"));
+        strategyImplementation = new MellowStrategy{salt: bytes32(0)}(
+            bytes32("MellowStrategyId"),
+            strategyForwarder,
+            address(pool),
+            IVault(vault),
+            address(0),
+            address(mockQueue),
+            address(0),
+            false
+        );
+    }
+
+    function testConstructor_InvalidQueue_AsyncDepositQueue_IsDepositQueue_False() external {
+        _deployMellowVault();
+        address strategyForwarder = address(new StrategyCallForwarder());
+        address mockQueue = makeAddr("mockQueue");
+        vm.mockCall(vault, abi.encodeCall(IVault.hasQueue, (mockQueue)), abi.encode(true));
+        vm.mockCall(vault, abi.encodeCall(IVault.isDepositQueue, (mockQueue)), abi.encode(false));
+        vm.expectRevert(abi.encodeWithSignature("InvalidQueue(string)", "asyncDeposit"));
+        strategyImplementation = new MellowStrategy{salt: bytes32(0)}(
+            bytes32("MellowStrategyId"),
+            strategyForwarder,
+            address(pool),
+            IVault(vault),
+            address(0),
+            address(mockQueue),
+            address(0),
+            false
+        );
+    }
+
+    function testConstructor_InvalidQueue_AsyncDepositQueue_NonWstethAsset() external {
+        _deployMellowVault();
+        address strategyForwarder = address(new StrategyCallForwarder());
+        address mockQueue = makeAddr("mockQueue");
+        vm.mockCall(vault, abi.encodeCall(IVault.hasQueue, (mockQueue)), abi.encode(true));
+        vm.mockCall(vault, abi.encodeCall(IVault.isDepositQueue, (mockQueue)), abi.encode(true));
+        vm.mockCall(mockQueue, abi.encodeCall(IQueue.asset, ()), abi.encode(eth));
+        vm.expectRevert(abi.encodeWithSignature("InvalidQueue(string)", "asyncDeposit"));
+        strategyImplementation = new MellowStrategy{salt: bytes32(0)}(
+            bytes32("MellowStrategyId"),
+            strategyForwarder,
+            address(pool),
+            IVault(vault),
+            address(0),
+            address(mockQueue),
+            address(0),
+            false
+        );
+    }
+
+    function testConstructor_InvalidQueue_AsyncDepositQueue_requestOfReverts() external {
+        _deployMellowVault();
+        address strategyForwarder = address(new StrategyCallForwarder());
+        address mockQueue = makeAddr("mockQueue");
+        vm.mockCall(vault, abi.encodeCall(IVault.hasQueue, (mockQueue)), abi.encode(true));
+        vm.mockCall(vault, abi.encodeCall(IVault.isDepositQueue, (mockQueue)), abi.encode(true));
+        vm.mockCall(mockQueue, abi.encodeCall(IQueue.asset, ()), abi.encode(wsteth));
+        vm.mockCallRevert(mockQueue, IDepositQueue.requestOf.selector, abi.encode("requestOf(any) call reverts"));
+        vm.expectRevert(abi.encode("requestOf(any) call reverts"));
+        strategyImplementation = new MellowStrategy{salt: bytes32(0)}(
+            bytes32("MellowStrategyId"),
+            strategyForwarder,
+            address(pool),
+            IVault(vault),
+            address(0),
+            address(mockQueue),
+            address(0),
+            false
+        );
+    }
+
+    function testConstructor_InvalidQueue_AsyncDepositQueue_requestOfTimestampNonZero() external {
+        _deployMellowVault();
+        address strategyForwarder = address(new StrategyCallForwarder());
+        address mockQueue = makeAddr("mockQueue");
+        vm.mockCall(vault, abi.encodeCall(IVault.hasQueue, (mockQueue)), abi.encode(true));
+        vm.mockCall(vault, abi.encodeCall(IVault.isDepositQueue, (mockQueue)), abi.encode(true));
+        vm.mockCall(mockQueue, abi.encodeCall(IQueue.asset, ()), abi.encode(wsteth));
+        vm.mockCall(mockQueue, IDepositQueue.requestOf.selector, abi.encode(1, 0));
+        vm.expectRevert(abi.encodeWithSignature("InvalidQueue(string)", "asyncDeposit"));
+        strategyImplementation = new MellowStrategy{salt: bytes32(0)}(
+            bytes32("MellowStrategyId"),
+            strategyForwarder,
+            address(pool),
+            IVault(vault),
+            address(0),
+            address(mockQueue),
+            address(0),
+            false
+        );
+    }
+
+    function testConstructor_InvalidQueue_AsyncDepositQueue_requestOfAssetsNonZero() external {
+        _deployMellowVault();
+        address strategyForwarder = address(new StrategyCallForwarder());
+        address mockQueue = makeAddr("mockQueue");
+        vm.mockCall(vault, abi.encodeCall(IVault.hasQueue, (mockQueue)), abi.encode(true));
+        vm.mockCall(vault, abi.encodeCall(IVault.isDepositQueue, (mockQueue)), abi.encode(true));
+        vm.mockCall(mockQueue, abi.encodeCall(IQueue.asset, ()), abi.encode(wsteth));
+        vm.mockCall(mockQueue, IDepositQueue.requestOf.selector, abi.encode(0, 1));
+        vm.expectRevert(abi.encodeWithSignature("InvalidQueue(string)", "asyncDeposit"));
+        strategyImplementation = new MellowStrategy{salt: bytes32(0)}(
+            bytes32("MellowStrategyId"),
+            strategyForwarder,
+            address(pool),
+            IVault(vault),
+            address(0),
+            address(mockQueue),
+            address(0),
+            false
+        );
+    }
+
+    function testConstructor_InvalidQueue_AsyncRedeemQueue_AssetZero() external {
+        _deployMellowVault();
+        address strategyForwarder = address(new StrategyCallForwarder());
+        address mockQueue = makeAddr("mockQueue");
+        vm.mockCall(mockQueue, abi.encodeCall(IQueue.asset, ()), abi.encode(address(0)));
+        vm.expectRevert(abi.encodeWithSignature("InvalidQueue(string)", "asyncRedeem"));
+        strategyImplementation = new MellowStrategy{salt: bytes32(0)}(
+            bytes32("MellowStrategyId"),
+            strategyForwarder,
+            address(pool),
+            IVault(vault),
+            address(syncDepositWstethQueue),
+            address(0),
+            address(mockQueue),
+            false
+        );
+    }
+
+    function testConstructor_InvalidQueue_AsyncRedeemQueue_HasQueueFalse() external {
+        _deployMellowVault();
+        address strategyForwarder = address(new StrategyCallForwarder());
+        address mockQueue = makeAddr("mockQueue");
+        vm.mockCall(vault, abi.encodeCall(IVault.hasQueue, (mockQueue)), abi.encode(false));
+        vm.expectRevert(abi.encodeWithSignature("InvalidQueue(string)", "asyncRedeem"));
+        strategyImplementation = new MellowStrategy{salt: bytes32(0)}(
+            bytes32("MellowStrategyId"),
+            strategyForwarder,
+            address(pool),
+            IVault(vault),
+            address(syncDepositWstethQueue),
+            address(0),
+            address(mockQueue),
+            false
+        );
+    }
+
+    function testConstructor_InvalidQueue_AsyncRedeemQueue_IsDepositQueue_True() external {
+        _deployMellowVault();
+        address strategyForwarder = address(new StrategyCallForwarder());
+        address mockQueue = makeAddr("mockQueue");
+        vm.mockCall(vault, abi.encodeCall(IVault.hasQueue, (mockQueue)), abi.encode(true));
+        vm.mockCall(vault, abi.encodeCall(IVault.isDepositQueue, (mockQueue)), abi.encode(true));
+        vm.expectRevert(abi.encodeWithSignature("InvalidQueue(string)", "asyncRedeem"));
+        strategyImplementation = new MellowStrategy{salt: bytes32(0)}(
+            bytes32("MellowStrategyId"),
+            strategyForwarder,
+            address(pool),
+            IVault(vault),
+            address(syncDepositWstethQueue),
+            address(0),
+            address(mockQueue),
+            false
+        );
+    }
+
+    function testConstructor_InvalidQueue_AsyncRedeemQueue_NonWstethAsset() external {
+        _deployMellowVault();
+        address strategyForwarder = address(new StrategyCallForwarder());
+        address mockQueue = makeAddr("mockQueue");
+        vm.mockCall(vault, abi.encodeCall(IVault.hasQueue, (mockQueue)), abi.encode(true));
+        vm.mockCall(vault, abi.encodeCall(IVault.isDepositQueue, (mockQueue)), abi.encode(false));
+        vm.mockCall(mockQueue, abi.encodeCall(IQueue.asset, ()), abi.encode(eth));
+        vm.expectRevert(abi.encodeWithSignature("InvalidQueue(string)", "asyncRedeem"));
+        strategyImplementation = new MellowStrategy{salt: bytes32(0)}(
+            bytes32("MellowStrategyId"),
+            strategyForwarder,
+            address(pool),
+            IVault(vault),
+            address(syncDepositWstethQueue),
+            address(0),
+            address(mockQueue),
+            false
+        );
+    }
+
+    function testConstructor_InvalidQueue_AsyncRedeemQueue_requestsOfReverts() external {
+        _deployMellowVault();
+        address strategyForwarder = address(new StrategyCallForwarder());
+        address mockQueue = makeAddr("mockQueue");
+        vm.mockCall(vault, abi.encodeCall(IVault.hasQueue, (mockQueue)), abi.encode(true));
+        vm.mockCall(vault, abi.encodeCall(IVault.isDepositQueue, (mockQueue)), abi.encode(false));
+        vm.mockCall(mockQueue, abi.encodeCall(IQueue.asset, ()), abi.encode(wsteth));
+        vm.mockCallRevert(mockQueue, IRedeemQueue.requestsOf.selector, abi.encode("requestsOf(any, any, any) call reverts"));
+        vm.expectRevert(abi.encode("requestsOf(any, any, any) call reverts"));
+        strategyImplementation = new MellowStrategy{salt: bytes32(0)}(
+            bytes32("MellowStrategyId"),
+            strategyForwarder,
+            address(pool),
+            IVault(vault),
+            address(syncDepositWstethQueue),
+            address(0),
+            address(mockQueue),
+            false
+        );
+    }
+
+    function testConstructor_InvalidQueue_AsyncRedeemQueue_requestsOfNonZero() external {
+        _deployMellowVault();
+        address strategyForwarder = address(new StrategyCallForwarder());
+        address mockQueue = makeAddr("mockQueue");
+        vm.mockCall(vault, abi.encodeCall(IVault.hasQueue, (mockQueue)), abi.encode(true));
+        vm.mockCall(vault, abi.encodeCall(IVault.isDepositQueue, (mockQueue)), abi.encode(false));
+        vm.mockCall(mockQueue, abi.encodeCall(IQueue.asset, ()), abi.encode(wsteth));
+        vm.mockCall(mockQueue, IRedeemQueue.requestsOf.selector, abi.encode(new IRedeemQueue.Request[](1)));
+        vm.expectRevert(abi.encodeWithSignature("InvalidQueue(string)", "asyncRedeem"));
+        strategyImplementation = new MellowStrategy{salt: bytes32(0)}(
+            bytes32("MellowStrategyId"),
+            strategyForwarder,
+            address(pool),
+            IVault(vault),
+            address(syncDepositWstethQueue),
+            address(0),
+            address(mockQueue),
+            false
+        );
+    }
+
+    function testConstructorSuccess() external {
+        _deployMellowVault();
+        address strategyForwarder = address(new StrategyCallForwarder());
+        strategyImplementation = new MellowStrategy{salt: bytes32(0)}(
+            bytes32("MellowStrategyId"),
+            strategyForwarder,
             address(pool),
             IVault(vault),
             address(syncDepositWstethQueue),
@@ -290,16 +658,74 @@ contract MellowStrategyTest is Test {
             address(asyncRedeemWstethQueue),
             true
         );
+        assertEq(address(strategyImplementation.POOL()), address(pool));
+        assertEq(address(strategyImplementation.WSTETH()), address(wsteth));
+        assertEq(address(strategyImplementation.MELLOW_VAULT()), address(vault));
+        assertEq(address(strategyImplementation.MELLOW_FEE_MANAGER()), address(IVault(vault).feeManager()));
+        assertEq(address(strategyImplementation.MELLOW_ORACLE()), address(IVault(vault).oracle()));
+        assertEq(address(strategyImplementation.MELLOW_SHARE_MANAGER()), address(IVault(vault).shareManager()));
+        assertEq(address(strategyImplementation.MELLOW_SYNC_DEPOSIT_QUEUE()), address(syncDepositWstethQueue));
+        assertEq(address(strategyImplementation.MELLOW_ASYNC_DEPOSIT_QUEUE()), address(asyncDepositWstethQueue));
+        assertEq(address(strategyImplementation.MELLOW_ASYNC_REDEEM_QUEUE()), address(asyncRedeemWstethQueue));
+        assertTrue(strategyImplementation.ALLOW_LIST_ENABLED());
 
-        assertEq(address(strategy.POOL()), address(pool));
-        assertEq(address(strategy.WSTETH()), address(wsteth));
-        assertEq(address(strategy.MELLOW_VAULT()), address(vault));
-        assertEq(address(strategy.MELLOW_FEE_MANAGER()), address(IVault(vault).feeManager()));
-        assertEq(address(strategy.MELLOW_ORACLE()), address(IVault(vault).oracle()));
-        assertEq(address(strategy.MELLOW_SHARE_MANAGER()), address(IVault(vault).shareManager()));
-        assertEq(address(strategy.MELLOW_SYNC_DEPOSIT_QUEUE()), address(syncDepositWstethQueue));
-        assertEq(address(strategy.MELLOW_ASYNC_DEPOSIT_QUEUE()), address(asyncDepositWstethQueue));
-        assertEq(address(strategy.MELLOW_ASYNC_REDEEM_QUEUE()), address(asyncRedeemWstethQueue));
-        assertTrue(strategy.ALLOW_LIST_ENABLED());
+        strategyImplementation = new MellowStrategy{salt: bytes32(0)}(
+            bytes32("MellowStrategyId"),
+            strategyForwarder,
+            address(pool),
+            IVault(vault),
+            address(syncDepositWstethQueue),
+            address(asyncDepositWstethQueue),
+            address(asyncRedeemWstethQueue),
+            false
+        );
+        assertEq(address(strategyImplementation.POOL()), address(pool));
+        assertEq(address(strategyImplementation.WSTETH()), address(wsteth));
+        assertEq(address(strategyImplementation.MELLOW_VAULT()), address(vault));
+        assertEq(address(strategyImplementation.MELLOW_FEE_MANAGER()), address(IVault(vault).feeManager()));
+        assertEq(address(strategyImplementation.MELLOW_ORACLE()), address(IVault(vault).oracle()));
+        assertEq(address(strategyImplementation.MELLOW_SHARE_MANAGER()), address(IVault(vault).shareManager()));
+        assertEq(address(strategyImplementation.MELLOW_SYNC_DEPOSIT_QUEUE()), address(syncDepositWstethQueue));
+        assertEq(address(strategyImplementation.MELLOW_ASYNC_DEPOSIT_QUEUE()), address(asyncDepositWstethQueue));
+        assertEq(address(strategyImplementation.MELLOW_ASYNC_REDEEM_QUEUE()), address(asyncRedeemWstethQueue));
+        assertFalse(strategyImplementation.ALLOW_LIST_ENABLED());
+    }
+
+
+    function testInitialize_Implementation_InvalidInitialization() external {
+        _deployStrategy(false);
+        
+        vm.expectRevert(abi.encodeWithSignature("InvalidInitialization()"));
+        strategyImplementation.initialize(address(0), address(0));
+    }
+    
+    function testInitialize_Proxy_ZeroArgument_admin() external {
+        _deployMellowVault();
+        address strategyForwarder = address(new StrategyCallForwarder());
+        strategyImplementation = new MellowStrategy{salt: bytes32(0)}(
+            bytes32("MellowStrategyId"),
+            strategyForwarder,
+            address(pool),
+            IVault(vault),
+            address(syncDepositWstethQueue),
+            address(asyncDepositWstethQueue),
+            address(asyncRedeemWstethQueue),
+            false
+        );
+    
+        strategy = MellowStrategy(payable(
+            new TransparentUpgradeableProxy(address(strategyImplementation), vaultAdmin, "")
+        ));
+    
+        vm.expectRevert(abi.encodeWithSignature("ZeroArgument(string)", "_admin"));
+        strategy.initialize(address(0), address(0));
+    }
+
+    function testInitialize_Proxy_Success_Zero() external {
+        _deployStrategy(false);
+
+        strategy.initialize(address(vaultAdmin), address(0));
+
+        
     }
 }
