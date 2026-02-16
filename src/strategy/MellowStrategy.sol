@@ -307,6 +307,9 @@ contract MellowStrategy is IStrategy, AllowList, FeaturePausable, StrategyCallFo
         if (MELLOW_VAULT.isPausedQueue(queue) || !MELLOW_VAULT.hasQueue(queue)) {
             return (false, 0);
         }
+        if (!MELLOW_SHARE_MANAGER.isDepositorWhitelisted(callForwarder, supplyParams.merkleProof)) {
+            return (false, 0);
+        }
         (bool isSuspicious, uint256 priceD18, uint32 timestamp) = getUncheckedWstETHReport();
         if (isSuspicious || priceD18 == 0) return (false, 0);
 

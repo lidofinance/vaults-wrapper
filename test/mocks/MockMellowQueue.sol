@@ -5,6 +5,6 @@ contract MockMellowQueue {
     address public asset;
 
     function setAsset(address a) external {
-        asset = a; 
+        asset = a;
     }
 }
