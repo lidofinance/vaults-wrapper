@@ -5,28 +5,28 @@ import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 
-import {AllowList} from "../AllowList.sol";
-import {StvStETHPool} from "../StvStETHPool.sol";
-import {WithdrawalQueue} from "../WithdrawalQueue.sol";
+import {AllowList} from "src/AllowList.sol";
+import {StvStETHPool} from "src/StvStETHPool.sol";
+import {WithdrawalQueue} from "src/WithdrawalQueue.sol";
 
 import {IStrategyCallForwarder} from "src/interfaces/IStrategyCallForwarder.sol";
 
-import {IDepositQueue} from "../interfaces/mellow/IDepositQueue.sol";
+import {IDepositQueue} from "src/interfaces/mellow/IDepositQueue.sol";
 
-import {IQueue} from "../interfaces/mellow/IQueue.sol";
-import {IRedeemQueue} from "../interfaces/mellow/IRedeemQueue.sol";
-import {ISyncDepositQueue} from "../interfaces/mellow/ISyncDepositQueue.sol";
+import {IQueue} from "src/interfaces/mellow/IQueue.sol";
+import {IRedeemQueue} from "src/interfaces/mellow/IRedeemQueue.sol";
+import {ISyncDepositQueue} from "src/interfaces/mellow/ISyncDepositQueue.sol";
 
-import {IFeeManager} from "../interfaces/mellow/IFeeManager.sol";
-import {IOracle} from "../interfaces/mellow/IOracle.sol";
-import {IShareManager} from "../interfaces/mellow/IShareManager.sol";
-import {IVault} from "../interfaces/mellow/IVault.sol";
+import {IFeeManager} from "src/interfaces/mellow/IFeeManager.sol";
+import {IOracle} from "src/interfaces/mellow/IOracle.sol";
+import {IShareManager} from "src/interfaces/mellow/IShareManager.sol";
+import {IVault} from "src/interfaces/mellow/IVault.sol";
 
-import {StrategyCallForwarderRegistry} from "../strategy/StrategyCallForwarderRegistry.sol";
-import {FeaturePausable} from "../utils/FeaturePausable.sol";
+import {StrategyCallForwarderRegistry} from "src/strategy/StrategyCallForwarderRegistry.sol";
+import {FeaturePausable} from "src/utils/FeaturePausable.sol";
 
-import {IStrategy} from "../interfaces/IStrategy.sol";
-import {IWstETH} from "../interfaces/core/IWstETH.sol";
+import {IStrategy} from "src/interfaces/IStrategy.sol";
+import {IWstETH} from "src/interfaces/core/IWstETH.sol";
 
 /**
  * @title MellowStrategy
@@ -155,7 +155,6 @@ contract MellowStrategy is IStrategy, AllowList, FeaturePausable, StrategyCallFo
         address asyncRedeemQueue_,
         bool allowListEnabled_
     ) StrategyCallForwarderRegistry(strategyId_, strategyCallForwarderImpl_) AllowList(allowListEnabled_) {
-        address wsteth = address(StvStETHPool(payable(pool_)).WSTETH());
         if (address(vault_) == address(0)) {
             revert ZeroArgument("vault");
         }
@@ -163,6 +162,7 @@ contract MellowStrategy is IStrategy, AllowList, FeaturePausable, StrategyCallFo
             revert ZeroArgument("depositQueues");
         }
 
+        address wsteth = address(StvStETHPool(payable(pool_)).WSTETH());
         if (syncDepositQueue_ != address(0)) {
             if (
                 !vault_.hasQueue(syncDepositQueue_) || !vault_.isDepositQueue(syncDepositQueue_)
@@ -188,7 +188,7 @@ contract MellowStrategy is IStrategy, AllowList, FeaturePausable, StrategyCallFo
         }
 
         if (asyncRedeemQueue_ == address(0)) {
-            revert ZeroArgument("asyncRedeemQueue");
+            revert ZeroArgument("asyncRedeem");
         }
         if (
             !vault_.hasQueue(asyncRedeemQueue_) || vault_.isDepositQueue(asyncRedeemQueue_)
@@ -228,8 +228,6 @@ contract MellowStrategy is IStrategy, AllowList, FeaturePausable, StrategyCallFo
      */
     function initialize(address admin_, address supplyPauser_) external initializer {
         if (admin_ == address(0)) revert ZeroArgument("_admin");
-
-        __AccessControlEnumerable_init();
 
         _grantRole(DEFAULT_ADMIN_ROLE, admin_);
         if (address(0) != supplyPauser_) {
@@ -423,6 +421,9 @@ contract MellowStrategy is IStrategy, AllowList, FeaturePausable, StrategyCallFo
         shares = Math.mulDiv(assets, priceD18, 1 ether, Math.Rounding.Ceil);
         uint256 redeemFeeD6 = MELLOW_FEE_MANAGER.redeemFeeD6();
         if (redeemFeeD6 != 0) {
+            if (redeemFeeD6 == 1e6) {
+                return (false, 0);
+            }
             shares = Math.mulDiv(shares, 1e6, 1e6 - redeemFeeD6, Math.Rounding.Ceil);
         }
         if (shares == 0) return (false, 0);
@@ -465,7 +466,7 @@ contract MellowStrategy is IStrategy, AllowList, FeaturePausable, StrategyCallFo
     function requestExitByShares(uint256 shares, bytes calldata) external returns (bytes32 requestId) {
         if (shares == 0) revert ZeroArgument("shares");
         (bool success, uint256 assets) = previewRedeem(shares);
-        if (!success || assets == 0) revert RedeemFailed();
+        if (!success) revert RedeemFailed();
         return _requestExit(assets, shares);
     }
 
@@ -601,13 +602,25 @@ contract MellowStrategy is IStrategy, AllowList, FeaturePausable, StrategyCallFo
     }
 
     /**
+     * @notice Returns the current oracle report for wstETH without performing extra validation.
+     * @dev Consumers typically check isSuspicious and priceD18 != 0.
+     * @return isSuspicious Whether the oracle report is flagged as suspicious.
+     * @return priceD18 Price in 1e18 precision.
+     * @return timestamp Report timestamp.
+     */
+    function getUncheckedWstETHReport() public view returns (bool isSuspicious, uint256 priceD18, uint32 timestamp) {
+        IOracle.DetailedReport memory report = MELLOW_ORACLE.getReport(address(WSTETH));
+        return (report.isSuspicious, report.priceD18, report.timestamp);
+    }
+
+    /**
      * @notice Returns async deposit request state for a user (if async deposit queue is configured).
      * @param _user User address.
      * @return assets Requested assets amount.
      * @return timestamp Request timestamp as stored in the queue.
      * @return isClaimable True if the request is claimable (queue reports non-zero claimable shares).
      */
-    function pendingDepositRequests(address _user)
+    function getDepositRequestOf(address _user)
         external
         view
         returns (uint256 assets, uint256 timestamp, bool isClaimable)
@@ -618,18 +631,6 @@ contract MellowStrategy is IStrategy, AllowList, FeaturePausable, StrategyCallFo
         if (assets > 0 && IDepositQueue(MELLOW_ASYNC_DEPOSIT_QUEUE).claimableOf(address(callForwarder)) != 0) {
             isClaimable = true;
         }
-    }
-
-    /**
-     * @notice Returns the current oracle report for wstETH without performing extra validation.
-     * @dev Consumers typically check isSuspicious and priceD18 != 0.
-     * @return isSuspicious Whether the oracle report is flagged as suspicious.
-     * @return priceD18 Price in 1e18 precision.
-     * @return timestamp Report timestamp.
-     */
-    function getUncheckedWstETHReport() public view returns (bool isSuspicious, uint256 priceD18, uint32 timestamp) {
-        IOracle.DetailedReport memory report = MELLOW_ORACLE.getReport(address(WSTETH));
-        return (report.isSuspicious, report.priceD18, report.timestamp);
     }
 
     /**
