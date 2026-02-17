@@ -278,17 +278,32 @@ contract MellowStrategy is IStrategy, AllowList, FeaturePausable, StrategyCallFo
     // =================================================================================
 
     /**
-     * @notice Previews supply into Mellow by converting assets (wstETH) into shares using the current oracle report,
-     * applying vault deposit fee and (for sync queue) sync penalty/maxAge constraints.
-     * @dev Returns (false, 0) if supply is paused, user is not allow-listed (when enabled), queue is missing/paused,
-     * oracle report is suspicious/expired, async queue requires claim-first, or computed shares are zero.
+     * @notice Estimates the number of Mellow shares that would be credited for supplying `assets` of wstETH right now.
+     * @dev This is a best-effort simulation and **does not** mutate state.
      *
-     * @param assets Amount of wstETH to deposit into Mellow.
-     * @param msgSender User address.
-     * @param callForwarder User-specific forwarder address whose queue state may affect async behavior.
-     * @param supplyParams ABI-decoded params controlling queue selection and allowlist proof.
-     * @return success Whether the operation is currently expected to succeed.
-     * @return shares Estimated shares minted/credited for the deposit (net of fees/penalties).
+     * The function:
+     * - Selects sync/async deposit queue based on `supplyParams.isSync`
+     * - Reads the current wstETH oracle report and converts `assets` -> `shares`
+     * - Applies the vault deposit fee
+     * - For sync queue: enforces `maxAge` freshness and applies the sync penalty
+     * - For async queue: if the caller has an existing request, requires that it is claimable (otherwise user must claim first)
+     *
+     * Returns `(false, 0)` if any precondition fails, including:
+     * - Supply feature is paused
+     * - Sender is not allow-listed (when allowlist is enabled)
+     * - Selected queue is unset, missing, or paused in the vault
+     * - Depositor whitelist proof is invalid for `callForwarder`
+     * - Oracle report is suspicious/invalid
+     * - Sync report is older than `maxAge`
+     * - Async queue has a pending request but nothing is currently claimable
+     * - Computed `shares` rounds to zero for non-zero `assets`
+     *
+     * @param assets Amount of wstETH to supply.
+     * @param msgSender User address used for allowlist checks.
+     * @param callForwarder User-specific forwarder whose queue state is used for async “claim-first” checks.
+     * @param supplyParams Parameters that pick sync/async queue and provide depositor whitelist merkle proof.
+     * @return success Whether a supply would currently be expected to succeed.
+     * @return shares Estimated shares credited after fees/penalties.
      */
     function previewSupply(
         uint256 assets,
@@ -298,6 +313,7 @@ contract MellowStrategy is IStrategy, AllowList, FeaturePausable, StrategyCallFo
     ) public view returns (bool success, uint256 shares) {
         if (isFeaturePaused(SUPPLY_FEATURE)) return (false, 0);
         if (ALLOW_LIST_ENABLED && !isAllowListed(msgSender)) return (false, 0);
+        if (assets == 0) return (true, 0);
         address queue = supplyParams.isSync ? MELLOW_SYNC_DEPOSIT_QUEUE : MELLOW_ASYNC_DEPOSIT_QUEUE;
         if (queue == address(0)) {
             return (false, 0);
@@ -371,16 +387,18 @@ contract MellowStrategy is IStrategy, AllowList, FeaturePausable, StrategyCallFo
             stv = StvStETHPool(payable(POOL)).depositETH{value: msg.value}(address(callForwarder), referral);
         }
 
-        callForwarder.doCall(POOL, abi.encodeWithSelector(StvStETHPool.mintWsteth.selector, assets));
+        if (assets != 0) {
+            callForwarder.doCall(POOL, abi.encodeWithSelector(StvStETHPool.mintWsteth.selector, assets));
 
-        address queue = supplyParams.isSync ? MELLOW_SYNC_DEPOSIT_QUEUE : MELLOW_ASYNC_DEPOSIT_QUEUE;
-        callForwarder.doCall(address(WSTETH), abi.encodeWithSelector(WSTETH.approve.selector, queue, assets));
-        callForwarder.doCall(
-            queue, abi.encodeCall(IDepositQueue.deposit, (assets.toUint224(), referral, supplyParams.merkleProof))
-        );
+            address queue = supplyParams.isSync ? MELLOW_SYNC_DEPOSIT_QUEUE : MELLOW_ASYNC_DEPOSIT_QUEUE;
+            callForwarder.doCall(address(WSTETH), abi.encodeWithSelector(WSTETH.approve.selector, queue, assets));
+            callForwarder.doCall(
+                queue, abi.encodeCall(IDepositQueue.deposit, (assets.toUint224(), referral, supplyParams.merkleProof))
+            );
 
+            emit MellowDeposited(msgSender, referral, assets, supplyParams.isSync, shares, params);
+        }
         emit StrategySupplied(msgSender, referral, msg.value, stv, assets, params);
-        emit MellowDeposited(msgSender, referral, assets, supplyParams.isSync, shares, params);
     }
 
     /**

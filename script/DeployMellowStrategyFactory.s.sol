@@ -4,7 +4,7 @@ pragma solidity 0.8.30;
 import {Script} from "forge-std/Script.sol";
 import {console} from "forge-std/console.sol";
 
-import {MellowStrategyFactory} from "src/factories/MellowStrategyFactory.sol";
+// import {MellowStrategyFactory} from "src/factories/MellowStrategyFactory.sol";
 
 contract DeployMellowStrategyFactory is Script {
     function _writePoolFactoryArtifacts(address _strategyFactory, string memory _poolFactoryJsonPath) internal {
@@ -53,8 +53,7 @@ contract DeployMellowStrategyFactory is Script {
         //     syncDepositQueue,
         //     asyncDepositQueue,
         //     asyncRedeemQueue,
-        //     allowList,
-        //     strategyCallFordwarderFactory
+        //     allowList
         // ));
         vm.stopBroadcast();
 

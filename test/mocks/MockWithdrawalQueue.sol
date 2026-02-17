@@ -3,7 +3,6 @@ pragma solidity 0.8.30;
 
 import {IStvStETHPool} from "../../src/interfaces/IStvStETHPool.sol";
 import {IStETH} from "../../src/interfaces/core/IStETH.sol";
-import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
 contract MockWithdrawalQueue {
     IStvStETHPool public POOL;
