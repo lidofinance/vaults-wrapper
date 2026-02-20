@@ -22,7 +22,7 @@
     "proposer": "0xcc95b0Dbe1519AfaC58d954444839A80700380a2",
     "executor": "0xcc95b0Dbe1519AfaC58d954444839A80700380a2"
   },
-  "strategyFactory": "0x08f666ad8bbfe64e8fd95f948df9c63110cf6d5e",
+  "strategyFactory": "0x5cEeb9c37271c848aacB843c7909171f44F65FC3",
   "connectDepositWei": 1000000000000000000,
   "mellow": {
     "vault": "0x006029e2228D784572CcF31d4b791a48d0F3C75D",

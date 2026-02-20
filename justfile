@@ -64,7 +64,8 @@ deploy-all env_file:
 deploy-ggv-mocks:
   forge script script/DeployGGVMocks.s.sol:DeployGGVMocks $(just _script-flags) --gas-limit {{fusaka_tx_gas_limit}} --sig 'run()'
 
-deploy-mellow-strategy-factory:
+deploy-mellow-strategy-factory MELLOW_POOL_PARAMS_JSON:
+  MELLOW_POOL_PARAMS_JSON={{MELLOW_POOL_PARAMS_JSON}} \
   forge script script/DeployMellowStrategyFactory.s.sol:DeployMellowStrategyFactory $(just _script-flags {{env('RPC_URL')}} {{env('DEPLOYER')}} {{env('PRIVATE_KEY')}}) --sig 'run()'
 
 deploy-mellow-pool-start FACTORY_ADDRESS MELLOW_POOL_PARAMS_JSON INTERMEDIATE_JSON:
