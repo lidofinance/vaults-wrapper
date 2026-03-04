@@ -28,6 +28,8 @@ import {FeaturePausable} from "src/utils/FeaturePausable.sol";
 import {IStrategy} from "src/interfaces/IStrategy.sol";
 import {IWstETH} from "src/interfaces/core/IWstETH.sol";
 
+import "forge-std/console.sol";
+
 /**
  * @title MellowStrategy
  * @notice Strategy adapter that routes user supply/redeem flows through a Mellow Vault via deposit/redeem queues.
@@ -81,9 +83,6 @@ contract MellowStrategy is IStrategy, AllowList, FeaturePausable, StrategyCallFo
     IWstETH public immutable WSTETH;
 
     IVault public immutable MELLOW_VAULT;
-    IFeeManager public immutable MELLOW_FEE_MANAGER;
-    IOracle public immutable MELLOW_ORACLE;
-    IShareManager public immutable MELLOW_SHARE_MANAGER;
     address public immutable MELLOW_SYNC_DEPOSIT_QUEUE;
     address public immutable MELLOW_ASYNC_DEPOSIT_QUEUE;
     address public immutable MELLOW_ASYNC_REDEEM_QUEUE;
@@ -117,6 +116,13 @@ contract MellowStrategy is IStrategy, AllowList, FeaturePausable, StrategyCallFo
      * @param shares Amount of shares redeemed (burned) in the redeem queue.
      */
     event MellowWithdrawalRequested(address indexed recipient, bytes32 requestId, uint256 shares);
+
+    /**
+     * @notice Emitted when Mellow shares are claimed to the StrategyCallForwarder
+     * balance associated with `msg.sender`.
+     * @param msgSender User whose shares were claimed.
+     */
+    event MellowSharesClaimed(address indexed msgSender);
 
     // ================================================================================
     // ERRORS
@@ -207,10 +213,6 @@ contract MellowStrategy is IStrategy, AllowList, FeaturePausable, StrategyCallFo
         WSTETH = IWstETH(wsteth);
 
         MELLOW_VAULT = vault_;
-        MELLOW_FEE_MANAGER = vault_.feeManager();
-        MELLOW_ORACLE = vault_.oracle();
-        MELLOW_SHARE_MANAGER = vault_.shareManager();
-
         MELLOW_SYNC_DEPOSIT_QUEUE = syncDepositQueue_;
         MELLOW_ASYNC_DEPOSIT_QUEUE = asyncDepositQueue_;
         MELLOW_ASYNC_REDEEM_QUEUE = asyncRedeemQueue_;
@@ -235,6 +237,7 @@ contract MellowStrategy is IStrategy, AllowList, FeaturePausable, StrategyCallFo
         }
 
         _initializeAllowList(admin_);
+        __AccessControlEnumerable_init();
     }
 
     // =================================================================================
@@ -321,26 +324,23 @@ contract MellowStrategy is IStrategy, AllowList, FeaturePausable, StrategyCallFo
         if (MELLOW_VAULT.isPausedQueue(queue) || !MELLOW_VAULT.hasQueue(queue)) {
             return (false, 0);
         }
-        if (!MELLOW_SHARE_MANAGER.isDepositorWhitelisted(callForwarder, supplyParams.merkleProof)) {
+        if (!MELLOW_VAULT.shareManager().isDepositorWhitelisted(callForwarder, supplyParams.merkleProof)) {
             return (false, 0);
         }
         (bool isSuspicious, uint256 priceD18, uint32 timestamp) = getUncheckedWstETHReport();
         if (isSuspicious || priceD18 == 0) return (false, 0);
-
-        shares = Math.mulDiv(assets, priceD18, 1 ether);
-
-        uint256 depositFeeD6 = MELLOW_FEE_MANAGER.depositFeeD6();
-        if (depositFeeD6 != 0) {
-            shares = Math.mulDiv(shares, 1e6 - depositFeeD6, 1e6);
-        }
-
         if (supplyParams.isSync) {
             (uint256 penaltyD6, uint32 maxAge) = ISyncDepositQueue(queue).syncDepositParams();
             if (uint256(maxAge) + timestamp < block.timestamp) {
                 return (false, 0);
             }
             if (penaltyD6 != 0) {
-                shares = Math.mulDiv(shares, 1e6 - penaltyD6, 1e6);
+                priceD18 = Math.mulDiv(priceD18, 1e6 - penaltyD6, 1e6); // L86 SyncDepositQueue.sol
+            }
+            shares = Math.mulDiv(assets, priceD18, 1 ether);
+            uint256 feeShares = MELLOW_VAULT.feeManager().calculateDepositFee(shares); // L95 SyncDepositQueue.sol
+            if (feeShares != 0) {
+                shares -= feeShares; // L98 SyncDepositQueue.sol
             }
         } else {
             IDepositQueue depositQueue = IDepositQueue(queue);
@@ -352,6 +352,9 @@ contract MellowStrategy is IStrategy, AllowList, FeaturePausable, StrategyCallFo
                     return (false, 0);
                 }
             }
+            uint256 feePriceD18 = MELLOW_VAULT.feeManager().calculateDepositFee(priceD18); // L180 DepositQueue.sol
+            uint256 reducedPriceD18 = priceD18 - feePriceD18; // L181 DepositQueue.sol
+            shares = Math.mulDiv(assets, reducedPriceD18, 1 ether); // L190 DepositQueue.sol
         }
         if (shares == 0) {
             return (false, 0);
@@ -374,6 +377,10 @@ contract MellowStrategy is IStrategy, AllowList, FeaturePausable, StrategyCallFo
      * @return stv Amount of stv minted if ETH was supplied (0 if msg.value == 0).
      */
     function supply(address referral, uint256 assets, bytes calldata params) external payable returns (uint256 stv) {
+        if (msg.value == 0 && assets == 0) {
+            revert ZeroArgument("msg.value and assets");
+        }
+
         MellowSupplyParams memory supplyParams = abi.decode(params, (MellowSupplyParams));
         address msgSender = _msgSender();
         IStrategyCallForwarder callForwarder = _getOrCreateCallForwarder(msgSender);
@@ -410,8 +417,12 @@ contract MellowStrategy is IStrategy, AllowList, FeaturePausable, StrategyCallFo
         if (MELLOW_ASYNC_DEPOSIT_QUEUE == address(0)) {
             revert NoAsyncDepositQueue();
         }
-        IStrategyCallForwarder callForwarder = _getOrCreateCallForwarder(_msgSender());
+        address msgSender = _msgSender();
+        IStrategyCallForwarder callForwarder = _getOrCreateCallForwarder(msgSender);
         success = IDepositQueue(MELLOW_ASYNC_DEPOSIT_QUEUE).claim(address(callForwarder));
+        if (success) {
+            emit MellowSharesClaimed(msgSender);
+        }
     }
 
     // =================================================================================
@@ -437,7 +448,7 @@ contract MellowStrategy is IStrategy, AllowList, FeaturePausable, StrategyCallFo
         }
 
         shares = Math.mulDiv(assets, priceD18, 1 ether, Math.Rounding.Ceil);
-        uint256 redeemFeeD6 = MELLOW_FEE_MANAGER.redeemFeeD6();
+        uint256 redeemFeeD6 = MELLOW_VAULT.feeManager().redeemFeeD6();
         if (redeemFeeD6 != 0) {
             if (redeemFeeD6 == 1e6) {
                 return (false, 0);
@@ -466,11 +477,13 @@ contract MellowStrategy is IStrategy, AllowList, FeaturePausable, StrategyCallFo
             return (false, 0);
         }
 
-        assets = Math.mulDiv(shares, 1 ether, priceD18);
-        uint256 redeemFeeD6 = MELLOW_FEE_MANAGER.redeemFeeD6();
-        if (redeemFeeD6 != 0) {
-            assets = Math.mulDiv(assets, 1e6 - redeemFeeD6, 1e6);
+        uint256 fees = MELLOW_VAULT.feeManager().calculateRedeemFee(shares); // L103 RedeemQueue.sol
+        if (fees > 0) {
+            // L104 RedeemQueue.sol
+            shares -= fees; // L107 RedeemQueue.sol
         }
+
+        assets = Math.mulDiv(shares, 1 ether, priceD18); // L241 RedeemQueue.sol
         if (assets == 0) return (false, 0);
         return (true, assets);
     }
@@ -504,7 +517,14 @@ contract MellowStrategy is IStrategy, AllowList, FeaturePausable, StrategyCallFo
     function _requestExit(uint256 assets, uint256 shares) internal returns (bytes32 requestId) {
         address msgSender = _msgSender();
         IStrategyCallForwarder callForwarder = _getOrCreateCallForwarder(msgSender);
-        uint256 userShares = MELLOW_SHARE_MANAGER.sharesOf(address(callForwarder));
+        // We check the total share balance here (including both active and claimable shares).
+        // In the most commonly used implementation - TokenizedShareManager and its derivatives -
+        // claimable shares are automatically claimed during the `lock` call executed inside
+        // `redeem` function, so this check correctly reflects the effective balance.
+        //
+        // For BasicShareManager, however, shares must be claimed explicitly via a separate
+        // call before this check will reflect the full balance.
+        uint256 userShares = MELLOW_VAULT.shareManager().sharesOf(address(callForwarder));
         if (shares > userShares) revert InsufficientMellowShares();
 
         address queue = MELLOW_ASYNC_REDEEM_QUEUE;
@@ -527,7 +547,7 @@ contract MellowStrategy is IStrategy, AllowList, FeaturePausable, StrategyCallFo
      */
     function finalizeRequestExit(bytes32 requestId) external {
         address msgSender = _msgSender();
-        uint32 timestamp = uint32(uint256(requestId));
+        uint32 timestamp = uint256(requestId).toUint32();
 
         IStrategyCallForwarder callForwarder = _getOrCreateCallForwarder(msgSender);
         uint32[] memory timestamps = new uint32[](1);
@@ -536,8 +556,20 @@ contract MellowStrategy is IStrategy, AllowList, FeaturePausable, StrategyCallFo
             MELLOW_ASYNC_REDEEM_QUEUE, abi.encodeCall(IRedeemQueue.claim, (address(callForwarder), timestamps))
         );
         uint256 assets = abi.decode(response, (uint256));
-
-        emit StrategyExitFinalized(msgSender, requestId, assets);
+        if (assets != 0) {
+            // Emit the event only if assets were actually transferred during the claim.
+            //
+            // `assets` may be zero in two cases:
+            // 1. The request is not yet claimable and therefore no assets were returned.
+            // 2. A rare edge case where the request was created based on a non-zero
+            //    estimation, but the final claim results in zero assets being transferred
+            //    (e.g., due to price changes, rounding, or other state updates between request
+            //    creation and settlement).
+            //
+            // In both situations we intentionally avoid emitting the event to prevent
+            // signaling a finalized exit that did not transfer any assets.
+            emit StrategyExitFinalized(msgSender, requestId, assets);
+        }
     }
 
     // =================================================================================
@@ -596,7 +628,7 @@ contract MellowStrategy is IStrategy, AllowList, FeaturePausable, StrategyCallFo
      */
     function sharesOf(address _user) external view returns (uint256 shares) {
         IStrategyCallForwarder callForwarder = getStrategyCallForwarderAddress(_user);
-        shares = MELLOW_SHARE_MANAGER.sharesOf(address(callForwarder));
+        shares = MELLOW_VAULT.shareManager().sharesOf(address(callForwarder));
     }
 
     /**
@@ -606,7 +638,7 @@ contract MellowStrategy is IStrategy, AllowList, FeaturePausable, StrategyCallFo
      */
     function claimableSharesOf(address _user) public view returns (uint256 shares) {
         IStrategyCallForwarder callForwarder = getStrategyCallForwarderAddress(_user);
-        shares = MELLOW_SHARE_MANAGER.claimableSharesOf(address(callForwarder));
+        shares = MELLOW_VAULT.shareManager().claimableSharesOf(address(callForwarder));
     }
 
     /**
@@ -616,7 +648,7 @@ contract MellowStrategy is IStrategy, AllowList, FeaturePausable, StrategyCallFo
      */
     function activeSharesOf(address _user) external view returns (uint256 shares) {
         IStrategyCallForwarder callForwarder = getStrategyCallForwarderAddress(_user);
-        shares = MELLOW_SHARE_MANAGER.activeSharesOf(address(callForwarder));
+        shares = MELLOW_VAULT.shareManager().activeSharesOf(address(callForwarder));
     }
 
     /**
@@ -627,7 +659,7 @@ contract MellowStrategy is IStrategy, AllowList, FeaturePausable, StrategyCallFo
      * @return timestamp Report timestamp.
      */
     function getUncheckedWstETHReport() public view returns (bool isSuspicious, uint256 priceD18, uint32 timestamp) {
-        IOracle.DetailedReport memory report = MELLOW_ORACLE.getReport(address(WSTETH));
+        IOracle.DetailedReport memory report = MELLOW_VAULT.oracle().getReport(address(WSTETH));
         return (report.isSuspicious, report.priceD18, report.timestamp);
     }
 
@@ -720,5 +752,21 @@ contract MellowStrategy is IStrategy, AllowList, FeaturePausable, StrategyCallFo
 
         IStrategyCallForwarder callForwarder = _getOrCreateCallForwarder(_msgSender());
         callForwarder.safeTransferERC20(_token, _recipient, _amount);
+    }
+
+    /**
+     * @notice Transfers ETH from the caller's StrategyCallForwarder to a recipient.
+     * @dev Recovery helper for ETH that may remain on the forwarder after external calls
+     * or refunds. The forwarder is resolved using `msg.sender`, restricting withdrawals
+     * to the caller's own forwarder instance.
+     * @param _recipient Address receiving the ETH (must be non-zero).
+     * @param _amount Amount of ETH to transfer (must be non-zero).
+     */
+    function safeTransferETH(address _recipient, uint256 _amount) external {
+        if (_recipient == address(0)) revert ZeroArgument("_recipient");
+        if (_amount == 0) revert ZeroArgument("_amount");
+
+        IStrategyCallForwarder callForwarder = _getOrCreateCallForwarder(_msgSender());
+        callForwarder.sendValue(payable(_recipient), _amount);
     }
 }

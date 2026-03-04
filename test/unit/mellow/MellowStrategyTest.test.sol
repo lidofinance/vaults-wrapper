@@ -3,6 +3,7 @@ pragma solidity 0.8.30;
 
 import {Test, Vm} from "forge-std/Test.sol";
 
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {TransparentUpgradeableProxy} from "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -24,7 +25,6 @@ import {IVault} from "src/interfaces/mellow/IVault.sol";
 import {IVaultConfigurator} from "src/interfaces/mellow/IVaultConfigurator.sol";
 
 import {MellowStrategy} from "src/strategy/MellowStrategy.sol";
-import {StrategyCallForwarder} from "src/strategy/StrategyCallForwarder.sol";
 import {StrategyCallForwarder} from "src/strategy/StrategyCallForwarder.sol";
 
 import {MockDashboard, MockDashboardFactory} from "test/mocks/MockDashboard.sol";
@@ -199,6 +199,14 @@ contract MellowStrategyTest is Test {
         reports[0].priceD18 = uint224(IWstETH(wsteth).getStETHByWstETH(1 ether));
 
         IVault(vault).oracle().submitReports(reports);
+        vm.stopPrank();
+    }
+
+    function _setFees(uint24 depositFeeD6, uint24 redeemFeeD6) internal {
+        IFeeManager feeManager = IVault(vault).feeManager();
+        address owner = Ownable(address(feeManager)).owner();
+        vm.startPrank(owner);
+        feeManager.setFees(depositFeeD6, redeemFeeD6, 0, 0);
         vm.stopPrank();
     }
 
@@ -796,9 +804,6 @@ contract MellowStrategyTest is Test {
         assertEq(address(strategyImplementation.POOL()), address(pool));
         assertEq(address(strategyImplementation.WSTETH()), address(wsteth));
         assertEq(address(strategyImplementation.MELLOW_VAULT()), address(vault));
-        assertEq(address(strategyImplementation.MELLOW_FEE_MANAGER()), address(IVault(vault).feeManager()));
-        assertEq(address(strategyImplementation.MELLOW_ORACLE()), address(IVault(vault).oracle()));
-        assertEq(address(strategyImplementation.MELLOW_SHARE_MANAGER()), address(IVault(vault).shareManager()));
         assertEq(address(strategyImplementation.MELLOW_SYNC_DEPOSIT_QUEUE()), address(syncDepositWstethQueue));
         assertEq(address(strategyImplementation.MELLOW_ASYNC_DEPOSIT_QUEUE()), address(asyncDepositWstethQueue));
         assertEq(address(strategyImplementation.MELLOW_ASYNC_REDEEM_QUEUE()), address(asyncRedeemWstethQueue));
@@ -817,9 +822,6 @@ contract MellowStrategyTest is Test {
         assertEq(address(strategyImplementation.POOL()), address(pool));
         assertEq(address(strategyImplementation.WSTETH()), address(wsteth));
         assertEq(address(strategyImplementation.MELLOW_VAULT()), address(vault));
-        assertEq(address(strategyImplementation.MELLOW_FEE_MANAGER()), address(IVault(vault).feeManager()));
-        assertEq(address(strategyImplementation.MELLOW_ORACLE()), address(IVault(vault).oracle()));
-        assertEq(address(strategyImplementation.MELLOW_SHARE_MANAGER()), address(IVault(vault).shareManager()));
         assertEq(address(strategyImplementation.MELLOW_SYNC_DEPOSIT_QUEUE()), address(syncDepositWstethQueue));
         assertEq(address(strategyImplementation.MELLOW_ASYNC_DEPOSIT_QUEUE()), address(asyncDepositWstethQueue));
         assertEq(address(strategyImplementation.MELLOW_ASYNC_REDEEM_QUEUE()), address(asyncRedeemWstethQueue));
@@ -1467,10 +1469,7 @@ contract MellowStrategyTest is Test {
             _deployStrategy(
                 DeployParams({allowList: false, withReport: true, withSyncQueue: true, withAsyncQueue: true})
             );
-            // 100% deposit fee
-            vm.mockCall(
-                address(IVault(vault).feeManager()), abi.encodeCall(IFeeManager.depositFeeD6, ()), abi.encode(1e6)
-            );
+            _setFees(1e6, 0);
             address callForwarder = address(strategy.getStrategyCallForwarderAddress(depositor));
             (bool success, uint256 shares) = strategy.previewSupply(
                 1 ether,
@@ -1488,9 +1487,7 @@ contract MellowStrategyTest is Test {
                 DeployParams({allowList: false, withReport: true, withSyncQueue: true, withAsyncQueue: true})
             );
             // 10% deposit fee
-            vm.mockCall(
-                address(IVault(vault).feeManager()), abi.encodeCall(IFeeManager.depositFeeD6, ()), abi.encode(1e5)
-            );
+            _setFees(1e5, 0);
             address callForwarder = address(strategy.getStrategyCallForwarderAddress(depositor));
             (bool success, uint256 shares) = strategy.previewSupply(
                 1 ether,
@@ -1508,9 +1505,7 @@ contract MellowStrategyTest is Test {
                 DeployParams({allowList: false, withReport: true, withSyncQueue: true, withAsyncQueue: true})
             );
             // 1% deposit fee
-            vm.mockCall(
-                address(IVault(vault).feeManager()), abi.encodeCall(IFeeManager.depositFeeD6, ()), abi.encode(1e4)
-            );
+            _setFees(1e4, 0);
             address callForwarder = address(strategy.getStrategyCallForwarderAddress(depositor));
             (bool success, uint256 shares) = strategy.previewSupply(
                 1 ether,
@@ -1528,9 +1523,7 @@ contract MellowStrategyTest is Test {
                 DeployParams({allowList: false, withReport: true, withSyncQueue: true, withAsyncQueue: true})
             );
             // 0.1234% deposit fee
-            vm.mockCall(
-                address(IVault(vault).feeManager()), abi.encodeCall(IFeeManager.depositFeeD6, ()), abi.encode(1234)
-            );
+            _setFees(1234, 0);
             address callForwarder = address(strategy.getStrategyCallForwarderAddress(depositor));
             (bool success, uint256 shares) = strategy.previewSupply(
                 1 ether,
@@ -2113,10 +2106,7 @@ contract MellowStrategyTest is Test {
 
         {
             // 100% redeem fee
-            vm.mockCall(
-                address(IVault(vault).feeManager()), abi.encodeCall(IFeeManager.redeemFeeD6, ()), abi.encode(1e6)
-            );
-
+            _setFees(0, 1e6);
             (bool success, uint256 shares) = strategy.previewWithdraw(1 ether);
             assertFalse(success);
             assertEq(shares, 0);
@@ -2124,10 +2114,7 @@ contract MellowStrategyTest is Test {
 
         {
             // 10% redeem fee
-            vm.mockCall(
-                address(IVault(vault).feeManager()), abi.encodeCall(IFeeManager.redeemFeeD6, ()), abi.encode(1e5)
-            );
-
+            _setFees(0, 1e5);
             (bool success, uint256 shares) = strategy.previewWithdraw(1 ether);
             assertTrue(success);
             assertEq(shares, Math.mulDiv(IWstETH(wsteth).getStETHByWstETH(1 ether), 10, 9, Math.Rounding.Ceil));
@@ -2135,10 +2122,7 @@ contract MellowStrategyTest is Test {
 
         {
             // 1% redeem fee
-            vm.mockCall(
-                address(IVault(vault).feeManager()), abi.encodeCall(IFeeManager.redeemFeeD6, ()), abi.encode(1e4)
-            );
-
+            _setFees(0, 1e4);
             (bool success, uint256 shares) = strategy.previewWithdraw(1 ether);
             assertTrue(success);
             assertEq(shares, Math.mulDiv(IWstETH(wsteth).getStETHByWstETH(1 ether), 100, 99, Math.Rounding.Ceil));
@@ -2146,10 +2130,7 @@ contract MellowStrategyTest is Test {
 
         {
             // 0.1234% redeem fee
-            vm.mockCall(
-                address(IVault(vault).feeManager()), abi.encodeCall(IFeeManager.redeemFeeD6, ()), abi.encode(1234)
-            );
-
+            _setFees(0, 1234);
             (bool success, uint256 shares) = strategy.previewWithdraw(1 ether);
             assertTrue(success);
             assertEq(
@@ -2327,10 +2308,7 @@ contract MellowStrategyTest is Test {
 
         {
             // 100% redeem fee
-            vm.mockCall(
-                address(IVault(vault).feeManager()), abi.encodeCall(IFeeManager.redeemFeeD6, ()), abi.encode(1e6)
-            );
-
+            _setFees(0, 1e6);
             (bool success, uint256 shares) = strategy.previewRedeem(1 ether);
             assertFalse(success);
             assertEq(shares, 0);
@@ -2338,10 +2316,7 @@ contract MellowStrategyTest is Test {
 
         {
             // 10% redeem fee
-            vm.mockCall(
-                address(IVault(vault).feeManager()), abi.encodeCall(IFeeManager.redeemFeeD6, ()), abi.encode(1e5)
-            );
-
+            _setFees(0, 1e5);
             (bool success, uint256 shares) = strategy.previewRedeem(1 ether);
             assertTrue(success);
             assertEq(shares, Math.mulDiv(IWstETH(wsteth).getWstETHByStETH(1 ether), 9, 10));
@@ -2349,10 +2324,7 @@ contract MellowStrategyTest is Test {
 
         {
             // 1% redeem fee
-            vm.mockCall(
-                address(IVault(vault).feeManager()), abi.encodeCall(IFeeManager.redeemFeeD6, ()), abi.encode(1e4)
-            );
-
+            _setFees(0, 1e4);
             (bool success, uint256 shares) = strategy.previewRedeem(1 ether);
             assertTrue(success);
             assertEq(shares, Math.mulDiv(IWstETH(wsteth).getWstETHByStETH(1 ether), 99, 100));
@@ -2360,10 +2332,7 @@ contract MellowStrategyTest is Test {
 
         {
             // 0.1234% redeem fee
-            vm.mockCall(
-                address(IVault(vault).feeManager()), abi.encodeCall(IFeeManager.redeemFeeD6, ()), abi.encode(1234)
-            );
-
+            _setFees(0, 1234);
             (bool success, uint256 shares) = strategy.previewRedeem(1 ether);
             assertTrue(success);
             assertEq(shares, Math.mulDiv(IWstETH(wsteth).getWstETHByStETH(1 ether), 1e6 - 1234, 1e6));
