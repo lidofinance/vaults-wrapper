@@ -17,9 +17,7 @@ import {IQueue} from "src/interfaces/mellow/IQueue.sol";
 import {IRedeemQueue} from "src/interfaces/mellow/IRedeemQueue.sol";
 import {ISyncDepositQueue} from "src/interfaces/mellow/ISyncDepositQueue.sol";
 
-import {IFeeManager} from "src/interfaces/mellow/IFeeManager.sol";
 import {IOracle} from "src/interfaces/mellow/IOracle.sol";
-import {IShareManager} from "src/interfaces/mellow/IShareManager.sol";
 import {IVault} from "src/interfaces/mellow/IVault.sol";
 
 import {StrategyCallForwarderRegistry} from "src/strategy/StrategyCallForwarderRegistry.sol";
@@ -27,8 +25,6 @@ import {FeaturePausable} from "src/utils/FeaturePausable.sol";
 
 import {IStrategy} from "src/interfaces/IStrategy.sol";
 import {IWstETH} from "src/interfaces/core/IWstETH.sol";
-
-import "forge-std/console.sol";
 
 /**
  * @title MellowStrategy
