@@ -13,26 +13,18 @@ contract MellowStrategyFactory is IStrategyFactory {
     address public immutable SYNC_DEPOSIT_QUEUE;
     address public immutable ASYNC_DEPOSIT_QUEUE;
     address public immutable ASYNC_REDEEM_QUEUE;
-    bool public immutable ALLOWLIST_ENABLED;
     address public immutable STRATEGY_CALL_FORWARDER_IMPLEMENTATION;
 
-    constructor(
-        address vault_,
-        address syncDepositQueue_,
-        address asyncDepositQueue_,
-        address asyncRedeemQueue_,
-        bool allowListEnabled_
-    ) {
+    constructor(address vault_, address syncDepositQueue_, address asyncDepositQueue_, address asyncRedeemQueue_) {
         VAULT = vault_;
         SYNC_DEPOSIT_QUEUE = syncDepositQueue_;
         ASYNC_DEPOSIT_QUEUE = asyncDepositQueue_;
         ASYNC_REDEEM_QUEUE = asyncRedeemQueue_;
-        ALLOWLIST_ENABLED = allowListEnabled_;
         STRATEGY_CALL_FORWARDER_IMPLEMENTATION = address(new StrategyCallForwarder());
     }
 
     /// @inheritdoc IStrategyFactory
-    function deploy(address pool, bytes calldata) external returns (address) {
+    function deploy(address pool, bytes calldata deployBytes) external returns (address) {
         return address(
             new MellowStrategy(
                 STRATEGY_ID,
@@ -42,7 +34,7 @@ contract MellowStrategyFactory is IStrategyFactory {
                 SYNC_DEPOSIT_QUEUE,
                 ASYNC_DEPOSIT_QUEUE,
                 ASYNC_REDEEM_QUEUE,
-                ALLOWLIST_ENABLED
+                abi.decode(deployBytes, (bool))
             )
         );
     }

@@ -141,6 +141,7 @@ contract StvPoolHarness is Test {
         });
 
         address strategyFactoryAddress = address(0);
+        bytes memory strategyDeployBytes;
         if (config.strategyKind == StrategyKind.GGV) {
             (address ggvTeller, address ggvBoringQueue) = abi.decode(config.deployParams, (address, address));
             strategyFactoryAddress = address(new GGVStrategyFactory(ggvTeller, ggvBoringQueue));
@@ -152,20 +153,24 @@ contract StvPoolHarness is Test {
                 address asyncRedeemQueue,
                 bool allowListEnabled
             ) = abi.decode(config.deployParams, (address, address, address, address, bool));
-            strategyFactoryAddress = address(
-                new MellowStrategyFactory(
-                    vault, syncDepositQueue, asyncDepositQueue, asyncRedeemQueue, allowListEnabled
-                )
-            );
+            strategyDeployBytes = abi.encode(allowListEnabled);
+            strategyFactoryAddress =
+                address(new MellowStrategyFactory(vault, syncDepositQueue, asyncDepositQueue, asyncRedeemQueue));
         }
         // StrategyKind.NONE: strategyFactoryAddress remains address(0)
 
         vm.startPrank(config.nodeOperator);
         Factory.PoolIntermediate memory intermediate = factory.createPoolStart(
-            vaultConfig, timelockConfig, commonPoolConfig, auxiliaryConfig, strategyFactoryAddress, ""
+            vaultConfig, timelockConfig, commonPoolConfig, auxiliaryConfig, strategyFactoryAddress, strategyDeployBytes
         );
         Factory.PoolDeployment memory deployment = factory.createPoolFinish{value: CONNECT_DEPOSIT}(
-            vaultConfig, timelockConfig, commonPoolConfig, auxiliaryConfig, strategyFactoryAddress, "", intermediate
+            vaultConfig,
+            timelockConfig,
+            commonPoolConfig,
+            auxiliaryConfig,
+            strategyFactoryAddress,
+            strategyDeployBytes,
+            intermediate
         );
         vm.stopPrank();
 
