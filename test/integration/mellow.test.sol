@@ -69,7 +69,11 @@ contract MellowIntegrationTest is StvStrategyPoolHarness {
             IAccessControlEnumerable(address(STRETH)).grantRole(CREATE_QUEUE_ROLE, lazyAdmin);
             IAccessControlEnumerable(address(STRETH)).grantRole(SET_QUEUE_LIMIT_ROLE, lazyAdmin);
             STRETH.setQueueLimit(10);
-            STRETH.createQueue(2, true, PROXY_ADMIN, WSTETH, abi.encode(0, 30 days));
+
+            try STRETH.createQueue(3, true, PROXY_ADMIN, WSTETH, abi.encode(0, 30 days)) {}
+            catch {
+                STRETH.createQueue(2, true, PROXY_ADMIN, WSTETH, abi.encode(0, 30 days));
+            }
             vm.stopPrank();
         }
 
