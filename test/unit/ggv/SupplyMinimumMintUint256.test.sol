@@ -6,7 +6,6 @@ import {Test} from "forge-std/Test.sol";
 import {SetupGGVStrategy} from "./SetupGGVStrategy.sol";
 import {GGVStrategy} from "src/strategy/GGVStrategy.sol";
 import {IStrategyCallForwarder} from "src/interfaces/IStrategyCallForwarder.sol";
-import {console} from "forge-std/console.sol";
 
 contract SupplyMinimumMintUint256Test is Test, SetupGGVStrategy {
     function test_supply_allows_minimumMint_above_uint16() public {

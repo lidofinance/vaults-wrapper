@@ -69,7 +69,7 @@ contract FactoryTest is Test {
 
     function _buildConfigs(
         bool allowListEnabled,
-        address allowListManager,
+        address allowListManager_,
         bool mintingEnabled,
         uint256 reserveRatioGapBP,
         string memory name,
@@ -96,7 +96,7 @@ contract FactoryTest is Test {
 
         auxiliaryConfig = Factory.AuxiliaryPoolConfig({
             allowListEnabled: allowListEnabled,
-            allowListManager: allowListManager,
+            allowListManager: allowListManager_,
             mintingEnabled: mintingEnabled,
             reserveRatioGapBP: reserveRatioGapBP
         });

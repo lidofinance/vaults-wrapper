@@ -43,13 +43,13 @@ contract MockStrategy is IStrategy {
         require(_stvAmount > 0, "zero stv");
         require(_wstethToMint > 0, "zero wsteth");
 
-        IERC20(address(StvPool(payable(POOL)))).transferFrom(msg.sender, address(this), _stvAmount);
+        require(IERC20(address(StvPool(payable(POOL)))).transferFrom(msg.sender, address(this), _stvAmount));
 
         StvStETHPool pool = StvStETHPool(payable(POOL));
         pool.mintWsteth(_wstethToMint);
 
         address wsteth = address(pool.WSTETH());
-        IERC20(wsteth).transfer(msg.sender, _wstethToMint);
+        require(IERC20(wsteth).transfer(msg.sender, _wstethToMint));
     }
 
     function remainingMintingCapacitySharesOf(address, uint256) external pure returns (uint256) {

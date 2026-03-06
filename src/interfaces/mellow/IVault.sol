@@ -1,0 +1,34 @@
+// SPDX-License-Identifier: MIT
+pragma solidity 0.8.30;
+
+import {IFeeManager} from "./IFeeManager.sol";
+import {IOracle} from "./IOracle.sol";
+import {IShareManager} from "./IShareManager.sol";
+import {IAccessControlEnumerable} from "@openzeppelin/contracts/access/extensions/IAccessControlEnumerable.sol";
+
+interface IVault is IAccessControlEnumerable {
+    struct RoleHolder {
+        bytes32 role;
+        address holder;
+    }
+
+    function shareManager() external view returns (IShareManager);
+
+    function oracle() external view returns (IOracle);
+
+    function hasQueue(address queue) external view returns (bool);
+
+    function isDepositQueue(address queue) external view returns (bool);
+
+    function isPausedQueue(address queue) external view returns (bool);
+
+    function feeManager() external view returns (IFeeManager);
+
+    function getQueueCount(address asset) external view returns (uint256);
+
+    function queueAt(address asset, uint256 index) external view returns (address);
+
+    function setQueueLimit(uint256 limit) external;
+
+    function createQueue(uint256 version, bool isDeposit, address owner, address asset, bytes calldata data) external;
+}
