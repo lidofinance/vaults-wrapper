@@ -45,7 +45,7 @@ contract DeployMellowStrategyFactory is Script {
 
     function run() external {
         string memory poolFactoryJsonPath =
-                            vm.envOr("POOL_FACTORY_DEPLOYMENT_JSON", string("deployments/pool-factory-hoodi.json"));
+            vm.envOr("POOL_FACTORY_DEPLOYMENT_JSON", string("deployments/pool-factory-hoodi.json"));
         string memory mellowParamsJsonPath = vm.envString("MELLOW_POOL_PARAMS_JSON");
         require(bytes(mellowParamsJsonPath).length != 0, "MELLOW_POOL_PARAMS_JSON env var must be set and non-empty");
         require(
@@ -61,9 +61,8 @@ contract DeployMellowStrategyFactory is Script {
         address asyncRedeemQueue = vm.parseJsonAddress(json, "$.mellow.asyncRedeemQueue");
 
         vm.startBroadcast();
-        address strategyFactory = address(
-            new MellowStrategyFactory(vault, syncDepositQueue, asyncDepositQueue, asyncRedeemQueue)
-        );
+        address strategyFactory =
+            address(new MellowStrategyFactory(vault, syncDepositQueue, asyncDepositQueue, asyncRedeemQueue));
         vm.stopBroadcast();
 
         _writePoolFactoryArtifacts(strategyFactory, poolFactoryJsonPath);
