@@ -4,7 +4,7 @@ pragma solidity 0.8.30;
 import {Script} from "forge-std/Script.sol";
 import {console} from "forge-std/console.sol";
 
-// import {MellowStrategyFactory} from "src/factories/MellowStrategyFactory.sol";
+import {MellowStrategyFactory} from "src/factories/MellowStrategyFactory.sol";
 
 contract DeployMellowStrategyFactory is Script {
     function _writePoolFactoryArtifacts(address _strategyFactory, string memory _poolFactoryJsonPath) internal {
@@ -45,16 +45,25 @@ contract DeployMellowStrategyFactory is Script {
 
     function run() external {
         string memory poolFactoryJsonPath =
-            vm.envOr("POOL_FACTORY_DEPLOYMENT_JSON", string("deployments/pool-factory-hoodi.json"));
-        address strategyFactory;
+                            vm.envOr("POOL_FACTORY_DEPLOYMENT_JSON", string("deployments/pool-factory-hoodi.json"));
+        string memory mellowParamsJsonPath = vm.envString("MELLOW_POOL_PARAMS_JSON");
+        require(bytes(mellowParamsJsonPath).length != 0, "MELLOW_POOL_PARAMS_JSON env var must be set and non-empty");
+        require(
+            vm.isFile(mellowParamsJsonPath),
+            string(abi.encodePacked("MELLOW_POOL_PARAMS_JSON file does not exist at: ", mellowParamsJsonPath))
+        );
+
+        string memory json = vm.readFile(mellowParamsJsonPath);
+
+        address vault = vm.parseJsonAddress(json, "$.mellow.vault");
+        address syncDepositQueue = vm.parseJsonAddress(json, "$.mellow.syncDepositQueue");
+        address asyncDepositQueue = vm.parseJsonAddress(json, "$.mellow.asyncDepositQueue");
+        address asyncRedeemQueue = vm.parseJsonAddress(json, "$.mellow.asyncRedeemQueue");
+
         vm.startBroadcast();
-        // strategyFactory = address(new MellowStrategyFactory(
-        //     vault,
-        //     syncDepositQueue,
-        //     asyncDepositQueue,
-        //     asyncRedeemQueue,
-        //     allowList
-        // ));
+        address strategyFactory = address(
+            new MellowStrategyFactory(vault, syncDepositQueue, asyncDepositQueue, asyncRedeemQueue)
+        );
         vm.stopBroadcast();
 
         _writePoolFactoryArtifacts(strategyFactory, poolFactoryJsonPath);
