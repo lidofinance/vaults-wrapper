@@ -14,7 +14,14 @@ contract MellowFactoryConfigTest is StvPoolHarness {
     MellowStrategyFactory public factory;
     IVault public vault;
 
+    // skip scratch test
+    function isValidChain() internal view returns (bool) {
+        return block.chainid == 1 || block.chainid == 560048;
+    }
+
     function setUp() public {
+        if (!isValidChain()) vm.skip(true);
+
         _initializeCore();
 
         address factoryAddr = vm.envAddress("MELLOW_STRATEGY_FACTORY");

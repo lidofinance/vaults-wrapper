@@ -209,8 +209,6 @@ contract WrapperUpgradeBtoCTest is StvPoolHarness, TimelockHarness {
         assertFalse(pool.hasRole(managerRole, address(factory)), "Factory should not have ALLOW_LIST_MANAGER_ROLE");
         assertFalse(pool.hasRole(depositsPauseRole, NODE_OPERATOR), "NodeOperator should not pause deposits");
         assertFalse(pool.hasRole(mintingPauseRole, NODE_OPERATOR), "NodeOperator should not pause minting");
-        WithdrawalQueue wq = WithdrawalQueue(payable(deployment.withdrawalQueue));
-        IDashboard dashboard = IDashboard(payable(deployment.dashboard));
 
         // Verify state continuity: user's STV balance didn't change during upgrade
         assertEq(pool.balanceOf(USER1), userStvBefore, "user STV should be preserved");
