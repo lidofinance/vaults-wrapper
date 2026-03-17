@@ -1,8 +1,8 @@
 {
   "mellow": {
     "vault": "0x6a37725ca7f4CE81c004c955f7280d5C704a249e",
-    "syncDepositQueue": "0xe39EED9A454C4918F8d0682062777cB251cd513F",
-    "asyncDepositQueue": "0xECD2Bfe725fa14f5Ed86e9bDcc0eA4b34A4ed522",
+    "syncDepositQueue": "0xECD2Bfe725fa14f5Ed86e9bDcc0eA4b34A4ed522",
+    "asyncDepositQueue": "0xe39EED9A454C4918F8d0682062777cB251cd513F",
     "asyncRedeemQueue": "0x095bFAca9f1c6F2B063Cd67C6d6bfcd0c3aaB7b4"
   }
 }
