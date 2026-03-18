@@ -35,7 +35,7 @@ contract MellowSolvencyTest is StvStrategyPoolHarness {
     bytes32 public constant REMOVE_QUEUE_ROLE = keccak256("modules.ShareModule.REMOVE_QUEUE_ROLE");
 
     address public constant WSTETH = 0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0;
-    IVault public constant STRETH = IVault(0x277C6A642564A91ff78b008022D65683cEE5CCC5);
+    IVault public constant EARN_ETH = IVault(0x6a37725ca7f4CE81c004c955f7280d5C704a249e);
     address public constant PROXY_ADMIN = 0x81698f87C6482bF1ce9bFcfC0F103C4A0Adf0Af0;
 
     // Variables
@@ -61,26 +61,26 @@ contract MellowSolvencyTest is StvStrategyPoolHarness {
         _initializeCore();
 
         // sync deposit queue deployment in case if its not yet in the prod vault
-        if (STRETH.getQueueCount(WSTETH) < 3) {
+        if (EARN_ETH.getQueueCount(WSTETH) < 3) {
             address lazyAdmin = getRoleHolder(bytes32(0));
             vm.startPrank(lazyAdmin);
-            IAccessControlEnumerable(address(STRETH)).grantRole(CREATE_QUEUE_ROLE, lazyAdmin);
-            IAccessControlEnumerable(address(STRETH)).grantRole(SET_QUEUE_LIMIT_ROLE, lazyAdmin);
-            STRETH.setQueueLimit(10);
-            STRETH.createQueue(2, true, PROXY_ADMIN, WSTETH, abi.encode(0, 30 days));
+            IAccessControlEnumerable(address(EARN_ETH)).grantRole(CREATE_QUEUE_ROLE, lazyAdmin);
+            IAccessControlEnumerable(address(EARN_ETH)).grantRole(SET_QUEUE_LIMIT_ROLE, lazyAdmin);
+            EARN_ETH.setQueueLimit(10);
+            EARN_ETH.createQueue(3, true, PROXY_ADMIN, WSTETH, abi.encode(0, 30 days));
             vm.stopPrank();
         }
 
-        asyncDepositQueue = STRETH.queueAt(WSTETH, 0);
-        asyncRedeemQueue = STRETH.queueAt(WSTETH, 1);
-        syncDepositQueue = STRETH.queueAt(WSTETH, 2);
+        asyncDepositQueue = EARN_ETH.queueAt(WSTETH, 0);
+        asyncRedeemQueue = EARN_ETH.queueAt(WSTETH, 1);
+        syncDepositQueue = EARN_ETH.queueAt(WSTETH, 2);
 
         ctx = _deployStvStETHPool(
             true,
             0,
             0,
             StrategyKind.MELLOW,
-            abi.encode(STRETH, syncDepositQueue, asyncDepositQueue, asyncRedeemQueue, false)
+            abi.encode(EARN_ETH, syncDepositQueue, asyncDepositQueue, asyncRedeemQueue, false)
         );
         pool = StvStETHPool(payable(ctx.pool));
         vm.label(address(pool), "WrapperProxy");
@@ -92,7 +92,7 @@ contract MellowSolvencyTest is StvStrategyPoolHarness {
 
         vm.startPrank(getRoleHolder(SET_SECURITY_PARAMS_ROLE));
         // inf params for testing only
-        STRETH.oracle()
+        EARN_ETH.oracle()
             .setSecurityParams(
                 IOracle.SecurityParams({
                     maxAbsoluteDeviation: type(uint224).max,
@@ -369,15 +369,15 @@ contract MellowSolvencyTest is StvStrategyPoolHarness {
     // Helpers
 
     function getRoleHolder(bytes32 role) internal view returns (address) {
-        return IAccessControlEnumerable(address(STRETH)).getRoleMember(role, 0);
+        return IAccessControlEnumerable(address(EARN_ETH)).getRoleMember(role, 0);
     }
 
     function isValidBlock() internal view returns (bool) {
-        return block.chainid == 1 && block.number >= 24307000;
+        return block.chainid == 1 && block.number >= 24684689;
     }
 
     function _submitMellowReport(int256 deltaD6) internal {
-        IOracle oracle = STRETH.oracle();
+        IOracle oracle = EARN_ETH.oracle();
         IOracle.DetailedReport memory report = oracle.getReport(WSTETH);
         uint256 minTimestamp = report.timestamp + 1 seconds;
         if (block.timestamp < minTimestamp) {
@@ -410,7 +410,7 @@ contract MellowSolvencyTest is StvStrategyPoolHarness {
     }
 
     function _handleBatches() public {
-        deal(address(WSTETH), address(STRETH), 10000 ether);
+        deal(address(WSTETH), address(EARN_ETH), 10000 ether);
         IRedeemQueue(asyncRedeemQueue).handleBatches(type(uint256).max);
     }
 

@@ -143,14 +143,14 @@ contract MellowStrategyTest is Test {
         IVault(vault).createQueue(0, true, vaultAdmin, wsteth, "");
         asyncDepositWstethQueue = IVault(vault).queueAt(wsteth, 0);
 
-        IVault(vault).createQueue(2, true, vaultAdmin, eth, abi.encode(0, 24 hours));
+        IVault(vault).createQueue(3, true, vaultAdmin, eth, abi.encode(0, 24 hours));
         syncDepositEthQueue = IVault(vault).queueAt(eth, 1);
-        IVault(vault).createQueue(2, true, vaultAdmin, wsteth, abi.encode(0, 24 hours));
+        IVault(vault).createQueue(3, true, vaultAdmin, wsteth, abi.encode(0, 24 hours));
         syncDepositWstethQueue = IVault(vault).queueAt(wsteth, 1);
 
-        IVault(vault).createQueue(0, false, vaultAdmin, eth, "");
+        IVault(vault).createQueue(2, false, vaultAdmin, eth, "");
         asyncRedeemEthQueue = IVault(vault).queueAt(eth, 2);
-        IVault(vault).createQueue(0, false, vaultAdmin, wsteth, "");
+        IVault(vault).createQueue(2, false, vaultAdmin, wsteth, "");
         asyncRedeemWstethQueue = IVault(vault).queueAt(wsteth, 2);
 
         if (withReport) {
