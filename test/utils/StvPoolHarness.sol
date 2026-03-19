@@ -158,6 +158,7 @@ contract StvPoolHarness is Test {
             address mellowFactoryEnv = vm.envOr("MELLOW_STRATEGY_FACTORY", address(0));
             if (mellowFactoryEnv != address(0)) {
                 strategyFactoryAddress = mellowFactoryEnv;
+                console.log("Using predeployed factory from MELLOW_STRATEGY_FACTORY", strategyFactoryAddress);
             } else {
                 strategyFactoryAddress =
                     address(new MellowStrategyFactory(vault, syncDepositQueue, asyncDepositQueue, asyncRedeemQueue));

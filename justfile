@@ -97,7 +97,7 @@ publish-sources address contract_path constructor_args:
     -vvvv
 
 test-integration path='**/*.test.sol':
-  forge test 'test/integration/{{path}}' --fork-url {{env('RPC_URL')}}
+  forge test 'test/integration/{{path}}' --fork-url {{env('RPC_URL')}} -vv
 
 test-unit:
   FOUNDRY_PROFILE=test forge test --no-match-path 'test/integration/*' test
