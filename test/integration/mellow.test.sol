@@ -233,6 +233,9 @@ contract MellowIntegrationTest is StvStrategyPoolHarness {
         uint256 syncAmount = depositAmount - asyncAmount;
         uint256 assetsSync = pool.remainingMintingCapacitySharesOf(USER1, syncAmount);
         {
+            // Submit fresh oracle report before sync deposit
+            _submitMellowReport(0);
+
             vm.startPrank(USER1);
 
             mellowStrategy.supply{value: asyncAmount}(

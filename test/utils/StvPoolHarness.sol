@@ -154,8 +154,14 @@ contract StvPoolHarness is Test {
                 bool allowListEnabled
             ) = abi.decode(config.deployParams, (address, address, address, address, bool));
             strategyDeployBytes = abi.encode(allowListEnabled);
-            strategyFactoryAddress =
-                address(new MellowStrategyFactory(vault, syncDepositQueue, asyncDepositQueue, asyncRedeemQueue));
+
+            address mellowFactoryEnv = vm.envOr("MELLOW_STRATEGY_FACTORY", address(0));
+            if (mellowFactoryEnv != address(0)) {
+                strategyFactoryAddress = mellowFactoryEnv;
+            } else {
+                strategyFactoryAddress =
+                    address(new MellowStrategyFactory(vault, syncDepositQueue, asyncDepositQueue, asyncRedeemQueue));
+            }
         }
         // StrategyKind.NONE: strategyFactoryAddress remains address(0)
 

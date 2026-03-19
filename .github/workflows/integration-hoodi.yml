@@ -13,6 +13,7 @@ jobs:
       FOUNDRY_PROFILE: test
       RPC_URL: https://hoodi.drpc.org
       CORE_LOCATOR_ADDRESS: "0xe2EF9536DAAAEBFf5b1c130957AB3E80056b06D8"
+      FACTORY_ADDRESS: "0xd05ebf24a340ece8b8fb53a170f1171dcd02b4d9"
       MELLOW_STRATEGY_FACTORY: "0x0b860bfFDA72D214Dc8aC98bEcd8D1cd55307561"
     steps:
       - uses: actions/checkout@v4
