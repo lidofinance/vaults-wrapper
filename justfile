@@ -64,6 +64,30 @@ deploy-all env_file:
 deploy-ggv-mocks:
   forge script script/DeployGGVMocks.s.sol:DeployGGVMocks $(just _script-flags) --gas-limit {{fusaka_tx_gas_limit}} --sig 'run()'
 
+deploy-mellow-strategy-factory MELLOW_POOL_PARAMS_JSON:
+  MELLOW_POOL_PARAMS_JSON={{MELLOW_POOL_PARAMS_JSON}} \
+  forge script script/DeployMellowStrategyFactory.s.sol:DeployMellowStrategyFactory $(just _script-flags {{env('RPC_URL')}} {{env('DEPLOYER')}} {{env('PRIVATE_KEY')}}) --sig 'run()'
+
+deploy-mellow-pool-start FACTORY_ADDRESS MELLOW_POOL_PARAMS_JSON INTERMEDIATE_JSON:
+  DEPLOY_MODE=start \
+  INTERMEDIATE_JSON={{INTERMEDIATE_JSON}} \
+  MELLOW_POOL_PARAMS_JSON={{MELLOW_POOL_PARAMS_JSON}} \
+  FACTORY_ADDRESS={{FACTORY_ADDRESS}} \
+  forge script script/DeployMellowStrategy.s.sol:DeployMellowStrategy $(just _script-flags {{env('RPC_URL')}} {{env('DEPLOYER')}} {{env('PRIVATE_KEY')}}) --gas-estimate-multiplier 110 -v --sig 'run()'
+
+deploy-mellow-pool-finish FACTORY_ADDRESS INTERMEDIATE_JSON:
+  DEPLOY_MODE=finish \
+  INTERMEDIATE_JSON={{INTERMEDIATE_JSON}} \
+  FACTORY_ADDRESS={{FACTORY_ADDRESS}} \
+  forge script script/DeployMellowStrategy.s.sol:DeployMellowStrategy $(just _script-flags {{env('RPC_URL')}} {{env('DEPLOYER')}} {{env('PRIVATE_KEY')}}) --gas-estimate-multiplier 110 -v --sig 'run()'
+
+deploy-mellow-pool FACTORY_ADDRESS MELLOW_POOL_PARAMS_JSON:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  INTERMEDIATE_JSON="deployments/mellow-pool-intermediate-$(date +%s).json"
+  just deploy-mellow-pool-start {{FACTORY_ADDRESS}} {{MELLOW_POOL_PARAMS_JSON}} "$INTERMEDIATE_JSON"
+  just deploy-mellow-pool-finish {{FACTORY_ADDRESS}} "$INTERMEDIATE_JSON"
+
 publish-sources address contract_path constructor_args:
   forge verify-contract {{address}} {{contract_path}} \
     --verifier etherscan \
@@ -73,7 +97,7 @@ publish-sources address contract_path constructor_args:
     -vvvv
 
 test-integration path='**/*.test.sol':
-  forge test 'test/integration/{{path}}' --fork-url {{env('RPC_URL')}}
+  forge test 'test/integration/{{path}}' --fork-url {{env('RPC_URL')}} -vv
 
 test-unit:
   FOUNDRY_PROFILE=test forge test --no-match-path 'test/integration/*' test

@@ -366,7 +366,9 @@ contract GGVTest is StvStrategyPoolHarness {
         uint256 ggvSharesBefore = boringVault.balanceOf(address(callForwarder));
 
         vm.prank(USER1);
-        uint256 stv = ggvStrategy.supply{value: depositAmount}(address(0), wstethToMint, abi.encode(GGVStrategy.GGVParamsSupply(0)));
+        uint256 stv = ggvStrategy.supply{value: depositAmount}(
+            address(0), wstethToMint, abi.encode(GGVStrategy.GGVParamsSupply(0))
+        );
 
         uint256 mintedSharesAfter = ggvStrategy.mintedStethSharesOf(USER1);
         uint256 wstethBalanceAfter = wsteth.balanceOf(address(callForwarder));

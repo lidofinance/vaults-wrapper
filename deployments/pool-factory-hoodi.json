@@ -8,6 +8,7 @@
     "stvPoolFactory": "0x441c44879c209D6E50a53207e3ed949734B2e98B",
     "stvStETHPoolFactory": "0x2E346511B787BD71f156B2D9EdE7EB74Aebb449f",
     "timelockFactory": "0x07710C986BaC246a54be7d843CD5972B838B1D42",
-    "withdrawalQueueFactory": "0x2D8862B595719A36C4dDadA11BaF2df744b8eEa6"
+    "withdrawalQueueFactory": "0x2D8862B595719A36C4dDadA11BaF2df744b8eEa6",
+    "mellowStrategyFactory": "0x0b860bfFDA72D214Dc8aC98bEcd8D1cd55307561"
   }
 }

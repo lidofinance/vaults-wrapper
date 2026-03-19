@@ -18,6 +18,7 @@ jobs:
           - 9123:8545
         env:
           HARDFORK: prague
+          DONT_SET_CHAIN_ID: true
     steps:
       - uses: actions/checkout@v4
         with:
