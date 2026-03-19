@@ -127,37 +127,53 @@ contract MellowSolvencyTest is StvStrategyPoolHarness {
 
     // Tests
 
-    function testFixedSetOfRandomizedActions() public {
+    function testTransitionRandomSupply() public {
         if (!isValidBlock()) vm.skip(true);
         for (uint256 i = 0; i < 50; i++) {
             transitionRandomSupply();
             _assertUniversalInvariants("testFixedSetOfRandomizedActions:transitionRandomSupply", ctx);
         }
+    }
+
+    function testTransitionRandomWithdrawal() public {
+        if (!isValidBlock()) vm.skip(true);
         for (uint256 i = 0; i < 50; i++) {
             transitionRandomWithdrawal();
             _assertUniversalInvariants("testFixedSetOfRandomizedActions:transitionRandomWithdrawal", ctx);
         }
+    }
+
+    function testTransitionRandomReport() public {
+        if (!isValidBlock()) vm.skip(true);
 
         transitionRandomReport();
         _assertUniversalInvariants("testFixedSetOfRandomizedActions:transitionRandomReport", ctx);
+    }
+
+    function testTransitionRandomClaim() public {
+        if (!isValidBlock()) vm.skip(true);
 
         for (uint256 i = 0; i < 50; i++) {
             transitionRandomClaim();
             _assertUniversalInvariants("testFixedSetOfRandomizedActions:transitionRandomClaim", ctx);
         }
+    }
+    function testTransitionRandomBurnWsteth() public {
+        if (!isValidBlock()) vm.skip(true);
 
         for (uint256 i = 0; i < 50; i++) {
             transitionRandomBurnWsteth();
             _assertUniversalInvariants("testFixedSetOfRandomizedActions:transitionRandomBurnWsteth", ctx);
         }
+    }
 
+    function testTransitionRandomLidoClaim() public {
+        if (!isValidBlock()) vm.skip(true);
         for (uint256 i = 0; i < 50; i++) {
             transitionRandomLidoClaim();
             _assertUniversalInvariants("testFixedSetOfRandomizedActions:transitionRandomLidoClaim", ctx);
         }
     }
-
-    // Transitions
 
     function transitionRandomSupply() internal {
         address actor;
