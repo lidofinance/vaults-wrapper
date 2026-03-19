@@ -19,6 +19,18 @@ contract StvStrategyPoolHarness is StvStETHPoolHarness {
         address _teller,
         address _boringQueue
     ) internal returns (WrapperContext memory) {
+        return _deployStvStETHPool(
+            enableAllowlist, nodeOperatorFeeBP, reserveRatioGapBP, StrategyKind.GGV, abi.encode(_teller, _boringQueue)
+        );
+    }
+
+    function _deployStvStETHPool(
+        bool enableAllowlist,
+        uint256 nodeOperatorFeeBP,
+        uint256 reserveRatioGapBP,
+        StrategyKind strategyKind,
+        bytes memory deployParams
+    ) internal returns (WrapperContext memory) {
         DeploymentConfig memory config = DeploymentConfig({
             allowListEnabled: enableAllowlist,
             mintingEnabled: true,
@@ -29,9 +41,8 @@ contract StvStrategyPoolHarness is StvStETHPoolHarness {
             confirmExpiry: CONFIRM_EXPIRY,
             minWithdrawalDelayTime: 1 days,
             reserveRatioGapBP: reserveRatioGapBP,
-            strategyKind: StrategyKind.GGV,
-            ggvTeller: _teller,
-            ggvBoringQueue: _boringQueue,
+            strategyKind: strategyKind,
+            deployParams: deployParams,
             timelockMinDelaySeconds: 0,
             timelockExecutor: NODE_OPERATOR,
             name: "Integration Strategy Pool",
@@ -45,9 +56,15 @@ contract StvStrategyPoolHarness is StvStETHPoolHarness {
         return ctx;
     }
 
-    function _allPossibleStvHolders(WrapperContext memory ctx) internal view override returns (address[] memory) {
+    function _allPossibleStvHolders(WrapperContext memory ctx)
+        internal
+        view
+        virtual
+        override
+        returns (address[] memory)
+    {
         address[] memory holders_ = super._allPossibleStvHolders(ctx);
-        address[] memory holders = new address[](holders_.length + 2);
+        address[] memory holders = new address[](holders_.length + 1);
         uint256 i = 0;
         for (i = 0; i < holders_.length; i++) {
             holders[i] = holders_[i];

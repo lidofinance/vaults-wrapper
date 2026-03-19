@@ -13,6 +13,8 @@ jobs:
       FOUNDRY_PROFILE: test
       RPC_URL: https://eth.drpc.org
       CORE_LOCATOR_ADDRESS: "0xC1d0b3DE6792Bf6b4b37EccdcC24e45978Cfd2Eb"
+      FACTORY_ADDRESS: "0x3f221b8E5bC098cC6C23611BEeacaeCfD77e1587"
+      MELLOW_STRATEGY_FACTORY: "0x8Fac09FD82F031D390B94622E2E4baBf16Fd2236"
     steps:
       - uses: actions/checkout@v4
         with:
