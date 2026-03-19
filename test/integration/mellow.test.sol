@@ -62,20 +62,9 @@ contract MellowIntegrationTest is StvStrategyPoolHarness {
         if (!isValidBlock()) vm.skip(true);
         _initializeCore();
 
-        // sync deposit queue deployment
-        {
-            address lazyAdmin = getRoleHolder(bytes32(0));
-            vm.startPrank(lazyAdmin);
-            IAccessControlEnumerable(address(EARN_ETH)).grantRole(CREATE_QUEUE_ROLE, lazyAdmin);
-            IAccessControlEnumerable(address(EARN_ETH)).grantRole(SET_QUEUE_LIMIT_ROLE, lazyAdmin);
-            EARN_ETH.setQueueLimit(50);
-            EARN_ETH.createQueue(3, true, PROXY_ADMIN, WSTETH, abi.encode(0, 30 days));
-            vm.stopPrank();
-        }
-
         asyncDepositQueue = EARN_ETH.queueAt(WSTETH, 0);
         asyncRedeemQueue = EARN_ETH.queueAt(WSTETH, 1);
-        syncDepositQueue = EARN_ETH.queueAt(WSTETH, 3);
+        syncDepositQueue = EARN_ETH.queueAt(WSTETH, 2);
 
         ctx = _deployStvStETHPool(
             true,
