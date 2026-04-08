@@ -24,9 +24,6 @@ lido-core/
 # Local deployments
 deployments/*-local.json
 
-# Docs
-docs/
-
 # Dotenv file
 .env
 .env.hoodi
