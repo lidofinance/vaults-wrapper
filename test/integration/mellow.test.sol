@@ -92,7 +92,7 @@ contract MellowIntegrationTest is StvStrategyPoolHarness {
         vm.prank(earnEthAdmin);
         IAccessControlEnumerable(address(EARN_ETH)).grantRole(SET_SECURITY_PARAMS_ROLE, earnEthAdmin);
 
-        vm.startPrank(getRoleHolder(SET_SECURITY_PARAMS_ROLE));
+        vm.startPrank(earnEthAdmin);
         // inf params for testing only
         EARN_ETH.oracle()
             .setSecurityParams(
