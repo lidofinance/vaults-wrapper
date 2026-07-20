@@ -87,6 +87,11 @@ contract MellowIntegrationTest is StvStrategyPoolHarness {
 
         withdrawalQueue = pool.WITHDRAWAL_QUEUE();
 
+        // SET_SECURITY_PARAMS_ROLE has no holders on mainnet anymore, grant it back for the test
+        address earnEthAdmin = getRoleHolder(bytes32(0));
+        vm.prank(earnEthAdmin);
+        IAccessControlEnumerable(address(EARN_ETH)).grantRole(SET_SECURITY_PARAMS_ROLE, earnEthAdmin);
+
         vm.startPrank(getRoleHolder(SET_SECURITY_PARAMS_ROLE));
         // inf params for testing only
         EARN_ETH.oracle()
