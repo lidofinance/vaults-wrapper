@@ -16,7 +16,7 @@ jobs:
       FACTORY_ADDRESS: "0xd05ebf24a340ece8b8fb53a170f1171dcd02b4d9"
       MELLOW_STRATEGY_FACTORY: "0x0b860bfFDA72D214Dc8aC98bEcd8D1cd55307561"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           submodules: recursive
 
