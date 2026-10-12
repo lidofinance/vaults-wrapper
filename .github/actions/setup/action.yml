@@ -23,4 +23,6 @@ runs:
     - name: Install Just
       if: steps.just-cache.outputs.cache-hit != 'true'
       shell: bash
-      run: cargo install "just@${{ inputs.just-version }}"
+      env:
+        JUST_VERSION: ${{ inputs.just-version }}
+      run: cargo install "just@${JUST_VERSION}"
